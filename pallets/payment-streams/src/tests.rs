@@ -106,7 +106,7 @@ mod fixed_rate_streams {
 
                 // The event should be emitted
                 System::assert_last_event(
-                    Event::<Test>::FixedRatePaymentStreamCreated {
+                    Event::FixedRatePaymentStreamCreated {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         rate,
@@ -258,7 +258,7 @@ mod fixed_rate_streams {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Try to create a payment stream from Bob to Alice of 10 units per block (since the original stream should have been deleted)
                 let rate: BalanceOf<Test> = 10;
@@ -450,7 +450,7 @@ mod fixed_rate_streams {
 
                 // The event should be emitted
                 System::assert_last_event(
-                    Event::<Test>::FixedRatePaymentStreamUpdated {
+                    Event::FixedRatePaymentStreamUpdated {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         new_rate,
@@ -670,7 +670,7 @@ mod fixed_rate_streams {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Try to update the rate of the payment stream from Bob to Charlie to 20 units per block
                 let new_rate: BalanceOf<Test> = 20;
@@ -745,7 +745,7 @@ mod fixed_rate_streams {
                     bob_balance_updated_deposit - 10 * rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
@@ -835,7 +835,7 @@ mod fixed_rate_streams {
 
                 // The event should be emitted
                 System::assert_last_event(
-                    Event::<Test>::FixedRatePaymentStreamDeleted {
+                    Event::FixedRatePaymentStreamDeleted {
                         user_account: bob,
                         provider_id: alice_msp_id,
                     }
@@ -903,7 +903,7 @@ mod fixed_rate_streams {
 
                 // The event should be emitted
                 System::assert_last_event(
-                    Event::<Test>::FixedRatePaymentStreamDeleted {
+                    Event::FixedRatePaymentStreamDeleted {
                         user_account: bob,
                         provider_id: alice_msp_id,
                     }
@@ -1008,7 +1008,7 @@ mod fixed_rate_streams {
                         + base_deposit
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
@@ -1173,7 +1173,7 @@ mod fixed_rate_streams {
                     bob_new_balance - 10 * rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
@@ -1369,7 +1369,7 @@ mod fixed_rate_streams {
                     bob_new_balance - 15 * rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 15 * rate,
@@ -1465,7 +1465,7 @@ mod fixed_rate_streams {
                     bob_new_balance - 10 * new_rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * new_rate,
@@ -1502,7 +1502,7 @@ mod fixed_rate_streams {
         }
 
         #[test]
-        fn charge_payment_streams_correctly_provider_not_privileged() {
+        fn charge_payment_streams_correctly_works_for_privileged_providers() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = 0;
                 let bob: AccountId = 1;
@@ -1523,14 +1523,110 @@ mod fixed_rate_streams {
                     )
                 );
 
-                // remove it has priviledge provider
+                // Set any last chargeable info for Alice. It shouldn't be used since she is a privileged provider
+                let last_chargeable_tick = System::block_number();
+                LastChargeableInfo::<Test>::insert(
+                    &alice_msp_id,
+                    ProviderLastChargeableInfo {
+                        last_chargeable_tick,
+                        price_index: 100,
+                    },
+                );
+
+                // Check the new free balance of Bob (after the new stream deposit)
+                let new_stream_deposit_blocks_balance_typed =
+                    BlockNumberToBalance::convert(<NewStreamDeposit as Get<u64>>::get());
+                let base_deposit = <BaseDeposit as Get<BalanceOf<Test>>>::get();
+                let bob_new_balance = bob_initial_balance
+                    - rate * new_stream_deposit_blocks_balance_typed
+                    - base_deposit;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Update the rate of the payment stream from Bob to Alice to 20 units per block
+                let new_rate: BalanceOf<Test> = 20;
                 assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(
+                    <PaymentStreams as PaymentStreamsInterface>::update_fixed_rate_payment_stream(
                         &alice_msp_id,
+                        &bob,
+                        new_rate
                     )
                 );
 
-                // We insert the last chargeable info instead
+                // Check that Bob's deposit has also been updated
+                let bob_new_balance =
+                    bob_new_balance - (new_rate - rate) * new_stream_deposit_blocks_balance_typed;
+                assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
+
+                // Advance 10 blocks. Alice should be able to charge for them since she is a privileged provider
+                run_to_block(System::block_number() + 10);
+
+                // Charge the payment stream from Bob to Alice
+                assert_ok!(PaymentStreams::charge_payment_streams(
+                    RuntimeOrigin::signed(alice),
+                    bob
+                ));
+
+                // Check that Bob was charged 10 blocks at the 20 units/block rate
+                assert_eq!(
+                    NativeBalance::free_balance(&bob),
+                    bob_new_balance - 10 * new_rate
+                );
+                System::assert_has_event(
+                    Event::PaymentStreamCharged {
+                        user_account: bob,
+                        provider_id: alice_msp_id,
+                        amount: 10 * new_rate,
+                        last_tick_charged: System::block_number(),
+                        charged_at_tick: System::block_number(),
+                    }
+                    .into(),
+                );
+
+                // Get the payment stream information
+                let payment_stream_info =
+                    PaymentStreams::get_fixed_rate_payment_stream_info(&alice_msp_id, &bob)
+                        .unwrap();
+
+                // The payment stream should be updated with the correct last charged tick
+                assert_eq!(
+                    payment_stream_info.last_charged_tick,
+                    System::block_number()
+                );
+
+                // The payment stream should have been updated with the correct rate
+                assert_eq!(payment_stream_info.rate, new_rate);
+            });
+        }
+
+        #[test]
+        fn charge_payment_streams_correctly_works_for_fixed_rate_streams_even_if_provider_is_not_privileged(
+        ) {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = 0;
+                let bob: AccountId = 1;
+                let bob_initial_balance = NativeBalance::free_balance(&bob);
+
+                // Register Alice as a MSP with 100 units of data and get her MSP ID
+                register_account_as_msp(alice, 100);
+                let alice_msp_id =
+                    <StorageProviders as ReadProvidersInterface>::get_provider_id(alice).unwrap();
+
+                // Create a payment stream from Bob to Alice of 10 units per block
+                let rate: BalanceOf<Test> = 10;
+                assert_ok!(
+                    <PaymentStreams as PaymentStreamsInterface>::create_fixed_rate_payment_stream(
+                        &alice_msp_id,
+                        &bob,
+                        rate
+                    )
+                );
+
+                // Remove Alice from the privileged providers list
+                <PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(
+                    &alice_msp_id,
+                );
+
+                // Set Alice's last chargeable info to use since she's no longer a privileged provider
                 let last_chargeable_tick = System::block_number();
                 LastChargeableInfo::<Test>::insert(
                     &alice_msp_id,
@@ -1587,7 +1683,7 @@ mod fixed_rate_streams {
                     bob_new_balance - 10 * new_rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * new_rate,
@@ -1677,7 +1773,7 @@ mod fixed_rate_streams {
                     bob_new_balance - 10 * rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * rate,
@@ -1721,7 +1817,7 @@ mod fixed_rate_streams {
                     bob_new_balance - 10 * rate - 20 * rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 20 * rate,
@@ -1817,7 +1913,7 @@ mod fixed_rate_streams {
                     bob_new_balance - 10 * bob_rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * bob_rate,
@@ -1833,7 +1929,7 @@ mod fixed_rate_streams {
                     charlie_new_balance - 10 * charlie_rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: charlie,
                         provider_id: alice_msp_id,
                         amount: 10 * charlie_rate,
@@ -1845,7 +1941,7 @@ mod fixed_rate_streams {
 
                 // Check that the UsersCharged event was emitted
                 System::assert_has_event(
-                    Event::<Test>::UsersCharged {
+                    Event::UsersCharged {
                         user_accounts: user_accounts.try_into().unwrap(),
                         provider_id: alice_msp_id,
                         charged_at_tick: PaymentStreams::get_current_tick(),
@@ -1931,10 +2027,9 @@ mod fixed_rate_streams {
                     )
                 );
 
-                assert_ok!(
-                    <PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(
-                        &alice_msp_id,
-                    )
+                // Remove Alice from the privileged providers list so it charges according to her last chargeable info
+                <PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(
+                    &alice_msp_id,
                 );
 
                 // Get the current price for dynamic-rate payment streams from the runtime
@@ -1994,7 +2089,7 @@ mod fixed_rate_streams {
                     bob_new_balance - 10 * bob_rate
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 10 * bob_rate,
@@ -2012,7 +2107,7 @@ mod fixed_rate_streams {
                             / GIGAUNIT_BALANCE
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: charlie,
                         provider_id: alice_msp_id,
                         amount: 10 * current_storage_price * charlie_amount_provided as u128
@@ -2033,7 +2128,7 @@ mod fixed_rate_streams {
                             / GIGAUNIT_BALANCE
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: dave,
                         provider_id: alice_msp_id,
                         amount: 10 * dave_rate
@@ -2047,7 +2142,7 @@ mod fixed_rate_streams {
 
                 // Check that the UsersCharged event was emitted
                 System::assert_has_event(
-                    Event::<Test>::UsersCharged {
+                    Event::UsersCharged {
                         user_accounts: user_accounts.try_into().unwrap(),
                         provider_id: alice_msp_id,
                         charged_at_tick: PaymentStreams::get_current_tick(),
@@ -2261,12 +2356,12 @@ mod fixed_rate_streams {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 0,
@@ -2360,12 +2455,12 @@ mod fixed_rate_streams {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_msp_id,
                         amount: 0,
@@ -2394,7 +2489,7 @@ mod fixed_rate_streams {
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: charlie_msp_id,
                         amount: 0,
@@ -2411,7 +2506,7 @@ mod fixed_rate_streams {
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
                 // Check that the UserPaidAllDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
+                System::assert_has_event(Event::UserPaidAllDebts { who: bob }.into());
             });
         }
 
@@ -2776,7 +2871,7 @@ mod dynamic_rate_streams {
 
                 // The event should be emitted
                 System::assert_last_event(
-                    Event::<Test>::DynamicRatePaymentStreamCreated {
+                    Event::DynamicRatePaymentStreamCreated {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount_provided,
@@ -2968,7 +3063,7 @@ mod dynamic_rate_streams {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Try to create a payment stream from Bob to Alice of 100 units provided (since the original stream would have been deleted)
                 assert_noop!(
@@ -3190,7 +3285,7 @@ mod dynamic_rate_streams {
 
                 // The event should be emitted
                 System::assert_last_event(
-                    Event::<Test>::DynamicRatePaymentStreamUpdated {
+                    Event::DynamicRatePaymentStreamUpdated {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         new_amount_provided,
@@ -3450,7 +3545,7 @@ mod dynamic_rate_streams {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Try to update the amount provided of the payment stream from Bob to Charlie to 200 units
                 let new_amount_provided = 200;
@@ -3540,7 +3635,7 @@ mod dynamic_rate_streams {
                     bob_balance_updated_deposit - paid_for_storage
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: paid_for_storage,
@@ -3639,7 +3734,7 @@ mod dynamic_rate_streams {
 
                 // The event should be emitted
                 System::assert_last_event(
-                    Event::<Test>::DynamicRatePaymentStreamDeleted {
+                    Event::DynamicRatePaymentStreamDeleted {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                     }
@@ -3716,7 +3811,7 @@ mod dynamic_rate_streams {
 
                 // The event should be emitted
                 System::assert_last_event(
-                    Event::<Test>::DynamicRatePaymentStreamDeleted {
+                    Event::DynamicRatePaymentStreamDeleted {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                     }
@@ -3831,7 +3926,7 @@ mod dynamic_rate_streams {
                     bob_new_balance + deposit_amount - amount_to_pay_for_storage
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
@@ -4006,7 +4101,7 @@ mod dynamic_rate_streams {
                     bob_new_balance - amount_to_pay_for_storage
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
@@ -4166,7 +4261,7 @@ mod dynamic_rate_streams {
                     bob_new_balance - amount_to_pay_for_storage
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
@@ -4278,7 +4373,7 @@ mod dynamic_rate_streams {
                     bob_new_balance - amount_to_pay_for_storage
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
@@ -4375,7 +4470,7 @@ mod dynamic_rate_streams {
                 let bob_new_balance = bob_new_balance - amount_to_pay_for_storage;
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
@@ -4422,7 +4517,7 @@ mod dynamic_rate_streams {
                     bob_new_balance - amount_to_pay_for_storage
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: amount_to_pay_for_storage,
@@ -4624,12 +4719,12 @@ mod dynamic_rate_streams {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
@@ -4748,12 +4843,12 @@ mod dynamic_rate_streams {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
@@ -4782,7 +4877,7 @@ mod dynamic_rate_streams {
                         - current_price * amount_provided as u128 / GIGAUNIT_BALANCE
                 );
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: charlie_bsp_id,
                         amount: 0,
@@ -4799,7 +4894,7 @@ mod dynamic_rate_streams {
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
                 // Check that the UserPaidAllDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
+                System::assert_has_event(Event::UserPaidAllDebts { who: bob }.into());
             });
         }
     }
@@ -5026,12 +5121,12 @@ mod user_without_funds {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
@@ -5101,7 +5196,7 @@ mod user_without_funds {
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
                 // Check that the UserPaidAllDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
+                System::assert_has_event(Event::UserPaidAllDebts { who: bob }.into());
 
                 // Check that Bob has no remaining payment streams
                 assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
@@ -5256,7 +5351,7 @@ mod user_without_funds {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
@@ -5332,7 +5427,7 @@ mod user_without_funds {
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
                 // Check that the UserPaidAllDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
+                System::assert_has_event(Event::UserPaidAllDebts { who: bob }.into());
             });
         }
 
@@ -5484,7 +5579,7 @@ mod user_without_funds {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
@@ -5558,7 +5653,7 @@ mod user_without_funds {
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
                 // Check that the UserPaidSomeDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidSomeDebts { who: bob }.into());
+                System::assert_has_event(Event::UserPaidSomeDebts { who: bob }.into());
             });
         }
 
@@ -5717,12 +5812,12 @@ mod user_without_funds {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
@@ -5792,7 +5887,7 @@ mod user_without_funds {
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
 
                 // Check that the UserPaidAllDebts event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserPaidAllDebts { who: bob }.into());
+                System::assert_has_event(Event::UserPaidAllDebts { who: bob }.into());
 
                 // Check that Bob has no remaining payment streams
                 assert_eq!(PaymentStreams::get_payment_streams_count_of_user(&bob), 0);
@@ -5923,12 +6018,12 @@ mod user_without_funds {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that no funds were charged from Bob's free balance
                 assert_eq!(NativeBalance::free_balance(&bob), bob_new_balance);
                 System::assert_has_event(
-                    Event::<Test>::PaymentStreamCharged {
+                    Event::PaymentStreamCharged {
                         user_account: bob,
                         provider_id: alice_bsp_id,
                         amount: 0,
@@ -6057,7 +6152,7 @@ mod user_without_funds {
                 ));
 
                 // Check that the UserWithoutFunds event was emitted for Bob
-                System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+                System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
                 // Check that Bob is flagged as a user without funds
                 assert!(UsersWithoutFunds::<Test>::contains_key(bob));
@@ -6229,7 +6324,7 @@ mod users_with_debt_over_threshold {
             ));
 
             // Check that the UserWithoutFunds event was emitted for Bob
-            System::assert_has_event(Event::<Test>::UserWithoutFunds { who: bob }.into());
+            System::assert_has_event(Event::UserWithoutFunds { who: bob }.into());
 
             // Check that Bob is flagged as a user without funds
             assert!(UsersWithoutFunds::<Test>::contains_key(bob));

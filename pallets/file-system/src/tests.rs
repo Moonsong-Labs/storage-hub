@@ -8,9 +8,9 @@ use crate::{
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
         StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, ValuePropId,
     },
-    Config, Error, Event, MaxReplicationTarget, PendingBucketsToMove, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestExpirations, StorageRequests,
-    TickRangeToMaximumThreshold,
+    Config, Error, Event, MaxReplicationTarget, NextAvailableStorageRequestExpirationBlock,
+    PendingBucketsToMove, PendingMoveBucketRequests, PendingStopStoringRequests,
+    StorageRequestExpirations, StorageRequests, TickRangeToMaximumThreshold,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -37,6 +37,7 @@ use sp_runtime::{
     traits::{BlakeTwo256, Get, Zero},
     BoundedVec, DispatchError,
 };
+use sp_std::cmp::max;
 use sp_trie::CompactProof;
 
 mod create_bucket_tests {
@@ -941,12 +942,12 @@ mod request_move_bucket {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -1995,6 +1996,7 @@ mod request_storage {
     }
 
     mod success {
+
         use super::*;
 
         #[test]
@@ -2024,6 +2026,14 @@ mod request_storage {
 
                 let owner_initial_balance =
                     <Test as file_system::Config>::Currency::free_balance(&owner_account_id);
+
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2060,6 +2070,7 @@ mod request_storage {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request
                     })
                 );
 
@@ -2088,6 +2099,7 @@ mod request_storage {
                         fingerprint,
                         size: 4,
                         peer_ids,
+                        expires_at: next_expiration_block_storage_request,
                     }
                     .into(),
                 );
@@ -2155,6 +2167,14 @@ mod request_storage {
                     value_prop_id,
                 );
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
                     user.clone(),
@@ -2190,6 +2210,7 @@ mod request_storage {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request
                     })
                 );
 
@@ -2228,6 +2249,7 @@ mod request_storage {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request
                     })
                 );
 
@@ -2241,6 +2263,7 @@ mod request_storage {
                         fingerprint,
                         size,
                         peer_ids,
+                        expires_at: next_expiration_block_storage_request,
                     }
                     .into(),
                 );
@@ -2310,6 +2333,14 @@ mod request_storage {
                     value_prop_id,
                 );
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -2345,6 +2376,7 @@ mod request_storage {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request
                     })
                 );
 
@@ -2809,12 +2841,12 @@ mod revoke_storage_request {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -3315,7 +3347,7 @@ mod msp_respond_storage_request {
         }
 
         #[test]
-        fn msp_respond_storage_request_fullfilled() {
+        fn msp_respond_storage_request_fulfilled() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
@@ -3341,6 +3373,14 @@ mod msp_respond_storage_request {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -3362,6 +3402,12 @@ mod msp_respond_storage_request {
                     fingerprint,
                 );
 
+                // Ensure the storage request expiration item was added to the expiration queue
+                assert!(file_system::StorageRequestExpirations::<Test>::get(
+                    next_expiration_block_storage_request
+                )
+                .contains(&file_key));
+
                 // Dispatch the BSP volunteer
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -3371,12 +3417,12 @@ mod msp_respond_storage_request {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -3408,6 +3454,12 @@ mod msp_respond_storage_request {
                     file_system::BucketsWithStorageRequests::<Test>::get(bucket_id, file_key)
                         .is_none()
                 );
+
+                // And the storage request expiration item should have been removed from the queue
+                assert!(!file_system::StorageRequestExpirations::<Test>::get(
+                    next_expiration_block_storage_request
+                )
+                .contains(&file_key));
             });
         }
     }
@@ -3628,6 +3680,7 @@ mod msp_respond_storage_request {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: 100,
                     },
                 );
 
@@ -3696,6 +3749,7 @@ mod msp_respond_storage_request {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: 100,
                     },
                 );
 
@@ -3928,6 +3982,7 @@ mod msp_respond_storage_request {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: 100,
                     },
                 );
 
@@ -4000,6 +4055,7 @@ mod msp_respond_storage_request {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: 100,
                     },
                 );
 
@@ -4709,12 +4765,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::NotABsp
@@ -4746,12 +4802,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::NoFileKeysToConfirm
@@ -4810,12 +4866,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::BspNotVolunteered
@@ -4907,12 +4963,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -4926,12 +4982,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -4941,12 +4997,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::NoFileKeysToConfirm
@@ -5033,13 +5089,11 @@ mod bsp_confirm {
                     <Test as file_system::Config>::MaxBatchConfirmStorageRequests,
                 > = file_keys
                     .into_iter()
-                    .map(|file_key| {
-                        (
-                            file_key,
-                            CompactProof {
-                                encoded_nodes: vec![file_key.as_ref().to_vec()],
-                            },
-                        )
+                    .map(|file_key| FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        },
                     })
                     .collect::<Vec<_>>()
                     .try_into()
@@ -5140,12 +5194,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::NoFileKeysToConfirm
@@ -5215,12 +5269,12 @@ mod bsp_confirm {
                         CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         },
-                        BoundedVec::try_from(vec![(
+                        BoundedVec::try_from(vec![FileKeyWithProof {
                             file_key,
-                            CompactProof {
+                            proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             }
-                        )])
+                        }])
                         .unwrap(),
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
@@ -5258,6 +5312,14 @@ mod bsp_confirm {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -5292,12 +5354,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -5316,6 +5378,7 @@ mod bsp_confirm {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -5483,15 +5546,13 @@ mod bsp_confirm {
                 );
 
                 // Confirm storing for all files
-                let file_proofs: Vec<_> = file_keys
+                let file_keys_with_proofs: Vec<_> = file_keys
                     .iter()
-                    .map(|&file_key| {
-                        (
-                            file_key,
-                            CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            },
-                        )
+                    .map(|&file_key| FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        },
                     })
                     .collect();
 
@@ -5502,7 +5563,7 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(file_proofs).unwrap(),
+                    BoundedVec::try_from(file_keys_with_proofs).unwrap(),
                 ));
 
                 let successful_file_keys: Vec<_> = file_keys
@@ -5554,6 +5615,14 @@ mod bsp_confirm {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -5588,12 +5657,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -5612,6 +5681,7 @@ mod bsp_confirm {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -5678,6 +5748,14 @@ mod bsp_confirm {
                 assert!(amount_provided_payment_stream.is_some());
                 assert_eq!(amount_provided_payment_stream.unwrap(), size);
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch another storage request.
                 let current_block = System::block_number();
                 let new_size = 8;
@@ -5710,12 +5788,12 @@ mod bsp_confirm {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -5734,6 +5812,7 @@ mod bsp_confirm {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -5772,6 +5851,168 @@ mod bsp_confirm {
                     amount_provided_payment_stream.unwrap() + new_size,
                     new_amount_provided_payment_stream
                 );
+            });
+        }
+
+        #[test]
+        fn bsp_confirm_storing_final_bsp_success() {
+            new_test_ext().execute_with(|| {
+                // Setup variables for the test.
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                // Sign up the MSP that will be used in the test and create a bucket under it for the file.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+
+                // Sign up account as a Backup Storage Provider and get its ID.
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Compute the file key of the storage request to issue.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Compute the expiration block for the storage request to issue.
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
+                // Dispatch the storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                    Some(1)
+                ));
+
+                // Ensure the storage request expiration item was added to the expiration queue.
+                assert!(StorageRequestExpirations::<Test>::get(
+                    next_expiration_block_storage_request
+                )
+                .contains(&file_key));
+
+                // Dispatch the BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+                // Modify the storage request to simulate the MSP having accepted it.
+                file_system::StorageRequests::<Test>::mutate(file_key, |maybe_metadata| {
+                    if let Some(metadata) = maybe_metadata {
+                        metadata.msp = Some((msp_id, true))
+                    }
+                });
+
+                // Get the current tick number.
+                let tick_when_confirming = ProofsDealer::get_current_tick();
+
+                // Dispatch BSP confirm storing.
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    }])
+                    .unwrap(),
+                ));
+
+                // Assert that the storage request was deleted since it has been fulfilled
+                assert!(!file_system::StorageRequests::<Test>::contains_key(
+                    &file_key
+                ));
+
+                // Assert that the StorageRequestBsps storage for this file key was drained
+                assert!(
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(file_key)
+                        .next()
+                        .is_none()
+                );
+
+                // Assert that the storage request was removed from the expiration queue
+                assert!(!StorageRequestExpirations::<Test>::get(
+                    next_expiration_block_storage_request
+                )
+                .contains(&file_key));
+
+                // Get the new root of the BSP after confirming to store the file.
+                let new_root = Providers::get_root(bsp_id).unwrap();
+
+                // Assert that the correct events were deposited
+                System::assert_last_event(
+                    Event::BspConfirmedStoring {
+                        who: bsp_account_id.clone(),
+                        bsp_id,
+                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        skipped_file_keys: Default::default(),
+                        new_root,
+                    }
+                    .into(),
+                );
+                System::assert_has_event(Event::StorageRequestFulfilled { file_key }.into());
+
+                // Assert that the proving cycle was initialised for this BSP.
+                let proof_record = ProviderToProofSubmissionRecord::<Test>::get(&bsp_id).unwrap();
+                assert_eq!(proof_record.last_tick_proven, tick_when_confirming);
+
+                // Assert that the correct event was deposited.
+                System::assert_has_event(
+                    Event::BspChallengeCycleInitialised {
+                        who: bsp_account_id,
+                        bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Assert that the randomness cycle was initialised for this BSP.
+                let maybe_first_randomness_provider_deadline =
+                    pallet_cr_randomness::ProvidersWithoutCommitment::<Test>::get(&bsp_id);
+                assert!(maybe_first_randomness_provider_deadline.is_some());
+                assert!(pallet_cr_randomness::ActiveProviders::<Test>::get(&bsp_id).is_some());
+
+                // Assert that the correct event was deposited.
+                let first_randomness_provider_deadline =
+                    maybe_first_randomness_provider_deadline.unwrap();
+                System::assert_has_event(
+                    pallet_cr_randomness::Event::ProviderCycleInitialised {
+                        provider_id: bsp_id,
+                        first_seed_commitment_deadline_tick: first_randomness_provider_deadline,
+                    }
+                    .into(),
+                );
+
+                // Assert that the payment stream between the BSP and the user has been created
+                assert!(PaymentStreams::has_active_payment_stream_with_user(
+                    &bsp_id,
+                    &owner_account_id
+                ));
             });
         }
     }
@@ -5865,6 +6106,14 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -5896,12 +6145,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -5930,6 +6179,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -5985,6 +6235,14 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6016,12 +6274,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6050,6 +6308,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6108,6 +6367,14 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6139,12 +6406,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6173,6 +6440,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6246,6 +6514,14 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6277,12 +6553,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6311,6 +6587,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6355,6 +6632,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6417,6 +6695,14 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6448,12 +6734,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6482,6 +6768,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6532,6 +6819,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6575,6 +6863,14 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6606,12 +6902,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6640,6 +6936,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6701,6 +6998,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6787,6 +7085,9 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+				let current_block_plus_storage_request_ttl = frame_system::Pallet::<Test>::block_number() + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(NextAvailableStorageRequestExpirationBlock::<Test>::get(), current_block_plus_storage_request_ttl);
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6825,12 +7126,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -6875,6 +7176,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+						expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6919,6 +7221,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+						expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -6999,6 +7302,9 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+				let current_block_plus_storage_request_ttl = frame_system::Pallet::<Test>::block_number() + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+				let next_expiration_block_storage_request = max(NextAvailableStorageRequestExpirationBlock::<Test>::get(), current_block_plus_storage_request_ttl);
+
                 // Dispatch first storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7059,12 +7365,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
-                        first_file_key,
-                        CompactProof {
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key: first_file_key,
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -7074,12 +7380,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
-                        second_file_key,
-                        CompactProof {
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key: second_file_key,
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -7132,6 +7438,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+						expires_at: next_expiration_block_storage_request,
                     })
                 );
 				assert_eq!(
@@ -7148,6 +7455,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+						expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -7184,6 +7492,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+						expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -7270,6 +7579,14 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7301,12 +7618,12 @@ mod bsp_stop_storing {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap()
                 ));
 
@@ -7351,6 +7668,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -7388,6 +7706,14 @@ mod bsp_stop_storing {
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7447,6 +7773,7 @@ mod bsp_stop_storing {
                         bsps_required: current_bsps_required.checked_add(1).unwrap(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -7499,6 +7826,14 @@ mod bsp_stop_storing {
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
                     bsp_signed.clone(),
@@ -7529,6 +7864,7 @@ mod bsp_stop_storing {
                         bsps_required: 1,
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -8089,6 +8425,7 @@ mod delete_file_and_pending_deletions_tests {
 
 				let bucket_size_after_confirm = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
 				let payment_stream_rate_after_confirm = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				let msp_used_capacity_after_confirm = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
@@ -8121,6 +8458,10 @@ mod delete_file_and_pending_deletions_tests {
 				// Assert that the Bucket's size was decreased by the file size
 				let new_bucket_size = bucket_info.size;
 				assert_eq!(new_bucket_size, bucket_size_after_confirm - size);
+
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity, msp_used_capacity_after_confirm - size);
 
 				// Assert that the payment stream rate decrease
 				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
@@ -8198,8 +8539,9 @@ mod delete_file_and_pending_deletions_tests {
                     }],
                 ));
 
-                // Query providers pallet Buckets storage
+                // Query providers pallet Buckets storage and MSP's used capacity
                 let bucket_size = Providers::get_bucket_size(&bucket_id).unwrap();
+				let msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
@@ -8237,6 +8579,9 @@ mod delete_file_and_pending_deletions_tests {
                     )
                         .unwrap()
                 );
+
+				// Assert that the MSP was removed from the privileged providers list.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 let pending_file_deletion_request_ttl: u32 =
                     PendingFileDeletionRequestTtl::<Test>::get();
@@ -8276,6 +8621,12 @@ mod delete_file_and_pending_deletions_tests {
                     bucket_size - size
                 );
 
+				// Check that the MSP's used capacity was reduced by the file size
+				assert_eq!(
+					<<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
+					msp_used_capacity - size
+				);
+
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
                 assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
@@ -8293,24 +8644,58 @@ mod delete_file_and_pending_deletions_tests {
                 let size = 1024 * 1024 * 1024; // One gigabyte
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
+				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-				// Increase bucket size and payment stream rate to simulate it storing the file
-				let initial_bucket_size = 2 * size;
-				assert_ok!(<<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(&bucket_id, initial_bucket_size));
-				let initial_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
-
-                let file_key = FileSystem::compute_file_key(
+				let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
                     location.clone(),
                     size,
                     fingerprint,
                 );
+
+				// Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids,
+                    None
+                ));
+
+                // Dispatch MSP confirm storing.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    bounded_vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            non_inclusion_forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: bounded_vec![],
+                    }],
+                ));
+
+				// Get the initial bucket size, MSP's used capacity and payment stream rate
+				let initial_bucket_size = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				let initial_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				let msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
@@ -8337,6 +8722,9 @@ mod delete_file_and_pending_deletions_tests {
                         .unwrap()
                 );
 
+				// Assert that the MSP was removed from the privileged providers list.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
@@ -8361,9 +8749,16 @@ mod delete_file_and_pending_deletions_tests {
 				let new_bucket_size = bucket_info.size;
 				assert_eq!(new_bucket_size, initial_bucket_size - size);
 
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity, msp_used_capacity - size);
+
 				// Assert that the payment stream rate decrease
 				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
 				assert!(new_payment_stream_rate < initial_payment_stream_rate);
+
+				// Assert that the MSP was added back to the privileged providers list.
+				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -8439,6 +8834,9 @@ mod delete_file_and_pending_deletions_tests {
                         .unwrap()
                 );
 
+				// Assert that the MSP was removed from the privileged providers list.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![H256::zero().as_bytes().to_vec()],
                 };
@@ -8453,6 +8851,9 @@ mod delete_file_and_pending_deletions_tests {
 					bucket_id,
 					forest_proof
 				));
+
+				// Assert that the MSP was added back to the privileged providers list.
+				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -8549,6 +8950,10 @@ mod delete_file_and_pending_deletions_tests {
                     }],
                 ));
 
+				// Get the bucket's size and MSP's used capacity after the file was stored
+				let bucket_size_after_confirm = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				let msp_used_capacity_after_confirm = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
 					owner_signed.clone(),
@@ -8586,6 +8991,9 @@ mod delete_file_and_pending_deletions_tests {
                         .unwrap()
                 );
 
+				// Assert that the MSP was removed from the privileged providers list.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
                 let pending_file_deletion_request_ttl: u32 =
                     PendingFileDeletionRequestTtl::<Test>::get();
                 let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
@@ -8619,6 +9027,14 @@ mod delete_file_and_pending_deletions_tests {
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
                 );
+
+				// Assert that the Bucket's size was decreased by the file size
+				let new_bucket_size = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				assert_eq!(new_bucket_size, bucket_size_after_confirm - size);
+
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity, msp_used_capacity_after_confirm - size);
 
                 // Assert that the payment stream was correctly deleted since the user is without funds
                 assert!(pallet_payment_streams::FixedRatePaymentStreams::<Test>::get(msp_id, owner_account_id.clone()).is_none());
@@ -9126,6 +9542,14 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9160,12 +9584,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9184,6 +9608,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -9320,6 +9745,14 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9349,12 +9782,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9400,6 +9833,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -9485,6 +9919,14 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9519,12 +9961,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9543,6 +9985,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -9721,6 +10164,14 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9755,12 +10206,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9779,6 +10230,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 
@@ -9932,6 +10384,14 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                let current_block_plus_storage_request_ttl =
+                    frame_system::Pallet::<Test>::block_number()
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_block_storage_request = max(
+                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
+                    current_block_plus_storage_request_ttl,
+                );
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9966,12 +10426,12 @@ mod stop_storing_for_insolvent_user {
                     CompactProof {
                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                     },
-                    BoundedVec::try_from(vec![(
+                    BoundedVec::try_from(vec![FileKeyWithProof {
                         file_key,
-                        CompactProof {
+                        proof: CompactProof {
                             encoded_nodes: vec![H256::default().as_ref().to_vec()],
                         }
-                    )])
+                    }])
                     .unwrap(),
                 ));
 
@@ -9990,6 +10450,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
+                        expires_at: next_expiration_block_storage_request,
                     })
                 );
 

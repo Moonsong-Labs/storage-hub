@@ -256,6 +256,7 @@ impl IndexerService {
                 fingerprint,
                 size,
                 peer_ids,
+                expires_at: _,
             } => {
                 let bucket =
                     Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
@@ -320,7 +321,12 @@ impl IndexerService {
                 Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::FailedToDecreaseBucketSize { .. } => {}
+            pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
+            pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
             pallet_file_system::Event::__Ignore(_, _) => {}

@@ -30,6 +30,8 @@
 pub use pallet::*;
 
 #[cfg(feature = "runtime-benchmarks")]
+pub mod benchmark_proofs;
+#[cfg(feature = "runtime-benchmarks")]
 pub mod benchmarking;
 
 pub mod types;
@@ -148,7 +150,7 @@ pub mod pallet {
             + AsMut<[u8]>
             + MaxEncodedLen;
 
-        /// Type representing the storage request bsps size type.
+        /// Type representing the storage request's BSP amount type.
         type ReplicationTargetType: Parameter
             + Member
             + MaybeSerializeDeserialize
@@ -309,12 +311,12 @@ pub mod pallet {
     pub type StorageRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, MerkleHash<T>, StorageRequestMetadata<T>>;
 
-    /// A double map from storage request to BSP `AccountId`s that volunteered to store the file.
+    /// A double map from file key to the BSP IDs of the BSPs that volunteered to store the file to whether that BSP has confirmed storing it.
     ///
-    /// Any BSP under a storage request prefix is considered to be a volunteer and can be removed at any time.
-    /// Once a BSP submits a valid proof to the via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
+    /// Any BSP under a file key prefix is considered to be a volunteer and can be removed at any time.
+    /// Once a BSP submits a valid proof via the `bsp_confirm_storing` extrinsic, the `confirmed` field in [`StorageRequestBspsMetadata`] will be set to `true`.
     ///
-    /// When a storage request is expired or removed, the corresponding storage request prefix in this map is removed.
+    /// When a storage request is expired or removed, the corresponding file key prefix in this map is removed.
     #[pallet::storage]
     pub type StorageRequestBsps<T: Config> = StorageDoubleMap<
         _,
@@ -533,6 +535,7 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
             peer_ids: PeerIds<T>,
+            expires_at: BlockNumberFor<T>,
         },
         /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
         ///
@@ -608,10 +611,12 @@ pub mod pallet {
             location: FileLocation<T>,
             new_root: MerkleHash<T>,
         },
-        /// Notifies that a priority challenge failed to be queued for pending file deletion.
+        /// Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
+        /// This can happen if the priority challenge queue is full, and the failed challenge should be manually
+        /// queued at a later time.
         FailedToQueuePriorityChallenge {
-            user: T::AccountId,
             file_key: MerkleHash<T>,
+            error: DispatchError,
         },
         /// Notifies that a file will be deleted.
         FileDeletionRequest {
@@ -664,9 +669,31 @@ pub mod pallet {
             file_size: StorageData<T>,
             error: DispatchError,
         },
+        /// Failed to get the MSP owner of the bucket for an expired file deletion request
+        /// This is different from the bucket not having a MSP, which is allowed and won't error
+        FailedToGetMspOfBucket {
+            bucket_id: BucketIdFor<T>,
+            error: DispatchError,
+        },
+        /// Failed to decrease MSP's used capacity for expired file deletion request
+        FailedToDecreaseMspUsedCapacity {
+            user: T::AccountId,
+            msp_id: ProviderIdFor<T>,
+            file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
+            error: DispatchError,
+        },
         /// Event to notify of incoherencies in used capacity.
         UsedCapacityShouldBeZero {
             actual_used_capacity: StorageData<T>,
+        },
+        /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+        /// the return of that storage request's deposit to the user failed.
+        FailedToReleaseStorageRequestCreationDeposit {
+            file_key: MerkleHash<T>,
+            owner: T::AccountId,
+            amount_to_return: BalanceOf<T>,
+            error: DispatchError,
         },
     }
 
@@ -1047,7 +1074,16 @@ pub mod pallet {
         /// the MSP actually has the files, while the non-inclusion proof is necessary to verify that the MSP
         /// wasn't storing it before.
         #[pallet::call_index(8)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight({
+			let total_weight: Weight = Weight::zero();
+			for bucket_response in storage_request_msp_response.iter() {
+				let amount_of_files_to_accept = bucket_response.accept.as_ref().map_or(0, |accept_response| accept_response.file_keys_and_proofs.len());
+				let amount_of_files_to_reject = bucket_response.reject.len();
+
+				total_weight.saturating_add(T::WeightInfo::msp_respond_storage_requests_multiple_buckets(1, amount_of_files_to_accept as u32, amount_of_files_to_reject as u32));
+			}
+			total_weight
+		})]
         pub fn msp_respond_storage_requests_multiple_buckets(
             origin: OriginFor<T>,
             storage_request_msp_response: StorageRequestMspResponse<T>,
@@ -1111,12 +1147,12 @@ pub mod pallet {
 
         /// Used by a BSP to confirm they are storing data of a storage request.
         #[pallet::call_index(11)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_confirm_storing(file_keys_and_proofs.len() as u32))]
         pub fn bsp_confirm_storing(
             origin: OriginFor<T>,
             non_inclusion_forest_proof: ForestProof<T>,
             file_keys_and_proofs: BoundedVec<
-                (MerkleHash<T>, KeyProof<T>),
+                FileKeyWithProof<T>,
                 T::MaxBatchConfirmStorageRequests,
             >,
         ) -> DispatchResult {
@@ -1140,7 +1176,7 @@ pub mod pallet {
         /// This metadata is necessary since it is needed to reconstruct the leaf node key in the storage
         /// provider's Merkle Forest.
         #[pallet::call_index(12)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_request_stop_storing())]
         pub fn bsp_request_stop_storing(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
@@ -1184,7 +1220,7 @@ pub mod pallet {
         /// The minimum amount of blocks between the request and the confirmation is defined by the runtime, such that the
         /// BSP can't immediately stop storing a file it has previously lost when receiving a challenge for it.
         #[pallet::call_index(13)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::bsp_confirm_stop_storing())]
         pub fn bsp_confirm_stop_storing(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
@@ -1213,7 +1249,7 @@ pub mod pallet {
         /// The validations are similar to the ones in the `bsp_request_stop_storing` and `bsp_confirm_stop_storing` extrinsics, but the SP doesn't need to
         /// wait for a minimum amount of blocks to confirm to stop storing the file nor it has to be a BSP.
         #[pallet::call_index(14)]
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1).ref_time())]
+        #[pallet::weight(T::WeightInfo::stop_storing_for_insolvent_user_bsp().max(T::WeightInfo::stop_storing_for_insolvent_user_msp()))]
         pub fn stop_storing_for_insolvent_user(
             origin: OriginFor<T>,
             file_key: MerkleHash<T>,
@@ -1251,7 +1287,12 @@ pub mod pallet {
         }
 
         #[pallet::call_index(15)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+			match maybe_inclusion_forest_proof {
+				Some(_) => T::WeightInfo::delete_file_with_inclusion_proof(),
+				None => T::WeightInfo::delete_file_without_inclusion_proof(),
+			}
+		})]
         pub fn delete_file(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
@@ -1285,7 +1326,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(16)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::pending_file_deletion_request_submit_proof())]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,
             user: T::AccountId,
@@ -1317,7 +1358,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(17)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::set_global_parameters())]
         pub fn set_global_parameters(
             origin: OriginFor<T>,
             new_max_replication_target: Option<T::ReplicationTargetType>,
@@ -1356,8 +1397,6 @@ pub mod pallet {
     #[pallet::hooks]
     impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
         fn on_poll(_n: BlockNumberFor<T>, weight: &mut frame_support::weights::WeightMeter) {
-            // TODO: Benchmark computational weight cost of this hook.
-
             Self::do_on_poll(weight);
         }
 

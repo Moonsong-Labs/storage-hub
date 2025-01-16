@@ -205,16 +205,20 @@ describeBspNet(
     });
 
     it("BSP can correctly delete a file from its forest and runtime correctly updates its root", async () => {
+      // Generate the inclusion proof for the file key that BSP-Three requested to stop storing.
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileMetadata.fileKey]
       );
+
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
         currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
       await userApi.block.skipTo(cooldown);
+      await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
+
       // Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
       await userApi.block.seal({
         calls: [

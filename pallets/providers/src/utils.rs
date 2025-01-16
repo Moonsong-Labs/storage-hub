@@ -309,7 +309,7 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
-        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id)?;
+        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id);
 
         // Emit the corresponding event
         Self::deposit_event(Event::<T>::MspSignUpSuccess {
@@ -429,7 +429,7 @@ where
             }
         })?;
 
-        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id)?;
+        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
 
         Ok(msp_id)
     }
@@ -462,6 +462,9 @@ where
                 >= bsp.sign_up_block + T::BspSignUpLockPeriod::get(),
             Error::<T>::SignOffPeriodNotPassed
         );
+
+        // Stop all cycles before deleting the BSP since this function will check if the BSP has default root
+        Self::do_stop_all_cycles(who)?;
 
         // Update the BSPs storage, removing the signer as an BSP
         AccountIdToBackupStorageProviderId::<T>::remove(who);
@@ -1184,6 +1187,28 @@ where
                 provider_id: *provider_id,
             });
         }
+
+        Ok(())
+    }
+
+    pub(crate) fn do_stop_all_cycles(account_id: &T::AccountId) -> DispatchResult {
+        let provider_id = AccountIdToBackupStorageProviderId::<T>::get(account_id)
+            .ok_or(Error::<T>::BspOnlyOperation)?;
+
+        if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+            ensure!(
+                provider.root == T::DefaultMerkleRoot::get(),
+                Error::<T>::CannotStopCycleWithNonDefaultRoot
+            );
+        } else {
+            return Err(Error::<T>::BspOnlyOperation.into());
+        }
+
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&provider_id)?;
+
+        <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::stop_randomness_cycle(
+            &provider_id,
+        )?;
 
         Ok(())
     }
