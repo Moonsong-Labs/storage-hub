@@ -1,6 +1,6 @@
 {
   "name": "@storagehub/types-bundle",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Bundle definitions for Polkadot{.js} app & api",
   "private": false,
   "type": "module",
@@ -23,12 +23,12 @@
   },
   "license": "ISC",
   "dependencies": {
-    "@polkadot/api": "12.4.2",
-    "@polkadot/api-base": "12.4.2",
-    "@polkadot/rpc-core": "12.4.2",
-    "@polkadot/typegen": "12.4.2",
-    "@polkadot/types": "12.4.2",
-    "@polkadot/types-codec": "12.4.2",
-    "typescript": "5.5.4"
+    "@polkadot/api": "*",
+    "@polkadot/api-base": "*",
+    "@polkadot/rpc-core": "*",
+    "@polkadot/typegen": "*",
+    "@polkadot/types": "*",
+    "@polkadot/types-codec": "*",
+    "typescript": "*"
   }
 }
