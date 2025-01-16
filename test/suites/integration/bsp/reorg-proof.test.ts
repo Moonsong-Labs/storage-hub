@@ -8,8 +8,6 @@ import {
   type EnrichedBspApi,
   type FileMetadata
 } from "../../../util";
-import type { SubmittableExtrinsic } from "@polkadot/api/types";
-import type { ISubmittableResult } from "@polkadot/types/types";
 
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
@@ -23,8 +21,6 @@ describeBspNet(
     let ignoredBlockHash: string;
     let volunteerBlockHash: string;
     let secondFileMetadata: FileMetadata;
-    let inclusionForestProofBeforeConfirmingStoring: string;
-    let confirmDeletionSignedCall: SubmittableExtrinsic<"promise", ISubmittableResult>;
 
     before(async () => {
       userApi = await createUserApi();
@@ -374,14 +370,6 @@ describeBspNet(
       } = await userApi.block.seal();
       volunteerBlockHash = blockHash.toString();
 
-      // Create and save a valid inclusion Forest proof for confirming the file deletion, at this point,
-      // with this root, so that it can be used in a forked non-best block that doesn't have the storage
-      // confirmation coming below.
-      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
-        firstFileMetadata.fileKey
-      ]);
-      inclusionForestProofBeforeConfirmingStoring = inclusionForestProof.toString();
-
       // Wait for the BSP to send the confirm storage extrinsic, and then seal a block,
       // without finalising it, to be able to reorg it out.
       await userApi.wait.bspStored(undefined, undefined, false);
@@ -408,94 +396,63 @@ describeBspNet(
     });
 
     it("File deletion confirmation is included in a forked non-best block", async () => {
-      // Save the BSP Forest root before confirming the storage request.
+      // Create and save a valid inclusion Forest proof for confirming the file deletion, at this point,
+      // with this root, with the latest file confirmation included in the forest, so that we can use it
+      // in the fork that will be reorged in, also after the file storage confirmation.
+      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+        firstFileMetadata.fileKey
+      ]);
+      const inclusionForestProofAfterConfirmingStoring = inclusionForestProof.toString();
+
+      // Save the BSP Forest root before doing the reorg.
       const onChainBspInfoBeforeResult = await userApi.call.storageProvidersApi.getBspInfo(
         ShConsts.DUMMY_BSP_ID
       );
       assert(onChainBspInfoBeforeResult.isOk);
       const onChainBspForestRootBefore = onChainBspInfoBeforeResult.asOk.root.toString();
 
-      // Send file deletion confirmation to a forked non-best block.
-      const {
-        blockReceipt: { blockHash }
-      } = await userApi.block.seal({
-        finaliseBlock: false,
-        parentHash: volunteerBlockHash
+      // We seal another non-final block on top of the block with the file storage confirmation.
+      // IMPORTANT!
+      // This is because somehow the User node drops the confirm deletion transaction from the
+      // tx pool if we try to include it in a non-best block, right after having built the block
+      // with the file storage confirmation.
+      await userApi.block.seal({ finaliseBlock: false });
+
+      // Seal a finalised block on top of the block with the volunteer transaction.
+      // This essentially reorgs out the file storage confirmation as far as the User
+      // node is concerned, but not for the BSP.
+      // Finality is a node-local concept, so this block is not finalised for the BSP
+      // node, which still sees the file storage confirmation as valid and the one in
+      // the longest chain.
+      await userApi.block.seal({
+        parentHash: volunteerBlockHash,
+        finaliseBlock: true
       });
-      ignoredBlockHash = blockHash.toString();
-      await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-      const { events, blockReceipt } = await userApi.block.seal({
+
+      // Wait for the reorged out storage confirmation transaction to be in the tx pool again.
+      // Then build a block with it, on top of the above finalised block.
+      // Still, this won't trigger a reorg in the BSP. This block will be at the same height
+      // of the current best block for the BSP.
+      await userApi.wait.bspStored(undefined, undefined, false);
+      await userApi.block.seal({ finaliseBlock: false });
+
+      // Seal another block with the confirm deletion transaction.
+      // This is finally the block that triggers the reorg in the BSP.
+      const { events } = await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.bspConfirmStopStoring(
             firstFileMetadata.fileKey,
-            inclusionForestProofBeforeConfirmingStoring
+            inclusionForestProofAfterConfirmingStoring
           )
         ],
         signer: bspKey,
-        finaliseBlock: false,
-        parentHash: ignoredBlockHash
+        finaliseBlock: false
       });
 
       // Check for the confirm stopped storing event.
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring", events);
 
-      // Check that file is still in the local Forest for the BSP.
-      await waitFor({
-        lambda: async () => {
-          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(
-            null,
-            firstFileMetadata.fileKey
-          );
-          return isFileInForest.isTrue;
-        }
-      });
-
-      // Check that the BSP root has not changed.
-      // We check for 3 seconds expecting to have no change, i.e. expecting the check in the
-      // lambda to fail all throughout those 3 seconds.
-      await rejects(
-        waitFor({
-          lambda: async () => {
-            // Get the local BSP Forest root.
-            const localBspForestRoot = (
-              await bspApi.rpc.storagehubclient.getForestRoot(null)
-            ).toString();
-
-            // Check if it changed.
-            return onChainBspForestRootBefore !== localBspForestRoot;
-          },
-          delay: 100,
-          iterations: 30 // 3 seconds
-        })
-      );
-    });
-
-    it("Ignored file deletion confirmation is reorged in and confirm storing is reorged out", async () => {
-      // Build a new block on top of the ignored block to trigger a reorg.
-      const parentHash = ignoredBlockHash;
-      const {
-        blockReceipt: { blockHash: reorgBlockHash }
-      } = await userApi.block.seal({
-        parentHash,
-        finaliseBlock: false
-      });
-
-      // Check that reorg was processed both by the User and BSP nodes.
-      const bestBlockHash = (await userApi.rpc.chain.getHeader()).hash.toString();
-      assert(bestBlockHash === reorgBlockHash.toString());
-      await userApi.wait.bspCatchUpToChainTip(bspApi);
-
-      // Check that neither of the files are included in the BSP's local Forest.
-      await waitFor({
-        lambda: async () => {
-          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(
-            null,
-            firstFileMetadata.fileKey
-          );
-          return isFileInForest.isTrue;
-        }
-      });
-
+      // Check that the recently added file is still in the local Forest for the BSP.
       await waitFor({
         lambda: async () => {
           const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(
@@ -505,9 +462,36 @@ describeBspNet(
           return isFileInForest.isTrue;
         }
       });
-    });
 
-    it("BSP confirm stop storing again", { skip: "Not Implemented" }, async () => {});
+      // Check that the deleted file is not in the local Forest for the BSP.
+      // We check for 3 seconds expecting to not find it, i.e. expecting the check in the
+      // lambda to fail all throughout those 3 seconds.
+      await rejects(
+        waitFor({
+          lambda: async () => {
+            const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(
+              null,
+              firstFileMetadata.fileKey
+            );
+            return isFileInForest.isTrue;
+          },
+          delay: 100,
+          iterations: 30 // 3 seconds
+        })
+      );
+
+      // Check that the new local Forest root matches the one on-chain.
+      const localBspForestRoot = (await bspApi.rpc.storagehubclient.getForestRoot(null)).toString();
+      const onChainBspInfoAfterResult = await userApi.call.storageProvidersApi.getBspInfo(
+        ShConsts.DUMMY_BSP_ID
+      );
+      assert(onChainBspInfoAfterResult.isOk);
+      const onChainBspForestRootAfter = await onChainBspInfoAfterResult.asOk.root.toString();
+      strictEqual(onChainBspForestRootAfter, localBspForestRoot);
+
+      // Check that the local Forest root is different thant the one before the reorg.
+      assert(localBspForestRoot !== onChainBspForestRootBefore);
+    });
   }
 );
 
