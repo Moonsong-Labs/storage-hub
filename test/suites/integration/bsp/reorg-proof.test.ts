@@ -9,6 +9,9 @@ import {
   type FileMetadata
 } from "../../../util";
 
+//! IMPORTANT!
+//! In order to understand better this test, we suggest following this [diagram](https://github.com/Moonsong-Labs/storage-hub/blob/main/resources/reorgsTestFlow.png).
+
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
   { initialised: true, networkConfig: "standard" },
