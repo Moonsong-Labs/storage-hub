@@ -343,13 +343,27 @@ where
     Block: cumulus_primitives_core::BlockT<Hash = H256>,
 {
     /// The block is a new best block, built on top of the previous best block.
-    NewBestBlock(MinimalBlockInfo),
+    ///
+    /// - `last_best_block_processed`: The last best block that was processed by this node.
+    ///   This is not necessarily the parent of `new_best_block`, since this node might be
+    ///   coming out of syncing mode.
+    /// - `new_best_block`: The new best block that was imported.
+    /// - `tree_route`: The [`TreeRoute`] with `new_best_block` as the last element. The
+    ///   length of the `tree_route` is determined by the number of blocks between the
+    ///   `last_best_block_processed` and `new_best_block`, but
+    NewBestBlock {
+        last_best_block_processed: MinimalBlockInfo,
+        new_best_block: MinimalBlockInfo,
+        tree_route: TreeRoute<Block>,
+    },
     /// The block belongs to a fork that is not currently the best fork.
     NewNonBestBlock(MinimalBlockInfo),
     /// This fork causes a reorg, i.e. it is the new best block, but the previous best block
     /// is not the parent of this one.
     ///
     /// The old best block (from the now non-best fork) is provided, as well as the new best block.
+    /// The [`TreeRoute`] between the two (both included) is also provided, where `old_best_block`
+    /// is the first element in the `tree_route`, and `new_best_block` is the last element.
     Reorg {
         old_best_block: MinimalBlockInfo,
         new_best_block: MinimalBlockInfo,

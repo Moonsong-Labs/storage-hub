@@ -28,6 +28,7 @@ use sp_core::{Blake2Hasher, Get, Hasher, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
+    traits::Zero,
     SaturatedConversion,
 };
 use storage_hub_runtime::{Runtime, RuntimeEvent, SignedExtra, UncheckedExtrinsic};
@@ -42,7 +43,7 @@ use crate::{
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
-    handler::LOG_TARGET,
+    handler::{LOG_TARGET, MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES},
     state::{
         OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
         OngoingProcessStopStoringForInsolventUserRequestCf,
@@ -145,7 +146,85 @@ where
 
         // If `tree_route` is `None`, this means that there was NO reorg while importing the block.
         if block_import_notification.tree_route.is_none() {
-            return NewBlockNotificationKind::NewBestBlock(new_block_info);
+            // Construct the tree route from the last best block processed and the new best block.
+            // Fetch the parents of the new best block until:
+            // - We reach the genesis block, or
+            // - The size of the route is equal to `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES`, or
+            // - The parent block is not found, or
+            // - We reach the last best block processed.
+            let mut route = vec![new_block_info.clone().into()];
+            let mut last_block_added = new_block_info.clone();
+            loop {
+                // Check if we are at the genesis block.
+                if last_block_added.number == BlockNumber::zero() {
+                    trace!(target: LOG_TARGET, "Reached genesis block while building tree route for new best block");
+                    break;
+                }
+
+                // Check if the route reached the maximum number of blocks to catch up on.
+                if route.len() == MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES as usize {
+                    trace!(target: LOG_TARGET, "Reached maximum blocks to catch up on while building tree route for new best block");
+                    break;
+                }
+
+                // Get the parent block.
+                let parent_hash = match self.client.header(last_block_added.hash) {
+                    Ok(Some(header)) => header.parent_hash,
+                    Ok(None) => {
+                        error!(target: LOG_TARGET, "Parent block hash not found for block {:?}", last_block_added.hash);
+                        break;
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get header for block {:?}: {:?}", last_block_added.hash, e);
+                        break;
+                    }
+                };
+                let parent_block = match self.client.block(parent_hash) {
+                    Ok(Some(block)) => block,
+                    Ok(None) => {
+                        error!(target: LOG_TARGET, "Block not found for block hash {:?}", parent_hash);
+                        break;
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get block for block hash {:?}: {:?}", parent_hash, e);
+                        break;
+                    }
+                };
+                let parent_block_info = MinimalBlockInfo {
+                    number: parent_block.block.header.number,
+                    hash: parent_block.block.hash(),
+                };
+
+                // Check if we reached the last best block processed.
+                if parent_block_info.hash == last_best_block.hash {
+                    trace!(target: LOG_TARGET, "Reached last best block processed while building tree route for new best block");
+                    break;
+                }
+
+                // Add the parent block to the route.
+                route.push(parent_block_info.into());
+
+                // Update last block added.
+                last_block_added = parent_block_info;
+            }
+
+            // The first element in the route is the last block processed, which will also be the
+            // `pivot`, so it will be ignored when processing the `tree_route`.
+            route.push(last_best_block.clone().into());
+
+            // Revert the route so that it is in ascending order of blocks.
+            route.reverse();
+
+            // Build the tree route.
+            let tree_route = TreeRoute::new(route, 0).expect(
+                "Tree route with pivot at 0 index and a route with at least 2 elements should be valid; qed",
+            );
+
+            return NewBlockNotificationKind::NewBestBlock {
+                last_best_block_processed: last_best_block,
+                new_best_block: new_block_info,
+                tree_route,
+            };
         }
 
         // At this point we know that the new block is the new best block, and that it also caused a reorg.
@@ -154,7 +233,22 @@ where
             .as_ref()
             .expect("Tree route should exist, it was just checked to be `Some`; qed")
             .clone();
-        let tree_route = (*tree_route).clone();
+
+        // Add the new best block to the tree route, so that it is also processed as part of the reorg.
+        let retracted = tree_route.retracted();
+        let common_block = tree_route.common_block().clone();
+        let enacted = tree_route.enacted();
+        let modified_route = retracted
+            .into_iter()
+            .chain(std::iter::once(&common_block))
+            .chain(enacted)
+            .chain(std::iter::once(&new_block_info.clone().into()))
+            .cloned()
+            .collect();
+
+        let tree_route = TreeRoute::new(modified_route, retracted.len()).expect(
+            "Tree route with one additional block to the enacted chain should be valid; qed",
+        );
         info!(target: LOG_TARGET, "🔀 New best block caused a reorg: {:?}", new_block_info);
         info!(target: LOG_TARGET, "⛓️ Tree route: {:?}", tree_route);
         NewBlockNotificationKind::Reorg {
@@ -376,11 +470,14 @@ where
         extrinsic_hash: H256,
     ) -> Result<Extrinsic> {
         // Get the block.
-        let block = self
-            .client
-            .block(block_hash)
-            .expect("Failed to get block. This shouldn't be possible for known existing block hash; qed")
-            .expect("Block returned None for known existing block hash. This shouldn't be the case for a block known to have at least one transaction; qed");
+        let maybe_block = self.client.block(block_hash).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to get block. Error: {:?}", e);
+            anyhow!("Failed to get block. Error: {:?}", e)
+        })?;
+        let block = maybe_block.ok_or_else(|| {
+            error!(target: LOG_TARGET, "Block returned None, i.e. block not found");
+            anyhow!("Block returned None, i.e. block not found")
+        })?;
 
         // Get the extrinsics.
         let extrinsics = block.block.extrinsics();
@@ -392,7 +489,10 @@ where
                 let hash = Blake2Hasher::hash(&e.encode());
                 hash == extrinsic_hash
             })
-            .expect("Extrinsic not found in block. This shouldn't be possible if we're looking into a block for which we got confirmation that the extrinsic was included; qed");
+            .ok_or_else(|| {
+                error!(target: LOG_TARGET, "Extrinsic with hash {:?} not found in block", extrinsic_hash);
+                anyhow!("Extrinsic not found in block")
+            })?;
 
         // Get the events from storage.
         let events_in_block = get_events_at_block(&self.client, &block_hash)?;

@@ -77,11 +77,22 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// continuing to process incoming events.
 ///
 /// TODO: Define properly the number of blocks to come out of sync mode
+/// TODO: Make this configurable in the config file
 pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
 
 /// On blocks that are multiples of this number, the blockchain service will trigger the catch
 /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
+///
+/// TODO: Make this configurable in the config file
 pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
+
+/// The maximum number of blocks from the past that will be processed for catching up the root
+/// changes (see [`BlockchainService::forest_root_changes_catchup`]). This constant determines
+/// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
+/// variant.
+///
+/// TODO: Make this configurable in the config file
+pub(crate) const MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES: BlockNumber = 10;
 
 /// The BlockchainService actor.
 ///
@@ -1051,18 +1062,11 @@ where
         // Get the new best block info, and the `TreeRoute`, i.e. the blocks from the old best block to the new best block.
         // A new non-best block is ignored and not processed.
         let (block_info, tree_route) = match new_block_notification_kind {
-            NewBlockNotificationKind::NewBestBlock(new_best_block_info) => {
-                // Making up a tree route with the new best block, and the old best block as the pivot.
-                let tree_route = TreeRoute::new(
-                    vec![
-                        last_block_processed.clone().into(),
-                        new_best_block_info.clone().into(),
-                    ],
-                    0,
-                )
-                .expect("`TreeRoute` with `pivot` 0 should be valid; qed");
-                (new_best_block_info, tree_route)
-            }
+            NewBlockNotificationKind::NewBestBlock {
+                last_best_block_processed: _,
+                new_best_block,
+                tree_route,
+            } => (new_best_block, tree_route),
             NewBlockNotificationKind::NewNonBestBlock(_) => return,
             NewBlockNotificationKind::Reorg {
                 old_best_block: _,
