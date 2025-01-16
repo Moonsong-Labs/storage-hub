@@ -380,6 +380,7 @@ impl pallet_storage_providers::Config for Test {
         { shp_constants::FILE_SIZE_TO_CHALLENGES },
     >;
     type NativeBalance = Balances;
+    type CrRandomness = CrRandomness;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;

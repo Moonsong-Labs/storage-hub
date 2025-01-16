@@ -4376,6 +4376,7 @@ declare module "@polkadot/types/lookup" {
     readonly asDeleteProvider: {
       readonly providerId: H256;
     } & Struct;
+    readonly isStopAllCycles: boolean;
     readonly type:
       | "RequestMspSignUp"
       | "RequestBspSignUp"
@@ -4392,7 +4393,8 @@ declare module "@polkadot/types/lookup" {
       | "ForceBspSignUp"
       | "Slash"
       | "TopUpDeposit"
-      | "DeleteProvider";
+      | "DeleteProvider"
+      | "StopAllCycles";
   }
 
   /** @name PalletFileSystemCall (339) */
@@ -5589,6 +5591,8 @@ declare module "@polkadot/types/lookup" {
     readonly isMaxBlockNumberReached: boolean;
     readonly isOperationNotAllowedForInsolventProvider: boolean;
     readonly isDeleteProviderConditionsNotMet: boolean;
+    readonly isCannotStopCycleWithNonDefaultRoot: boolean;
+    readonly isBspOnlyOperation: boolean;
     readonly isInvalidEncodedFileMetadata: boolean;
     readonly isInvalidEncodedAccountId: boolean;
     readonly isPaymentStreamNotFound: boolean;
@@ -5636,6 +5640,8 @@ declare module "@polkadot/types/lookup" {
       | "MaxBlockNumberReached"
       | "OperationNotAllowedForInsolventProvider"
       | "DeleteProviderConditionsNotMet"
+      | "CannotStopCycleWithNonDefaultRoot"
+      | "BspOnlyOperation"
       | "InvalidEncodedFileMetadata"
       | "InvalidEncodedAccountId"
       | "PaymentStreamNotFound";
