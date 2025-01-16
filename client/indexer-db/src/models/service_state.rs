@@ -8,7 +8,7 @@ use crate::{schema::service_state, DbConnection};
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = service_state)]
 pub struct ServiceState {
-    pub id: i32,
+    pub id: i64,
     pub last_processed_block: i64,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,

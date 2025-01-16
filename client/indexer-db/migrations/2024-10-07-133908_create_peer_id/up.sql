@@ -1,5 +1,5 @@
 CREATE TABLE peer_id (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     peer BYTEA NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -8,7 +8,7 @@ CREATE TABLE peer_id (
 -- Create File_PeerId table
 CREATE TABLE file_peer_id (
     file_id BIGINT NOT NULL,
-    peer_id INTEGER NOT NULL,
+    peer_id BIGINT NOT NULL,
     PRIMARY KEY (file_id, peer_id),
     FOREIGN KEY (file_id) REFERENCES file(id) ON DELETE CASCADE,
     FOREIGN KEY (peer_id) REFERENCES peer_id(id) ON DELETE CASCADE

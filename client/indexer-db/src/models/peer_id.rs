@@ -8,7 +8,7 @@ use crate::{schema::peer_id, DbConnection};
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = peer_id)]
 pub struct PeerId {
-    pub id: i32,
+    pub id: i64,
     pub peer: Vec<u8>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,

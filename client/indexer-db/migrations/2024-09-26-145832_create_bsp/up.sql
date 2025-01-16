@@ -1,6 +1,6 @@
 -- Create BSP table
 CREATE TABLE bsp (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     account VARCHAR NOT NULL,
     capacity NUMERIC(20, 0) NOT NULL,
     stake NUMERIC(38, 0) NOT NULL DEFAULT 0,
@@ -11,7 +11,7 @@ CREATE TABLE bsp (
 
 -- Create BSP_MultiAddress table
 CREATE TABLE bsp_multiaddress (
-    bsp_id INTEGER NOT NULL,
+    bsp_id BIGINT NOT NULL,
     multiaddress_id INTEGER NOT NULL,
     PRIMARY KEY (bsp_id, multiaddress_id),
     FOREIGN KEY (bsp_id) REFERENCES bsp(id) ON DELETE CASCADE,
