@@ -12,7 +12,7 @@ CREATE TABLE bsp (
 -- Create BSP_MultiAddress table
 CREATE TABLE bsp_multiaddress (
     bsp_id BIGINT NOT NULL,
-    multiaddress_id INTEGER NOT NULL,
+    multiaddress_id BIGINT NOT NULL,
     PRIMARY KEY (bsp_id, multiaddress_id),
     FOREIGN KEY (bsp_id) REFERENCES bsp(id) ON DELETE CASCADE,
     FOREIGN KEY (multiaddress_id) REFERENCES multiaddress(id) ON DELETE CASCADE
