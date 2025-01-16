@@ -131,12 +131,6 @@ where
             },
         );
 
-        info!(
-            target: LOG_TARGET,
-            "MSP: accepting move bucket request for bucket {:?}",
-            bucket_id.as_ref(),
-        );
-
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(call, Tip::from(0))

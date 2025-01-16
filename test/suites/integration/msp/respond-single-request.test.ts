@@ -2,16 +2,18 @@ import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
 
 describeMspNet(
-  "Single MSP accepting storage request",
-  { networkConfig: "standard" },
-  ({ before, createMsp1Api, it, createUserApi }) => {
+  "MSP responds to single storage request",
+  { initialised: false, indexer: true },
+  ({ before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMspApi = await createMsp1Api();
-      assert(maybeMspApi, "MSP API not available");
+      const maybeMspApi = await createMspApi();
+      if (!maybeMspApi) {
+        throw new Error("Failed to create MSP API");
+      }
       mspApi = maybeMspApi;
     });
 

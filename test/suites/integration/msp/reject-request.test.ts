@@ -4,15 +4,16 @@ import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../uti
 describeMspNet(
   "Single MSP rejecting storage request",
   { initialised: true },
-  ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {
+  ({ before, createMspApi, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMspApi = await createMsp1Api();
-
-      assert(maybeMspApi, "MSP API not available");
+      const maybeMspApi = await createMspApi();
+      if (!maybeMspApi) {
+        throw new Error("Failed to create MSP API");
+      }
       mspApi = maybeMspApi;
     });
 

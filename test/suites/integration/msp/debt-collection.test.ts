@@ -4,15 +4,17 @@ import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 import type { H256 } from "@polkadot/types/interfaces";
 import type { Option } from "@polkadot/types";
 
-describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, createUserApi }) => {
+describeMspNet("Single MSP collecting debt", ({ before, createMspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
   let mspApi: EnrichedBspApi;
   let bucketId: H256;
 
   before(async () => {
     userApi = await createUserApi();
-    const maybeMspApi = await createMsp1Api();
-    assert(maybeMspApi, "MSP API not available");
+    const maybeMspApi = await createMspApi();
+    if (!maybeMspApi) {
+      throw new Error("Failed to create MSP API");
+    }
     mspApi = maybeMspApi;
   });
 

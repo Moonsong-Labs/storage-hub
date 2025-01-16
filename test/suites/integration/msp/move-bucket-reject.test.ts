@@ -11,14 +11,17 @@ import {
   shUser,
   sleep,
   type EnrichedBspApi,
+  mspTwoKey,
   createSqlClient
 } from "../../../util";
+import { onboardMsp } from "../../../util/bspNet/docker";
 import Docker from "dockerode";
+import type { EventRecord } from "@polkadot/types/interfaces";
 
 describeMspNet(
   "MSP rejects bucket move requests",
   { initialised: false, indexer: true },
-  ({ before, createMsp1Api, createMsp2Api, it, createUserApi }) => {
+  ({ after, before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let msp1Api: EnrichedBspApi;
     let msp2Api: EnrichedBspApi;
@@ -30,17 +33,16 @@ describeMspNet(
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMsp1Api = await createMsp1Api();
-      if (maybeMsp1Api) {
-        msp1Api = maybeMsp1Api;
-      } else {
-        throw new Error("MSP API for first MSP not available");
+      const maybeMsp1Api = await createMspApi();
+      if (!maybeMsp1Api) {
+        throw new Error("Failed to create MSP API");
       }
-      const maybeMsp2Api = await createMsp2Api();
-      if (maybeMsp2Api) {
-        msp2Api = maybeMsp2Api;
-      } else {
-        throw new Error("MSP API for second MSP not available");
+      msp1Api = maybeMsp1Api;
+    });
+
+    after(async () => {
+      if (msp2Api) {
+        await msp2Api.disconnect();
       }
     });
 
@@ -133,7 +135,7 @@ describeMspNet(
       // Get the events of the storage requests to extract the file keys and check
       // that the MSP received them.
       const events = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
-      const matchedEvents = events.filter((e) =>
+      const matchedEvents = events.filter((e: EventRecord) =>
         userApi.events.fileSystem.NewStorageRequest.is(e.event)
       );
       if (matchedEvents.length !== source.length) {
@@ -269,6 +271,21 @@ describeMspNet(
 
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
       }
+    });
+
+    it("Add MSP2 with default capacity", async () => {
+      const { mspApi } = await onboardMsp(userApi, {
+        mspSigner: mspTwoKey,
+        name: "sh-msp-2",
+        mspId: ShConsts.DUMMY_MSP_ID_2,
+        maxStorageCapacity: 4294967295,
+        jumpCapacity: 4294967295,
+        waitForIdle: true,
+        nodeKey: ShConsts.NODE_INFOS.msp2.nodeKey,
+        keystoreFolder: "msp-two"
+      });
+
+      msp2Api = mspApi;
     });
 
     it("MSP 2 rejects move request when indexer postgres DB is down", async () => {

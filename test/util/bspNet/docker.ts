@@ -1,13 +1,20 @@
 import Docker from "dockerode";
+import assert from "node:assert";
 import { execSync } from "node:child_process";
 import path from "node:path";
-import { DOCKER_IMAGE } from "../constants";
-import { sendCustomRpc } from "../rpc";
-import * as NodeBspNet from "./node";
-import { BspNetTestApi } from "./test-api";
-import assert from "node:assert";
+import { fileURLToPath } from "node:url";
 import { PassThrough, type Readable } from "node:stream";
+import { DOCKER_IMAGE } from "../constants";
+import { BspNetTestApi } from "./test-api";
+import { getContainerIp, forceSignupMsp } from "./helpers";
+import { sendCustomRpc } from "../rpc";
 import { sleep } from "../timer";
+import type { KeyringPair } from "@polkadot/keyring/types";
+import type { EnrichedBspApi } from "./test-api";
+import * as NodeBspNet from "./node";
+
+// Get the absolute path to the docker directory
+const DOCKER_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../docker");
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
@@ -93,7 +100,7 @@ export const addBspContainer = async (options?: {
         "9944/tcp": [{ HostPort: rpcPort.toString() }],
         [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }]
       },
-      Binds: [`${process.cwd()}/../docker/dev-keystores:${keystorePath}:rw`]
+      Binds: [`${path.join(DOCKER_DIR, "dev-keystores")}:${keystorePath}:rw`]
     },
     Cmd: [
       "--dev",
@@ -135,6 +142,102 @@ export const addBspContainer = async (options?: {
 
   console.log(
     `▶️ BSP container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
+  );
+
+  return { containerName, rpcPort, p2pPort, peerId };
+};
+
+export const addMspContainer = async (options?: {
+  name?: string;
+  maxStorageCapacity?: number;
+  jumpCapacity?: number;
+  additionalArgs?: string[];
+  nodeKey?: string;
+  keystoreFolder?: string;
+}) => {
+  const docker = new Docker();
+  const existingMsps = (
+    await docker.listContainers({
+      filters: { ancestor: [DOCKER_IMAGE] }
+    })
+  )
+    .flatMap(({ Command }) => Command)
+    .filter((cmd) => cmd.includes("--provider-type=msp"));
+
+  const mspNum = existingMsps.length;
+
+  // Unlike BSPs, MSPs can be the first provider
+  const p2pPort = 30555 + mspNum;
+  const rpcPort = 9777 + mspNum;
+  const containerName = options?.name || `docker-sh-msp-${mspNum + 1}`;
+
+  // Get bootnode from user container args
+  const { Args } = await docker.getContainer("docker-sh-user-1").inspect();
+  const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
+  assert(bootNodeArg, "No bootnode found in docker args");
+
+  // Get keystore path
+  const keystorePath = "/keystore";
+  const keystoreFolder = options?.keystoreFolder || "msp";
+
+  const container = await docker.createContainer({
+    Image: DOCKER_IMAGE,
+    name: containerName,
+    platform: "linux/amd64",
+    NetworkingConfig: {
+      EndpointsConfig: {
+        docker_default: {}
+      }
+    },
+    HostConfig: {
+      PortBindings: {
+        "9944/tcp": [{ HostPort: rpcPort.toString() }],
+        [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }]
+      },
+      Binds: [`${path.join(DOCKER_DIR, "dev-keystores", keystoreFolder)}:${keystorePath}:rw`]
+    },
+    Cmd: [
+      "--dev",
+      "--sealing=manual",
+      "--provider",
+      "--provider-type=msp",
+      `--name=${containerName}`,
+      "--no-hardware-benchmarks",
+      "--unsafe-rpc-external",
+      "--rpc-methods=unsafe",
+      "--rpc-cors=all",
+      `--port=${p2pPort}`,
+      "--base-path=/data",
+      bootNodeArg,
+      `--max-storage-capacity=${options?.maxStorageCapacity}`,
+      `--jump-capacity=${options?.jumpCapacity}`,
+      "--msp-charging-period=12",
+      "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub",
+      ...(options?.nodeKey ? [`--node-key=${options.nodeKey}`] : []),
+      ...(options?.additionalArgs || [])
+    ]
+  });
+  await container.start();
+
+  let peerId: string | undefined;
+  for (let i = 0; i < 200; i++) {
+    try {
+      peerId = await sendCustomRpc(`http://127.0.0.1:${rpcPort}`, "system_localPeerId");
+      break;
+    } catch {
+      await sleep(50);
+    }
+  }
+
+  assert(peerId, "Failed to connect after 10s. Exiting...");
+
+  const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+  const chainName = api.consts.system.version.specName.toString();
+  assert(chainName === "storage-hub-runtime", `Error connecting to MSP via api ${containerName}`);
+  await api.disconnect();
+
+  console.log(
+    `▶️ MSP container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
@@ -284,4 +387,70 @@ export const waitForLog = async (options: {
       }
     );
   });
+};
+
+export const onboardMsp: (
+  api: EnrichedBspApi,
+  options: {
+    mspSigner: KeyringPair;
+    name?: string;
+    mspKeySeed?: string;
+    mspId?: string;
+    maxStorageCapacity?: number;
+    jumpCapacity?: number;
+    additionalArgs?: string[];
+    waitForIdle?: boolean;
+    pricePerGigaUnitOfDataPerBlock?: number;
+    maxDataLimit?: number;
+    commitment?: string;
+    nodeKey?: string;
+    keystoreFolder?: string;
+  }
+) => Promise<{ rpcPort: number; mspApi: EnrichedBspApi }> = async (api, options) => {
+  // Launch an MSP node
+  const { rpcPort } = await addMspContainer({
+    name: options.name,
+    maxStorageCapacity: options.maxStorageCapacity,
+    jumpCapacity: options.jumpCapacity,
+    additionalArgs: ["--keystore-path=/keystore", ...(options.additionalArgs || [])],
+    nodeKey: options.nodeKey,
+    keystoreFolder: options.keystoreFolder
+  });
+
+  // Create API for MSP
+  const mspApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
+
+  if (options.waitForIdle) {
+    await api.docker.waitForLog({
+      containerName: options.name || "docker-sh-msp-2",
+      searchString: "💤 Idle",
+      timeout: 15000
+    });
+  }
+
+  // Give MSP some balance and sign it up
+  const amount = 10000n * 10n ** 12n;
+  await api.block.seal({
+    calls: [api.tx.sudo.sudo(api.tx.balances.forceSetBalance(options.mspSigner.address, amount))]
+  });
+
+  // Get MSP's multiaddress
+  const mspIp = await getContainerIp(options.name || "docker-sh-msp-2");
+  const mspPeerId = await mspApi.rpc.system.localPeerId();
+  const multiAddressMsp = `/ip4/${mspIp}/tcp/30350/p2p/${mspPeerId}`;
+
+  // Sign up MSP
+  await forceSignupMsp({
+    api,
+    who: options.mspSigner.address,
+    mspId: options.mspId,
+    capacity: options.maxStorageCapacity,
+    multiaddress: multiAddressMsp,
+    pricePerGigaUnitOfDataPerBlock: options.pricePerGigaUnitOfDataPerBlock,
+    commitment: options.commitment,
+    maxDataLimit: options.maxDataLimit,
+    paymentAccount: options.mspSigner.address
+  });
+
+  return { rpcPort, mspApi };
 };

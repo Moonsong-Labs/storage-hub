@@ -236,13 +236,7 @@ export type FullNetContext = {
    * Creates and returns a connected API instance for the first MSP node.
    * @returns A promise that resolves to an enriched api instance for MSP operations.
    */
-  createMsp1Api: () => ReturnType<typeof BspNetTestApi.create> | undefined;
-
-  /**
-   * Creates and returns a connected API instance for the second MSP node.
-   * @returns A promise that resolves to an enriched api instance for MSP operations.
-   */
-  createMsp2Api: () => ReturnType<typeof BspNetTestApi.create> | undefined;
+  createMspApi: () => ReturnType<typeof BspNetTestApi.create> | undefined;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
@@ -337,6 +331,8 @@ export type TestOptions = {
   extrinsicRetryTimeout?: number;
   /** If true, runs launched userNode has attached indexer service enabled. */
   indexer?: boolean;
+  /** Set a custom max storage capacity for MSP2 */
+  msp2MaxStorageCapacity?: number;
 };
 
 /**

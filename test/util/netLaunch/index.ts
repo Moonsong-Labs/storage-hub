@@ -8,6 +8,7 @@ import {
   addBsp,
   BspNetTestApi,
   forceSignupBsp,
+  forceSignupMsp,
   getContainerIp,
   getContainerPeerId,
   ShConsts,
@@ -33,11 +34,20 @@ import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
 import { spawn, spawnSync } from "node:child_process";
 import { DUMMY_MSP_ID } from "../bspNet/consts";
+import { onboardMsp } from "../bspNet/docker";
+import type { KeyringPair } from "@polkadot/keyring/types";
+import { fileURLToPath } from "node:url";
 
 export type ShEntity = {
   port: number;
   name: string;
 };
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Get the absolute path to the docker directory
+const DOCKER_DIR = path.resolve(__dirname, "../../../docker");
 
 export class NetworkLauncher {
   private composeYaml?: any;
@@ -55,15 +65,11 @@ export class NetworkLauncher {
       fullnet: "fullnet-base-template.yml"
     } as const;
 
-    // if (this.config.noisy && this.type === "fullnet") {
-    //   assert(false, "Noisy fullnet not supported");
-    // }
-
     const file = this.type === "fullnet" ? composeFiles.fullnet : composeFiles.bspnet;
 
     assert(file, `Compose file not found for ${this.type} network`);
 
-    const composeFilePath = path.resolve(process.cwd(), "..", "docker", file);
+    const composeFilePath = path.join(DOCKER_DIR, file);
     const composeFile = fs.readFileSync(composeFilePath, "utf8");
     const composeYaml = yaml.parse(composeFile);
 
@@ -158,19 +164,15 @@ export class NetworkLauncher {
         composeYaml.services["sh-msp-1"].command.push(
           "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
         );
-        composeYaml.services["sh-msp-2"].command.push(
-          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
-        );
       }
     }
 
-    const cwd = path.resolve(process.cwd(), "..", "docker");
     const entries = Object.entries(composeYaml.services).map(([key, value]: any) => {
       let remappedValue: any;
       if ("volumes" in value) {
         remappedValue = {
           ...value,
-          volumes: value.volumes.map((volume: any) => volume.replace("./", `${cwd}/`))
+          volumes: value.volumes.map((volume: any) => volume.replace("./", `${DOCKER_DIR}/`))
         };
       }
       return { node: key, spec: remappedValue ?? value };
@@ -200,26 +202,25 @@ export class NetworkLauncher {
       doubleQuotedAsJSON: true,
       flowCollectionPadding: true
     });
-    fs.mkdirSync(path.join(cwd, "tmp"), { recursive: true });
+    fs.mkdirSync(path.join(DOCKER_DIR, "tmp"), { recursive: true });
     const tmpFile = tmp.fileSync({ postfix: ".yml" });
     fs.writeFileSync(tmpFile.name, updatedCompose);
     return tmpFile.name;
   }
 
   private async startNetwork(verbose = false) {
-    const cwd = path.resolve(process.cwd(), "..", "docker");
     const tmpFile = this.remapComposeYaml();
 
     if (this.config.noisy) {
       await compose.upOne("toxiproxy", {
-        cwd: cwd,
+        cwd: DOCKER_DIR,
         config: tmpFile,
         log: verbose
       });
     }
 
     await compose.upOne("sh-bsp", {
-      cwd: cwd,
+      cwd: DOCKER_DIR,
       config: tmpFile,
       log: verbose
     });
@@ -249,30 +250,15 @@ export class NetworkLauncher {
       );
 
       for (const mspService of mspServices) {
-        const nodeKey =
-          mspService === "sh-msp-1"
-            ? ShConsts.NODE_INFOS.msp1.nodeKey
-            : mspService === "sh-msp-2"
-              ? ShConsts.NODE_INFOS.msp2.nodeKey
-              : undefined;
-        assert(
-          nodeKey,
-          `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
-        );
+        if (mspService !== "sh-msp-1") {
+          continue; // Skip MSP2 and any other MSPs in initial setup
+        }
 
-        const mspId =
-          mspService === "sh-msp-1"
-            ? ShConsts.DUMMY_MSP_ID
-            : mspService === "sh-msp-2"
-              ? ShConsts.DUMMY_MSP_ID_2
-              : undefined;
-        assert(
-          mspId,
-          `Service ${mspService} not msp-1/2, either add to hardcoded list or make this dynamic`
-        );
+        const nodeKey = ShConsts.NODE_INFOS.msp1.nodeKey;
+        const mspId = ShConsts.DUMMY_MSP_ID;
 
         await compose.upOne(mspService, {
-          cwd: cwd,
+          cwd: DOCKER_DIR,
           config: tmpFile,
           log: verbose,
           env: {
@@ -288,7 +274,7 @@ export class NetworkLauncher {
 
     if (this.config.indexer) {
       await compose.upOne("sh-postgres", {
-        cwd: cwd,
+        cwd: DOCKER_DIR,
         config: tmpFile,
         log: verbose
       });
@@ -297,7 +283,7 @@ export class NetworkLauncher {
     }
 
     await compose.upOne("sh-user", {
-      cwd: cwd,
+      cwd: DOCKER_DIR,
       config: tmpFile,
       log: verbose,
       env: {
@@ -413,25 +399,46 @@ export class NetworkLauncher {
   }
 
   public async setupMsp(api: EnrichedBspApi, who: string, multiAddressMsp: string, mspId?: string) {
-    await api.block.seal({
-      calls: [
-        api.tx.sudo.sudo(
-          api.tx.providers.forceMspSignUp(
-            who,
-            mspId ?? ShConsts.DUMMY_MSP_ID,
-            this.config.capacity || ShConsts.CAPACITY_512,
-            // The peer ID has to be different from the BSP's since the user now attempts to send files to MSPs when new storage requests arrive.
-            [multiAddressMsp],
-            // The MSP will charge 100 UNITS per GigaUnit of data per block.
-            100 * 1024 * 1024,
-            "Terms of Service...",
-            9999999,
-            who
-          )
-        )
-      ]
+    const capacity = this.config.capacity
+      ? Number(this.config.capacity)
+      : Number(ShConsts.CAPACITY_512);
+    await forceSignupMsp({
+      api,
+      who,
+      mspId,
+      capacity,
+      multiaddress: multiAddressMsp,
+      pricePerGigaUnitOfDataPerBlock: 100 * 1024 * 1024,
+      commitment: "Terms of Service...",
+      maxDataLimit: 9999999,
+      paymentAccount: who
     });
     return this;
+  }
+
+  public async onboardMspWithConfig(
+    api: EnrichedBspApi,
+    mspKey: KeyringPair,
+    options?: {
+      name?: string;
+      mspKeySeed?: string;
+      mspId?: string;
+      maxStorageCapacity?: number;
+      jumpCapacity?: number;
+      waitForIdle?: boolean;
+      pricePerGigaUnitOfDataPerBlock?: number;
+      maxDataLimit?: number;
+      commitment?: string;
+      nodeKey?: string;
+    }
+  ) {
+    return onboardMsp(api, {
+      mspSigner: mspKey,
+      ...options,
+      maxStorageCapacity: options?.maxStorageCapacity ?? Number(this.config.capacity),
+      jumpCapacity: options?.jumpCapacity ?? Number(this.config.capacity),
+      nodeKey: options?.nodeKey ?? ShConsts.NODE_INFOS.msp1.nodeKey
+    });
   }
 
   public async setupRuntimeParams(api: EnrichedBspApi) {
@@ -683,36 +690,22 @@ export class NetworkLauncher {
         service.includes("sh-msp")
       );
       for (const service of mspServices) {
+        if (service !== "sh-msp-1") {
+          continue; // Skip MSP2 and any other MSPs in initial setup
+        }
+
         const mspContainerName = launchedNetwork.composeYaml.services[service].container_name;
         assert(mspContainerName, "MSP container name not found in compose file");
         const mspIp = await getContainerIp(mspContainerName);
         const mspPeerId = await launchedNetwork.getPeerId(service);
         const multiAddressMsp = `/ip4/${mspIp}/tcp/30350/p2p/${mspPeerId}`;
 
-        // TODO: As we add more MSPs make this more dynamic
-        const mspAddress =
-          service === "sh-msp-1"
-            ? mspKey.address
-            : service === "sh-msp-2"
-              ? mspTwoKey.address
-              : undefined;
-        assert(
-          mspAddress,
-          `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
+        await launchedNetwork.setupMsp(
+          userApi,
+          mspKey.address,
+          multiAddressMsp,
+          ShConsts.DUMMY_MSP_ID
         );
-
-        const mspId =
-          service === "sh-msp-1"
-            ? ShConsts.DUMMY_MSP_ID
-            : service === "sh-msp-2"
-              ? ShConsts.DUMMY_MSP_ID_2
-              : undefined;
-        assert(
-          mspId,
-          `Service ${service} not msp-1/2, either add to hardcoded list or make this dynamic`
-        );
-        console.log(`Adding msp ${service} with address ${multiAddressMsp} and id ${mspId}`);
-        await launchedNetwork.setupMsp(userApi, mspAddress, multiAddressMsp, mspId);
       }
     }
 
@@ -787,3 +780,35 @@ export type NetLaunchConfig = {
    */
   toxics?: ToxicInfo[];
 };
+
+export interface NetworkConfig {
+  bspMaxStorageCapacity?: number;
+  bspJumpCapacity?: number;
+  mspMaxStorageCapacity?: number;
+  mspJumpCapacity?: number;
+  mspPricePerGigaUnitOfDataPerBlock?: number;
+  mspMaxDataLimit?: number;
+  mspCommitment?: string;
+  mspPaymentAccount?: string;
+  bspPaymentAccount?: string;
+  bspCommitment?: string;
+  bspPricePerGigaUnitOfDataPerBlock?: number;
+  bspMaxDataLimit?: number;
+  bspSignUpLockPeriod?: number;
+  bspMinDeposit?: number;
+  bspMinCapacity?: number;
+  bspDepositPerData?: number;
+  minBlocksBetweenCapacityChanges?: number;
+  slashAmountPerChunkOfStorageData?: number;
+  bucketDeposit?: number;
+  maxMultiAddressSize?: number;
+  maxMultiAddressAmount?: number;
+  maxProtocols?: number;
+  maxBsps?: number;
+  maxMsps?: number;
+  bucketNameLimit?: number;
+  maxCommitmentSize?: number;
+  maxExpiredItemsInBlock?: number;
+  maxFileSize?: number;
+  providerTopUpTtl?: number;
+}

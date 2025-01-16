@@ -152,6 +152,35 @@ export const forceSignupBsp = async (options: {
   return Object.assign(bspId, blockResults);
 };
 
+export const forceSignupMsp = async (options: {
+  api: EnrichedBspApi;
+  who: string | Uint8Array;
+  mspId?: string;
+  capacity?: number;
+  multiaddress: string;
+  pricePerGigaUnitOfDataPerBlock?: number;
+  commitment?: string;
+  maxDataLimit?: number;
+  paymentAccount?: string;
+}) => {
+  return options.api.block.seal({
+    calls: [
+      options.api.tx.sudo.sudo(
+        options.api.tx.providers.forceMspSignUp(
+          options.who,
+          options.mspId ?? options.who,
+          options.capacity ?? 4294967295,
+          [options.multiaddress],
+          options.pricePerGigaUnitOfDataPerBlock ?? 100 * 1024 * 1024,
+          options.commitment ?? "Terms of Service...",
+          options.maxDataLimit ?? 9999999,
+          options.paymentAccount ?? options.who
+        )
+      )
+    ]
+  });
+};
+
 export const createCheckBucket = async (api: EnrichedBspApi, bucketName: string) => {
   const newBucketEventEvent = await api.createBucket(bucketName);
   const newBucketEventDataBlob =
