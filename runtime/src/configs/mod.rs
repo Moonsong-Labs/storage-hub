@@ -493,6 +493,7 @@ impl pallet_storage_providers::Config for Runtime {
         { shp_constants::FILE_SIZE_TO_CHALLENGES },
     >;
     type NativeBalance = Balances;
+    type CrRandomness = MockCrRandomness;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;

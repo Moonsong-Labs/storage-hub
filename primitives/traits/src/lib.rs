@@ -1051,11 +1051,11 @@ pub trait PaymentStreamsInterface {
     /// Check if a provider has any active payment streams.
     fn has_active_payment_stream(provider_id: &Self::ProviderId) -> bool;
 
-    /// Add a privileged provider to the PrivilegedProvider storage.
-    fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+    /// Add a privileged provider to the PrivilegedProviders storage, allowing it to charge every tick.
+    fn add_privileged_provider(provider_id: &Self::ProviderId);
 
-    /// Remove a privileged provider to the PrivilegedProvider storage.
-    fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+    /// Remove a privileged provider to the PrivilegedProviders storage.
+    fn remove_privileged_provider(provider_id: &Self::ProviderId);
 
     /// Get current tick.
     fn current_tick() -> Self::TickNumber;

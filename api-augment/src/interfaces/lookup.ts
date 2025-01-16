@@ -3507,7 +3507,8 @@ export default {
       top_up_deposit: "Null",
       delete_provider: {
         providerId: "H256"
-      }
+      },
+      stop_all_cycles: "Null"
     }
   },
   /**
@@ -4466,6 +4467,8 @@ export default {
       "MaxBlockNumberReached",
       "OperationNotAllowedForInsolventProvider",
       "DeleteProviderConditionsNotMet",
+      "CannotStopCycleWithNonDefaultRoot",
+      "BspOnlyOperation",
       "InvalidEncodedFileMetadata",
       "InvalidEncodedAccountId",
       "PaymentStreamNotFound"

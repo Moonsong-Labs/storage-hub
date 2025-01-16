@@ -1654,16 +1654,12 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Self::provider_has_payment_streams(provider_id)
     }
 
-    fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult {
+    fn add_privileged_provider(provider_id: &Self::ProviderId) {
         PrivilegedProviders::<T>::insert(provider_id, ());
-
-        Ok(())
     }
 
-    fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult {
+    fn remove_privileged_provider(provider_id: &Self::ProviderId) {
         PrivilegedProviders::<T>::remove(provider_id);
-
-        Ok(())
     }
 
     fn current_tick() -> BlockNumberFor<T> {
