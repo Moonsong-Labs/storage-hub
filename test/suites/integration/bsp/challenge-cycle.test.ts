@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission",
