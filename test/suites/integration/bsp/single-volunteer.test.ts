@@ -111,7 +111,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       containerName: "docker-sh-bsp-1",
       searchString: "File upload complete",
       timeout: 5000
-    })
+    });
 
     await userApi.block.seal();
     const {
@@ -129,7 +129,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     // TODO: Replace with a better wait once trace logging for event processing added
     await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
-    
+
     const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
     strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
     notEqual(bspForestRootAfterConfirm.toString(), initialBspForestRoot.toString());
