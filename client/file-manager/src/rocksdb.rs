@@ -610,7 +610,7 @@ where
     }
 
     /// Stores file metadata and an empty root.
-    /// Should only be used if no chunks have beeen written yet.
+    /// Should only be used if no chunks have been written yet.
     /// Otherwise use [`Self::insert_file_with_data`]
     fn insert_file(
         &mut self,

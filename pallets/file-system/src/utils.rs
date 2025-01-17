@@ -841,7 +841,7 @@ where
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
                 &bucket_root,
                 file_keys.as_slice(),
-                &accepted_file_keys.non_inclusion_forest_proof,
+                &accepted_file_keys.forest_proof,
             )?;
 
         let mut accepted_files_metadata = Vec::new();
@@ -1010,7 +1010,7 @@ where
                     })
                     .collect::<Vec<_>>()
                     .as_slice(),
-                &accepted_file_keys.non_inclusion_forest_proof,
+                &accepted_file_keys.forest_proof,
             )?;
 
         // Update root of the bucket.

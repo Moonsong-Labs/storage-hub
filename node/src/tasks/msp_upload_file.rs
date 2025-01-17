@@ -287,7 +287,7 @@ where
                     .map(|file_key_with_proof| file_key_with_proof.file_key)
                     .collect();
 
-                let non_inclusion_forest_proof = match fs.read().await.generate_proof(file_keys) {
+                let forest_proof = match fs.read().await.generate_proof(file_keys) {
                     Ok(proof) => proof,
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to generate non-inclusion forest proof: {:?}", e);
@@ -297,7 +297,7 @@ where
 
                 Some(StorageRequestMspAcceptedFileKeys {
                     file_keys_and_proofs: accept.clone(),
-                    non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
+                    forest_proof: forest_proof.proof,
                 })
             } else {
                 None

@@ -374,7 +374,7 @@ mod delete_bucket_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -461,7 +461,7 @@ mod delete_bucket_tests {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -637,7 +637,7 @@ mod delete_bucket_tests {
 									encoded_nodes: vec![H256::default().as_ref().to_vec()],
 								}
 							}],
-							non_inclusion_forest_proof: CompactProof {
+							forest_proof: CompactProof {
 								encoded_nodes: vec![H256::default().as_ref().to_vec()],
 							},
 						}),
@@ -917,7 +917,7 @@ mod request_move_bucket {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -2932,7 +2932,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -2987,7 +2987,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec(), file_key.as_ref().to_vec()],
                             },
                         }),
@@ -3087,7 +3087,7 @@ mod msp_respond_storage_request {
                                     }
                                 }
                             ],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -3207,7 +3207,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3222,7 +3222,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3354,7 +3354,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3369,7 +3369,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3494,7 +3494,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -3550,7 +3550,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3615,7 +3615,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3683,7 +3683,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3752,7 +3752,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3827,7 +3827,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3897,7 +3897,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3960,7 +3960,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -3981,7 +3981,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -4055,7 +4055,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -4128,7 +4128,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -4932,7 +4932,7 @@ mod bsp_confirm {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8255,7 +8255,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8408,7 +8408,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8524,7 +8524,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8677,7 +8677,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8935,7 +8935,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -9796,7 +9796,7 @@ mod stop_storing_for_insolvent_user {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),

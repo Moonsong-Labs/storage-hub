@@ -3534,7 +3534,7 @@ declare const _default: {
    **/
   PalletFileSystemStorageRequestMspAcceptedFileKeys: {
     fileKeysAndProofs: string;
-    nonInclusionForestProof: string;
+    forestProof: string;
   };
   /**
    * Lookup346: pallet_file_system::types::FileKeyWithProof<T>
