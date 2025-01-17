@@ -12,8 +12,9 @@ use pallet_proofs_dealer::SlashableProviders;
 use pallet_randomness::GetBabeData;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{
-    CommitmentVerifier, FileMetadataInterface, MaybeDebug, ProofSubmittersInterface,
-    ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
+    CommitRevealRandomnessInterface, CommitmentVerifier, FileMetadataInterface, MaybeDebug,
+    ProofSubmittersInterface, ReadChallengeableProvidersInterface, TrieMutation,
+    TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Get, Hasher, H256};
@@ -336,12 +337,28 @@ impl shp_traits::StorageHubTickGetter for MockStorageHubTickGetter {
     }
 }
 
+pub struct MockCommitRevealRandomness;
+impl CommitRevealRandomnessInterface for MockCommitRevealRandomness {
+    type ProviderId = <Test as pallet_storage_providers::Config>::ProviderId;
+
+    fn initialise_randomness_cycle(
+        _who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
+    fn stop_randomness_cycle(_who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+}
+
 // Storage providers pallet:
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type NativeBalance = Balances;
+    type CrRandomness = MockCommitRevealRandomness;
     type RuntimeHoldReason = RuntimeHoldReason;
     type FileMetadataManager = MockFileMetadataManager;
     type StorageDataUnit = StorageDataUnit;

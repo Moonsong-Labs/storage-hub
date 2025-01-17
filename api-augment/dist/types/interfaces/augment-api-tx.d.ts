@@ -13,6 +13,7 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
+  PalletFileSystemFileKeyWithProof,
   PalletFileSystemStorageRequestMspBucketResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
@@ -26,7 +27,6 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
-  ShpFileKeyVerifierFileKeyProof,
   SpRuntimeMultiSignature,
   SpTrieStorageProofCompactProof,
   SpWeightsWeightV2Weight,
@@ -524,21 +524,18 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array,
           fileKeysAndProofs:
-            | Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>
-            | [
-                H256 | string | Uint8Array,
-                (
-                  | ShpFileKeyVerifierFileKeyProof
-                  | {
-                      fileMetadata?: any;
-                      proof?: any;
-                    }
-                  | string
-                  | Uint8Array
-                )
-              ][]
+            | Vec<PalletFileSystemFileKeyWithProof>
+            | (
+                | PalletFileSystemFileKeyWithProof
+                | {
+                    fileKey?: any;
+                    proof?: any;
+                  }
+                | string
+                | Uint8Array
+              )[]
         ) => SubmittableExtrinsic<ApiType>,
-        [SpTrieStorageProofCompactProof, Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>]
+        [SpTrieStorageProofCompactProof, Vec<PalletFileSystemFileKeyWithProof>]
       >;
       /**
        * Executed by a BSP to request to stop storing a file.
@@ -3718,6 +3715,17 @@ declare module "@polkadot/api-base/types/submittable" {
         (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
+      /**
+       * BSP operation to stop all of your automatic cycles.
+       *
+       * This includes:
+       *
+       * - Commit reveal randomness cycle
+       * - Proof challenge cycle
+       *
+       * If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
+       **/
+      stopAllCycles: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**
        * Dispatchable extrinsic to top-up the deposit of a Storage Provider.
        *
