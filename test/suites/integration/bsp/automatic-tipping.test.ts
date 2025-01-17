@@ -33,19 +33,14 @@ describeBspNet(
 
       const txPool = await userApi.rpc.author.pendingExtrinsics();
 
-      const tips = confirmStoringPendingMatches.map(
-        (match) => txPool[match.extIndex].tip.toBigInt()
+      const tips = confirmStoringPendingMatches.map((match) =>
+        txPool[match.extIndex].tip.toBigInt()
       );
 
       // Log all tips first
-      console.log(
-        "All tips:",
-        tips
-      );
+      console.log("All tips:", tips);
 
-      const isIncreasing = tips
-        .slice(1)
-        .every((current, i) => current > tips[i]);
+      const isIncreasing = tips.slice(1).every((current, i) => current > tips[i]);
 
       assert(isIncreasing, "Tip should increase with each retry");
     });
