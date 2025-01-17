@@ -25,11 +25,11 @@ async function main() {
   await waitForChain(resources.relayApi);
 
   // Check if executor parameters are set
+  // @ts-ignore mute anyJson error
   const { executorParams } = (await resources.relayApi.query.configuration.activeConfig()).toJSON();
   if (isDeepStrictEqual(executorParams, idealExecutorParams)) {
     console.log("Executor parameters are already set to ideal values ✅");
   } else {
-    // @ts-expect-error - ApiAugment issue
     const setConfig = resources.relayApi.tx.configuration.setExecutorParams(idealExecutorParams);
 
     // Setting Async Config
