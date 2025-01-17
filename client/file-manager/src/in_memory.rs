@@ -1,3 +1,4 @@
+use log::info;
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use std::collections::{HashMap, HashSet};
 use trie_db::TrieDBMutBuilder;
@@ -393,6 +394,8 @@ where
             Some(list) => list.insert(key),
             None => return Err(FileStorageError::FailedToAddEntityToExcludeList),
         };
+
+        info!("Key added to the exclude list : {:?}", key);
         Ok(())
     }
 
@@ -405,6 +408,7 @@ where
             Some(list) => list.remove(key),
             None => return Err(FileStorageError::FailedToAddEntityToExcludeList),
         };
+        info!("Key removed to the exclude list : {:?}", key);
         Ok(())
     }
 }
@@ -779,5 +783,30 @@ mod tests {
         assert!(file_storage
             .get_chunk(&file_key_2, &ChunkId::new(2u64))
             .is_ok());
+    }
+
+    #[test]
+    fn add_file_to_exclude_list() {
+        let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
+
+        let hash = HasherOutT::<LayoutV1<BlakeTwo256>>::try_from([
+            3, 23, 10, 46, 117, 151, 183, 183, 227, 216, 76, 5, 57, 29, 19, 154, 98, 177, 87, 231,
+            135, 134, 216, 192, 130, 242, 157, 207, 76, 17, 19, 20,
+        ])
+        .unwrap();
+
+        file_storage
+            .add_to_exclude_list(hash, ExcludeType::File)
+            .unwrap();
+
+        assert!(!file_storage.is_allowed(&hash, ExcludeType::File).unwrap());
+
+        file_storage
+            .add_to_exclude_list(hash, ExcludeType::Fingerprint)
+            .unwrap();
+
+        assert!(!file_storage
+            .is_allowed(&hash, ExcludeType::Fingerprint)
+            .unwrap())
     }
 }

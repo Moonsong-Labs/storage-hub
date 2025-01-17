@@ -1,3 +1,4 @@
+use log::info;
 use std::{io, path::PathBuf, sync::Arc};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
@@ -854,6 +855,7 @@ where
             FileStorageError::FailedToWriteToStorage
         })?;
 
+        info!("Key added to the exclude list : {:?}", key);
         Ok(())
     }
 
@@ -872,6 +874,7 @@ where
             FileStorageError::FailedToWriteToStorage
         })?;
 
+        info!("Key removed to the exclude list : {:?}", key);
         Ok(())
     }
 }

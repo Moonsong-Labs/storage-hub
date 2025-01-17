@@ -1071,10 +1071,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
     };
     storagehubclient: {
       /**
-       * Add filekey to exclude list
+       * Add key to exclude list
        **/
       addToExcludeList: AugmentedRpc<
-        (file_key: H256 | string | Uint8Array) => Observable<ITuple<[]>>
+        (key: H256 | string | Uint8Array, exclude_type: Text | string) => Observable<ITuple<[]>>
       >;
       /**
        * Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest.
@@ -1160,10 +1160,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       removeBcsvKeys: AugmentedRpc<(keystore_path: Text | string) => Observable<ITuple<[]>>>;
       /**
-       * Remove filekey from exclude list
+       * Remove key from exclude list
        **/
       removeFromExcludeList: AugmentedRpc<
-        (file_key: H256 | string | Uint8Array) => Observable<ITuple<[]>>
+        (key: H256 | string | Uint8Array, exclude_type: Text | string) => Observable<ITuple<[]>>
       >;
       /**
        * Save a file from the local storage to the disk.
