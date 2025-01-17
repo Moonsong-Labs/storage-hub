@@ -3403,6 +3403,7 @@ declare const _default: {
       delete_provider: {
         providerId: string;
       };
+      stop_all_cycles: string;
     };
   };
   /**

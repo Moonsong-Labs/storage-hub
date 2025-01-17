@@ -1060,6 +1060,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AppendBucketToMspFailed: AugmentedError<ApiType>;
       /**
+       * An operation dedicated to BSPs only
+       **/
+      BspOnlyOperation: AugmentedError<ApiType>;
+      /**
        * Error thrown when a bucket ID already exists in storage.
        **/
       BucketAlreadyExists: AugmentedError<ApiType>;
@@ -1087,6 +1091,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
+       * Cannot stop BSP cycles without a default root
+       **/
+      CannotStopCycleWithNonDefaultRoot: AugmentedError<ApiType>;
       /**
        * Failed to delete a provider due to conditions not being met.
        *
