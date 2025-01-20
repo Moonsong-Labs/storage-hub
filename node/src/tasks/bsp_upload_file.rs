@@ -583,8 +583,6 @@ where
                 anyhow::anyhow!(err_msg)
             })?;
 
-        dbg!(&is_allowed);
-
         if !is_allowed {
             info!("Bucket is in the exclude list");
             return Ok(());

@@ -3,7 +3,7 @@ import assert from "node:assert";
 
 describeBspNet(
   "BSP Exclude list tests",
-  { initialised: "multi", networkConfig: "standard", only: true },
+  { only: true },
   ({ before, createUserApi, it, createBspApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -13,7 +13,7 @@ describeBspNet(
       bspApi = await createBspApi();
     });
 
-    it("Adding file fingerprint to exclude list and make sure it doesnt volunteer for it", async () => {
+    it("Adding bucket to exclude list and make sure it doesnt volunteer for it", async () => {
       const newBucketEventEvent = await userApi.createBucket("exclude-list");
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
@@ -29,8 +29,8 @@ describeBspNet(
       });
 
       const { file_metadata: FileMetadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
-        "res/cloud.jpg",
-        "cat/cloud.jpg",
+        "res/whatsup.jpg",
+        "test/whatsup.jpg",
         userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId,
       );
@@ -40,17 +40,19 @@ describeBspNet(
       await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.issueStorageRequest(
-            FileMetadata.bucketId,
+            newBucketEventDataBlob.bucketId,
             FileMetadata.location,
             FileMetadata.fingerprint,
-            FileMetadata.fileSize,
+            FileMetadata.file_size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            null
+            1
           )
         ],
         signer: shUser
       });
+
+      await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
       // waiting for bsp to see the request
       await sleep(5000);
