@@ -1,6 +1,6 @@
 -- Create MSP table
 CREATE TABLE msp (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     account VARCHAR NOT NULL,
     capacity NUMERIC(20, 0) NOT NULL,
     value_prop VARCHAR NOT NULL,
@@ -10,8 +10,8 @@ CREATE TABLE msp (
 
 -- Create MSP_MultiAddress table
 CREATE TABLE msp_multiaddress (
-    msp_id INTEGER NOT NULL,
-    multiaddress_id INTEGER NOT NULL,
+    msp_id BIGINT NOT NULL,
+    multiaddress_id BIGINT NOT NULL,
     PRIMARY KEY (msp_id, multiaddress_id),
     FOREIGN KEY (msp_id) REFERENCES msp(id) ON DELETE CASCADE,
     FOREIGN KEY (multiaddress_id) REFERENCES multiaddress(id) ON DELETE CASCADE

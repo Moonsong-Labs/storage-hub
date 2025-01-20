@@ -15,7 +15,7 @@ use crate::{
 #[diesel(table_name = bsp)]
 pub struct Bsp {
     /// The ID of the BSP as stored in the database. For the runtime id, use `onchain_bsp_id`.
-    pub id: i32,
+    pub id: i64,
     pub account: String,
     pub capacity: BigDecimal,
     pub stake: BigDecimal,
@@ -32,8 +32,8 @@ pub struct Bsp {
 #[diesel(belongs_to(Bsp, foreign_key = bsp_id))]
 #[diesel(belongs_to(MultiAddress, foreign_key = multiaddress_id))]
 pub struct BspMultiAddress {
-    pub bsp_id: i32,
-    pub multiaddress_id: i32,
+    pub bsp_id: i64,
+    pub multiaddress_id: i64,
 }
 
 impl Bsp {
@@ -165,15 +165,15 @@ impl Bsp {
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = bsp_file)]
 pub struct BspFile {
-    pub bsp_id: i32,
-    pub file_id: i32,
+    pub bsp_id: i64,
+    pub file_id: i64,
 }
 
 impl BspFile {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
-        bsp_id: i32,
-        file_id: i32,
+        bsp_id: i64,
+        file_id: i64,
     ) -> Result<(), diesel::result::Error> {
         diesel::insert_into(bsp_file::table)
             .values((bsp_file::bsp_id.eq(bsp_id), bsp_file::file_id.eq(file_id)))

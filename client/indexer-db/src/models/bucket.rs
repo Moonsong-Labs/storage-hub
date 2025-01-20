@@ -10,9 +10,9 @@ use crate::{schema::bucket, DbConnection};
 #[diesel(belongs_to(Msp, foreign_key = msp_id))]
 pub struct Bucket {
     /// The ID of the Bucket as stored in the database. For the runtime id, use `onchain_bucket_id`.
-    pub id: i32,
+    pub id: i64,
     /// The ID of the MSP (column in the database) that the bucket belongs to.
-    pub msp_id: Option<i32>,
+    pub msp_id: Option<i64>,
     pub account: String,
     pub onchain_bucket_id: Vec<u8>,
     pub name: Vec<u8>,
@@ -26,7 +26,7 @@ pub struct Bucket {
 impl Bucket {
     pub async fn create<'a>(
         conn: &mut DbConnection<'a>,
-        msp_id: Option<i32>,
+        msp_id: Option<i64>,
         account: String,
         onchain_bucket_id: Vec<u8>,
         name: Vec<u8>,
@@ -73,7 +73,7 @@ impl Bucket {
     pub async fn update_msp<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: Vec<u8>,
-        msp_id: i32,
+        msp_id: i64,
     ) -> Result<Self, diesel::result::Error> {
         let bucket = diesel::update(bucket::table)
             .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
