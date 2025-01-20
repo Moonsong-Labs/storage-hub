@@ -1563,6 +1563,20 @@ where
             return Err(Error::<T>::NotRegistered.into());
         }
     }
+
+    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
+    ///
+    /// This function attempts to insert a the expiration item at the next available block starting from
+    /// the current next available block.
+    pub(crate) fn enqueue_expiration_item(
+        expiration_item: ExpirationItem<T>,
+    ) -> Result<BlockNumberFor<T>, DispatchError> {
+        let expiration_block = expiration_item.get_next_expiration_block()?;
+        let new_expiration_block = expiration_item.try_append(expiration_block)?;
+        expiration_item.set_next_expiration_block(new_expiration_block)?;
+
+        Ok(new_expiration_block)
+    }
 }
 
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
@@ -2498,20 +2512,6 @@ where
         }
 
         true
-    }
-
-    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
-    ///
-    /// This function attempts to insert a the expiration item at the next available block starting from
-    /// the current next available block.
-    pub(crate) fn enqueue_expiration_item(
-        expiration_item: ExpirationItem<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let expiration_block = expiration_item.get_next_expiration_block()?;
-        let new_expiration_block = expiration_item.try_append(expiration_block)?;
-        expiration_item.set_next_expiration_block(new_expiration_block)?;
-
-        Ok(new_expiration_block)
     }
 }
 
