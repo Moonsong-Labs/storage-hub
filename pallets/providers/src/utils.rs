@@ -15,7 +15,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError,
+    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError, QueryBucketsForMspError,
     QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
@@ -312,7 +312,7 @@ where
         <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id);
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::MspSignUpSuccess {
+        Self::deposit_event(Event::MspSignUpSuccess {
             who: who.clone(),
             msp_id,
             multiaddresses: sign_up_request.msp_info.multiaddresses.clone(),
@@ -375,7 +375,7 @@ where
         });
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::BspSignUpSuccess {
+        Self::deposit_event(Event::BspSignUpSuccess {
             who: who.clone(),
             bsp_id,
             root: bsp_info.root,
@@ -878,7 +878,7 @@ where
         let mut final_capacity = new_decreased_capacity;
 
         // Slash amount could be 0, but this is still emitted as a signal for the provider and users to be aware
-        Self::deposit_event(Event::<T>::Slashed {
+        Self::deposit_event(Event::Slashed {
             provider_id: *provider_id,
             amount: actual_slashed,
         });
@@ -922,7 +922,7 @@ where
             // they will not be slashed
             AwaitingTopUpFromProviders::<T>::remove(&typed_provider_id);
 
-            Self::deposit_event(Event::<T>::TopUpFulfilled {
+            Self::deposit_event(Event::TopUpFulfilled {
                 provider_id: *provider_id,
                 amount: held_deposit_difference,
             });
@@ -946,7 +946,7 @@ where
             );
 
             // Signal to the provider that they need to top up their held deposit to match the current used capacity
-            Self::deposit_event(Event::<T>::AwaitingTopUp {
+            Self::deposit_event(Event::AwaitingTopUp {
                 provider_id: *provider_id,
                 top_up_metadata,
             });
@@ -1052,7 +1052,7 @@ where
         AwaitingTopUpFromProviders::<T>::remove(typed_provider_id);
 
         // Signal that the slashed amount has been topped up
-        Self::deposit_event(Event::<T>::TopUpFulfilled {
+        Self::deposit_event(Event::TopUpFulfilled {
             provider_id,
             amount: held_deposit_difference,
         });
@@ -1140,7 +1140,7 @@ where
             MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id);
             MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id);
 
-            Self::deposit_event(Event::<T>::MspDeleted {
+            Self::deposit_event(Event::MspDeleted {
                 provider_id: *provider_id,
             });
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
@@ -1183,7 +1183,7 @@ where
                 *n = n.saturating_sub(bsp.reputation_weight);
             });
 
-            Self::deposit_event(Event::<T>::BspDeleted {
+            Self::deposit_event(Event::BspDeleted {
                 provider_id: *provider_id,
             });
         }
@@ -1827,7 +1827,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            Self::deposit_event(Event::<T>::BucketRootChanged {
+            Self::deposit_event(Event::BucketRootChanged {
                 bucket_id,
                 old_root: bucket.root,
                 new_root,
@@ -2512,6 +2512,18 @@ where
         }
 
         true
+    }
+
+    pub fn query_buckets_for_msp(
+        msp_id: &MainStorageProviderId<T>,
+    ) -> Result<Vec<BucketId<T>>, QueryBucketsForMspError> {
+        if !MainStorageProviders::<T>::contains_key(msp_id) {
+            return Err(QueryBucketsForMspError::ProviderNotRegistered);
+        }
+
+        Ok(MainStorageProviderIdsToBuckets::<T>::iter_prefix(msp_id)
+            .map(|(bucket_id, _)| bucket_id)
+            .collect())
     }
 }
 
