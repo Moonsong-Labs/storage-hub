@@ -637,8 +637,8 @@ where
     /// 2. `ConfirmStoringRequest`.
     ///
     /// If this node is managing a MSP, the priority is given by:
-    /// 1. `RespondStorageRequest` over...
-    /// 2. `FileDeletionRequest`.
+    /// 1. `FileDeletionRequest` over...
+    /// 2. `RespondStorageRequest`.
     ///
     /// For both BSPs and MSPs, the last priority is given to:
     /// 1. `StopStoringForInsolventUserRequest`.
@@ -787,7 +787,35 @@ where
             .provider_id
             .expect("Just checked that this node is managing a Provider; qed")
         {
-            // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
+            // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending file deletion requests.
+            // We prioritize file deletion requests over respond storing requests since MSPs cannot charge any users while there are pending file deletion requests.
+            if next_event_data.is_none() {
+                // TODO: Update this to some greater value once batching is supported by the runtime.
+                let max_batch_delete: u32 = 1;
+                let mut file_deletion_requests = Vec::new();
+                for _ in 0..max_batch_delete {
+                    if let Some(request) = state_store_context
+                        .pending_file_deletion_request_deque()
+                        .pop_front()
+                    {
+                        file_deletion_requests.push(request);
+                    } else {
+                        break;
+                    }
+                }
+
+                // If we have at least 1 file deletion request, send the process event.
+                if file_deletion_requests.len() > 0 {
+                    next_event_data = Some(
+                        ProcessFileDeletionRequestData {
+                            file_deletion_requests,
+                        }
+                        .into(),
+                    );
+                }
+            }
+
+            // If we have no pending file deletion requests, we can also check for pending respond storing requests.
             // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
             if next_event_data.is_none() {
                 let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
@@ -810,33 +838,6 @@ where
                     next_event_data = Some(
                         ProcessMspRespondStoringRequestData {
                             respond_storing_requests: respond_storage_requests,
-                        }
-                        .into(),
-                    );
-                }
-            }
-
-            // If we have no pending respond storage requests, check for pending file deletion requests
-            if next_event_data.is_none() {
-                // TODO: Update this to some greater value once batching is supported by the runtime.
-                let max_batch_delete: u32 = 1;
-                let mut file_deletion_requests = Vec::new();
-                for _ in 0..max_batch_delete {
-                    if let Some(request) = state_store_context
-                        .pending_file_deletion_request_deque()
-                        .pop_front()
-                    {
-                        file_deletion_requests.push(request);
-                    } else {
-                        break;
-                    }
-                }
-
-                // If we have at least 1 file deletion request, send the process event.
-                if file_deletion_requests.len() > 0 {
-                    next_event_data = Some(
-                        ProcessFileDeletionRequestData {
-                            file_deletion_requests,
                         }
                         .into(),
                     );
