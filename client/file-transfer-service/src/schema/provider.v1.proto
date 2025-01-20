@@ -34,6 +34,8 @@ message RemoteUploadDataRequest {
 message RemoteUploadDataResponse {
 	// Success or failure of the upload.
 	bool success = 1;
+	// Whether the file is completely uploaded.
+	bool file_complete = 2;
 }
 
 // Remote data download request.

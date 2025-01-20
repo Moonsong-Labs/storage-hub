@@ -374,7 +374,7 @@ mod delete_bucket_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -461,7 +461,7 @@ mod delete_bucket_tests {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -637,7 +637,7 @@ mod delete_bucket_tests {
 									encoded_nodes: vec![H256::default().as_ref().to_vec()],
 								}
 							}],
-							non_inclusion_forest_proof: CompactProof {
+							forest_proof: CompactProof {
 								encoded_nodes: vec![H256::default().as_ref().to_vec()],
 							},
 						}),
@@ -917,7 +917,7 @@ mod request_move_bucket {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -2903,10 +2903,9 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    Some(1)
                 ));
 
-                // Compute the file key.
                 // Compute the file key.
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -2915,6 +2914,11 @@ mod msp_respond_storage_request {
                     size,
                     fingerprint,
                 );
+
+                // Simulate a BSP already confirming the storage request.
+                StorageRequests::<Test>::mutate(file_key, |storage_request| {
+                    storage_request.as_mut().unwrap().bsps_confirmed = 1;
+                });
 
                 // Dispatch the MSP accept request.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
@@ -2928,7 +2932,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -2936,13 +2940,65 @@ mod msp_respond_storage_request {
                     }],
                 ));
 
-                // Assert that the storage was updated
-                assert_eq!(
-                    file_system::StorageRequests::<Test>::get(file_key)
-                        .unwrap()
-                        .msp,
-                    Some((msp_id, true))
+                // Check that the storage request has been deleted since it is fulfilled.
+                assert_eq!(StorageRequests::<Test>::get(file_key), None);
+
+                // Get bucket root
+                let bucket_root = <<Test as Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
+
+                // Check that the bucket root is not default
+                assert_ne!(bucket_root, <<Test as Config>::Providers as shp_traits::ReadProvidersInterface>::get_default_root());
+
+                // Dispatch a storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                    Some(1)
+                ));
+
+                // Compute the file key.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
                 );
+
+                // Simulate a BSP already confirming the storage request.
+                StorageRequests::<Test>::mutate(file_key, |storage_request| {
+                    storage_request.as_mut().unwrap().bsps_confirmed = 1;
+                });
+
+                // Dispatch the MSP accept request with the file key in the forest proof.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec(), file_key.as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                let post_state_bucket_root = <<Test as Config>::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
+
+                // Bucket root should not have changed
+                assert_eq!(bucket_root, post_state_bucket_root);
             });
         }
 
@@ -3031,7 +3087,7 @@ mod msp_respond_storage_request {
                                     }
                                 }
                             ],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -3151,7 +3207,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3166,7 +3222,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3298,7 +3354,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3313,7 +3369,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3438,7 +3494,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -3494,7 +3550,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3559,7 +3615,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3627,7 +3683,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3696,7 +3752,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3771,7 +3827,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3841,7 +3897,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3904,7 +3960,7 @@ mod msp_respond_storage_request {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -3925,7 +3981,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -3999,7 +4055,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -4072,7 +4128,7 @@ mod msp_respond_storage_request {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
                                 }],
-                                non_inclusion_forest_proof: CompactProof {
+                                forest_proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 },
                             }),
@@ -4080,69 +4136,6 @@ mod msp_respond_storage_request {
                         }],
                     ),
                     Error::<Test>::InsufficientAvailableCapacity
-                );
-            });
-        }
-
-        #[test]
-        fn fails_if_the_non_inclusion_proof_includes_the_file_key() {
-            new_test_ext().execute_with(|| {
-                let owner_account_id = Keyring::Alice.to_account_id();
-                let msp = Keyring::Charlie.to_account_id();
-                let msp_signed = RuntimeOrigin::signed(msp.clone());
-                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 4;
-                let fingerprint = H256::zero();
-                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
-
-                // Dispatch a storage request.
-                assert_ok!(FileSystem::issue_storage_request(
-                    RuntimeOrigin::signed(owner_account_id.clone()),
-                    bucket_id,
-                    location.clone(),
-                    fingerprint,
-                    size,
-                    msp_id,
-                    peer_ids.clone(),
-                    None
-                ));
-
-                let file_key = FileSystem::compute_file_key(
-                    owner_account_id.clone(),
-                    bucket_id,
-                    location.clone(),
-                    size,
-                    fingerprint,
-                );
-
-                // Try to accept storing a file with a non-inclusion proof that includes the file key
-                assert_noop!(
-                    FileSystem::msp_respond_storage_requests_multiple_buckets(
-                        msp_signed.clone(),
-                        vec![StorageRequestMspBucketResponse {
-                            bucket_id,
-                            accept: Some(StorageRequestMspAcceptedFileKeys {
-                                file_keys_and_proofs: vec![FileKeyWithProof {
-                                    file_key,
-                                    proof: CompactProof {
-                                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                    }
-                                }],
-                                non_inclusion_forest_proof: CompactProof {
-                                    encoded_nodes: vec![file_key.as_ref().to_vec()],
-                                },
-                            }),
-                            reject: vec![],
-                        }],
-                    ),
-                    Error::<Test>::ExpectedNonInclusionProof
                 );
             });
         }
@@ -4939,7 +4932,7 @@ mod bsp_confirm {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8262,7 +8255,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8415,7 +8408,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8531,7 +8524,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8684,7 +8677,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -8942,7 +8935,7 @@ mod delete_file_and_pending_deletions_tests {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
@@ -9803,7 +9796,7 @@ mod stop_storing_for_insolvent_user {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
                             }],
-                            non_inclusion_forest_proof: CompactProof {
+                            forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
