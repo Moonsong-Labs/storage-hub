@@ -1884,6 +1884,7 @@ mod benchmarks {
             <T as pallet::Config>::RuntimeEvent::from(Event::FileDeletionRequest {
                 user: user_account.clone(),
                 file_key,
+                file_size,
                 bucket_id: file_bucket_id,
                 msp_id,
                 proof_of_inclusion: false,
@@ -2025,6 +2026,7 @@ mod benchmarks {
             <T as pallet::Config>::RuntimeEvent::from(Event::FileDeletionRequest {
                 user: user_account.clone(),
                 file_key,
+                file_size,
                 bucket_id: file_bucket_id,
                 msp_id,
                 proof_of_inclusion: true,
