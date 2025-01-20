@@ -21,7 +21,7 @@ describeBspNet(
       assert(newBucketEventDataBlob, "Event doesn't match Type");
 
       // !!! It has to be called on `bspApi`
-      await bspApi.rpc.storagehubclient.addToExcludeList(newBucketEventDataBlob.bucketId, "bucket")
+      await bspApi.rpc.storagehubclient.addToExcludeList(newBucketEventDataBlob.bucketId, "bucket");
 
       await bspApi.assert.log({
         searchString: "Key added to the exclude list",
@@ -32,7 +32,7 @@ describeBspNet(
         "res/whatsup.jpg",
         "test/whatsup.jpg",
         userApi.shConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId,
+        newBucketEventDataBlob.bucketId
       );
 
       await sleep(5000);
@@ -61,7 +61,6 @@ describeBspNet(
         searchString: "Bucket is in the exclude list",
         containerName: "docker-sh-bsp-1"
       });
-
     });
   }
 );
