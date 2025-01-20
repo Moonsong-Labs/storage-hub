@@ -11,7 +11,7 @@ use sp_runtime::AccountId32;
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 
-use crate::types::{ConfirmStoringRequest, RespondStorageRequest};
+use crate::types::{self, ConfirmStoringRequest, RespondStorageRequest};
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
 
@@ -105,6 +105,7 @@ pub enum ForestWriteLockTaskData {
     ConfirmStoringRequest(ProcessConfirmStoringRequestData),
     MspRespondStorageRequest(ProcessMspRespondStoringRequestData),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData),
+    FileDeletionRequest(ProcessFileDeletionRequestData),
 }
 
 impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
@@ -128,6 +129,12 @@ impl From<ProcessMspRespondStoringRequestData> for ForestWriteLockTaskData {
 impl From<ProcessStopStoringForInsolventUserRequestData> for ForestWriteLockTaskData {
     fn from(data: ProcessStopStoringForInsolventUserRequestData) -> Self {
         Self::StopStoringForInsolventUserRequest(data)
+    }
+}
+
+impl From<ProcessFileDeletionRequestData> for ForestWriteLockTaskData {
+    fn from(data: ProcessFileDeletionRequestData) -> Self {
+        Self::FileDeletionRequest(data)
     }
 }
 
@@ -316,6 +323,65 @@ pub struct NotifyPeriod {}
 
 impl EventBusMessage for NotifyPeriod {}
 
+/// File deletion request event.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct FileDeletionRequest {
+    /// Account ID of the user that requested the file deletion.
+    pub user: AccountId32,
+    /// File key that was requested to be deleted.
+    pub file_key: FileKey,
+    /// File size of the file that was requested to be deleted.
+    pub file_size: StorageData,
+    /// Bucket ID in which the file key belongs to.
+    pub bucket_id: BucketId,
+    /// The MSP ID that provided the proof of inclusion for a pending file deletion request.
+    pub msp_id: ProofsDealerProviderId,
+    /// Whether a proof of inclusion was provided by the user.
+    ///
+    /// This means that the file key requested to be deleted was included in the user's submitted inclusion forest proof.
+    /// The key would have been
+    pub proof_of_inclusion: bool,
+}
+
+impl EventBusMessage for FileDeletionRequest {}
+
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct ProcessFileDeletionRequestData {
+    pub file_deletion_requests: Vec<types::FileDeletionRequest>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ProcessFileDeletionRequest {
+    pub data: ProcessFileDeletionRequestData,
+    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+}
+
+impl EventBusMessage for ProcessFileDeletionRequest {}
+
+/// Finalised proof submitted by an MSP for a pending file deletion request event.
+///
+/// Fields are identical
+#[derive(Debug, Clone)]
+pub struct FinalisedProofSubmittedForPendingFileDeletionRequest {
+    /// Account ID of the user that requested the file deletion.
+    pub user: AccountId32,
+    /// File key that was requested to be deleted.
+    pub file_key: FileKey,
+    /// File size of the file that was requested to be deleted.
+    pub file_size: StorageData,
+    /// Bucket ID in which the file key belongs to.
+    pub bucket_id: BucketId,
+    /// The MSP ID that provided the proof of inclusion for a pending file deletion request.
+    pub msp_id: ProofsDealerProviderId,
+    /// Whether a proof of inclusion was provided by the MSP.
+    ///
+    /// This means that the file key requested to be deleted was responded to by the MSP with an inclusion forest proof,
+    /// which would have deleted the file key from the bucket's forest.
+    pub proof_of_inclusion: bool,
+}
+
+impl EventBusMessage for FinalisedProofSubmittedForPendingFileDeletionRequest {}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
@@ -331,6 +397,7 @@ pub struct BlockchainServiceEventBusProvider {
     process_msp_respond_storing_request_event_bus: EventBus<ProcessMspRespondStoringRequest>,
     process_stop_storing_for_insolvent_user_request_event_bus:
         EventBus<ProcessStopStoringForInsolventUserRequest>,
+    process_file_deletion_request_event_bus: EventBus<ProcessFileDeletionRequest>,
     slashable_provider_event_bus: EventBus<SlashableProvider>,
     finalised_mutations_applied_event_bus: EventBus<FinalisedTrieRemoveMutationsApplied>,
     proof_accepted_event_bus: EventBus<ProofAccepted>,
@@ -346,6 +413,9 @@ pub struct BlockchainServiceEventBusProvider {
     bsp_stop_storing_event_bus: EventBus<BspConfirmStoppedStoring>,
     finalised_bsp_stop_storing_event_bus: EventBus<FinalisedBspConfirmStoppedStoring>,
     notify_period_event_bus: EventBus<NotifyPeriod>,
+    file_deletion_request_event_bus: EventBus<FileDeletionRequest>,
+    finalised_file_deletion_request_event_bus:
+        EventBus<FinalisedProofSubmittedForPendingFileDeletionRequest>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -359,6 +429,7 @@ impl BlockchainServiceEventBusProvider {
             process_confirm_storage_request_event_bus: EventBus::new(),
             process_msp_respond_storing_request_event_bus: EventBus::new(),
             process_stop_storing_for_insolvent_user_request_event_bus: EventBus::new(),
+            process_file_deletion_request_event_bus: EventBus::new(),
             slashable_provider_event_bus: EventBus::new(),
             finalised_mutations_applied_event_bus: EventBus::new(),
             proof_accepted_event_bus: EventBus::new(),
@@ -374,6 +445,8 @@ impl BlockchainServiceEventBusProvider {
             bsp_stop_storing_event_bus: EventBus::new(),
             finalised_bsp_stop_storing_event_bus: EventBus::new(),
             notify_period_event_bus: EventBus::new(),
+            file_deletion_request_event_bus: EventBus::new(),
+            finalised_file_deletion_request_event_bus: EventBus::new(),
         }
     }
 }
@@ -515,5 +588,25 @@ impl ProvidesEventBus<FinalisedBspConfirmStoppedStoring> for BlockchainServiceEv
 impl ProvidesEventBus<NotifyPeriod> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<NotifyPeriod> {
         &self.notify_period_event_bus
+    }
+}
+
+impl ProvidesEventBus<FileDeletionRequest> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<FileDeletionRequest> {
+        &self.file_deletion_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<ProcessFileDeletionRequest> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<ProcessFileDeletionRequest> {
+        &self.process_file_deletion_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<FinalisedProofSubmittedForPendingFileDeletionRequest>
+    for BlockchainServiceEventBusProvider
+{
+    fn event_bus(&self) -> &EventBus<FinalisedProofSubmittedForPendingFileDeletionRequest> {
+        &self.finalised_file_deletion_request_event_bus
     }
 }

@@ -140,6 +140,16 @@ pub struct ForestProof<T: TrieLayout> {
     pub root: HasherOutT<T>,
 }
 
+impl<T: TrieLayout> ForestProof<T> {
+    /// Returns whether a file key was found in the forest proof.
+    pub fn contains_file_key(&self, file_key: &HasherOutT<T>) -> bool {
+        self.proven.iter().any(|proven| match proven {
+            Proven::ExactKey(leaf) => leaf.key.as_ref() == file_key.as_ref(),
+            _ => false,
+        })
+    }
+}
+
 #[derive(Clone, Encode, Decode)]
 pub struct FileProof {
     /// The compact proof.

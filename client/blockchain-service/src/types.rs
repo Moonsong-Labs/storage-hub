@@ -10,8 +10,8 @@ use frame_support::dispatch::DispatchInfo;
 use log::warn;
 use sc_client_api::BlockImportNotification;
 use shc_common::types::{
-    BlockNumber, CustomChallenge, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
-    RejectedStorageRequestReason, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
+    BlockNumber, BucketId, CustomChallenge, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
+    RejectedStorageRequestReason, StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
 };
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::H256;
@@ -20,7 +20,7 @@ use sp_runtime::{
     AccountId32, DispatchError, SaturatedConversion,
 };
 
-use crate::handler::LOG_TARGET;
+use crate::{events, handler::LOG_TARGET};
 
 /// A struct that holds the information to submit a storage proof.
 ///
@@ -132,6 +132,58 @@ pub struct StopStoringForInsolventUserRequest {
 impl StopStoringForInsolventUserRequest {
     pub fn new(user: AccountId32) -> Self {
         Self { user }
+    }
+}
+
+/// A struct that holds the information to delete a file from storage.
+///
+/// This struct is used as an item in the `pending_file_deletion_requests` queue.
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct FileDeletionRequest {
+    pub user: AccountId32,
+    pub file_key: H256,
+    pub file_size: StorageData,
+    pub bucket_id: BucketId,
+    pub msp_id: ProofsDealerProviderId,
+    pub proof_of_inclusion: bool,
+    pub try_count: u32,
+}
+
+impl FileDeletionRequest {
+    pub fn new(
+        user: AccountId32,
+        file_key: H256,
+        file_size: StorageData,
+        bucket_id: BucketId,
+        msp_id: ProofsDealerProviderId,
+        proof_of_inclusion: bool,
+    ) -> Self {
+        Self {
+            user,
+            file_key,
+            file_size,
+            bucket_id,
+            msp_id,
+            proof_of_inclusion,
+            try_count: 0,
+        }
+    }
+
+    pub fn increment_try_count(&mut self) {
+        self.try_count += 1;
+    }
+}
+
+impl From<events::FileDeletionRequest> for FileDeletionRequest {
+    fn from(event: events::FileDeletionRequest) -> Self {
+        Self::new(
+            event.user,
+            event.file_key.into(),
+            event.file_size,
+            event.bucket_id,
+            event.msp_id,
+            event.proof_of_inclusion,
+        )
     }
 }
 

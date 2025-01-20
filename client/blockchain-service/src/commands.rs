@@ -27,6 +27,8 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
+use crate::types::FileDeletionRequest;
+
 use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
@@ -196,6 +198,10 @@ pub enum BlockchainServiceCommand {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
+    QueueFileDeletionRequest {
+        request: FileDeletionRequest,
+        callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
 }
 
 /// Interface for interacting with the BlockchainService actor.
@@ -280,6 +286,9 @@ pub trait BlockchainServiceInterface {
     /// Queue a RespondStoringRequest to be processed.
     async fn queue_msp_respond_storage_request(&self, request: RespondStorageRequest)
         -> Result<()>;
+
+    /// Queue a FileDeletionRequest to be processed.
+    async fn queue_file_deletion_request(&self, request: FileDeletionRequest) -> Result<()>;
 
     /// Query the challenges that a Provider needs to submit for a given seed.
     async fn query_challenges_from_seed(
@@ -576,6 +585,13 @@ where
     ) -> Result<()> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn queue_file_deletion_request(&self, request: FileDeletionRequest) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueueFileDeletionRequest { request, callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }

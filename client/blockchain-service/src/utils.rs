@@ -38,14 +38,16 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 use crate::{
     events::{
         ForestWriteLockTaskData, MultipleNewChallengeSeeds, NotifyPeriod,
-        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
-        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
+        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData, ProcessFileDeletionRequest,
+        ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
+        ProcessSubmitProofRequestData,
     },
     handler::{LOG_TARGET, MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES},
     state::{
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessFileDeletionRequestCf,
+        OngoingProcessMspRespondStorageRequestCf,
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -635,7 +637,8 @@ where
     /// 2. `ConfirmStoringRequest`.
     ///
     /// If this node is managing a MSP, the priority is given by:
-    /// 1. `RespondStorageRequest`.
+    /// 1. `RespondStorageRequest` over...
+    /// 2. `FileDeletionRequest`.
     ///
     /// For both BSPs and MSPs, the last priority is given to:
     /// 1. `StopStoringForInsolventUserRequest`.
@@ -664,6 +667,9 @@ where
                     state_store_context
                         .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
                         .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessFileDeletionRequestCf)
+                        .delete();
                     state_store_context.commit();
                 }
                 Err(TryRecvError::Closed) => {
@@ -677,6 +683,9 @@ where
                         .delete();
                     state_store_context
                         .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                        .delete();
+                    state_store_context
+                        .access_value(&OngoingProcessFileDeletionRequestCf)
                         .delete();
                     state_store_context.commit();
                 }
@@ -781,31 +790,55 @@ where
             // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending respond storing requests.
             // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
             if next_event_data.is_none() {
-                if next_event_data.is_none() {
-                    let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
+                let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
-                    // Batch multiple respond storing requests up to the runtime configured maximum.
-                    let mut respond_storage_requests = Vec::new();
-                    for _ in 0..max_batch_respond {
-                        if let Some(request) = state_store_context
-                            .pending_msp_respond_storage_request_deque()
-                            .pop_front()
-                        {
-                            respond_storage_requests.push(request);
-                        } else {
-                            break;
+                // Batch multiple respond storing requests up to the runtime configured maximum.
+                let mut respond_storage_requests = Vec::new();
+                for _ in 0..max_batch_respond {
+                    if let Some(request) = state_store_context
+                        .pending_msp_respond_storage_request_deque()
+                        .pop_front()
+                    {
+                        respond_storage_requests.push(request);
+                    } else {
+                        break;
+                    }
+                }
+
+                // If we have at least 1 respond storing request, send the process event.
+                if respond_storage_requests.len() > 0 {
+                    next_event_data = Some(
+                        ProcessMspRespondStoringRequestData {
+                            respond_storing_requests: respond_storage_requests,
                         }
-                    }
+                        .into(),
+                    );
+                }
+            }
 
-                    // If we have at least 1 respond storing request, send the process event.
-                    if respond_storage_requests.len() > 0 {
-                        next_event_data = Some(
-                            ProcessMspRespondStoringRequestData {
-                                respond_storing_requests: respond_storage_requests,
-                            }
-                            .into(),
-                        );
+            // If we have no pending respond storage requests, check for pending file deletion requests
+            if next_event_data.is_none() {
+                let max_batch_delete: u32 = 100;
+                let mut file_deletion_requests = Vec::new();
+                for _ in 0..max_batch_delete {
+                    if let Some(request) = state_store_context
+                        .pending_file_deletion_request_deque()
+                        .pop_front()
+                    {
+                        file_deletion_requests.push(request);
+                    } else {
+                        break;
                     }
+                }
+
+                // If we have at least 1 file deletion request, send the process event.
+                if file_deletion_requests.len() > 0 {
+                    next_event_data = Some(
+                        ProcessFileDeletionRequestData {
+                            file_deletion_requests,
+                        }
+                        .into(),
+                    );
                 }
             }
         }
@@ -857,6 +890,13 @@ where
                     .write(data);
                 state_store_context.commit();
             }
+            ForestWriteLockTaskData::FileDeletionRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessFileDeletionRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
             _ => {}
         }
 
@@ -865,7 +905,7 @@ where
         // event. Clone is required because there is no constraint on the number of listeners that can
         // subscribe to the event (and each is guaranteed to receive all emitted events).
         let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-        match data.into() {
+        match data {
             ForestWriteLockTaskData::SubmitProofRequest(data) => {
                 self.emit(ProcessSubmitProofRequest {
                     data,
@@ -886,6 +926,12 @@ where
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 self.emit(ProcessStopStoringForInsolventUserRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::FileDeletionRequest(data) => {
+                self.emit(ProcessFileDeletionRequest {
                     data,
                     forest_root_write_tx,
                 });

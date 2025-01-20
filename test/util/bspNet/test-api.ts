@@ -278,6 +278,14 @@ export class BspNetTestApi implements AsyncDisposable {
 
       // TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
       /**
+       * Waits for a MSP to submit a proof for a pending file deletion request.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has submitted a proof for a pending file deletion request.
+       */
+      mspPendingFileDeletionRequestSubmitProof: (expectedExts?: number) =>
+        Waits.waitForMspPendingFileDeletionRequestSubmitProof(this._api, expectedExts),
+
+      /**
        * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.

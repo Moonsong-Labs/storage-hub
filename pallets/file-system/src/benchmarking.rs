@@ -1885,7 +1885,7 @@ mod benchmarks {
                 user: user_account.clone(),
                 file_key,
                 bucket_id: file_bucket_id,
-                msp_id: Some(msp_id),
+                msp_id,
                 proof_of_inclusion: false,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -2026,7 +2026,7 @@ mod benchmarks {
                 user: user_account.clone(),
                 file_key,
                 bucket_id: file_bucket_id,
-                msp_id: Some(msp_id),
+                msp_id,
                 proof_of_inclusion: true,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -2222,6 +2222,7 @@ mod benchmarks {
             Event::ProofSubmittedForPendingFileDeletionRequest {
                 user: user_account.clone(),
                 file_key,
+                file_size,
                 bucket_id: file_bucket_id,
                 msp_id,
                 proof_of_inclusion: true,

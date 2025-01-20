@@ -1557,15 +1557,17 @@ declare const _default: {
       FileDeletionRequest: {
         user: string;
         fileKey: string;
+        fileSize: string;
         bucketId: string;
         mspId: string;
         proofOfInclusion: string;
       };
       ProofSubmittedForPendingFileDeletionRequest: {
-        mspId: string;
         user: string;
         fileKey: string;
+        fileSize: string;
         bucketId: string;
+        mspId: string;
         proofOfInclusion: string;
       };
       BspChallengeCycleInitialised: {
