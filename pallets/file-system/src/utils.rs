@@ -2033,6 +2033,8 @@ where
 
         let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
+        // The bucket must be stored by an MSP before deletion to maintain consistency between the bucket root and runtime state.
+        // This is required because the runtime needs the MSP to provide a proof of inclusion to apply a remove delta for an existing file key.
         let msp_id = msp_id.ok_or(Error::<T>::OperationNotAllowedWhileBucketIsNotStoredByMsp)?;
 
         let file_key_included = match maybe_inclusion_forest_proof {

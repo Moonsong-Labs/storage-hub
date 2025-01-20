@@ -818,7 +818,8 @@ where
 
             // If we have no pending respond storage requests, check for pending file deletion requests
             if next_event_data.is_none() {
-                let max_batch_delete: u32 = 100;
+                // TODO: Update this to some greater value once batching is supported by the runtime.
+                let max_batch_delete: u32 = 1;
                 let mut file_deletion_requests = Vec::new();
                 for _ in 0..max_batch_delete {
                     if let Some(request) = state_store_context

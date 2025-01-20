@@ -27,14 +27,13 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
-use crate::types::FileDeletionRequest;
-
 use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
-        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, MinimalBlockInfo, RespondStorageRequest,
-        RetryStrategy, StopStoringForInsolventUserRequest, SubmitProofRequest, Tip,
+        ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
+        RespondStorageRequest, RetryStrategy, StopStoringForInsolventUserRequest,
+        SubmitProofRequest, Tip,
     },
 };
 

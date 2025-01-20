@@ -11,7 +11,9 @@ use sp_runtime::AccountId32;
 use std::sync::Arc;
 use tokio::sync::{oneshot, Mutex};
 
-use crate::types::{self, ConfirmStoringRequest, RespondStorageRequest};
+use crate::types::{
+    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
+};
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
 
@@ -347,7 +349,7 @@ impl EventBusMessage for FileDeletionRequest {}
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessFileDeletionRequestData {
-    pub file_deletion_requests: Vec<types::FileDeletionRequest>,
+    pub file_deletion_requests: Vec<FileDeletionRequestType>,
 }
 
 #[derive(Debug, Clone)]

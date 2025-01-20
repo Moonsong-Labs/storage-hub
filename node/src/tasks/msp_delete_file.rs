@@ -25,14 +25,15 @@ const MAX_DELETE_FILE_REQUEST_TIP: u128 = 100;
 
 /// MSP Delete File Task: Handles the whole flow of a file being deleted from an MSP.
 ///
-/// The flow is split into two parts, which are represented here as 2 handlers for 2
+/// The flow is split into three parts, which are represented here as 3 handlers for 3
 /// different events:
-/// - [`ProcessFileDeletionRequest`] event: The first part of the flow. It is triggered when there are
-///   pending file deletion requests to process. The MSP will generate an inclusion forest proof
-///   and submit it to confirm each file can be deleted, processing them one at a time.
-/// - [`FinalisedProofSubmittedForPendingFileDeletionRequest`] event: The second part of the flow. It is triggered when
-///   the file deletion request is finalized on-chain. The MSP will then delete the file from its
-///   file storage.
+/// - [`FileDeletionRequest`] event: The first part of the flow. It is triggered when a file deletion request is received from the blockchain.
+///   The deletion request is queued for processing by the [`ProcessFileDeletionRequest`] event handler in batches.
+/// - [`ProcessFileDeletionRequest`] event: The second part of the flow. It is triggered when there are
+///   pending file deletion requests to process. The MSP will generate an (non-)inclusion forest proof for all file keys in the batch and
+///   submit it to the runtime to delete any existing file keys proven to be in the forest.
+/// - [`FinalisedProofSubmittedForPendingFileDeletionRequest`] event: The third part of the flow. It is triggered when
+///   the file deletion request is finalized on-chain. The MSP will then delete the file from its file storage.
 pub struct MspDeleteFileTask<NT>
 where
     NT: ShNodeType,
@@ -101,7 +102,7 @@ where
 /// Handles the [`ProcessFileDeletionRequest`] event.
 ///
 /// This event is triggered when there are pending file deletion requests to process.
-/// The MSP will generate an (non-inclusion) forest proof and submit it to confirm each file can(not) be deleted.
+/// The MSP will generate an (non-)inclusion forest proof and submit it to confirm each file can(not) be deleted.
 /// Files are processed one at a time to ensure proper forest root management.
 impl<NT> EventHandler<ProcessFileDeletionRequest> for MspDeleteFileTask<NT>
 where
@@ -131,89 +132,100 @@ where
             }
         };
 
-        // Process each file deletion request sequentially
-        for request in &event.data.file_deletion_requests {
-            trace!(
-                target: LOG_TARGET,
-                "Processing file deletion request for file_key {:?}",
-                request.file_key
+        // TODO: Remove this once batching is supported by the runtime.
+        if event.data.file_deletion_requests.len() > 1 {
+            let err_msg = format!(
+                "Processing batch of {} file deletion requests. This is not supported yet. Please report this to the StorageHub team.",
+                event.data.file_deletion_requests.len()
             );
+            error!(target: LOG_TARGET, err_msg);
+            return Err(anyhow!(err_msg));
+        } else if event.data.file_deletion_requests.is_empty() {
+            let err_msg = "No file deletion requests to process.";
+            error!(target: LOG_TARGET, err_msg);
+            return Err(anyhow!(err_msg));
+        }
 
-            // Get the forest storage for the bucket
-            let forest_storage = self
-                .storage_hub_handler
-                .forest_storage_handler
-                .get(&request.bucket_id.as_ref().to_vec())
-                .await
-                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
+        let delete_file_request = event.data.file_deletion_requests.first().unwrap();
 
-            // Acquire write lock once for the entire operation
-            let mut forest_storage_write = forest_storage.write().await;
+        trace!(
+            target: LOG_TARGET,
+            "Processing file deletion request for file_key {:?}",
+            delete_file_request.file_key
+        );
 
-            // Generate proof and check existence
-            let forest_proof =
-                forest_storage_write.generate_proof(vec![request.file_key.into()])?;
+        // Get the forest storage for the bucket
+        let forest_storage = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get(&delete_file_request.bucket_id.as_ref().to_vec())
+            .await
+            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
 
-            // Build and submit extrinsic
-            let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::pending_file_deletion_request_submit_proof {
-                    user: request.user.clone(),
-                    file_key: request.file_key.into(),
-                    file_size: request.file_size,
-                    bucket_id: request.bucket_id,
-                    forest_proof: forest_proof.proof.clone(),
-                },
-            );
+        // Acquire write lock once for the entire operation
+        let forest_storage_read = forest_storage.read().await;
 
-            // Submit extrinsic with retry and wait for it to be included in a block
-            let _events = self
-                .storage_hub_handler
-                .blockchain
-                .submit_extrinsic_with_retry(
-                    call,
-                    RetryStrategy::default()
-                        .with_max_retries(MAX_DELETE_FILE_REQUEST_TRY_COUNT)
-                        .with_max_tip(MAX_DELETE_FILE_REQUEST_TIP as f64)
-                        .with_timeout(Duration::from_secs(
-                            self.storage_hub_handler
-                                .provider_config
-                                .extrinsic_retry_timeout,
-                        )),
-                    true,
+        // TODO: Pass multiple file keys to generate_proof once batching is supported by the runtime.
+        let forest_proof =
+            forest_storage_read.generate_proof(vec![delete_file_request.file_key.into()])?;
+
+        drop(forest_storage_read);
+
+        // Build and submit extrinsic
+        let call = storage_hub_runtime::RuntimeCall::FileSystem(
+            pallet_file_system::Call::pending_file_deletion_request_submit_proof {
+                user: delete_file_request.user.clone(),
+                file_key: delete_file_request.file_key.into(),
+                file_size: delete_file_request.file_size,
+                bucket_id: delete_file_request.bucket_id,
+                forest_proof: forest_proof.proof.clone(),
+            },
+        );
+
+        // Submit extrinsic with retry and wait for it to be included in a block
+        self.storage_hub_handler
+            .blockchain
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(MAX_DELETE_FILE_REQUEST_TRY_COUNT)
+                    .with_max_tip(MAX_DELETE_FILE_REQUEST_TIP as f64)
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    )),
+                false,
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to submit file deletion proof after {} retries: {:?}",
+                    MAX_DELETE_FILE_REQUEST_TRY_COUNT,
+                    e
                 )
-                .await
-                .map_err(|e| {
-                    anyhow!(
-                        "Failed to submit file deletion proof after {} retries: {:?}",
-                        MAX_DELETE_FILE_REQUEST_TRY_COUNT,
-                        e
-                    )
-                })?;
+            })?;
 
-            if forest_proof.contains_file_key(&request.file_key.into()) {
-                // Delete the file key from forest storage
-                forest_storage_write.delete_file_key(&request.file_key.into()).map_err(|e| {
+        if forest_proof.contains_file_key(&delete_file_request.file_key.into()) {
+            let mut forest_storage_write = forest_storage.write().await;
+            // Delete the file key from forest storage
+            forest_storage_write
+                .delete_file_key(&delete_file_request.file_key.into())
+                .map_err(|e| {
                     let err_msg = format!(
                         "CRITICAL❗️❗️ Failed to remove file key from Forest storage after remove delta was applied on chain for file_key {:?}, error: {:?}",
-                        request.file_key,
+                        delete_file_request.file_key,
                         e
                     );
                     error!(target: LOG_TARGET, err_msg);
                     anyhow!(err_msg)
                 })?;
-            }
-
-            trace!(
-                target: LOG_TARGET,
-                "Successfully processed deletion for file_key {:?}",
-                request.file_key
-            );
         }
 
         info!(
             target: LOG_TARGET,
-            "Successfully processed batch of {} file deletion requests",
-            event.data.file_deletion_requests.len()
+            "Successfully processed file deletion request for file_key {:?}",
+            delete_file_request.file_key
         );
 
         // Release the forest root write lock
