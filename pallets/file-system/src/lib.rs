@@ -1368,6 +1368,9 @@ pub mod pallet {
 
             assert!(tick_range_to_max_threshold < storage_request_ttl.into(), "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring.");
 
+            // The checkpoint challenge period already greater than the longest challenge period a BSP can have + the tolerance,
+            // so by ensuring the minimum wait for stop storing is greater than the checkpoint challenge period, we ensure that
+            // the BSP cannot immediately stop storing a file it has lost when receiving a challenge for it.
             assert!(min_wait_for_stop_storing > checkpoint_challenge_period, "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be smaller than the checkpoint challenge period.");
         }
     }
