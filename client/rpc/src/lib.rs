@@ -62,7 +62,7 @@ impl<FL, FSH: Clone> Clone for StorageHubClientRpcConfig<FL, FSH> {
 impl<FL, FSH> StorageHubClientRpcConfig<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Send + Sync + Clone,
+    FSH: ForestStorageHandler + Send + Sync,
 {
     pub fn new(
         file_storage: Arc<RwLock<FL>>,
@@ -193,6 +193,9 @@ pub trait StorageHubClientApi {
     #[method(name = "addToExcludeList", with_extensions)]
     async fn add_to_exclude_list(&self, file_key: H256, exclude_type: String) -> RpcResult<()>;
 
+    // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
+    // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
+    // list ban users, bucket or even file fingerprint.
     // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
     // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
     // list ban users, bucket or even file fingerprint.

@@ -75,7 +75,7 @@ where
         >,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
-    FSH: ForestStorageHandler + Send + Sync + Clone + 'static,
+    FSH: ForestStorageHandler + Send + Sync + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};
