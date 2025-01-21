@@ -7,14 +7,13 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, BspConfirmStoppedStoring, FileDeletionRequest,
-        FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
-        FinalisedProofSubmittedForPendingFileDeletionRequest, LastChargeableInfoUpdated,
-        MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested,
-        MoveBucketRequestedForNewMsp, MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod,
-        ProcessConfirmStoringRequest, ProcessFileDeletionRequest, ProcessMspRespondStoringRequest,
-        ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
-        SpStopStoringInsolventUser, UserWithoutFunds,
+        AcceptedBspVolunteer, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
+        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForNewMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
+        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
+        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     BlockchainService,
 };
