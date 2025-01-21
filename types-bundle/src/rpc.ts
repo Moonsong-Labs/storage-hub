@@ -150,9 +150,7 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
         }
       ],
       type: "Vec<u8>"
-    }
-  },
-  storagehubprovider: {
+    },
     insertBcsvKeys: {
       description: "Generate and insert new keys of type BCSV into the keystore.",
       params: [

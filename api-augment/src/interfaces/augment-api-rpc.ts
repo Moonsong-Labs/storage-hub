@@ -1183,6 +1183,14 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<Option<H256>>
       >;
       /**
+       * Generate and insert new keys of type BCSV into the keystore.
+       **/
+      insertBcsvKeys: AugmentedRpc<
+        (
+          seed: Option<Text> | null | Uint8Array | Text | string
+        ) => Observable<Text>
+      >;
+      /**
        * Check if a file is in the file storage.
        **/
       isFileInFileStorage: AugmentedRpc<

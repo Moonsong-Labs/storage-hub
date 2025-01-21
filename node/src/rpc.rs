@@ -20,10 +20,7 @@ use shc_common::types::{
     MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use shc_rpc::{
-    AuthorStorageHubProvider, AuthorStorageHubProviderApiServer, StorageHubClientApiServer,
-    StorageHubClientRpc, StorageHubClientRpcConfig,
-};
+use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
@@ -95,14 +92,7 @@ where
     io.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
     if let Some(storage_hub_client_config) = maybe_storage_hub_client_config {
-        io.merge(StorageHubClientRpc::new(client, storage_hub_client_config.clone()).into_rpc())?;
-        io.merge(
-            AuthorStorageHubProvider::new(
-                storage_hub_client_config.file_storage,
-                storage_hub_client_config.keystore,
-            )
-            .into_rpc(),
-        )?;
+        io.merge(StorageHubClientRpc::new(client, storage_hub_client_config).into_rpc())?;
     }
 
     if let Some(command_sink) = command_sink {
