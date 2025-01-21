@@ -711,15 +711,6 @@ where
     }
 
     /// Accepts or rejects batches of storage requests assumed to be grouped by bucket.
-    ///
-    /// This is using a best-effort strategy to process as many file keys as possible, returning
-    /// the ones that were accepted, rejected, or failed to be processed.
-    ///
-    /// File keys that are not part of the bucket they belong to will be skipped (failed).
-    ///
-    /// All file keys will be processed (unless there are duplicates, they are simply skipped) and any errors
-    /// while processing them will be marked as a failed key and continue processing the rest. It is up to the
-    /// caller to verify the final result and apply only the file keys that have been successfully accepted.
     pub(crate) fn do_msp_respond_storage_request(
         sender: T::AccountId,
         storage_request_msp_response: StorageRequestMspResponse<T>,
@@ -819,7 +810,8 @@ where
     /// 1. Verify the non-inclusion proof.
     /// 2. For each file key: Verify and process the acceptance. If any operation fails during the processing of a file key,
     /// the entire function will fail and no changes will be applied.
-    /// 3. If all file keys are successfully processed, apply the delta with all the accepted keys to the root of the bucket.
+    /// 3. If all file keys are successfully processed, apply the delta with all the accepted keys to the root of the bucket which are part of the set of
+    /// non-inclusion file keys (since it is possible that the file key was already stored by the MSP).
     /// 4. If any step fails, the function will return an error and no changes will be made to the storage state.
     fn do_msp_accept_storage_request(
         msp_id: ProviderIdFor<T>,
@@ -848,7 +840,7 @@ where
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
                 &bucket_root,
                 file_keys.as_slice(),
-                &accepted_file_keys.non_inclusion_forest_proof,
+                &accepted_file_keys.forest_proof,
             )?;
 
         let mut accepted_files_metadata = Vec::new();
@@ -858,51 +850,44 @@ where
                 <StorageRequests<T>>::get(&file_key_with_proof.file_key)
                     .ok_or(Error::<T>::StorageRequestNotFound)?;
 
-            // Ensure that the file key IS NOT part of the bucket's forest.
-            if proven_keys.contains(&file_key_with_proof.file_key) {
-                return Err(Error::<T>::ExpectedNonInclusionProof.into());
-            }
-
             // Check that the storage request bucket ID matches the provided bucket ID.
-            if storage_request_metadata.bucket_id != bucket_id {
-                return Err(Error::<T>::InvalidBucketIdFileKeyPair.into());
-            }
+            ensure!(
+                storage_request_metadata.bucket_id == bucket_id,
+                Error::<T>::InvalidBucketIdFileKeyPair
+            );
 
             // Check that the MSP is the one storing the bucket.
-            if !<T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
-                &msp_id,
-                &storage_request_metadata.bucket_id,
-            ) {
-                return Err(Error::<T>::MspNotStoringBucket.into());
-            }
+            ensure!(
+                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
+                    &msp_id,
+                    &storage_request_metadata.bucket_id
+                ),
+                Error::<T>::MspNotStoringBucket
+            );
 
             // Check that the storage request has a MSP.
-            if storage_request_metadata.msp.is_none() {
-                return Err(Error::<T>::RequestWithoutMsp.into());
-            }
+            ensure!(
+                storage_request_metadata.msp.is_some(),
+                Error::<T>::RequestWithoutMsp
+            );
 
             let (request_msp_id, confirm_status) = storage_request_metadata.msp.unwrap();
 
             // Check that the sender corresponds to the MSP in the storage request and that it hasn't yet confirmed storing the file.
-            if request_msp_id != msp_id {
-                return Err(Error::<T>::NotSelectedMsp.into());
-            }
+            ensure!(request_msp_id == msp_id, Error::<T>::NotSelectedMsp);
 
-            if confirm_status {
-                return Err(Error::<T>::MspAlreadyConfirmed.into());
-            }
+            // Check that the MSP hasn't already confirmed storing the file.
+            ensure!(!confirm_status, Error::<T>::MspAlreadyConfirmed);
 
             // Check that the MSP still has enough available capacity to store the file.
-            if <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
-                < storage_request_metadata.size
-            {
-                return Err(Error::<T>::InsufficientAvailableCapacity.into());
-            }
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
+                    >= storage_request_metadata.size,
+                Error::<T>::InsufficientAvailableCapacity
+            );
 
             // Get the file metadata to insert into the bucket under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
-
-            accepted_files_metadata.push(file_metadata);
 
             let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 msp_id,
@@ -910,32 +895,39 @@ where
                 &storage_request_metadata,
             );
 
-            // Check that the key proof is valid.
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
-                &file_key_with_proof.file_key,
-                &chunk_challenges,
-                &file_key_with_proof.proof,
-            )?;
+            // Only check the key proof, increase the bucket size and capacity used if the file key is not in the forest proof, and
+            // add the file metadata to the `accepted_files_metadata` since all keys in this array will be added to the bucket forest via an apply delta.
+            // This can happen if the storage request was issued again by the user and the MSP has already stored the file.
+            if !proven_keys.contains(&file_key_with_proof.file_key) {
+                accepted_files_metadata.push((file_metadata, file_key_with_proof));
 
-            // Increase size of the bucket.
-            <T::Providers as MutateBucketsInterface>::increase_bucket_size(
-                &storage_request_metadata.bucket_id,
-                storage_request_metadata.size,
-            )?;
+                // Check that the key proof is valid.
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
+                    &file_key_with_proof.file_key,
+                    &chunk_challenges,
+                    &file_key_with_proof.proof,
+                )?;
 
-            // Increase the used capacity of the MSP
-            // This should not fail since we checked that the MSP has enough available capacity to store the file.
-            expect_or_err!(
-                <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
-                    &msp_id,
+                // Increase size of the bucket.
+                <T::Providers as MutateBucketsInterface>::increase_bucket_size(
+                    &storage_request_metadata.bucket_id,
                     storage_request_metadata.size,
-                ),
-                "Failed to increase capacity used for MSP",
-                Error::<T>::TooManyStorageRequestResponses,
-                result
-            );
+                )?;
 
-            // Notify that the storage request has been accepted by an MSP.
+                // Increase the used capacity of the MSP
+                // This should not fail since we checked that the MSP has enough available capacity to store the file.
+                expect_or_err!(
+                    <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
+                        &msp_id,
+                        storage_request_metadata.size,
+                    ),
+                    "Failed to increase capacity used for MSP",
+                    Error::<T>::TooManyStorageRequestResponses,
+                    result
+                );
+            }
+
+            // Notify that the storage request has been accepted by the MSP.
             Self::deposit_event(Event::MspAcceptedStorageRequest {
                 file_key: file_key_with_proof.file_key,
             });
@@ -991,6 +983,11 @@ where
             }
         }
 
+        // If there are no mutations to apply, return the current root of the bucket.
+        if accepted_files_metadata.is_empty() {
+            return Ok(bucket_root);
+        }
+
         // Get the current root of the bucket where the file will be stored.
         let bucket_root = expect_or_err!(
             <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id),
@@ -1004,7 +1001,6 @@ where
                 &bucket_root,
                 accepted_files_metadata
                     .iter()
-                    .zip(accepted_file_keys.file_keys_and_proofs)
                     .map(|(file_metadata, file_key_with_proof)| {
                         (
                             file_key_with_proof.file_key,
@@ -1013,7 +1009,7 @@ where
                     })
                     .collect::<Vec<_>>()
                     .as_slice(),
-                &accepted_file_keys.non_inclusion_forest_proof,
+                &accepted_file_keys.forest_proof,
             )?;
 
         // Update root of the bucket.

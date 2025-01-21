@@ -3636,7 +3636,7 @@ export default {
    **/
   PalletFileSystemStorageRequestMspAcceptedFileKeys: {
     fileKeysAndProofs: "Vec<PalletFileSystemFileKeyWithProof>",
-    nonInclusionForestProof: "SpTrieStorageProofCompactProof"
+    forestProof: "SpTrieStorageProofCompactProof"
   },
   /**
    * Lookup350: pallet_file_system::types::FileKeyWithProof<T>

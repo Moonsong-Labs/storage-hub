@@ -127,15 +127,17 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspAcceptedFileKeys<T: Config> {
     pub file_keys_and_proofs: Vec<FileKeyWithProof<T>>,
-    pub non_inclusion_forest_proof: ForestProof<T>,
+    /// File keys which have already been accepted by the MSP in a previous storage request should be included
+    /// in the proof.
+    pub forest_proof: ForestProof<T>,
 }
 
 impl<T: Config> Debug for StorageRequestMspAcceptedFileKeys<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "StorageRequestMspAcceptedFileKeys(file_keys_and_proofs: {:?}, non_inclusion_forest_proof: {:?})",
-            self.file_keys_and_proofs, self.non_inclusion_forest_proof
+            "StorageRequestMspAcceptedFileKeys(file_keys_and_proofs: {:?}, forest_proof: {:?})",
+            self.file_keys_and_proofs, self.forest_proof
         )
     }
 }

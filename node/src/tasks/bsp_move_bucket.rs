@@ -120,9 +120,9 @@ where
 
         self.storage_hub_handler
             .file_transfer
-            .unregister_bucket_with_grace_period(
+            .schedule_unregister_bucket(
                 event.bucket_id,
-                MOVE_BUCKET_ACCEPTED_GRACE_PERIOD_SECONDS,
+                Some(MOVE_BUCKET_ACCEPTED_GRACE_PERIOD_SECONDS),
             )
             .await
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
@@ -150,7 +150,7 @@ where
 
         self.storage_hub_handler
             .file_transfer
-            .unregister_bucket(event.bucket_id)
+            .schedule_unregister_bucket(event.bucket_id, None)
             .await
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 
@@ -177,7 +177,7 @@ where
 
         self.storage_hub_handler
             .file_transfer
-            .unregister_bucket(event.bucket_id)
+            .schedule_unregister_bucket(event.bucket_id, None)
             .await
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;
 
