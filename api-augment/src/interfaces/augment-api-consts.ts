@@ -74,9 +74,19 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
       /**
-       * Default replication target
+       * High security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.01% chance of their file
+       * being controlled by a single malicious entity.
        **/
-      defaultReplicationTarget: u32 & AugmentedConst<ApiType>;
+      highSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
+       * Low security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~1% chance of their file
+       * being controlled by a single malicious entity.
+       **/
+      lowSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
@@ -114,6 +124,13 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxUserPendingMoveBucketRequests: u32 & AugmentedConst<ApiType>;
       /**
+       * Medium security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.1% chance of their file
+       * being controlled by a single malicious entity.
+       **/
+      mediumSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * Number of ticks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
        **/
       minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
@@ -134,6 +151,13 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
+       * Super high security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.001% chance of their file
+       * being controlled by a single malicious entity.
+       **/
+      superHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
        * to arrive at its maximum value.
        **/
@@ -142,6 +166,13 @@ declare module "@polkadot/api-base/types/consts" {
        * The treasury account of the runtime, where a fraction of each payment goes.
        **/
       treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
+      /**
+       * Ultra high security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.0001% chance of their file
+       * being controlled by a single malicious entity.
+       **/
+      ultraHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/

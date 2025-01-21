@@ -137,23 +137,59 @@ pub mod dynamic_params {
         #[allow(non_upper_case_globals)]
         pub static ProviderTopUpTtl: BlockNumber = 14_400;
 
-        /// The default number of BSPs that a storage request targets when issued by the file system pallet.
+        /// The amount of BSPs that a low security storage request should use as the replication target.
         ///
-        /// This number is a safe default so users that do not have specific requirements for replication
-        /// can still have their files stored in a way that is resilient to failures, while being small enough
-        /// to not be a burden on the network.
+        /// This must be the lowest amount of BSPs that guarantee that the probability that a malicious
+        /// actor controlling 1/3 of the BSPs can hold the file hostage by controlling all its
+        /// volunteered BSPs is ~1%.
         #[codec(index = 18)]
         #[allow(non_upper_case_globals)]
-        pub static DefaultReplicationTarget: ReplicationTargetType = 12;
+        pub static LowSecurityReplicationTarget: ReplicationTargetType = 7;
+
+        /// The amount of BSPs that a medium security storage request should use as the replication target.
+        ///
+        /// This must be the lowest amount of BSPs that guarantee that the probability that a malicious
+        /// actor controlling 1/3 of the BSPs can hold the file hostage by controlling all its
+        /// volunteered BSPs is ~0.1%.
+        #[codec(index = 19)]
+        #[allow(non_upper_case_globals)]
+        pub static MediumSecurityReplicationTarget: ReplicationTargetType = 12;
+
+        /// The amount of BSPs that a high security storage request should use as the replication target.
+        ///
+        /// This must be the lowest amount of BSPs that guarantee that the probability that a malicious
+        /// actor controlling 1/3 of the BSPs can hold the file hostage by controlling all its
+        /// volunteered BSPs is ~0.01%.
+        #[codec(index = 20)]
+        #[allow(non_upper_case_globals)]
+        pub static HighSecurityReplicationTarget: ReplicationTargetType = 17;
+
+        /// The amount of BSPs that a super high security storage request should use as the replication target.
+        ///
+        /// This must be the lowest amount of BSPs that guarantee that the probability that a malicious
+        /// actor controlling 1/3 of the BSPs can hold the file hostage by controlling all its
+        /// volunteered BSPs is ~0.001%.
+        #[codec(index = 21)]
+        #[allow(non_upper_case_globals)]
+        pub static SuperHighSecurityReplicationTarget: ReplicationTargetType = 22;
+
+        /// The amount of BSPs that an ultra high security storage request should use as the replication target.
+        ///
+        /// This must be the lowest amount of BSPs that guarantee that the probability that a malicious
+        /// actor controlling 1/3 of the BSPs can hold the file hostage by controlling all its
+        /// volunteered BSPs is ~0.0001%.
+        #[codec(index = 22)]
+        #[allow(non_upper_case_globals)]
+        pub static UltraHighSecurityReplicationTarget: ReplicationTargetType = 26;
 
         /// The maximum amount of BSPs that a user can require a storage request to use as the replication target.
         ///
         /// This is a safety measure to prevent users from issuing storage requests that are too large and would
         /// require a large number of BSPs to store the file.
-        #[codec(index = 19)]
+        #[codec(index = 23)]
         #[allow(non_upper_case_globals)]
         pub static MaxReplicationTarget: ReplicationTargetType =
-            3 * DefaultReplicationTarget::get();
+            UltraHighSecurityReplicationTarget::get().saturating_mul(150).saturating_div(100);
 
         /// The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
         /// to arrive at its maximum value.
@@ -161,7 +197,7 @@ pub mod dynamic_params {
         /// This is big enough so volunteering for a storage request is not open to everyone inmediatly, preventing
         /// a select few BSPs from taking all the requests, while small enough so that storage requests don't take
         /// too long to be filled.
-        #[codec(index = 20)]
+        #[codec(index = 24)]
         #[allow(non_upper_case_globals)]
         pub static TickRangeToMaximumThreshold: BlockNumber = 3600; // 6 hours with a 6 second block time
 
@@ -169,7 +205,7 @@ pub mod dynamic_params {
         ///
         /// It's a function of the TickRangeToMaximumThreshold since it does not make sense for a storage request to
         /// expire before arriving at its maximum threshold for volunteering.
-        #[codec(index = 21)]
+        #[codec(index = 25)]
         #[allow(non_upper_case_globals)]
         pub static StorageRequestTtl: BlockNumber = TickRangeToMaximumThreshold::get()
             .saturating_mul(110)
@@ -180,18 +216,18 @@ pub mod dynamic_params {
         ///
         /// It's a function of the checkpoint challenge period since this makes it so BSPs can't avoid checkpoint
         /// challenges by stopping storing a file key right before the challenge period ends in case they lost it.
-        #[codec(index = 22)]
+        #[codec(index = 26)]
         #[allow(non_upper_case_globals)]
         pub static MinWaitForStopStoring: BlockNumber = CheckpointChallengePeriod::get()
             .saturating_mul(110)
             .saturating_div(100);
 
-        #[codec(index = 23)]
+        #[codec(index = 27)]
         #[allow(non_upper_case_globals)]
         /// 20 ticks, or 2 minutes with 6 seconds per tick.
         pub static MinSeedPeriod: BlockNumber = 20;
 
-        #[codec(index = 24)]
+        #[codec(index = 28)]
         #[allow(non_upper_case_globals)]
         /// 10k UNITs * [`MinSeedPeriod`] = 10k UNITs * 20 = 200k UNITs
         ///

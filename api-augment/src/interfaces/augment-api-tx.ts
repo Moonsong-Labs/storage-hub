@@ -20,6 +20,7 @@ import type {
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemFileKeyWithProof,
+  PalletFileSystemReplicationTarget,
   PalletFileSystemStorageRequestMspBucketResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
@@ -554,9 +555,18 @@ declare module "@polkadot/api-base/types/submittable" {
           size: u64 | AnyNumber | Uint8Array,
           mspId: H256 | string | Uint8Array,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber
+          replicationTarget:
+            | PalletFileSystemReplicationTarget
+            | { LowSecurity: any }
+            | { MediumSecurity: any }
+            | { HighSecurity: any }
+            | { SuperHighSecurity: any }
+            | { UltraHighSecurity: any }
+            | { Custom: any }
+            | string
+            | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u64, H256, Vec<Bytes>, Option<u32>]
+        [H256, Bytes, H256, u64, H256, Vec<Bytes>, PalletFileSystemReplicationTarget]
       >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (

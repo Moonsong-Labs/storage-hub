@@ -301,9 +301,40 @@ pub mod pallet {
         #[pallet::constant]
         type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
 
-        /// Default replication target
+        /// Low security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~1% chance of their file
+        /// being controlled by a single malicious entity.
         #[pallet::constant]
-        type DefaultReplicationTarget: Get<ReplicationTargetType<Self>>;
+        type LowSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// Medium security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~0.1% chance of their file
+        /// being controlled by a single malicious entity.
+        #[pallet::constant]
+        type MediumSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// High security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~0.01% chance of their file
+        /// being controlled by a single malicious entity.
+        #[pallet::constant]
+        type HighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// Super high security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~0.001% chance of their file
+        /// being controlled by a single malicious entity.
+        #[pallet::constant]
+        type SuperHighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// Ultra high security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~0.0001% chance of their file
+        /// being controlled by a single malicious entity.
+        #[pallet::constant]
+        type UltraHighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
 
         /// Maximum replication target that a user can select for a new storage request.
         #[pallet::constant]
@@ -993,7 +1024,7 @@ pub mod pallet {
             size: StorageData<T>,
             msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
-            replication_target: Option<ReplicationTargetType<T>>,
+            replication_target: ReplicationTarget<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -1348,7 +1379,13 @@ pub mod pallet {
         /// of crate::construct_runtime's expansion.
         /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
-            let default_replication_target = T::DefaultReplicationTarget::get();
+            let low_security_replication_target = T::LowSecurityReplicationTarget::get();
+            let medium_security_replication_target = T::MediumSecurityReplicationTarget::get();
+            let high_security_replication_target = T::HighSecurityReplicationTarget::get();
+            let super_high_security_replication_target =
+                T::SuperHighSecurityReplicationTarget::get();
+            let ultra_high_security_replication_target =
+                T::UltraHighSecurityReplicationTarget::get();
             let max_replication_target = T::MaxReplicationTarget::get();
             let storage_request_ttl = T::StorageRequestTtl::get();
             let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
@@ -1357,13 +1394,28 @@ pub mod pallet {
                 <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::get_checkpoint_challenge_period();
 
             assert!(
-                default_replication_target > T::ReplicationTargetType::zero(),
-                "Default replication target cannot be zero."
+                low_security_replication_target > T::ReplicationTargetType::zero(),
+                "Low security replication target cannot be zero."
             );
-
             assert!(
-                max_replication_target >= default_replication_target,
-                "Max replication target cannot be smaller than default replication target."
+				medium_security_replication_target >= low_security_replication_target,
+				"Medium security replication target cannot be smaller than low security replication target."
+			);
+            assert!(
+				high_security_replication_target >= medium_security_replication_target,
+				"High security replication target cannot be smaller than medium security replication target."
+			);
+            assert!(
+				super_high_security_replication_target >= high_security_replication_target,
+				"Super high security replication target cannot be smaller than high security replication target."
+			);
+            assert!(
+				ultra_high_security_replication_target >= super_high_security_replication_target,
+				"Ultra high security replication target cannot be smaller than super high security replication target."
+			);
+            assert!(
+                max_replication_target >= ultra_high_security_replication_target,
+                "Max replication target cannot be smaller than the most secure replication target."
             );
 
             assert!(tick_range_to_max_threshold < storage_request_ttl.into(), "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring.");

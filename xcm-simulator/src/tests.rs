@@ -1174,6 +1174,7 @@ mod users {
     use pallet_file_system::types::MaxNumberOfPeerIds;
     use pallet_file_system::types::MaxPeerIdSize;
     use pallet_file_system::types::PendingFileDeletionRequest;
+    use pallet_file_system::types::ReplicationTarget;
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
     use storagehub::configs::BucketNameLimit;
@@ -1316,7 +1317,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: None,
+                    replication_target: ReplicationTarget::MediumSecurity,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1697,7 +1698,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: None,
+                    replication_target: ReplicationTarget::MediumSecurity,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub

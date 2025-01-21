@@ -41,8 +41,8 @@ use crate::{
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
         FileKeyHasher, FileKeyWithProof, FileLocation, Fingerprint, ForestProof, MerkleHash,
         MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingFileDeletionRequest,
-        PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTargetType,
-        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTarget,
+        ReplicationTargetType, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
@@ -710,7 +710,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         msp_id: Option<ProviderIdFor<T>>,
-        replication_target: Option<ReplicationTargetType<T>>,
+        replication_target: ReplicationTarget<T>,
         user_peer_ids: Option<PeerIds<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // Check that the file size is greater than zero.
@@ -765,7 +765,14 @@ where
             None
         };
 
-        let replication_target = replication_target.unwrap_or(T::DefaultReplicationTarget::get());
+        let replication_target = match replication_target {
+            ReplicationTarget::LowSecurity => T::LowSecurityReplicationTarget::get(),
+            ReplicationTarget::MediumSecurity => T::MediumSecurityReplicationTarget::get(),
+            ReplicationTarget::HighSecurity => T::HighSecurityReplicationTarget::get(),
+            ReplicationTarget::SuperHighSecurity => T::SuperHighSecurityReplicationTarget::get(),
+            ReplicationTarget::UltraHighSecurity => T::UltraHighSecurityReplicationTarget::get(),
+            ReplicationTarget::Custom(replication_target) => replication_target,
+        };
 
         if replication_target.is_zero() {
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
@@ -1818,7 +1825,7 @@ where
                     fingerprint,
                     size,
                     None,
-                    Some(ReplicationTargetType::<T>::one()),
+                    ReplicationTarget::Custom(ReplicationTargetType::<T>::one()),
                     None,
                 )?;
 

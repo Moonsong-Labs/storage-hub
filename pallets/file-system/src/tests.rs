@@ -4,9 +4,10 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileDeletionRequestExpirationItem,
         FileKeyWithProof, FileLocation, MoveBucketRequestMetadata, PeerIds,
-        PendingFileDeletionRequest, PendingFileDeletionRequestTtl, ProviderIdFor, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, ValuePropId,
+        PendingFileDeletionRequest, PendingFileDeletionRequestTtl, ProviderIdFor,
+        ReplicationTarget, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
+        ThresholdType, ValuePropId,
     },
     Config, Error, Event, NextAvailableStorageRequestExpirationBlock, PendingBucketsToMove,
     PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
@@ -353,7 +354,7 @@ mod delete_bucket_tests {
                     4,
                     msp_id,
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Accept the storage request to store the file, so the bucket is not empty.
@@ -433,7 +434,7 @@ mod delete_bucket_tests {
                     4,
                     msp_id,
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Simulate insolvent provider
@@ -616,7 +617,7 @@ mod delete_bucket_tests {
 					4,
 					msp_id,
 					BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
-                    None
+                    ReplicationTarget::MediumSecurity
 				));
 
 				// Accept the storage request to store the file, so the bucket is not empty.
@@ -733,7 +734,7 @@ mod request_move_bucket {
                     4,
                     msp_charlie_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 assert_noop!(
@@ -876,7 +877,7 @@ mod request_move_bucket {
                     size,
                     msp_charlie_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Compute the file key.
@@ -1702,7 +1703,7 @@ mod request_storage {
                         4,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::MediumSecurity
                     ),
                     pallet_storage_providers::Error::<Test>::BucketNotFound
                 );
@@ -1736,7 +1737,7 @@ mod request_storage {
                         4,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::MediumSecurity
                     ),
                     Error::<Test>::NotBucketOwner
                 );
@@ -1793,7 +1794,7 @@ mod request_storage {
                         4,
                         msp_charlie_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::MediumSecurity
                     ),
                     Error::<Test>::BucketIsBeingMoved
                 );
@@ -1850,7 +1851,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::MediumSecurity
                     ),
                     Error::<Test>::CannotHoldDeposit
                 );
@@ -1901,7 +1902,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        Some(0)
+                        ReplicationTarget::Custom(0)
                     ),
                     Error::<Test>::ReplicationTargetCannotBeZero
                 );
@@ -1941,7 +1942,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        Some(
+                        ReplicationTarget::Custom(
                             <<Test as crate::Config>::MaxReplicationTarget as Get<u32>>::get() + 1
                         )
                     ),
@@ -1989,7 +1990,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::MediumSecurity
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
@@ -2046,7 +2047,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2069,7 +2070,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_block_storage_request
@@ -2140,7 +2141,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(<Test as crate::Config>::MaxReplicationTarget::get())
+                    ReplicationTarget::Custom(<Test as crate::Config>::MaxReplicationTarget::get())
                 ),);
             });
         }
@@ -2186,7 +2187,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2209,7 +2210,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_block_storage_request
@@ -2225,7 +2226,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2248,7 +2249,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_block_storage_request
@@ -2305,7 +2306,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::MediumSecurity
                     ),
                     Error::<Test>::FileSizeCannotBeZero
                 );
@@ -2352,7 +2353,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2375,7 +2376,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_block_storage_request
@@ -2469,7 +2470,7 @@ mod request_storage {
                     4,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Assert that the storage request expirations storage is at max capacity
@@ -2548,7 +2549,7 @@ mod request_storage {
                     4,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
@@ -2647,7 +2648,7 @@ mod revoke_storage_request {
                     4,
                     msp_id,
                     Default::default(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2698,7 +2699,7 @@ mod revoke_storage_request {
                     4,
                     msp_id,
                     Default::default(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2758,7 +2759,7 @@ mod revoke_storage_request {
                     4,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
@@ -2840,7 +2841,7 @@ mod revoke_storage_request {
                     4,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2935,7 +2936,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Compute the file key.
@@ -2990,7 +2991,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Compute the file key.
@@ -3084,7 +3085,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch a storage request for the second file.
@@ -3096,7 +3097,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch the MSP accept request for the first file.
@@ -3211,7 +3212,7 @@ mod msp_respond_storage_request {
                     first_size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch a storage request for the second file.
@@ -3223,7 +3224,7 @@ mod msp_respond_storage_request {
                     second_size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch the MSP accept request for the second file.
@@ -3358,7 +3359,7 @@ mod msp_respond_storage_request {
                     first_size,
                     msp_id,
                     first_peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch a storage request for the second file.
@@ -3370,7 +3371,7 @@ mod msp_respond_storage_request {
                     second_size,
                     msp_id,
                     second_peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch the MSP accept request for the second file.
@@ -3478,7 +3479,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Compute the file key.
@@ -3636,7 +3637,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -3707,7 +3708,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -3780,7 +3781,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: None,
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
@@ -3849,7 +3850,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: None,
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
@@ -3920,7 +3921,7 @@ mod msp_respond_storage_request {
                     size,
                     expected_msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -3984,7 +3985,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4082,7 +4083,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: Some((expected_msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
@@ -4155,7 +4156,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
@@ -4224,7 +4225,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4301,7 +4302,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4371,7 +4372,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4431,7 +4432,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4490,7 +4491,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Compute the file key to volunteer for.
@@ -4555,7 +4556,7 @@ mod bsp_volunteer {
                     4,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
@@ -4619,7 +4620,7 @@ mod bsp_volunteer {
                     4,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4713,7 +4714,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Compute the file key to volunteer for.
@@ -4806,7 +4807,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4907,7 +4908,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4974,7 +4975,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Custom(2)
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5128,7 +5129,7 @@ mod bsp_confirm {
                         size,
                         msp_id,
                         Default::default(),
-                        None
+                        ReplicationTarget::MediumSecurity
                     ));
 
                     let file_key = FileSystem::compute_file_key(
@@ -5225,7 +5226,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5313,7 +5314,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5418,7 +5419,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5479,7 +5480,7 @@ mod bsp_confirm {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -5606,7 +5607,7 @@ mod bsp_confirm {
                             size,
                             msp_id,
                             peer_ids.clone(),
-                            Some(1)
+                            ReplicationTarget::Custom(1)
                         ));
 
                         let file_key = FileSystem::compute_file_key(
@@ -5746,7 +5747,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5807,7 +5808,7 @@ mod bsp_confirm {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -5896,7 +5897,7 @@ mod bsp_confirm {
                     new_size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5951,7 +5952,7 @@ mod bsp_confirm {
                         size: new_size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -6049,7 +6050,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Ensure the storage request expiration item was added to the expiration queue.
@@ -6208,7 +6209,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6281,7 +6282,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6349,7 +6350,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -6426,7 +6427,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6494,7 +6495,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -6574,7 +6575,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6642,7 +6643,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -6737,7 +6738,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6805,7 +6806,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -6850,7 +6851,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_block_storage_request,
@@ -6934,7 +6935,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -7002,7 +7003,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -7053,7 +7054,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_block_storage_request,
@@ -7118,7 +7119,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -7186,7 +7187,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -7248,7 +7249,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_block_storage_request,
@@ -7356,7 +7357,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-					None
+					ReplicationTarget::MediumSecurity
                 ));
 
 
@@ -7447,7 +7448,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_block_storage_request,
@@ -7492,7 +7493,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_block_storage_request,
@@ -7594,7 +7595,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-					None
+					ReplicationTarget::MediumSecurity
                 ));
 
 				// Dispatch second storage request.
@@ -7606,7 +7607,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-					None
+					ReplicationTarget::MediumSecurity
                 ));
 
                 let first_file_key = FileSystem::compute_file_key(
@@ -7734,7 +7735,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_block_storage_request,
@@ -7751,7 +7752,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_block_storage_request,
@@ -7788,7 +7789,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_block_storage_request,
@@ -7896,7 +7897,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     Default::default(),
-                    None,
+                    ReplicationTarget::MediumSecurity,
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -7980,7 +7981,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: Default::default(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_block_storage_request,
@@ -8039,7 +8040,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     Default::default(),
-                    None,
+                    ReplicationTarget::MediumSecurity,
                 ));
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
@@ -8071,7 +8072,7 @@ mod bsp_stop_storing {
                 ));
 
                 let current_bsps_required: <Test as Config>::ReplicationTargetType =
-                    <Test as Config>::DefaultReplicationTarget::get();
+                    <Test as Config>::MediumSecurityReplicationTarget::get();
 
                 // Assert that the storage request bsps_required was incremented
                 assert_eq!(
@@ -8487,7 +8488,7 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch MSP confirm storing.
@@ -8640,7 +8641,7 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch MSP confirm storing.
@@ -8756,7 +8757,7 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch MSP confirm storing.
@@ -8909,7 +8910,7 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 // Dispatch MSP confirm storing.
@@ -9167,7 +9168,7 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     msp_id,
                     peer_ids,
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Dispatch MSP confirm storing.
@@ -9324,7 +9325,7 @@ mod compute_threshold {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9383,7 +9384,7 @@ mod compute_threshold {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9408,7 +9409,7 @@ mod compute_threshold {
                 let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
                     &bsp_id,
                     storage_request.requested_at,
-                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                 )
                 .unwrap();
 
@@ -9432,7 +9433,7 @@ mod compute_threshold {
                 let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
                     &bsp_id,
                     storage_request.requested_at,
-                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                 )
                 .unwrap();
 
@@ -9468,7 +9469,7 @@ mod compute_threshold {
                 let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
                     &bsp_id,
                     storage_request.requested_at,
-                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                 )
                 .unwrap();
 
@@ -9519,7 +9520,7 @@ mod compute_threshold {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9554,7 +9555,7 @@ mod compute_threshold {
                 let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
                     &bsp_id,
                 	requested_at,
-                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                 )
                 .unwrap();
 
@@ -9620,7 +9621,7 @@ mod compute_threshold {
                 let (_eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
                     &bsp_id,
                     requested_at,
-                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                 )
                 .unwrap();
 
@@ -9654,7 +9655,7 @@ mod compute_threshold {
                     FileSystem::compute_request_eligibility_criteria(
                         &bsp_bob_id,
                         requested_at,
-                        <Test as crate::Config>::DefaultReplicationTarget::get(),
+                        <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                     )
                     .unwrap();
 
@@ -9675,7 +9676,7 @@ mod compute_threshold {
                     FileSystem::compute_request_eligibility_criteria(
                         &bsp_charlie_id,
                         requested_at,
-                        <Test as crate::Config>::DefaultReplicationTarget::get(),
+                        <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                     )
                     .unwrap();
 
@@ -9709,7 +9710,7 @@ mod compute_threshold {
                     FileSystem::compute_request_eligibility_criteria(
                         &bsp_bob_id,
                         requested_at,
-                        <Test as crate::Config>::DefaultReplicationTarget::get(),
+                        <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                     )
                     .unwrap();
 
@@ -9717,7 +9718,7 @@ mod compute_threshold {
                     FileSystem::compute_request_eligibility_criteria(
                         &bsp_charlie_id,
                         requested_at,
-                        <Test as crate::Config>::DefaultReplicationTarget::get(),
+                        <Test as crate::Config>::MediumSecurityReplicationTarget::get(),
                     )
                     .unwrap();
 
@@ -9779,7 +9780,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9840,7 +9841,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -9998,7 +9999,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -10081,7 +10082,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, true)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -10188,7 +10189,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -10249,7 +10250,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -10449,7 +10450,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -10510,7 +10511,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
@@ -10685,7 +10686,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::MediumSecurity
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -10746,7 +10747,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::MediumSecurityReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_block_storage_request,
