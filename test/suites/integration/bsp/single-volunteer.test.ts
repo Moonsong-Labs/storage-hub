@@ -73,13 +73,18 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       signer: shUser
     });
 
-    await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
-
     await userApi.assert.extrinsicPresent({
       module: "fileSystem",
       method: "bspVolunteer",
       checkTxPool: true
     });
+
+    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+
+    const newStorageRequestDataBlob =
+      userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+
+    assert(newStorageRequestDataBlob, "NewStorageRequest event data does not match expected type");
 
     await userApi.block.seal();
     const {
@@ -107,10 +112,10 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     );
     strictEqual(resSize.toBigInt(), file_size.toBigInt());
 
-    await userApi.docker.waitForLog({
-      containerName: "docker-sh-bsp-1",
-      searchString: "File upload complete",
-      timeout: 5000
+    await waitFor({
+      lambda: async () =>
+        (await bspApi.rpc.storagehubclient.isFileInFileStorage(newStorageRequestDataBlob.fileKey))
+          .isFileFound
     });
 
     await userApi.block.seal();
