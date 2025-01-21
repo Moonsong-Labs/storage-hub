@@ -2373,7 +2373,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::MediumSecurity,
         )?;
 
         // Compute the file key
@@ -2489,7 +2489,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::MediumSecurity,
         )?;
 
         // Compute the file key
