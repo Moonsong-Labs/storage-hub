@@ -797,6 +797,7 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
 /****** File System pallet ******/
 type ThresholdType = u32;
 pub type ReplicationTargetType = u32;
+pub type ReplicationTargetType = u32;
 
 parameter_types! {
     pub const StorageRequestCreationDeposit: Balance = 10;
@@ -815,6 +816,7 @@ impl pallet_file_system::Config for Runtime {
     type UpdateStoragePrice = MostlyStablePriceIndexUpdater<Runtime>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
+    type ReplicationTargetType = ReplicationTargetType;
     type ReplicationTargetType = ReplicationTargetType;
     type ThresholdType = ThresholdType;
     type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
@@ -841,9 +843,15 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring =
         runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
+    type MinWaitForStopStoring =
+        runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
     type DefaultReplicationTarget =
         runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
+    type MaxReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
+    type TickRangeToMaximumThreshold =
+        runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type MaxReplicationTarget =
         runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
     type TickRangeToMaximumThreshold =

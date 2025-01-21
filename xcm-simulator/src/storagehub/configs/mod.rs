@@ -844,6 +844,7 @@ where
 
 type ThresholdType = u32;
 pub type ReplicationTargetType = u32;
+pub type ReplicationTargetType = u32;
 
 parameter_types! {
     pub const MaxBatchConfirmStorageRequests: u32 = 10;
@@ -889,7 +890,15 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring =
         runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
+    type MinWaitForStopStoring =
+        runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type DefaultReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
+    type MaxReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
+    type TickRangeToMaximumThreshold =
+        runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type DefaultReplicationTarget =
         runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
     type MaxReplicationTarget =
