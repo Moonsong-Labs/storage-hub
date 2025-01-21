@@ -189,7 +189,9 @@ pub mod dynamic_params {
         #[codec(index = 23)]
         #[allow(non_upper_case_globals)]
         pub static MaxReplicationTarget: ReplicationTargetType =
-            UltraHighSecurityReplicationTarget::get().saturating_mul(150).saturating_div(100);
+            UltraHighSecurityReplicationTarget::get()
+                .saturating_mul(150)
+                .saturating_div(100);
 
         /// The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
         /// to arrive at its maximum value.
