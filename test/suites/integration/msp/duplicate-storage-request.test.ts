@@ -16,7 +16,7 @@ describeMspNet(
       mspApi = maybeMspApi;
     });
 
-    it("Network launches and can be queried", { only: true }, async () => {
+    it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -24,7 +24,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("MSP accepts subsequent storage request for the same file key", { only: true }, async () => {
+    it("MSP accepts subsequent storage request for the same file key", async () => {
       const source = "res/whatsup.jpg";
       const destination = "test/smile.jpg";
       const initialised = await getLaunchResponse();
