@@ -758,7 +758,7 @@ mod benchmarks {
 
             let accept = StorageRequestMspAcceptedFileKeys {
                 file_keys_and_proofs,
-                non_inclusion_forest_proof,
+                forest_proof: non_inclusion_forest_proof,
             };
 
             // Finally, build the response for this bucket and push it to the responses bounded vector

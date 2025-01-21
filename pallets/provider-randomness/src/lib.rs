@@ -1,20 +1,3 @@
-//! # Randomness Pallet
-//!
-//! This pallet provides access to randomness using as source the relay chain BABE one epoch ago randomness,
-//! produced by the relay chain per relay chain epoch
-//!
-//! There are no extrinsics for this pallet. Instead, an inherent updates the pseudo-random word obtained from
-//! the relay chain when an epoch changes, and that word can be then used by other pallets as a source of randomness
-//! as this pallet implements the Randomness trait
-//!
-//! ## Babe Epoch Randomness
-//! Babe epoch randomness is retrieved once every relay chain epoch.
-//!
-//! The `set_babe_randomness` mandatory inherent reads the Babe epoch randomness from the
-//! relay chain state proof and updates the latest pseudo-random word with this epoch randomness.
-//!
-//! `Config::BabeDataGetter` is responsible for reading the epoch index and epoch randomness
-//! from the relay chain state proof
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use frame_support::{pallet, traits::Randomness};

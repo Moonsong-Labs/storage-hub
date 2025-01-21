@@ -14,7 +14,7 @@ use crate::{
 #[diesel(table_name = msp)]
 pub struct Msp {
     /// The ID of the MSP as stored in the database. For the runtime id, use `onchain_msp_id`.
-    pub id: i32,
+    pub id: i64,
     pub account: String,
     pub capacity: BigDecimal,
     pub value_prop: String,
@@ -29,8 +29,8 @@ pub struct Msp {
 #[diesel(belongs_to(Msp, foreign_key = msp_id))]
 #[diesel(belongs_to(MultiAddress, foreign_key = multiaddress_id))]
 pub struct MspMultiAddress {
-    pub msp_id: i32,
-    pub multiaddress_id: i32,
+    pub msp_id: i64,
+    pub multiaddress_id: i64,
 }
 
 impl Msp {
