@@ -9359,7 +9359,7 @@ mod compute_threshold {
         }
 
         #[test]
-        fn compute_threshold_to_succeed() {
+        fn compute_request_eligibility_criteria() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let user = RuntimeOrigin::signed(owner_account_id.clone());
@@ -9412,13 +9412,16 @@ mod compute_threshold {
 
                 let storage_request = file_system::StorageRequests::<Test>::get(file_key).unwrap();
 
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
-                        .unwrap();
+                let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                    storage_request.requested_at,
+                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                )
+                .unwrap();
 
                 assert!(
-                    threshold_to_succeed > 0
-                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                    eligibility_value > 0
+                        && eligibility_value <= ThresholdType::<Test>::max_value()
                 );
                 assert!(slope > 0);
 
@@ -9433,13 +9436,16 @@ mod compute_threshold {
                 // Simulate there being many BSPs in the network with high reputation weight
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(u32::MAX);
 
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
-                        .unwrap();
+                let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                    storage_request.requested_at,
+                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                )
+                .unwrap();
 
                 assert!(
-                    threshold_to_succeed > 0
-                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                    eligibility_value > 0
+                        && eligibility_value <= ThresholdType::<Test>::max_value()
                 );
                 assert!(slope > 0);
 
@@ -9466,21 +9472,24 @@ mod compute_threshold {
                     }
                 });
 
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
-                        .unwrap();
+                let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                    storage_request.requested_at,
+                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                )
+                .unwrap();
 
                 assert!(
-                    threshold_to_succeed > 0
-                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                    eligibility_value > 0
+                        && eligibility_value <= ThresholdType::<Test>::max_value()
                 );
                 assert!(slope > 0);
 
-                let block_number =
+                let volunteer_tick =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since its reputation weight is so high.
-                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
+                assert_eq!(volunteer_tick, frame_system::Pallet::<Test>::block_number());
             });
         }
 
@@ -9508,6 +9517,7 @@ mod compute_threshold {
                 );
 
                 // Dispatch a signed extrinsic.
+				let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
                 assert_ok!(FileSystem::issue_storage_request(
                     user.clone(),
                     bucket_id,
@@ -9548,17 +9558,21 @@ mod compute_threshold {
                     }
                 });
 
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
+                let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                	requested_at,
+                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                )
+                .unwrap();
 
-                assert_eq!(threshold_to_succeed, ThresholdType::<Test>::max_value());
+                assert_eq!(eligibility_value, ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let block_number =
+                let volunteer_tick =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
-                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
+                assert_eq!(volunteer_tick, <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick());
             });
         }
         #[test]
@@ -9576,7 +9590,8 @@ mod compute_threshold {
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
 
-                let result = FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at);
+                let result =
+                    FileSystem::compute_request_eligibility_criteria(&bsp_id, requested_at, 1);
 
                 assert_noop!(result, Error::<Test>::NoGlobalReputationWeightSet);
             });
@@ -9609,8 +9624,12 @@ mod compute_threshold {
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
 
-                let (_threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at).unwrap();
+                let (_eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                    requested_at,
+                    <Test as crate::Config>::DefaultReplicationTarget::get(),
+                )
+                .unwrap();
 
                 assert_eq!(slope, ThresholdType::<Test>::max_value());
             });
@@ -9638,8 +9657,13 @@ mod compute_threshold {
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
 
-                let (_threshold_to_succeed, slope_bsp_1) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
+                let (_eligibility_value, slope_bsp_1) =
+                    FileSystem::compute_request_eligibility_criteria(
+                        &bsp_bob_id,
+                        requested_at,
+                        <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    )
+                    .unwrap();
 
                 // Set BSP's reputation weight to 10 (10 times higher than the other BSP)
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
@@ -9654,9 +9678,13 @@ mod compute_threshold {
                     },
                 );
 
-                let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
-                        .unwrap();
+                let (_eligibility_value, slope_bsp_2) =
+                    FileSystem::compute_request_eligibility_criteria(
+                        &bsp_charlie_id,
+                        requested_at,
+                        <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    )
+                    .unwrap();
 
                 // BSP with higher weight should have higher slope
                 assert!(slope_bsp_2 > slope_bsp_1);
@@ -9684,12 +9712,21 @@ mod compute_threshold {
 
                 let requested_at = frame_system::Pallet::<Test>::block_number();
 
-                let (_threshold_to_succeed, slope_bsp_1) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
+                let (_eligibility_value, slope_bsp_1) =
+                    FileSystem::compute_request_eligibility_criteria(
+                        &bsp_bob_id,
+                        requested_at,
+                        <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    )
+                    .unwrap();
 
-                let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
-                        .unwrap();
+                let (_eligibility_value, slope_bsp_2) =
+                    FileSystem::compute_request_eligibility_criteria(
+                        &bsp_charlie_id,
+                        requested_at,
+                        <Test as crate::Config>::DefaultReplicationTarget::get(),
+                    )
+                    .unwrap();
 
                 // BSPs with equal weight should have equal slope
                 assert_eq!(slope_bsp_2, slope_bsp_1);

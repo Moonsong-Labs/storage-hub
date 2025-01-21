@@ -4572,6 +4572,7 @@ export default {
       "FileKeyNotPendingDeletion",
       "FileSizeCannotBeZero",
       "NoGlobalReputationWeightSet",
+      "NoBspReputationWeightSet",
       "MaximumThresholdCannotBeZero",
       "TickRangeToMaximumThresholdCannotBeZero",
       "PendingStopStoringRequestNotFound",

@@ -191,6 +191,7 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + PartialOrd
+            + Ord
             + Bounded
             + One
             + Zero;
@@ -763,6 +764,8 @@ pub mod pallet {
         FileSizeCannotBeZero,
         /// No global reputation weight set.
         NoGlobalReputationWeightSet,
+        /// No BSP reputation weight set.
+        NoBspReputationWeightSet,
         /// Maximum threshold cannot be zero.
         MaximumThresholdCannotBeZero,
         /// Tick range to maximum threshold cannot be zero.

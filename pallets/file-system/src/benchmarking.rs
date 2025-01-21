@@ -867,6 +867,11 @@ mod benchmarks {
                 QueryFileEarliestVolunteerTickError::StorageRequestNotFound => {
                     return Err(BenchmarkError::Stop("Storage request not found."));
                 }
+                QueryFileEarliestVolunteerTickError::FailedToComputeEligibilityCriteria => {
+                    return Err(BenchmarkError::Stop(
+                        "Failed to compute eligibility criteria for BSP.",
+                    ));
+                }
                 QueryFileEarliestVolunteerTickError::InternalError => {
                     return Err(BenchmarkError::Stop("Internal runtime API error."));
                 }
@@ -1069,6 +1074,11 @@ mod benchmarks {
                     }
                     QueryFileEarliestVolunteerTickError::StorageRequestNotFound => {
                         return Err(BenchmarkError::Stop("Storage request not found."));
+                    }
+                    QueryFileEarliestVolunteerTickError::FailedToComputeEligibilityCriteria => {
+                        return Err(BenchmarkError::Stop(
+                            "Failed to compute eligibility criteria for BSP.",
+                        ));
                     }
                     QueryFileEarliestVolunteerTickError::InternalError => {
                         return Err(BenchmarkError::Stop("Internal runtime API error."));

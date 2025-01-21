@@ -144,7 +144,7 @@ pub mod dynamic_params {
         /// to not be a burden on the network.
         #[codec(index = 18)]
         #[allow(non_upper_case_globals)]
-        pub static DefaultReplicationTarget: ReplicationTargetType = 7;
+        pub static DefaultReplicationTarget: ReplicationTargetType = 12;
 
         /// The maximum amount of BSPs that a user can require a storage request to use as the replication target.
         ///

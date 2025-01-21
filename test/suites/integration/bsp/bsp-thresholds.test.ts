@@ -15,7 +15,7 @@ import {
 
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
-  { initialised: false, bspStartingWeight: 5n, networkConfig: "standard" },
+  { initialised: false, bspStartingWeight: 100n, networkConfig: "standard" },
   ({ before, it, createUserApi, createBspApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -210,6 +210,19 @@ describeBspNet(
         ]
       });
 
+      const storageRequestTtlRuntimeParameter = {
+        RuntimeConfig: {
+          StorageRequestTtl: [null, 550]
+        }
+      };
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter)
+          )
+        ]
+      });
+
       // Create a new BSP and onboard with no reputation
       const { rpcPort } = await addBsp(userApi, bspDownKey, {
         name: "sh-bsp-down",
@@ -259,7 +272,8 @@ describeBspNet(
       await userApi.wait.bspStored(1);
 
       // Checking volunteering and confirming for the low reputation BSP
-      await userApi.block.skipTo(lowReputationVolunteerTick);
+      // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
+      await userApi.block.skipTo(lowReputationVolunteerTick - 1);
       await userApi.wait.bspVolunteer(1);
       const matchedEvents = await userApi.assert.eventMany("fileSystem", "AcceptedBspVolunteer"); // T1
 
@@ -350,7 +364,8 @@ describeBspNet(
       await userApi.wait.bspStored(1);
 
       // Then wait for the second BSP to volunteer and confirm storing the file
-      await userApi.block.skipTo(bsp2VolunteerTick);
+      // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
+      await userApi.block.skipTo(bsp2VolunteerTick - 1);
 
       await userApi.wait.bspVolunteer(1);
       await bspTwoApi.wait.fileStorageComplete(fileKey);
@@ -386,6 +401,11 @@ describeBspNet(
           TickRangeToMaximumThreshold: [null, 100]
         }
       };
+      const storageRequestTtlRuntimeParameter = {
+        RuntimeConfig: {
+          StorageRequestTtl: [null, 110]
+        }
+      };
       await userApi.block.seal({
         calls: [
           userApi.tx.sudo.sudo(
@@ -397,6 +417,13 @@ describeBspNet(
         calls: [
           userApi.tx.sudo.sudo(
             userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+          )
+        ]
+      });
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(storageRequestTtlRuntimeParameter)
           )
         ]
       });

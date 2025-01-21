@@ -5523,6 +5523,7 @@ declare module "@polkadot/types/lookup" {
     readonly isFileKeyNotPendingDeletion: boolean;
     readonly isFileSizeCannotBeZero: boolean;
     readonly isNoGlobalReputationWeightSet: boolean;
+    readonly isNoBspReputationWeightSet: boolean;
     readonly isMaximumThresholdCannotBeZero: boolean;
     readonly isTickRangeToMaximumThresholdCannotBeZero: boolean;
     readonly isPendingStopStoringRequestNotFound: boolean;
@@ -5599,6 +5600,7 @@ declare module "@polkadot/types/lookup" {
       | "FileKeyNotPendingDeletion"
       | "FileSizeCannotBeZero"
       | "NoGlobalReputationWeightSet"
+      | "NoBspReputationWeightSet"
       | "MaximumThresholdCannotBeZero"
       | "TickRangeToMaximumThresholdCannotBeZero"
       | "PendingStopStoringRequestNotFound"
