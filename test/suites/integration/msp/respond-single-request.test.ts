@@ -56,7 +56,9 @@ describeMspNet(
             userApi.shConsts.TEST_ARTEFACTS[source].size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            null
+            {
+              LowSecurity: null
+            }
           )
         ],
         signer: shUser

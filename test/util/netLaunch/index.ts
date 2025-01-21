@@ -473,7 +473,11 @@ export class NetworkLauncher {
     //     MaximumTreasuryCut: [null, {VALUE_YOU_WANT}],
     //     BspStopStoringFilePenalty: [null, {VALUE_YOU_WANT}],
     //     ProviderTopUpTtl: [null, {VALUE_YOU_WANT}],
-    //     DefaultReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     LowSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     MediumSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     HighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     SuperHighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     UltraHighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
     //     MaxReplicationTarget: [null, {VALUE_YOU_WANT}],
     //     TickRangeToMaximumThreshold: [null, {VALUE_YOU_WANT}],
     //     StorageRequestTtl: [null, {VALUE_YOU_WANT}],
@@ -520,14 +524,16 @@ export class NetworkLauncher {
     await api.block.seal({
       calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))]
     });
-    const defaultReplicationTargetRuntimeParameter = {
+    const lowSecurityReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
-        DefaultReplicationTarget: [null, 3]
+        LowSecurityReplicationTarget: [null, 3]
       }
     };
     await api.block.seal({
       calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+        api.tx.sudo.sudo(
+          api.tx.parameters.setParameter(lowSecurityReplicationTargetRuntimeParameter)
+        )
       ]
     });
     const maxReplicationTargetRuntimeParameter = {
@@ -607,14 +613,16 @@ export class NetworkLauncher {
   public async initExtraBsps() {
     await using api = await this.getApi("sh-user");
 
-    const defaultReplicationTargetRuntimeParameter = {
+    const lowSecurityReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
-        DefaultReplicationTarget: [null, 4]
+        LowSecurityReplicationTarget: [null, 4]
       }
     };
     await api.block.seal({
       calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+        api.tx.sudo.sudo(
+          api.tx.parameters.setParameter(lowSecurityReplicationTargetRuntimeParameter)
+        )
       ]
     });
 

@@ -142,7 +142,9 @@ describeMspNet(
             file_size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            2
+            {
+              Custom: 2
+            }
           )
         );
       }

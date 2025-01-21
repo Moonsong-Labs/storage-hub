@@ -27,6 +27,10 @@ export const sendNewStorageRequest = async (
 
   const issueOwner = owner ?? shUser;
 
+  const replicationTarget = {
+    LowSecurity: null
+  };
+
   const issueStorageRequestResult = await sealBlock(
     api,
     api.tx.fileSystem.issueStorageRequest(
@@ -36,7 +40,7 @@ export const sendNewStorageRequest = async (
       fileMetadata.file_size,
       mspId ?? ShConsts.DUMMY_MSP_ID,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
-      null
+      replicationTarget
     ),
     issueOwner
   );
@@ -112,6 +116,16 @@ export const createBucketAndSendNewStorageRequest = async (
     newBucketEventDataBlob.bucketId
   );
 
+  let replicationTargetToUse: { Custom: number } | { LowSecurity: null };
+  if (replicationTarget) {
+    replicationTargetToUse = {
+      Custom: replicationTarget
+    };
+  } else {
+    replicationTargetToUse = {
+      LowSecurity: null
+    };
+  }
   const issueStorageRequestResult = await sealBlock(
     api,
     api.tx.fileSystem.issueStorageRequest(
@@ -121,7 +135,7 @@ export const createBucketAndSendNewStorageRequest = async (
       fileMetadata.file_size,
       mspId ?? ShConsts.DUMMY_MSP_ID,
       [ShConsts.NODE_INFOS.user.expectedPeerId],
-      replicationTarget ?? null
+      replicationTargetToUse
     ),
     owner ?? shUser
   );

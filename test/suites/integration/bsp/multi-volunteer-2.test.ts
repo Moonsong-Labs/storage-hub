@@ -18,15 +18,17 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
   });
 
   it("multiple BSPs race to volunteer for single file", async () => {
-    // Set default replication target to 1
-    const defaultReplicationTargetRuntimeParameter = {
+    // Set the low security replication target to 1, which is the one used in tests
+    const lowSecurityReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
-        DefaultReplicationTarget: [null, 1]
+        LowSecurityReplicationTarget: [null, 1]
       }
     };
     await api.block.seal({
       calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+        api.tx.sudo.sudo(
+          api.tx.parameters.setParameter(lowSecurityReplicationTargetRuntimeParameter)
+        )
       ]
     });
 

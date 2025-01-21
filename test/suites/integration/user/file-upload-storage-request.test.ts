@@ -29,7 +29,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            LowSecurity: null
+          }
         )
       ],
       signer: shUser
@@ -86,7 +88,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/half-chunk-file"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [],
-          null
+          {
+            LowSecurity: null
+          }
         )
       ],
       signer: shUser
@@ -131,7 +135,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            LowSecurity: null
+          }
         )
       ],
       signer: shUser
@@ -164,7 +170,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].size,
           INVALID_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            LowSecurity: null
+          }
         )
       ],
       signer: shUser
@@ -194,7 +202,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            LowSecurity: null
+          }
         )
       ],
       signer: shUser
@@ -230,7 +240,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            LowSecurity: null
+          }
         )
       ],
       signer: shUser
