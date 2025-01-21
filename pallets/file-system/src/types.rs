@@ -224,7 +224,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct PendingStopStoringRequest<T: Config> {
-    pub tick_when_requested: BlockNumberFor<T>,
+    pub tick_when_requested: TickNumber<T>,
     pub file_owner: T::AccountId,
     pub file_size: StorageData<T>,
 }

@@ -796,9 +796,9 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
 
 /****** File System pallet ******/
 type ThresholdType = u32;
+pub type ReplicationTargetType = u32;
 
 parameter_types! {
-    pub const MinWaitForStopStoring: BlockNumber = 10;
     pub const StorageRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
@@ -815,7 +815,7 @@ impl pallet_file_system::Config for Runtime {
     type UpdateStoragePrice = MostlyStablePriceIndexUpdater<Runtime>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
-    type ReplicationTargetType = u32;
+    type ReplicationTargetType = ReplicationTargetType;
     type ThresholdType = ThresholdType;
     type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
@@ -834,18 +834,20 @@ impl pallet_file_system::Config for Runtime {
     type MaxNumberOfPeerIds = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
     type MaxExpiredItemsInBlock = ConstU32<100>;
-    #[cfg(feature = "runtime-benchmarks")]
-    type StorageRequestTtl = ConstU32<2000>;
-    #[cfg(not(feature = "runtime-benchmarks"))]
-    type StorageRequestTtl = ConstU32<40>;
+    type StorageRequestTtl = runtime_params::dynamic_params::runtime_config::StorageRequestTtl;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
-    type MinWaitForStopStoring = MinWaitForStopStoring;
+    type MinWaitForStopStoring =
+        runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
     type DefaultReplicationTarget =
         runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
+    type MaxReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
+    type TickRangeToMaximumThreshold =
+        runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
 }
 
 impl MostlyStablePriceIndexUpdaterConfig for Runtime {

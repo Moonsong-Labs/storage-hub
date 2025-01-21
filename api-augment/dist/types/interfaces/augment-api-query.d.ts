@@ -317,11 +317,6 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
-       * Maximum number replication target allowed to be set for a storage request to be fulfilled.
-       **/
-      maxReplicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
-      /**
        * A map of blocks to expired move bucket requests.
        **/
       moveBucketRequestExpirations: AugmentedQuery<
@@ -461,11 +456,6 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
-      /**
-       * Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-       **/
-      tickRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query
        **/

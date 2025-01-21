@@ -64,6 +64,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
     use shp_file_metadata::ChunkId;
+    use shp_traits::ProofsDealerInterface;
     use sp_runtime::{
         traits::{
             Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating,
@@ -291,9 +292,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxUserPendingMoveBucketRequests: Get<u32>;
 
-        /// Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
+        /// Number of ticks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
         #[pallet::constant]
-        type MinWaitForStopStoring: Get<BlockNumberFor<Self>>;
+        type MinWaitForStopStoring: Get<TickNumber<Self>>;
 
         /// Deposit held from the User when creating a new storage request
         #[pallet::constant]
@@ -302,6 +303,15 @@ pub mod pallet {
         /// Default replication target
         #[pallet::constant]
         type DefaultReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// Maximum replication target that a user can select for a new storage request.
+        #[pallet::constant]
+        type MaxReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
+        /// to arrive at its maximum value.
+        #[pallet::constant]
+        type TickRangeToMaximumThreshold: Get<TickNumber<Self>>;
     }
 
     #[pallet::pallet]
@@ -446,46 +456,6 @@ pub mod pallet {
     #[pallet::storage]
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
-
-    // TODO: add this to pallet params instead of a storage element
-    /// Maximum number replication target allowed to be set for a storage request to be fulfilled.
-    #[pallet::storage]
-    pub type MaxReplicationTarget<T: Config> =
-        StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
-
-    /// Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-    #[pallet::storage]
-    pub type TickRangeToMaximumThreshold<T: Config> = StorageValue<_, TickNumber<T>, ValueQuery>;
-
-    #[pallet::genesis_config]
-    pub struct GenesisConfig<T: Config> {
-        pub max_replication_target: ReplicationTargetType<T>,
-        pub tick_range_to_maximum_threshold: TickNumber<T>,
-    }
-
-    impl<T: Config> Default for GenesisConfig<T> {
-        fn default() -> Self {
-            // TODO: Find a better default value for this.
-            let max_replication_target = 10u32.into();
-            let tick_range_to_maximum_threshold = 10u32.into();
-
-            MaxReplicationTarget::<T>::put(max_replication_target);
-            TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
-
-            Self {
-                max_replication_target,
-                tick_range_to_maximum_threshold,
-            }
-        }
-    }
-
-    #[pallet::genesis_build]
-    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-        fn build(&self) {
-            MaxReplicationTarget::<T>::put(self.max_replication_target);
-            TickRangeToMaximumThreshold::<T>::put(self.tick_range_to_maximum_threshold);
-        }
-    }
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -1356,42 +1326,6 @@ pub mod pallet {
 
             Ok(())
         }
-
-        #[pallet::call_index(17)]
-        #[pallet::weight(T::WeightInfo::set_global_parameters())]
-        pub fn set_global_parameters(
-            origin: OriginFor<T>,
-            new_max_replication_target: Option<T::ReplicationTargetType>,
-            tick_range_to_maximum_threshold: Option<TickNumber<T>>,
-        ) -> DispatchResult {
-            // Check that the extrinsic was sent with root origin.
-            ensure_root(origin)?;
-
-            if let Some(new_max_replication_target) = new_max_replication_target {
-                ensure!(
-                    new_max_replication_target > T::ReplicationTargetType::zero(),
-                    Error::<T>::ReplicationTargetCannotBeZero
-                );
-
-                ensure!(
-                    new_max_replication_target >= T::DefaultReplicationTarget::get(),
-                    Error::<T>::MaxReplicationTargetSmallerThanDefault
-                );
-
-                MaxReplicationTarget::<T>::put(new_max_replication_target);
-            }
-
-            if let Some(tick_range_to_maximum_threshold) = tick_range_to_maximum_threshold {
-                ensure!(
-                    tick_range_to_maximum_threshold > TickNumber::<T>::zero(),
-                    Error::<T>::TickRangeToMaximumThresholdCannotBeZero
-                );
-
-                TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
-            }
-
-            Ok(().into())
-        }
     }
 
     #[pallet::hooks]
@@ -1412,11 +1346,29 @@ pub mod pallet {
         /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
             let default_replication_target = T::DefaultReplicationTarget::get();
+            let max_replication_target = T::MaxReplicationTarget::get();
+            let storage_request_ttl = T::StorageRequestTtl::get();
+            let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
+            let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();
+            let checkpoint_challenge_period =
+                <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::get_checkpoint_challenge_period();
 
             assert!(
                 default_replication_target > T::ReplicationTargetType::zero(),
                 "Default replication target cannot be zero."
             );
+
+            assert!(
+                max_replication_target >= default_replication_target,
+                "Max replication target cannot be smaller than default replication target."
+            );
+
+            assert!(tick_range_to_max_threshold < storage_request_ttl.into(), "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring.");
+
+            // The checkpoint challenge period already greater than the longest challenge period a BSP can have + the tolerance,
+            // so by ensuring the minimum wait for stop storing is greater than the checkpoint challenge period, we ensure that
+            // the BSP cannot immediately stop storing a file it has lost when receiving a challenge for it.
+            assert!(min_wait_for_stop_storing > checkpoint_challenge_period, "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be smaller than the checkpoint challenge period.");
         }
     }
 }

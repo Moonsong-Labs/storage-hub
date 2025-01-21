@@ -94,6 +94,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxPeerIdSize: u32 & AugmentedConst<ApiType>;
       /**
+       * Maximum replication target that a user can select for a new storage request.
+       **/
+      maxReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * Maximum number of file deletion requests a user can have pending.
        **/
       maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
@@ -102,7 +106,7 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxUserPendingMoveBucketRequests: u32 & AugmentedConst<ApiType>;
       /**
-       * Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
+       * Number of ticks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
        **/
       minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
       /**
@@ -121,6 +125,11 @@ declare module "@polkadot/api-base/types/consts" {
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
+      /**
+       * The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
+       * to arrive at its maximum value.
+       **/
+      tickRangeToMaximumThreshold: u32 & AugmentedConst<ApiType>;
       /**
        * The treasury account of the runtime, where a fraction of each payment goes.
        **/

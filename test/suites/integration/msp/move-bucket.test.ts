@@ -61,8 +61,29 @@ describeMspNet(
 
     it("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
       // Replicate to 2 BSPs, 5 blocks to maxthreshold
+      const maxReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          MaxReplicationTarget: [null, 2]
+        }
+      };
+      const tickRangeToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 5]
+        }
+      };
       await userApi.block.seal({
-        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 5))]
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+          )
+        ]
       });
 
       await userApi.docker.onboardBsp({

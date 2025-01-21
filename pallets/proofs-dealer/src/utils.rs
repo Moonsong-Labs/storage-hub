@@ -1181,6 +1181,10 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
     fn get_current_tick() -> Self::TickNumber {
         ChallengesTicker::<T>::get()
     }
+
+    fn get_checkpoint_challenge_period() -> Self::TickNumber {
+        T::CheckpointChallengePeriod::get()
+    }
 }
 
 impl<T: pallet::Config> ProofSubmittersInterface for Pallet<T> {
