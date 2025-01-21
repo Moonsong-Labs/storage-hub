@@ -3,7 +3,7 @@ import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../uti
 
 describeMspNet(
   "Single MSP accepting subsequent storage request for same file key",
-  { initialised: true },
+  { initialised: true, only: true },
   ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -16,7 +16,7 @@ describeMspNet(
       mspApi = maybeMspApi;
     });
 
-    it("Network launches and can be queried", async () => {
+    it("Network launches and can be queried", { only: true }, async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -24,7 +24,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("MSP accepts subsequent storage request for the same file key", async () => {
+    it("MSP accepts subsequent storage request for the same file key", { only: true }, async () => {
       const source = "res/whatsup.jpg";
       const destination = "test/smile.jpg";
       const initialised = await getLaunchResponse();

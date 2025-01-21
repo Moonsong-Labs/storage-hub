@@ -4,8 +4,10 @@ use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
     types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
+    Extensions,
 };
 use log::{debug, error, info};
+use sc_rpc_api::check_if_safe;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use tokio::{fs, fs::create_dir_all, sync::RwLock};
@@ -60,7 +62,7 @@ impl<FL, FSH: Clone> Clone for StorageHubClientRpcConfig<FL, FSH> {
 impl<FL, FSH> StorageHubClientRpcConfig<FL, FSH>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Send + Sync,
+    FSH: ForestStorageHandler + Send + Sync + Clone,
 {
     pub fn new(
         file_storage: Arc<RwLock<FL>>,
@@ -101,7 +103,6 @@ pub enum GetFileFromFileStorageResult {
 /// Used by the `rpc` macro from `jsonrpsee`
 /// to generate the trait that is actually going to be implemented.
 #[rpc(server, namespace = "storagehubclient")]
-#[async_trait]
 pub trait StorageHubClientApi {
     #[method(name = "loadFileInStorage")]
     async fn load_file_in_storage(
@@ -205,7 +206,6 @@ pub struct StorageHubClientRpc<FL, FSH, C, Block> {
     client: Arc<C>,
     file_storage: Arc<RwLock<FL>>,
     forest_storage_handler: FSH,
-    keystore: KeystorePtr,
     _block_marker: std::marker::PhantomData<Block>,
 }
 
@@ -222,7 +222,6 @@ where
             client,
             file_storage: storage_hub_client_rpc_config.file_storage,
             forest_storage_handler: storage_hub_client_rpc_config.forest_storage_handler,
-            keystore: storage_hub_client_rpc_config.keystore,
             _block_marker: Default::default(),
         }
     }
@@ -876,4 +875,115 @@ where
         proof: file_key_proof,
         challenge_count,
     })
+}
+
+/// Provides an interface for BSP/MSP provider operations
+#[rpc(server, namespace = "storagehubprovider")]
+pub trait AuthorStorageHubProviderApi {
+    #[method(name = "insertBcsvKeys", with_extensions)]
+    async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
+
+    #[method(name = "removeBcsvKeys", with_extensions)]
+    async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()>;
+
+    #[method(name = "addToExcludeList", with_extensions)]
+    async fn add_to_exclude_list(&self, file_key: H256) -> RpcResult<()>;
+
+    #[method(name = "removeFromExcludeList", with_extensions)]
+    async fn remove_from_exclude_list(&self, file_key: H256) -> RpcResult<()>;
+}
+
+/// Stores the required objects to be used in our RPC methods for provider operations.
+pub struct AuthorStorageHubProvider<FL> {
+    file_storage: Arc<RwLock<FL>>,
+    keystore: KeystorePtr,
+}
+
+impl<FL> AuthorStorageHubProvider<FL>
+where
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+{
+    pub fn new(file_storage: Arc<RwLock<FL>>, keystore: KeystorePtr) -> Self {
+        Self {
+            file_storage,
+            keystore,
+        }
+    }
+}
+
+#[async_trait]
+impl<FL> AuthorStorageHubProviderApiServer for AuthorStorageHubProvider<FL>
+where
+    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+{
+    async fn insert_bcsv_keys(&self, ext: &Extensions, seed: Option<String>) -> RpcResult<String> {
+        check_if_safe(ext)?;
+
+        let seed = seed.as_deref();
+
+        let new_pub_key = match seed {
+            None => self
+                .keystore
+                .sr25519_generate_new(BCSV_KEY_TYPE, seed)
+                .map_err(into_rpc_error)?,
+            Some(seed) => {
+                let new_pair = Sr25519Pair::from_string(seed, None).map_err(into_rpc_error)?;
+                let new_pub_key = new_pair.public();
+                self.keystore
+                    .insert(BCSV_KEY_TYPE, seed, &new_pub_key)
+                    .map_err(into_rpc_error)?;
+
+                new_pub_key
+            }
+        };
+
+        Ok(new_pub_key.to_string())
+    }
+
+    async fn remove_bcsv_keys(&self, ext: &Extensions, keystore_path: String) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
+        let pub_keys = self.keystore.keys(BCSV_KEY_TYPE).map_err(into_rpc_error)?;
+        let key_path = PathBuf::from(keystore_path);
+
+        for pub_key in pub_keys {
+            let mut key = key_path.clone();
+            let key_name = key_file_name(&pub_key, BCSV_KEY_TYPE);
+            key.push(key_name);
+
+            // In case a key is not found we just ignore it
+            // because there may be keys in memory that are not in the file system.
+            let _ = fs::remove_file(key).await.map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to remove key: {:?}", e);
+            });
+        }
+
+        Ok(())
+    }
+
+    async fn add_to_exclude_list(&self, ext: &Extensions, file_key: H256) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
+        let mut write_file_storage = self.file_storage.write().await;
+        write_file_storage
+            .add_file_to_exclude_list(file_key)
+            .map_err(into_rpc_error)?;
+
+        drop(write_file_storage);
+
+        Ok(())
+    }
+
+    async fn remove_from_exclude_list(&self, ext: &Extensions, file_key: H256) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
+        let mut write_file_storage = self.file_storage.write().await;
+        write_file_storage
+            .remove_file_from_exclude_list(&file_key)
+            .map_err(into_rpc_error)?;
+
+        drop(write_file_storage);
+
+        Ok(())
+    }
 }

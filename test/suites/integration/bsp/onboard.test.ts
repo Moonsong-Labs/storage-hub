@@ -134,7 +134,7 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createUserApi, createApi, i
     strictEqual(hasBobKey.isTrue, false);
 
     // Rotate keys and check that Bob's pub key is now in Keystore.
-    await insertKeysApi.rpc.storagehubclient.insertBcsvKeys(bobSeed);
+    await insertKeysApi.rpc.storagehubprovider.insertBcsvKeys(bobSeed);
     hasBobKey = await insertKeysApi.rpc.author.hasKey(bobPubKey, bcsvKeyType);
     strictEqual(hasBobKey.isTrue, true);
   });
@@ -162,11 +162,11 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createUserApi, createApi, i
     strictEqual(hasDaveKey.isTrue, false);
 
     // Rotate keys and check that Dave's pub key is now in Keystore.
-    await removeKeysApi.rpc.storagehubclient.insertBcsvKeys(daveSeed);
+    await removeKeysApi.rpc.storagehubprovider.insertBcsvKeys(daveSeed);
     hasDaveKey = await removeKeysApi.rpc.author.hasKey(davePubKey, bcsvKeyType);
     strictEqual(hasDaveKey.isTrue, true);
 
-    await removeKeysApi.rpc.storagehubclient.removeBcsvKeys(keystore_path);
+    await removeKeysApi.rpc.storagehubprovider.removeBcsvKeys(keystore_path);
 
     // We still have Alice's key in `--dev` mode because it's inserted into the in-memory Keystore.
     hasAliceKey = await removeKeysApi.rpc.author.hasKey(alicePubKey, bcsvKeyType);

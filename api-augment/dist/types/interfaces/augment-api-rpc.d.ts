@@ -14,10 +14,13 @@ import type {
   bool,
   f64,
   u32,
-  u64
+  u64,
 } from "@polkadot/types-codec";
-import type { AnyNumber, Codec, ITuple } from "@polkadot/types-codec/types";
-import type { ExtrinsicOrHash, ExtrinsicStatus } from "@polkadot/types/interfaces/author";
+import type { AnyNumber, Codec } from "@polkadot/types-codec/types";
+import type {
+  ExtrinsicOrHash,
+  ExtrinsicStatus,
+} from "@polkadot/types/interfaces/author";
 import type { EpochAuthorship } from "@polkadot/types/interfaces/babe";
 import type { BeefyVersionedFinalityProof } from "@polkadot/types/interfaces/beefy";
 import type { BlockHash } from "@polkadot/types/interfaces/chain";
@@ -29,7 +32,7 @@ import type {
   ContractCallRequest,
   ContractExecResult,
   ContractInstantiateResult,
-  InstantiateRequestV1
+  InstantiateRequestV1,
 } from "@polkadot/types/interfaces/contracts";
 import type { BlockStats } from "@polkadot/types/interfaces/dev";
 import type { CreatedBlock } from "@polkadot/types/interfaces/engine";
@@ -47,17 +50,23 @@ import type {
   EthSyncStatus,
   EthTransaction,
   EthTransactionRequest,
-  EthWork
+  EthWork,
 } from "@polkadot/types/interfaces/eth";
 import type { Extrinsic } from "@polkadot/types/interfaces/extrinsics";
 import type {
   EncodedFinalityProofs,
   JustificationNotification,
-  ReportedRoundStates
+  ReportedRoundStates,
 } from "@polkadot/types/interfaces/grandpa";
-import type { MmrHash, MmrLeafBatchProof } from "@polkadot/types/interfaces/mmr";
+import type {
+  MmrHash,
+  MmrLeafBatchProof,
+} from "@polkadot/types/interfaces/mmr";
 import type { StorageKind } from "@polkadot/types/interfaces/offchain";
-import type { FeeDetails, RuntimeDispatchInfoV1 } from "@polkadot/types/interfaces/payment";
+import type {
+  FeeDetails,
+  RuntimeDispatchInfoV1,
+} from "@polkadot/types/interfaces/payment";
 import type { RpcMethods } from "@polkadot/types/interfaces/rpc";
 import type {
   AccountId,
@@ -72,13 +81,13 @@ import type {
   Justification,
   KeyValue,
   SignedBlock,
-  StorageData
+  StorageData,
 } from "@polkadot/types/interfaces/runtime";
 import type {
   MigrationStatusResult,
   ReadProof,
   RuntimeVersion,
-  TraceBlockResponse
+  TraceBlockResponse,
 } from "@polkadot/types/interfaces/state";
 import type {
   ApplyExtrinsicResult,
@@ -88,7 +97,7 @@ import type {
   NetworkState,
   NodeRole,
   PeerInfo,
-  SyncState
+  SyncState,
 } from "@polkadot/types/interfaces/system";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
@@ -96,7 +105,7 @@ import type {
   FileMetadata,
   GetFileFromFileStorageResult,
   LoadFileInStorageResult,
-  SaveFileToDisk
+  SaveFileToDisk,
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 export type __AugmentedRpc = AugmentedRpc<() => unknown>;
 declare module "@polkadot/rpc-core/types/jsonrpc" {
@@ -106,12 +115,17 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Returns true if the keystore has private keys for the given public key and key type.
        **/
       hasKey: AugmentedRpc<
-        (publicKey: Bytes | string | Uint8Array, keyType: Text | string) => Observable<bool>
+        (
+          publicKey: Bytes | string | Uint8Array,
+          keyType: Text | string
+        ) => Observable<bool>
       >;
       /**
        * Returns true if the keystore has private keys for the given session public keys.
        **/
-      hasSessionKeys: AugmentedRpc<(sessionKeys: Bytes | string | Uint8Array) => Observable<bool>>;
+      hasSessionKeys: AugmentedRpc<
+        (sessionKeys: Bytes | string | Uint8Array) => Observable<bool>
+      >;
       /**
        * Insert a key into the keystore.
        **/
@@ -154,20 +168,26 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Submit and subscribe to watch an extrinsic until unsubscribed
        **/
       submitAndWatchExtrinsic: AugmentedRpc<
-        (extrinsic: Extrinsic | IExtrinsic | string | Uint8Array) => Observable<ExtrinsicStatus>
+        (
+          extrinsic: Extrinsic | IExtrinsic | string | Uint8Array
+        ) => Observable<ExtrinsicStatus>
       >;
       /**
        * Submit a fully formatted extrinsic for block inclusion
        **/
       submitExtrinsic: AugmentedRpc<
-        (extrinsic: Extrinsic | IExtrinsic | string | Uint8Array) => Observable<Hash>
+        (
+          extrinsic: Extrinsic | IExtrinsic | string | Uint8Array
+        ) => Observable<Hash>
       >;
     };
     babe: {
       /**
        * Returns data about which slots (primary or secondary) can be claimed in the current epoch with the keys in the keystore
        **/
-      epochAuthorship: AugmentedRpc<() => Observable<HashMap<AuthorityId, EpochAuthorship>>>;
+      epochAuthorship: AugmentedRpc<
+        () => Observable<HashMap<AuthorityId, EpochAuthorship>>
+      >;
     };
     beefy: {
       /**
@@ -177,18 +197,24 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Returns the block most recently finalized by BEEFY, alongside its justification.
        **/
-      subscribeJustifications: AugmentedRpc<() => Observable<BeefyVersionedFinalityProof>>;
+      subscribeJustifications: AugmentedRpc<
+        () => Observable<BeefyVersionedFinalityProof>
+      >;
     };
     chain: {
       /**
        * Get header and body of a relay chain block
        **/
-      getBlock: AugmentedRpc<(hash?: BlockHash | string | Uint8Array) => Observable<SignedBlock>>;
+      getBlock: AugmentedRpc<
+        (hash?: BlockHash | string | Uint8Array) => Observable<SignedBlock>
+      >;
       /**
        * Get the block hash for a specific block
        **/
       getBlockHash: AugmentedRpc<
-        (blockNumber?: BlockNumber | AnyNumber | Uint8Array) => Observable<BlockHash>
+        (
+          blockNumber?: BlockNumber | AnyNumber | Uint8Array
+        ) => Observable<BlockHash>
       >;
       /**
        * Get hash of the last finalized block in the canon chain
@@ -197,7 +223,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Retrieves the header for a specific block
        **/
-      getHeader: AugmentedRpc<(hash?: BlockHash | string | Uint8Array) => Observable<Header>>;
+      getHeader: AugmentedRpc<
+        (hash?: BlockHash | string | Uint8Array) => Observable<Header>
+      >;
       /**
        * Retrieves the newest header via subscription
        **/
@@ -381,7 +409,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Instructs the manual-seal authorship task to finalize a block
        **/
       finalizeBlock: AugmentedRpc<
-        (hash: BlockHash | string | Uint8Array, justification?: Justification) => Observable<bool>
+        (
+          hash: BlockHash | string | Uint8Array,
+          justification?: Justification
+        ) => Observable<bool>
       >;
     };
     eth: {
@@ -450,7 +481,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         (
           blockCount: U256 | AnyNumber | Uint8Array,
           newestBlock: BlockNumber | AnyNumber | Uint8Array,
-          rewardPercentiles: Option<Vec<f64>> | null | Uint8Array | Vec<f64> | f64[]
+          rewardPercentiles:
+            | Option<Vec<f64>>
+            | null
+            | Uint8Array
+            | Vec<f64>
+            | f64[]
         ) => Observable<EthFeeHistory>
       >;
       /**
@@ -673,7 +709,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Sends signed transaction, returning its hash.
        **/
-      sendRawTransaction: AugmentedRpc<(bytes: Bytes | string | Uint8Array) => Observable<H256>>;
+      sendRawTransaction: AugmentedRpc<
+        (bytes: Bytes | string | Uint8Array) => Observable<H256>
+      >;
       /**
        * Sends transaction; will block waiting for signer to return the transaction hash
        **/
@@ -698,7 +736,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Used for submitting mining hashrate.
        **/
       submitHashrate: AugmentedRpc<
-        (index: U256 | AnyNumber | Uint8Array, hash: H256 | string | Uint8Array) => Observable<bool>
+        (
+          index: U256 | AnyNumber | Uint8Array,
+          hash: H256 | string | Uint8Array
+        ) => Observable<bool>
       >;
       /**
        * Used for submitting a proof-of-work solution.
@@ -742,7 +783,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Uninstalls filter.
        **/
-      uninstallFilter: AugmentedRpc<(index: U256 | AnyNumber | Uint8Array) => Observable<bool>>;
+      uninstallFilter: AugmentedRpc<
+        (index: U256 | AnyNumber | Uint8Array) => Observable<bool>
+      >;
     };
     grandpa: {
       /**
@@ -760,7 +803,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Subscribes to grandpa justifications
        **/
-      subscribeJustifications: AugmentedRpc<() => Observable<JustificationNotification>>;
+      subscribeJustifications: AugmentedRpc<
+        () => Observable<JustificationNotification>
+      >;
     };
     mmr: {
       /**
@@ -776,7 +821,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Get the MMR root hash for the current best block.
        **/
-      root: AugmentedRpc<(at?: BlockHash | string | Uint8Array) => Observable<MmrHash>>;
+      root: AugmentedRpc<
+        (at?: BlockHash | string | Uint8Array) => Observable<MmrHash>
+      >;
       /**
        * Verify an MMR proof
        **/
@@ -967,7 +1014,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Returns the runtime metadata
        **/
-      getMetadata: AugmentedRpc<(at?: BlockHash | string | Uint8Array) => Observable<Metadata>>;
+      getMetadata: AugmentedRpc<
+        (at?: BlockHash | string | Uint8Array) => Observable<Metadata>
+      >;
       /**
        * @deprecated Use `api.rpc.state.getKeysPaged` to retrieve keys
        * Returns the keys with prefix, leave empty to get all the keys (deprecated: Use getKeysPaged)
@@ -1066,7 +1115,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Check current migration state
        **/
       trieMigrationStatus: AugmentedRpc<
-        (at?: BlockHash | string | Uint8Array) => Observable<MigrationStatusResult>
+        (
+          at?: BlockHash | string | Uint8Array
+        ) => Observable<MigrationStatusResult>
       >;
     };
     storagehubclient: {
@@ -1074,7 +1125,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Add key to exclude list. Exclude type can be `file`, `user`, `bucket` and `fingerprint`.
        **/
       addToExcludeList: AugmentedRpc<
-        (key: H256 | string | Uint8Array, exclude_type: Text | string) => Observable<ITuple<[]>>
+        (
+          key: H256 | string | Uint8Array,
+          exclude_type: Text | string
+        ) => Observable<ITuple<[]>>
       >;
       /**
        * Generate a SCALE-encoded proof for a file key to allow a BSP to confirm storing it.
@@ -1139,19 +1193,17 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Get the root of the forest trie.
        **/
       getForestRoot: AugmentedRpc<
-        (forest_key: Option<H256> | null | Uint8Array | H256 | string) => Observable<Option<H256>>
-      >;
-      /**
-       * Generate and insert new keys of type BCSV into the keystore.
-       **/
-      insertBcsvKeys: AugmentedRpc<
-        (seed: Option<Text> | null | Uint8Array | Text | string) => Observable<Text>
+        (
+          forest_key: Option<H256> | null | Uint8Array | H256 | string
+        ) => Observable<Option<H256>>
       >;
       /**
        * Check if a file is in the file storage.
        **/
       isFileInFileStorage: AugmentedRpc<
-        (file_key: H256 | string | Uint8Array) => Observable<GetFileFromFileStorageResult>
+        (
+          file_key: H256 | string | Uint8Array
+        ) => Observable<GetFileFromFileStorageResult>
       >;
       /**
        * Check if a file is in the forest.
@@ -1176,12 +1228,17 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Remove keys of BCSV type for the Blockchain Service.
        **/
-      removeBcsvKeys: AugmentedRpc<(keystore_path: Text | string) => Observable<ITuple<[]>>>;
+      removeBcsvKeys: AugmentedRpc<
+        (keystore_path: Text | string) => Observable<ITuple<[]>>
+      >;
       /**
        * Remove key from exclude list
        **/
       removeFromExcludeList: AugmentedRpc<
-        (key: H256 | string | Uint8Array, exclude_type: Text | string) => Observable<ITuple<[]>>
+        (
+          key: H256 | string | Uint8Array,
+          exclude_type: Text | string
+        ) => Observable<ITuple<[]>>
       >;
       /**
        * Save a file from the local storage to the disk.
@@ -1197,7 +1254,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Returns the json-serialized chainspec running the node, with a sync state.
        **/
-      genSyncSpec: AugmentedRpc<(raw: bool | boolean | Uint8Array) => Observable<Json>>;
+      genSyncSpec: AugmentedRpc<
+        (raw: bool | boolean | Uint8Array) => Observable<Json>
+      >;
     };
     system: {
       /**
@@ -1209,7 +1268,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Adds the supplied directives to the current log filter
        **/
-      addLogFilter: AugmentedRpc<(directives: Text | string) => Observable<Null>>;
+      addLogFilter: AugmentedRpc<
+        (directives: Text | string) => Observable<Null>
+      >;
       /**
        * Adds a reserved peer
        **/
@@ -1266,7 +1327,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Remove a reserved peer
        **/
-      removeReservedPeer: AugmentedRpc<(peerId: Text | string) => Observable<Text>>;
+      removeReservedPeer: AugmentedRpc<
+        (peerId: Text | string) => Observable<Text>
+      >;
       /**
        * Returns the list of reserved peers
        **/
@@ -1292,7 +1355,9 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
       /**
        * Returns sha3 of the given data
        **/
-      sha3: AugmentedRpc<(data: Bytes | string | Uint8Array) => Observable<H256>>;
+      sha3: AugmentedRpc<
+        (data: Bytes | string | Uint8Array) => Observable<H256>
+      >;
     };
   }
 }

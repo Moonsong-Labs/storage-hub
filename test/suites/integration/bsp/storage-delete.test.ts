@@ -1,10 +1,24 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
+import {
+  bspKey,
+  describeBspNet,
+  shUser,
+  waitFor,
+  type EnrichedBspApi,
+} from "../../../util";
 
 describeBspNet(
   "BSPNet: Stop storing file and other BSPs taking the relay",
   { initialised: "multi", networkConfig: "standard" },
-  ({ before, createUserApi, after, it, createApi, createBspApi, getLaunchResponse }) => {
+  ({
+    before,
+    createUserApi,
+    after,
+    it,
+    createApi,
+    createBspApi,
+    getLaunchResponse,
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let bspTwoApi: EnrichedBspApi;
@@ -13,13 +27,19 @@ describeBspNet(
     before(async () => {
       const launchResponse = await getLaunchResponse();
       assert(
-        launchResponse && "bspTwoRpcPort" in launchResponse && "bspThreeRpcPort" in launchResponse,
+        launchResponse &&
+          "bspTwoRpcPort" in launchResponse &&
+          "bspThreeRpcPort" in launchResponse,
         "BSPNet failed to initialise with required ports"
       );
       userApi = await createUserApi();
       bspApi = await createBspApi();
-      bspTwoApi = await createApi(`ws://127.0.0.1:${launchResponse.bspTwoRpcPort}`);
-      bspThreeApi = await createApi(`ws://127.0.0.1:${launchResponse.bspThreeRpcPort}`);
+      bspTwoApi = await createApi(
+        `ws://127.0.0.1:${launchResponse.bspTwoRpcPort}`
+      );
+      bspThreeApi = await createApi(
+        `ws://127.0.0.1:${launchResponse.bspThreeRpcPort}`
+      );
     });
 
     after(async () => {
@@ -29,9 +49,15 @@ describeBspNet(
 
     it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
-      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
+      strictEqual(
+        userNodePeerId.toString(),
+        userApi.shConsts.NODE_INFOS.user.expectedPeerId
+      );
       const bspNodePeerId = await bspApi.rpc.system.localPeerId();
-      strictEqual(bspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.bsp.expectedPeerId);
+      strictEqual(
+        bspNodePeerId.toString(),
+        userApi.shConsts.NODE_INFOS.bsp.expectedPeerId
+      );
     });
 
     it("bsp one stop storing and bsp three volunteer", async () => {
@@ -43,7 +69,11 @@ describeBspNet(
       await userApi.docker.pauseBspContainer("sh-bsp-three");
 
       const { fileKey, location, fingerprint, fileSize, bucketId } =
-        await userApi.file.createBucketAndSendNewStorageRequest(source, destination, bucketName);
+        await userApi.file.createBucketAndSendNewStorageRequest(
+          source,
+          destination,
+          bucketName
+        );
 
       // Wait for the two BSP to volunteer
       await userApi.wait.bspVolunteer(2);
@@ -52,14 +82,14 @@ describeBspNet(
       // Revoke the storage request otherwise the new storage request event is not being triggered
       await userApi.block.seal({
         calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
-        signer: shUser
+        signer: shUser,
       });
 
       await userApi.assert.eventPresent("fileSystem", "StorageRequestRevoked");
 
       // Unpause BSP Three
       await userApi.docker.resumeBspContainer({
-        containerName: "sh-bsp-three"
+        containerName: "sh-bsp-three",
       });
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
@@ -69,18 +99,18 @@ describeBspNet(
       // Wait for BSP to update its local Forest root before starting to generate the inclusion proofs
       await waitFor({
         lambda: async () => {
-          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+          const isFileInForest =
+            await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
           return isFileInForest.isTrue;
-        }
+        },
       });
 
       // Add the file key to the exclude list
       bspApi.rpc.storagehubclient.addToExcludeList(fileKey, "file");
 
       // Request to stop storing a file with Dummy BSP
-      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
-        fileKey
-      ]);
+      const inclusionForestProof =
+        await bspApi.rpc.storagehubclient.generateForestProof(null, [fileKey]);
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
       await userApi.block.seal({
         calls: [
@@ -93,12 +123,15 @@ describeBspNet(
             fileSize,
             false,
             inclusionForestProof.toString()
-          )
+          ),
         ],
-        signer: bspKey
+        signer: bspKey,
       });
 
-      await userApi.assert.eventPresent("fileSystem", "BspRequestedToStopStoring");
+      await userApi.assert.eventPresent(
+        "fileSystem",
+        "BspRequestedToStopStoring"
+      );
 
       // When requested to stop storing a file we should also receive an event new storage request
       // to replace the bsp leaving
@@ -110,7 +143,8 @@ describeBspNet(
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
-        currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+        currentBlockNumber +
+        userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
 
       // New storage request does not get fulfilled and therefore gets cleaned up and we enqueue a checkpoint challenge remove mutation
       // Which then the bsp responds to and has the file key get removed from the forest

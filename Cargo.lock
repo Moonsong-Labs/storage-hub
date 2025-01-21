@@ -13904,6 +13904,7 @@ dependencies = [
  "log",
  "pallet-file-system-runtime-api",
  "pallet-proofs-dealer-runtime-api",
+ "sc-rpc-api",
  "serde",
  "shc-common",
  "shc-file-manager",

@@ -13,13 +13,17 @@ use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
+use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 use shc_common::types::{
     BackupStorageProviderId, BlockNumber, ChunkId, CustomChallenge, ForestLeaf,
     MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
+use shc_rpc::{
+    AuthorStorageHubProvider, AuthorStorageHubProviderApiServer, StorageHubClientApiServer,
+    StorageHubClientRpc, StorageHubClientRpcConfig,
+};
 use sp_api::ProvideRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
@@ -74,7 +78,7 @@ where
         >,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
-    FSH: ForestStorageHandler + Send + Sync + 'static,
+    FSH: ForestStorageHandler + Send + Sync + Clone + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};
@@ -91,7 +95,14 @@ where
     io.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
     if let Some(storage_hub_client_config) = maybe_storage_hub_client_config {
-        io.merge(StorageHubClientRpc::new(client, storage_hub_client_config).into_rpc())?;
+        io.merge(StorageHubClientRpc::new(client, storage_hub_client_config.clone()).into_rpc())?;
+        io.merge(
+            AuthorStorageHubProvider::new(
+                storage_hub_client_config.file_storage,
+                storage_hub_client_config.keystore,
+            )
+            .into_rpc(),
+        )?;
     }
 
     if let Some(command_sink) = command_sink {
@@ -101,6 +112,9 @@ where
             ManualSeal::new(command_sink).into_rpc(),
         )?;
     };
+
+    // Deny unsafe RPCs.
+    io.extensions_mut().insert(DenyUnsafe::Yes);
 
     Ok(io)
 }
