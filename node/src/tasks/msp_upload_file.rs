@@ -525,57 +525,9 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        // Apply the necessary deltas to each one of the bucket's forest storage to reflect the result.
+        // Remove the files that were rejected from the File Storage.
+        // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
         for storage_request_msp_bucket_response in storage_request_msp_response {
-            // Add the file keys that were accepted to the forest storage of the bucket.
-            if let Some(StorageRequestMspAcceptedFileKeys {
-                file_keys_and_proofs,
-                ..
-            }) = &storage_request_msp_bucket_response.accept
-            {
-                let fs = self
-                    .storage_hub_handler
-                    .forest_storage_handler
-                    .get(
-                        &storage_request_msp_bucket_response
-                            .bucket_id
-                            .as_ref()
-                            .to_vec(),
-                    )
-                    .await
-                    .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
-
-                let mut write_fs = fs.write().await;
-
-                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
-                let file_metadatas: Vec<FileMetadata> = file_keys_and_proofs
-                    .iter()
-                    .filter_map(|file_key_with_proof| {
-                        match read_file_storage.get_metadata(&file_key_with_proof.file_key) {
-                            Ok(Some(metadata)) => Some(metadata),
-                            Ok(None) => {
-                                // TODO: Should probably save this to state and retry later.
-                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ File does not exist after responding to storage request for file key {:?}", file_key_with_proof.file_key);
-                                None
-                            }
-                            Err(e) => {
-                                // TODO: Should probably save this to state and retry later.
-                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get file metadata after responding to storage request for file key {:?}: {:?}", file_key_with_proof.file_key, e);
-                                None
-                            }
-                        }
-                    })
-                    .collect();
-
-                drop(read_file_storage);
-
-                if let Err(e) = write_fs.insert_files_metadata(&file_metadatas) {
-                    // TODO: Should probably figure out a way to stop storing the file.
-                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to insert file metadatas after responding to storage requests: {:?}", e);
-                }
-            }
-
             let mut fs = self.storage_hub_handler.file_storage.write().await;
 
             for RejectedStorageRequest { file_key, .. } in
