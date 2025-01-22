@@ -532,7 +532,19 @@ where
     /// 1. `StopStoringForInsolventUserRequest`.
     ///
     /// This function is called every time a new block is imported and after each request is queued.
+    ///
+    /// _This check will be skipped if the latest processed block does not match the current best block._
     pub(crate) fn check_pending_forest_root_writes(&mut self) {
+        let client_best_hash = self.client.info().best_hash;
+        let client_best_number = self.client.info().best_number;
+
+        // Skip if the latest processed block doesn't match the current best block
+        if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
+        {
+            trace!(target: LOG_TARGET, "Skipping forest root write because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
+            return;
+        }
+
         if let Some(mut rx) = self.forest_root_write_lock.take() {
             // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
             match rx.try_recv() {
