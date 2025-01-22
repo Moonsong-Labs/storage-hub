@@ -196,9 +196,6 @@ pub trait StorageHubClientApi {
     // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
     // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
     // list ban users, bucket or even file fingerprint.
-    // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
-    // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
-    // list ban users, bucket or even file fingerprint.
     #[method(name = "removeFromExcludeList", with_extensions)]
     async fn remove_from_exclude_list(&self, file_key: H256, exclude_type: String)
         -> RpcResult<()>;

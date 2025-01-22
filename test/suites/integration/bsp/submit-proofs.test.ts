@@ -323,6 +323,12 @@ describeBspNet(
         checkTxPool: true
       });
 
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        checkTxPool: true
+      });
+
       // Seal block and check that the transaction was successful.
       await userApi.block.seal();
 

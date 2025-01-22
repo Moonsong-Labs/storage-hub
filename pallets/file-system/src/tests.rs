@@ -35,8 +35,6 @@ use sp_runtime::{
     bounded_vec,
     traits::{BlakeTwo256, Get},
     BoundedVec,
-    traits::{BlakeTwo256, Get},
-    BoundedVec,
 };
 use sp_std::cmp::max;
 use sp_trie::CompactProof;
@@ -1945,9 +1943,6 @@ mod request_storage {
                         Some(
                             <<Test as crate::Config>::MaxReplicationTarget as Get<u32>>::get() + 1
                         )
-                        Some(
-                            <<Test as crate::Config>::MaxReplicationTarget as Get<u32>>::get() + 1
-                        )
                     ),
                     Error::<Test>::ReplicationTargetExceedsMaximum
                 );
@@ -2145,7 +2140,6 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(<Test as crate::Config>::MaxReplicationTarget::get())
                     Some(<Test as crate::Config>::MaxReplicationTarget::get())
                 ),);
             });
@@ -2769,7 +2763,6 @@ mod revoke_storage_request {
                 ));
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account.clone(),
@@ -2778,21 +2771,6 @@ mod revoke_storage_request {
                     4,
                     fingerprint,
                 );
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -2873,21 +2851,6 @@ mod revoke_storage_request {
                     4,
                     fingerprint,
                 );
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -3534,21 +3497,6 @@ mod msp_respond_storage_request {
                     next_expiration_tick_storage_request
                 )
                 .contains(&file_key));
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -4381,21 +4329,6 @@ mod bsp_volunteer {
                     roll_to(current_block + ticks_to_advance);
                 }
 
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
 
@@ -4513,8 +4446,6 @@ mod bsp_volunteer {
 
                 // Set very high global weight so BSP does not have priority
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX);
-                // Set very high global weight so BSP does not have priority
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX);
 
                 // Dispatch BSP volunteer.
                 assert_noop!(
@@ -4573,8 +4504,6 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                // Set a high enough global weight so BSP does not have priority
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX);
                 // Set a high enough global weight so BSP does not have priority
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX);
 
@@ -4719,22 +4648,6 @@ mod bsp_volunteer {
                     // Advance by the number of ticks until this BSP can volunteer for the file.
                     roll_to(current_block + ticks_to_advance);
                 }
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
@@ -4814,8 +4727,6 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                // Set a high enough global weight so BSP does not have priority
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX / 2);
                 // Set a high enough global weight so BSP does not have priority
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX / 2);
 
@@ -5119,21 +5030,6 @@ mod bsp_confirm {
                     roll_to(current_block + ticks_to_advance);
                 }
 
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_bob_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_bob_signed.clone(), file_key,));
 
@@ -5358,22 +5254,6 @@ mod bsp_confirm {
                 }
 
                 // Dispatch BSP volunteer.
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
-                // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
 
                 // Pre-confirm one file key to simulate a previous BSP already confirming it
@@ -5445,21 +5325,6 @@ mod bsp_confirm {
                     size,
                     fingerprint,
                 );
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -5567,21 +5432,6 @@ mod bsp_confirm {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -5746,7 +5596,6 @@ mod bsp_confirm {
                     .collect();
 
                 // Issue storage requests for each file
-                // Issue storage requests for each file
                 let file_keys: Vec<_> = locations
                     .iter()
                     .map(|location| {
@@ -5773,32 +5622,6 @@ mod bsp_confirm {
                         file_key
                     })
                     .collect();
-
-                // Calculate in how many ticks the BSP can volunteer for the files
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = file_keys
-                    .iter()
-                    .map(|&file_key| {
-                        FileSystem::query_earliest_file_volunteer_tick(
-                            Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                            file_key,
-                        )
-                        .unwrap()
-                    })
-                    .max()
-                    .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
-                // Volunteer for all files
-                for &file_key in &file_keys {
-                    assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the files
                 let current_tick = ProofsDealer::get_current_tick();
@@ -5937,21 +5760,6 @@ mod bsp_confirm {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -6268,21 +6076,6 @@ mod bsp_confirm {
                     roll_to(current_block + ticks_to_advance);
                 }
 
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
                 // Dispatch the BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -6518,22 +6311,6 @@ mod bsp_stop_storing {
                     // Advance by the number of ticks until this BSP can volunteer for the file.
                     roll_to(current_block + ticks_to_advance);
                 }
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -6664,21 +6441,6 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -6842,22 +6604,6 @@ mod bsp_stop_storing {
                     // Advance by the number of ticks until this BSP can volunteer for the file.
                     roll_to(current_block + ticks_to_advance);
                 }
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -7005,22 +6751,6 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
@@ -7235,21 +6965,6 @@ mod bsp_stop_storing {
                     roll_to(current_block + ticks_to_advance);
                 }
 
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -7417,22 +7132,6 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
@@ -7668,28 +7367,12 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
 					&bsp_id,
 					&owner_account_id
 				).is_none());
-
-				// Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
 				// Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -7935,7 +7618,6 @@ mod bsp_stop_storing {
 				);
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(
@@ -7945,25 +7627,6 @@ mod bsp_stop_storing {
 					)
 					.is_none()
 				);
-
-				// Calculate in how many ticks the BSP can volunteer for the files
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = max(FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    first_file_key,
-                )
-                .unwrap(), FileSystem::query_earliest_file_volunteer_tick(
-					Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-					second_file_key,
-				)
-				.unwrap());
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
 				// Calculate in how many ticks the BSP can volunteer for the files
                 let current_tick = ProofsDealer::get_current_tick();
@@ -8237,22 +7900,6 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
@@ -9770,20 +9417,14 @@ mod compute_threshold {
                 assert!(slope > 0);
 
                 let volunteer_tick_number_only_bsp =
-                let volunteer_tick_number_only_bsp =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer either this block or in the future.
                 assert!(
                     volunteer_tick_number_only_bsp >= frame_system::Pallet::<Test>::block_number()
                 );
-                // BSP should be able to volunteer either this block or in the future.
-                assert!(
-                    volunteer_tick_number_only_bsp >= frame_system::Pallet::<Test>::block_number()
-                );
 
                 // Simulate there being many BSPs in the network with high reputation weight
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(u32::MAX);
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(u32::MAX);
 
                 let (threshold_to_succeed, slope) =
@@ -9797,16 +9438,9 @@ mod compute_threshold {
                 assert!(slope > 0);
 
                 let volunteer_tick_number_many_bsps =
-                let volunteer_tick_number_many_bsps =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP can only volunteer after some number of blocks have passed.
-                assert!(
-                    volunteer_tick_number_many_bsps > frame_system::Pallet::<Test>::block_number()
-                );
-
-                // BSP can volunteer further in the future compared to when it was the only BSP.
-                assert!(volunteer_tick_number_many_bsps > volunteer_tick_number_only_bsp);
                 assert!(
                     volunteer_tick_number_many_bsps > frame_system::Pallet::<Test>::block_number()
                 );
@@ -10137,21 +9771,6 @@ mod stop_storing_for_insolvent_user {
                     roll_to(current_block + ticks_to_advance);
                 }
 
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -10369,21 +9988,6 @@ mod stop_storing_for_insolvent_user {
                     roll_to(current_block + ticks_to_advance);
                 }
 
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -10560,21 +10164,6 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -10852,21 +10441,6 @@ mod stop_storing_for_insolvent_user {
                     roll_to(current_block + ticks_to_advance);
                 }
 
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
-
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -11087,21 +10661,6 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
-
-                // Calculate in how many ticks the BSP can volunteer for the file
-                let current_tick = ProofsDealer::get_current_tick();
-                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
-                    file_key,
-                )
-                .unwrap();
-                if tick_when_bsp_can_volunteer > current_tick {
-                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
-                    let current_block = System::block_number();
-
-                    // Advance by the number of ticks until this BSP can volunteer for the file.
-                    roll_to(current_block + ticks_to_advance);
-                }
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();

@@ -3,7 +3,7 @@ import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../uti
 
 describeMspNet(
   "Single MSP accepting subsequent storage request for same file key",
-  { initialised: true, only: true },
+  { initialised: true },
   ({ before, createMsp1Api, it, createUserApi, getLaunchResponse }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;

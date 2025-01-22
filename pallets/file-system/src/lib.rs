@@ -1372,11 +1372,6 @@ pub mod pallet {
                 "Max replication target cannot be smaller than default replication target."
             );
 
-            assert!(
-                max_replication_target >= default_replication_target,
-                "Max replication target cannot be smaller than default replication target."
-            );
-
             assert!(tick_range_to_max_threshold < storage_request_ttl.into(), "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring.");
 
             // The checkpoint challenge period already greater than the longest challenge period a BSP can have + the tolerance,

@@ -80,13 +80,6 @@ describeMspNet(
       await userApi.block.seal({
         calls: [
           userApi.tx.sudo.sudo(
-            userApi.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter)
-          )
-        ]
-      });
-      await userApi.block.seal({
-        calls: [
-          userApi.tx.sudo.sudo(
             userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
           )
         ]
