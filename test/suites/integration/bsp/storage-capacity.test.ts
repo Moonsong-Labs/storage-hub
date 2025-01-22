@@ -90,12 +90,13 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
 
     //To allow for BSP to react to request
-    await sleep(500);
+    await userApi.docker.waitForLog({
+      containerName: "docker-sh-bsp-1",
+      searchString: "Insufficient storage capacity to volunteer for file key"
+    });
 
     // Skip block height until BSP sends a call to change capacity.
     await userApi.block.skipToMinChangeTime();
-    // Allow BSP enough time to send call to change capacity.
-    await sleep(500);
     // Assert BSP has sent a call to increase its capacity.
     await userApi.assert.extrinsicPresent({
       module: "providers",
@@ -107,9 +108,6 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
 
     // Assert that the capacity has changed.
     await userApi.assert.eventPresent("providers", "CapacityChanged");
-
-    // Allow BSP enough time to send call to volunteer for the storage request.
-    await sleep(500);
 
     // Assert that the BSP has send a call to volunteer for the storage request.
     await userApi.assert.extrinsicPresent({
@@ -212,13 +210,10 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     const bucketName2 = "bucket-2";
     await userApi.file.createBucketAndSendNewStorageRequest(source2, location2, bucketName2);
 
-    //To allow for BSP to react to request
-    await sleep(500);
+    // TODO: Add log line which we can check against
+    await sleep(500); //To allow for BSP to react to request
 
     await userApi.block.skipToMinChangeTime();
-
-    // Allow BSP enough time to send call to change capacity.
-    await sleep(500);
 
     // Assert BSP has sent a call to increase its capacity.
     await userApi.assert.extrinsicPresent({
