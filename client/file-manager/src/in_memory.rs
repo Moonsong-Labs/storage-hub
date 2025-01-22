@@ -229,6 +229,38 @@ where
         Ok(self.metadata.get(file_key).cloned())
     }
 
+    fn is_file_complete(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
+        let metadata = self
+            .metadata
+            .get(key)
+            .ok_or(FileStorageError::FileDoesNotExist)?;
+
+        let file_data = self.file_data.get(key).expect(
+            format!(
+                "Invariant broken! Metadata for file key {:?} found but no associated trie",
+                key
+            )
+            .as_str(),
+        );
+
+        let stored_chunks = file_data.stored_chunks_count()?;
+        if metadata.chunks_count() != stored_chunks {
+            return Ok(false);
+        }
+
+        if metadata.fingerprint
+            != file_data
+                .get_root()
+                .as_ref()
+                .try_into()
+                .expect("Hasher output mismatch!")
+        {
+            return Ok(false);
+        }
+
+        Ok(true)
+    }
+
     fn insert_file(
         &mut self,
         key: HasherOutT<T>,

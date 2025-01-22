@@ -1,4 +1,7 @@
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use codec::{Decode, Encode};
 use frame_system::EventRecord;
@@ -166,7 +169,21 @@ impl DownloadRequestId {
     }
 
     pub fn next(&self) -> Self {
-        let next = self.0 + 1;
-        DownloadRequestId(next)
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        DownloadRequestId(COUNTER.fetch_add(1, Ordering::SeqCst))
+    }
+}
+
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
+pub struct UploadRequestId(u64);
+
+impl UploadRequestId {
+    pub fn new(id: u64) -> Self {
+        UploadRequestId(id)
+    }
+
+    pub fn next(&self) -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        UploadRequestId(COUNTER.fetch_add(1, Ordering::SeqCst))
     }
 }

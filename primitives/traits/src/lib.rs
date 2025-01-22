@@ -817,6 +817,12 @@ pub trait ProofsDealerInterface {
     /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
     /// challenges and making sure that Providers respond to them in time.
     fn get_current_tick() -> Self::TickNumber;
+
+    /// Get the checkpoint challenge period.
+    ///
+    /// The Proofs Dealer pallet uses the checkpoint challenge period to determine the time period
+    /// between checkpoint challenges.
+    fn get_checkpoint_challenge_period() -> Self::TickNumber;
 }
 
 /// A trait to verify proofs based on commitments and challenges.

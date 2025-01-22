@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
+import { bspKey, describeBspNet, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSPNet: BSP Challenge Cycle and Proof Submission with changed capacity",
@@ -49,7 +49,11 @@ describeBspNet(
 
       // Wait for task to execute and seal one more block.
       // In this block, the BSP should have submitted a proof.
-      await sleep(500);
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
       await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
@@ -139,7 +143,11 @@ describeBspNet(
       }
 
       // Wait for BSP to submit proof and seal one more block
-      await sleep(500);
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
       await userApi.block.seal();
 
       // Verify proof was submitted successfully
@@ -236,7 +244,11 @@ describeBspNet(
       }
 
       // Wait for BSP to submit proof and seal one more block
-      await sleep(500);
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
       await userApi.block.seal();
 
       // Verify proof was submitted successfully
@@ -297,7 +309,11 @@ describeBspNet(
       }
 
       // Wait for BSP to submit proof and seal one more block
-      await sleep(500);
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
       await userApi.block.seal();
 
       // Verify proof was submitted successfully

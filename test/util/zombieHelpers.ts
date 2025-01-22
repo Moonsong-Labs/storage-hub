@@ -1,4 +1,3 @@
-import "@polkadot/api-augment/kusama";
 import "@storagehub/api-augment";
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import assert from "node:assert";

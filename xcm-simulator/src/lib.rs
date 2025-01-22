@@ -259,13 +259,6 @@ pub fn sh_ext() -> sp_io::TestExternalities {
         .build_storage()
         .unwrap();
 
-    pallet_file_system::GenesisConfig::<Runtime> {
-        max_replication_target: 10,
-        tick_range_to_maximum_threshold: 1,
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
-
     pallet_balances::GenesisConfig::<Runtime> {
         balances: vec![
             (ALICE, INITIAL_BALANCE),

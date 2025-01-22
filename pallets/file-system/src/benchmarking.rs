@@ -458,7 +458,7 @@ mod benchmarks {
         n: Linear<
             1,
             {
-                Into::<u64>::into(MaxReplicationTarget::<T>::get())
+                Into::<u64>::into(T::MaxReplicationTarget::get())
                     .try_into()
                     .unwrap()
             },
@@ -758,7 +758,7 @@ mod benchmarks {
 
             let accept = StorageRequestMspAcceptedFileKeys {
                 file_keys_and_proofs,
-                non_inclusion_forest_proof,
+                forest_proof: non_inclusion_forest_proof,
             };
 
             // Finally, build the response for this bucket and push it to the responses bounded vector
@@ -2269,39 +2269,6 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn set_global_parameters() -> Result<(), BenchmarkError> {
-        /***********  Setup initial conditions: ***********/
-        let new_max_replication_target: T::ReplicationTargetType =
-            T::DefaultReplicationTarget::get().saturating_add(ReplicationTargetType::<T>::one());
-        let new_tick_range_to_maximum_threshold: TickNumber<T> = One::one();
-
-        /*********** Call the extrinsic to benchmark: ***********/
-        #[extrinsic_call]
-        _(
-            RawOrigin::Root,
-            Some(new_max_replication_target),
-            Some(new_tick_range_to_maximum_threshold),
-        );
-
-        /*********** Post-benchmark checks: ***********/
-        // Ensure the max replication target was updated
-        assert_eq!(
-            pallet::MaxReplicationTarget::<T>::get(),
-            new_max_replication_target,
-            "Max replication target should have been updated."
-        );
-
-        // Ensure the tick range to maximum threshold was updated
-        assert_eq!(
-            pallet::TickRangeToMaximumThreshold::<T>::get(),
-            new_tick_range_to_maximum_threshold,
-            "Tick range to maximum threshold should have been updated."
-        );
-
-        Ok(())
-    }
-
-    #[benchmark]
     fn on_poll_hook() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         // Set the total used capacity of the network to be the same as the total capacity of the network,
@@ -2338,7 +2305,7 @@ mod benchmarks {
             0,
             {
                 <<T as pallet::Config>::ReplicationTargetType as Into<u64>>::into(
-                    pallet::MaxReplicationTarget::<T>::get(),
+                    T::MaxReplicationTarget::get(),
                 ) as u32
             },
         >,
@@ -2454,7 +2421,7 @@ mod benchmarks {
             0,
             {
                 <<T as pallet::Config>::ReplicationTargetType as Into<u64>>::into(
-                    pallet::MaxReplicationTarget::<T>::get(),
+                    T::MaxReplicationTarget::get(),
                 ) as u32
             },
         >,

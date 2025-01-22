@@ -1,5 +1,5 @@
 use crate::{
-    configs::{ChallengeTicksTolerance, SpMinDeposit},
+    configs::{ChallengeTicksTolerance, ReplicationTargetType, SpMinDeposit},
     Balance, BlockNumber, Perbill, Runtime, NANOUNIT, UNIT,
 };
 use frame_support::dynamic_params::{dynamic_pallet_params, dynamic_params};
@@ -137,17 +137,61 @@ pub mod dynamic_params {
         #[allow(non_upper_case_globals)]
         pub static ProviderTopUpTtl: BlockNumber = 14_400;
 
-        /// Default replication target when issuing storage requests via the file system pallet.
+        /// The default number of BSPs that a storage request targets when issued by the file system pallet.
+        ///
+        /// This number is a safe default so users that do not have specific requirements for replication
+        /// can still have their files stored in a way that is resilient to failures, while being small enough
+        /// to not be a burden on the network.
         #[codec(index = 18)]
         #[allow(non_upper_case_globals)]
-        pub static DefaultReplicationTarget: u32 = 7;
+        pub static DefaultReplicationTarget: ReplicationTargetType = 7;
 
+        /// The maximum amount of BSPs that a user can require a storage request to use as the replication target.
+        ///
+        /// This is a safety measure to prevent users from issuing storage requests that are too large and would
+        /// require a large number of BSPs to store the file.
         #[codec(index = 19)]
+        #[allow(non_upper_case_globals)]
+        pub static MaxReplicationTarget: ReplicationTargetType =
+            3 * DefaultReplicationTarget::get();
+
+        /// The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
+        /// to arrive at its maximum value.
+        ///
+        /// This is big enough so volunteering for a storage request is not open to everyone inmediatly, preventing
+        /// a select few BSPs from taking all the requests, while small enough so that storage requests don't take
+        /// too long to be filled.
+        #[codec(index = 20)]
+        #[allow(non_upper_case_globals)]
+        pub static TickRangeToMaximumThreshold: BlockNumber = 3600; // 6 hours with a 6 second block time
+
+        /// The amount of ticks after which a storage request is considered expired and can be removed from storage.
+        ///
+        /// It's a function of the TickRangeToMaximumThreshold since it does not make sense for a storage request to
+        /// expire before arriving at its maximum threshold for volunteering.
+        #[codec(index = 21)]
+        #[allow(non_upper_case_globals)]
+        pub static StorageRequestTtl: BlockNumber = TickRangeToMaximumThreshold::get()
+            .saturating_mul(110)
+            .saturating_div(100);
+
+        /// The minimum amount of ticks between a stop storing request from a BSP and that BSP being able to
+        /// confirm to stop storing that file key.
+        ///
+        /// It's a function of the checkpoint challenge period since this makes it so BSPs can't avoid checkpoint
+        /// challenges by stopping storing a file key right before the challenge period ends in case they lost it.
+        #[codec(index = 22)]
+        #[allow(non_upper_case_globals)]
+        pub static MinWaitForStopStoring: BlockNumber = CheckpointChallengePeriod::get()
+            .saturating_mul(110)
+            .saturating_div(100);
+
+        #[codec(index = 23)]
         #[allow(non_upper_case_globals)]
         /// 20 ticks, or 2 minutes with 6 seconds per tick.
         pub static MinSeedPeriod: BlockNumber = 20;
 
-        #[codec(index = 20)]
+        #[codec(index = 24)]
         #[allow(non_upper_case_globals)]
         /// 10k UNITs * [`MinSeedPeriod`] = 10k UNITs * 20 = 200k UNITs
         ///
