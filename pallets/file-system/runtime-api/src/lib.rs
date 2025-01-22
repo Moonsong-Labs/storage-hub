@@ -44,19 +44,27 @@ pub enum QueryConfirmChunksToProveForFileError {
     ChallengedChunkToChunkIdError,
 }
 
+/// Error type for the `storage_requests_by_msp`.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum StorageRequestsByMSPError {
+    FailedToRetrieveStorageRequests,
+}
+
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait FileSystemApi<BackupStorageProviderId, MainStorageProviderId, FileKey, TickNumber, ChunkId>
+    pub trait FileSystemApi<BackupStorageProviderId, MainStorageProviderId, FileKey, TickNumber, ChunkId, StorageRequestMetadata>
     where
         BackupStorageProviderId: Codec,
         MainStorageProviderId: Codec,
         FileKey: Codec,
         TickNumber: Codec,
         ChunkId: Codec,
+        StorageRequestMetadata: Codec,
     {
         fn is_storage_request_open_to_volunteers(file_key: FileKey) -> Result<bool, IsStorageRequestOpenToVolunteersError>;
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<TickNumber, QueryFileEarliestVolunteerTickError>;
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
         fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
+        fn storage_requests_by_msp(msp_id: MainStorageProviderId) -> Vec<StorageRequestMetadata>;
     }
 }
