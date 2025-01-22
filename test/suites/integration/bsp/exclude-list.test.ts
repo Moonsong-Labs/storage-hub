@@ -1,4 +1,4 @@
-import { describeBspNet, shUser, type EnrichedBspApi, sleep } from "../../../util";
+import { describeBspNet, shUser, type EnrichedBspApi } from "../../../util";
 import assert from "node:assert";
 
 describeBspNet(
