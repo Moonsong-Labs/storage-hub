@@ -17,8 +17,8 @@ use shc_common::{
     types::{
         BackupStorageProviderId, BlockNumber, ChunkId, CustomChallenge, FileMetadata, ForestLeaf,
         HashT, KeyProof, KeyProofs, MainStorageProviderId, ProofsDealerProviderId, Proven,
-        RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
-        FILE_CHUNK_SIZE,
+        RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, StorageRequestMetadata,
+        BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
     },
 };
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
@@ -251,6 +251,7 @@ where
             H256,
             BlockNumber,
             ChunkId,
+            StorageRequestMetadata,
         >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,

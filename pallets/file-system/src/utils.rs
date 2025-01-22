@@ -11,6 +11,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
+use sp_core::H256;
 use sp_runtime::{
     traits::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
@@ -2403,6 +2404,22 @@ where
             .saturating_add(threshold_slope.saturating_mul(ticks_since_requested));
 
         Ok((to_succeed, threshold_slope))
+    }
+
+    pub fn storage_requests_by_msp(
+        msp_id: ProviderIdFor<T>,
+    ) -> Vec<(MerkleHash<T>, StorageRequestMetadata<T>)> {
+        // Get the storeage requests for a specific MSP
+        StorageRequests::<T>::iter()
+            .filter(|(_, metadata)| {
+                if let Some(msp) = metadata.msp {
+                    msp.0 == msp_id
+                } else {
+                    false
+                }
+            })
+            .map(|(file_key, storage)| (file_key, storage))
+            .collect()
     }
 }
 
