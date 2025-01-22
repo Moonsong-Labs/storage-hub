@@ -4,6 +4,7 @@ use frame_support::{
     weights::Weight,
 };
 use pallet_aura::Authorities;
+use pallet_file_system::types::StorageRequestMetadata;
 use pallet_file_system_runtime_api::*;
 use pallet_payment_streams_runtime_api::*;
 use pallet_proofs_dealer::types::{
@@ -328,7 +329,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId, BucketId<Runtime>> for Runtime {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId, BucketId<Runtime>, StorageRequestMetadata<Runtime>> for Runtime {
         fn is_storage_request_open_to_volunteers(file_key: H256) -> Result<bool, IsStorageRequestOpenToVolunteersError> {
             FileSystem::is_storage_request_open_to_volunteers(file_key)
         }
@@ -345,8 +346,12 @@ impl_runtime_apis! {
             FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
         }
 
-        fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<BucketId<Runtime>, GenericApplyDeltaEventInfoError> {
+       fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<BucketId<Runtime>, GenericApplyDeltaEventInfoError> {
             FileSystem::decode_generic_apply_delta_event_info(encoded_event_info)
+        }
+
+        fn storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<StorageRequestMetadata<Runtime>> {
+            FileSystem::storage_requests_by_msp(msp_id)
         }
     }
 

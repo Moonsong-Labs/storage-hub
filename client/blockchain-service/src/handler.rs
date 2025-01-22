@@ -40,8 +40,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     types::{
-        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId,
-        TickNumber, BCSV_KEY_TYPE,
+        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId, StorageRequestMetadata, TickNumber, BCSV_KEY_TYPE
     },
 };
 use shp_file_metadata::FileKey;
@@ -1195,9 +1194,28 @@ where
                 // TODO: Send events to check that this node has a Forest Storage for the BSP that it manages.
                 // TODO: Catch up to Forest root writes in the BSP Forest.
             }
-            Some(StorageProviderId::MainStorageProvider(_msp_id)) => {
+            Some(StorageProviderId::MainStorageProvider(msp_id)) => {
                 // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
                 // TODO: Catch up to Forest root writes in the Bucket's Forests.
+
+                // TODO: Call runtime here
+                let storage_requests: Vec<StorageRequestMetadata> = self
+                    .client
+                    .runtime_api()
+                    .storage_requests_by_msp(block_hash, msp_id).unwrap();
+
+                for sr in storage_requests {
+                    self.emit(NewStorageRequest {
+                        who: sr.owner,
+                        file_key: ,
+                        bucket_id: sr.bucket_id,
+                        location: sr.location,
+                        fingerprint: sr.fingerprint.into(),
+                        size: sr.size,
+                        user_peer_ids: ,
+                        expires_at: ,
+                    })
+                }
             }
             None => {
                 warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
