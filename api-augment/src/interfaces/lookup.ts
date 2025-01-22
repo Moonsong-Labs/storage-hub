@@ -1699,7 +1699,8 @@ export default {
       MutationsApplied: {
         mutations: "Vec<(H256,ShpTraitsTrieMutation)>",
         oldRoot: "H256",
-        newRoot: "H256"
+        newRoot: "H256",
+        eventInfo: "Option<Bytes>"
       },
       ChallengesTickerSet: {
         paused: "bool"

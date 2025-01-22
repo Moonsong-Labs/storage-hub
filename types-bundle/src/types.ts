@@ -43,6 +43,7 @@ export const ALL_TYPES: RegistryTypes = {
   ShouldRemoveFile: "bool",
   BackupStorageProviderId: "H256",
   MainStorageProviderId: "H256",
+  BucketId: "H256",
   StorageData: "u64",
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",

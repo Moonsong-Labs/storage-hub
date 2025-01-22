@@ -40,6 +40,7 @@ import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
   BackupStorageProvider,
   BackupStorageProviderId,
+  BucketId,
   ChunkId,
   GetBspInfoError,
   GetChallengePeriodError,
@@ -47,6 +48,7 @@ import type {
   GetCheckpointChallengesError,
   GetNextDeadlineTickError,
   GetProofSubmissionRecordError,
+  GetStakeError,
   GetUsersWithDebtOverThresholdError,
   IsStorageRequestOpenToVolunteersError,
   MainStorageProviderId,
@@ -54,6 +56,7 @@ import type {
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryBucketsForMspError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
   QueryMspConfirmChunksToProveForFileError,
@@ -555,6 +558,15 @@ declare module "@polkadot/api-base/types/calls" {
         ) => Observable<Result<BackupStorageProvider, GetBspInfoError>>
       >;
       /**
+       * Get the stake of a BSP.
+       **/
+      getBspStake: AugmentedCall<
+        ApiType,
+        (
+          bspId: BackupStorageProviderId | string | Uint8Array
+        ) => Observable<Result<Balance, GetStakeError>>
+      >;
+      /**
        * Get the slashable amount corresponding to the configured max file size.
        **/
       getSlashAmountPerMaxFileSize: AugmentedCall<ApiType, () => Observable<Balance>>;
@@ -580,6 +592,15 @@ declare module "@polkadot/api-base/types/calls" {
         (
           providerId: ProviderId | string | Uint8Array
         ) => Observable<Result<StorageDataUnit, QueryAvailableStorageCapacityError>>
+      >;
+      /**
+       * Get the Buckets that an MSP is storing.
+       **/
+      queryBucketsForMsp: AugmentedCall<
+        ApiType,
+        (
+          mspId: MainStorageProviderId | string | Uint8Array
+        ) => Observable<Result<Vec<BucketId>, QueryBucketsForMspError>>
       >;
       /**
        * Query the earliest block number that a BSP can change its capacity.

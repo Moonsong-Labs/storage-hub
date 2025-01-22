@@ -257,6 +257,16 @@ const STORAGE_PROVIDERS_V1 = {
     ],
     type: "Vec<ValuePropositionWithId>"
   },
+  get_bsp_stake: {
+    description: "Get the stake of a BSP.",
+    params: [
+      {
+        name: "bspId",
+        type: "BackupStorageProviderId"
+      }
+    ],
+    type: "Result<Balance, GetStakeError>"
+  },
   can_delete_provider: {
     description: "Check if a provider can be deleted.",
     params: [
@@ -266,6 +276,16 @@ const STORAGE_PROVIDERS_V1 = {
       }
     ],
     type: "bool"
+  },
+  query_buckets_for_msp: {
+    description: "Get the Buckets that an MSP is storing.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      }
+    ],
+    type: "Result<Vec<BucketId>, QueryBucketsForMspError>"
   }
 };
 const PAYMENT_STREAMS_V1 = {
