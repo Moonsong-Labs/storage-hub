@@ -1,3 +1,4 @@
+use codec::{Decode, Encode};
 use log::info;
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use std::collections::{HashMap, HashSet};
@@ -8,12 +9,9 @@ use shc_common::types::{
 };
 
 use crate::traits::{
-    FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError, FileStorageWriteOutcome,
+    ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
+    FileStorageWriteOutcome,
 };
-
-use codec::{Decode, Encode};
-
-use crate::traits::ExcludeType;
 
 pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
     root: HasherOutT<T>,

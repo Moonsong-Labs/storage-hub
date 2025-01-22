@@ -96,6 +96,91 @@ where
             capacity_queue: Arc::new(Mutex::new(0_u64)),
         }
     }
+
+    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let mut is_allowed = read_file_storage
+            .is_allowed(
+                &event.file_key.into(),
+                shc_file_manager::traits::ExcludeType::File,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.fingerprint.as_hash().into(),
+                shc_file_manager::traits::ExcludeType::Fingerprint,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File fingerprint is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        let owner = H256::from(event.who.as_ref());
+        is_allowed = read_file_storage
+            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Owner is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.bucket_id,
+                shc_file_manager::traits::ExcludeType::Bucket,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Bucket is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        drop(read_file_storage);
+
+        return Ok(true);
+    }
 }
 
 /// Handles the [`NewStorageRequest`] event.
@@ -513,81 +598,11 @@ where
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
         // First check if the file is not on our exclude list
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let mut is_allowed = read_file_storage
-            .is_allowed(
-                &event.file_key.into(),
-                shc_file_manager::traits::ExcludeType::File,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
+        let is_allowed = self.is_allowed(&event).await?;
 
         if !is_allowed {
-            info!("File is in the exclude list");
-        }
-
-        is_allowed = read_file_storage
-            .is_allowed(
-                &event.fingerprint.as_hash().into(),
-                shc_file_manager::traits::ExcludeType::Fingerprint,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("File fingerprint is in the exclude list");
             return Ok(());
         }
-
-        let owner = H256::from(event.who.as_ref());
-        is_allowed = read_file_storage
-            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("Owner is in the exclude list");
-            return Ok(());
-        }
-
-        is_allowed = read_file_storage
-            .is_allowed(
-                &event.bucket_id,
-                shc_file_manager::traits::ExcludeType::Bucket,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("Bucket is in the exclude list");
-            return Ok(());
-        }
-
-        drop(read_file_storage);
 
         // Get the current Forest key of the Provider running this node.
         let current_forest_key = CURRENT_FOREST_KEY.to_vec();

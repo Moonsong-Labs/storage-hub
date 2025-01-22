@@ -1,5 +1,6 @@
-use shc_common::types::{Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT};
 use std::str::FromStr;
+
+use shc_common::types::{Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT};
 use trie_db::TrieLayout;
 
 #[derive(Debug)]

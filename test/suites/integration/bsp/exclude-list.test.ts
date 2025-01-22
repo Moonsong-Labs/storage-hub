@@ -35,8 +35,6 @@ describeBspNet(
         newBucketEventDataBlob.bucketId
       );
 
-      await sleep(5000);
-
       await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.issueStorageRequest(
@@ -53,9 +51,6 @@ describeBspNet(
       });
 
       await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
-
-      // waiting for bsp to see the request
-      await sleep(5000);
 
       await bspApi.assert.log({
         searchString: "Bucket is in the exclude list",
