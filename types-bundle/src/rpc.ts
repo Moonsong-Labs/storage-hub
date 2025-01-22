@@ -172,7 +172,8 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
       type: "()"
     },
     addToExcludeList: {
-      description: "Add key to exclude list. Exclude type can be `file`, `user`, `bucket` and `fingerprint`.",
+      description:
+        "Add key to exclude list. Exclude type can be `file`, `user`, `bucket` and `fingerprint`.",
       params: [
         {
           name: "key",

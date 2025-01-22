@@ -1029,7 +1029,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
     };
     storagehubclient: {
       /**
-       * Add key to exclude list
+       * Add key to exclude list. Exclude type can be `file`, `user`, `bucket` and `fingerprint`.
        **/
       addToExcludeList: AugmentedRpc<
         (key: H256 | string | Uint8Array, exclude_type: Text | string) => Observable<ITuple<[]>>
