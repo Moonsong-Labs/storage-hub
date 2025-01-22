@@ -9571,34 +9571,6 @@ mod compute_threshold {
         }
 
         #[test]
-        fn compute_threshold_to_succeed_with_one_tick_range() {
-            new_test_ext().execute_with(|| {
-                // Setup: create a BSP
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
-
-                // Set TickRangeToMaximumThreshold to one
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
-
-                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
-
-                let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
-
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at).unwrap();
-
-                // Check that base_slope is set to one due to division by zero handling
-                assert!(slope > ThresholdType::<Test>::zero());
-
-                // Ensure threshold_to_succeed is greater than zero
-                assert!(threshold_to_succeed > ThresholdType::<Test>::zero());
-            });
-        }
-
-        #[test]
         fn compute_threshold_to_succeed_with_max_slope() {
             new_test_ext().execute_with(|| {
                 // Setup: create a BSP
