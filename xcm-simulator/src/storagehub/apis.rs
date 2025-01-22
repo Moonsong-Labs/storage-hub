@@ -441,8 +441,8 @@ impl_runtime_apis! {
             Providers::query_provider_multiaddresses(who)
         }
 
-        fn query_value_propositions_for_msp(who: &ProviderIdFor<Runtime>) -> Vec<ValuePropositionWithId<Runtime>> {
-            Providers::query_value_propositions_for_msp(who)
+        fn query_value_propositions_for_msp(msp_id: &MainStorageProviderId<Runtime>) -> Vec<ValuePropositionWithId<Runtime>> {
+            Providers::query_value_propositions_for_msp(msp_id)
         }
 
         fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {

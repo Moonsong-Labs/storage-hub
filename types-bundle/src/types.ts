@@ -151,6 +151,18 @@ export const ALL_TYPES: RegistryTypes = {
       InternalApiError: null
     }
   },
+  GetStakeError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalError: null
+    }
+  },
+  QueryBucketsForMspError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalError: null
+    }
+  },
   QueryConfirmChunksToProveForFileError: {
     _enum: {
       ChallengedChunkToChunkIdError: null

@@ -444,8 +444,8 @@ impl_runtime_apis! {
             Providers::get_slash_amount_per_max_file_size()
         }
 
-        fn query_value_propositions_for_msp(provider_id: &ProviderIdFor<Runtime>) -> Vec<ValuePropositionWithId<Runtime>> {
-            Providers::query_value_propositions_for_msp(provider_id)
+        fn query_value_propositions_for_msp(msp_id: &MainStorageProviderId<Runtime>) -> Vec<ValuePropositionWithId<Runtime>> {
+            Providers::query_value_propositions_for_msp(msp_id)
         }
 
         fn get_bsp_stake(bsp_id: &BackupStorageProviderId<Runtime>) -> Result<Balance, GetStakeError> {
