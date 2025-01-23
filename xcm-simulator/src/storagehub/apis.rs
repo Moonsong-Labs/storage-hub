@@ -348,7 +348,7 @@ impl_runtime_apis! {
             FileSystem::decode_generic_apply_delta_event_info(encoded_event_info)
         }
 
-        fn storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<StorageRequestMetadata<Runtime>> {
+        fn storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<(H256, StorageRequestMetadata<Runtime>)> {
             FileSystem::storage_requests_by_msp(msp_id)
         }
     }
