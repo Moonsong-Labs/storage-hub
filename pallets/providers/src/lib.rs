@@ -953,7 +953,7 @@ pub mod pallet {
         pub fn confirm_sign_up(
             origin: OriginFor<T>,
             provider_account: Option<T::AccountId>,
-        ) -> DispatchResultWithPostInfo {
+        ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
 
@@ -964,8 +964,8 @@ pub mod pallet {
                 None => Self::do_confirm_sign_up(&who)?,
             }
 
-            // Return a successful DispatchResultWithPostInfo. If the extrinsic executed correctly, it will be free for the caller
-            Ok(Pays::No.into())
+            // Return a successful DispatchResult.
+            Ok(())
         }
 
         /// Dispatchable extrinsic that allows a user with a pending Sign Up Request to cancel it, getting the deposit back.
@@ -1403,7 +1403,7 @@ pub mod pallet {
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         ///
-        /// This is a free operation.
+        /// This is a free operation to incentivize the community to slash misbehaving providers.
         #[pallet::call_index(13)]
         #[pallet::weight(T::WeightInfo::slash())]
         pub fn slash(
@@ -1421,17 +1421,15 @@ pub mod pallet {
         /// Dispatchable extrinsic to top-up the deposit of a Storage Provider.
         ///
         /// The dispatch origin for this call must be signed.
-        ///
-        /// This is a free transaction if the user successfully tops up their deposit.
         #[pallet::call_index(14)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn top_up_deposit(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+        pub fn top_up_deposit(origin: OriginFor<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             Self::do_top_up_deposit(&who)?;
 
-            Ok(Pays::No.into())
+            Ok(())
         }
 
         /// Delete a provider from the system.
@@ -1446,6 +1444,9 @@ pub mod pallet {
         /// to automate the process.
         ///
         /// Emits `MspDeleted` or `BspDeleted` event when successful.
+        ///
+        /// This operation is free if successful to encourage the community to delete insolvent providers,
+        /// debloating the state.
         #[pallet::call_index(15)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_provider(
@@ -1470,13 +1471,13 @@ pub mod pallet {
         /// If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
         #[pallet::call_index(16)]
         #[pallet::weight(T::WeightInfo::stop_all_cycles())]
-        pub fn stop_all_cycles(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+        pub fn stop_all_cycles(origin: OriginFor<T>) -> DispatchResult {
             // Check that the extrinsic was signed.
             let who = ensure_signed(origin)?;
 
             Self::do_stop_all_cycles(&who)?;
 
-            Ok(Pays::No.into())
+            Ok(())
         }
     }
 

@@ -1140,7 +1140,7 @@ where
             MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id);
             MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id);
 
-            Self::deposit_event(Event::<T>::MspDeleted {
+            Self::deposit_event(Event::MspDeleted {
                 provider_id: *provider_id,
             });
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
@@ -1183,9 +1183,12 @@ where
                 *n = n.saturating_sub(bsp.reputation_weight);
             });
 
-            Self::deposit_event(Event::<T>::BspDeleted {
+            Self::deposit_event(Event::BspDeleted {
                 provider_id: *provider_id,
             });
+        } else {
+            // If the provider is not found, return an error
+            return Err(Error::<T>::NotRegistered.into());
         }
 
         Ok(())
