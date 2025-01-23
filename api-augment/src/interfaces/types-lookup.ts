@@ -4554,7 +4554,7 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletFileSystemStorageRequestMspAcceptedFileKeys (344) */
   interface PalletFileSystemStorageRequestMspAcceptedFileKeys extends Struct {
     readonly fileKeysAndProofs: Vec<PalletFileSystemFileKeyWithProof>;
-    readonly nonInclusionForestProof: SpTrieStorageProofCompactProof;
+    readonly forestProof: SpTrieStorageProofCompactProof;
   }
 
   /** @name PalletFileSystemFileKeyWithProof (346) */
