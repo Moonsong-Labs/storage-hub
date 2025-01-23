@@ -46,7 +46,7 @@ mod benchmarks {
                 .saturating_sub(sp_runtime::traits::One::one());
 
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(
-            Event::<T>::NewOneEpochAgoRandomnessAvailable {
+            Event::NewOneEpochAgoRandomnessAvailable {
                 randomness_seed: epoch_randomness,
                 from_epoch: relay_epoch_index,
                 valid_until_block: latest_valid_block_for_randomness,

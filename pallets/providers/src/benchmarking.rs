@@ -110,7 +110,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -189,7 +189,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -266,7 +266,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -287,14 +287,13 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the sign up confirmation was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspSignUpSuccess {
-                who: user_account.clone(),
-                bsp_id: AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap(),
-                capacity: capacity.into(),
-                multiaddresses: multiaddresses.clone(),
-                root: T::DefaultMerkleRoot::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::BspSignUpSuccess {
+            who: user_account.clone(),
+            bsp_id: AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap(),
+            capacity: capacity.into(),
+            multiaddresses: multiaddresses.clone(),
+            root: T::DefaultMerkleRoot::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the BSP is now in the providers' storage
@@ -356,7 +355,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: 100000u32.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -386,14 +385,13 @@ mod benchmarks {
             id: value_prop.derive_id(),
             value_prop: value_prop.clone(),
         };
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspSignUpSuccess {
-                who: user_account.clone(),
-                msp_id: AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap(),
-                capacity: 100000u32.into(),
-                multiaddresses: multiaddresses.clone(),
-                value_prop: value_prop_with_id,
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MspSignUpSuccess {
+            who: user_account.clone(),
+            msp_id: AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap(),
+            capacity: 100000u32.into(),
+            multiaddresses: multiaddresses.clone(),
+            value_prop: value_prop_with_id,
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the MSP is now in the providers' storage
@@ -448,7 +446,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -462,7 +460,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the sign up cancellation was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::SignUpRequestCanceled {
+            <T as pallet::Config>::RuntimeEvent::from(Event::SignUpRequestCanceled {
                 who: user_account.clone(),
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -532,7 +530,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: 100000u32.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -562,11 +560,10 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the MSP sign off was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspSignOffSuccess {
-                who: user_account.clone(),
-                msp_id,
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MspSignOffSuccess {
+            who: user_account.clone(),
+            msp_id,
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the MSP was removed from the providers' storage
@@ -620,7 +617,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -656,11 +653,10 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the BSP sign off was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspSignOffSuccess {
-                who: user_account.clone(),
-                bsp_id,
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::BspSignOffSuccess {
+            who: user_account.clone(),
+            bsp_id,
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the BSP was removed from the providers' storage
@@ -714,7 +710,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -759,15 +755,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::CapacityChanged {
-                who: user_account.clone(),
-                provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
-                old_capacity: initial_capacity.into(),
-                new_capacity: new_capacity.into(),
-                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::CapacityChanged {
+            who: user_account.clone(),
+            provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
+            old_capacity: initial_capacity.into(),
+            new_capacity: new_capacity.into(),
+            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -828,7 +823,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -873,15 +868,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::CapacityChanged {
-                who: user_account.clone(),
-                provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
-                old_capacity: initial_capacity.into(),
-                new_capacity: new_capacity.into(),
-                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::CapacityChanged {
+            who: user_account.clone(),
+            provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
+            old_capacity: initial_capacity.into(),
+            new_capacity: new_capacity.into(),
+            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -949,7 +943,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -994,15 +988,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::CapacityChanged {
-                who: user_account.clone(),
-                provider_id: StorageProviderId::MainStorageProvider(msp_id),
-                old_capacity: initial_capacity.into(),
-                new_capacity: new_capacity.into(),
-                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::CapacityChanged {
+            who: user_account.clone(),
+            provider_id: StorageProviderId::MainStorageProvider(msp_id),
+            old_capacity: initial_capacity.into(),
+            new_capacity: new_capacity.into(),
+            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -1070,7 +1063,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1115,15 +1108,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::CapacityChanged {
-                who: user_account.clone(),
-                provider_id: StorageProviderId::MainStorageProvider(msp_id),
-                old_capacity: initial_capacity.into(),
-                new_capacity: new_capacity.into(),
-                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::CapacityChanged {
+            who: user_account.clone(),
+            provider_id: StorageProviderId::MainStorageProvider(msp_id),
+            old_capacity: initial_capacity.into(),
+            new_capacity: new_capacity.into(),
+            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -1191,7 +1183,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1246,12 +1238,11 @@ mod benchmarks {
             value_prop_max_data_limit.into(),
         );
         let value_prop_id = value_prop.derive_id();
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropAdded {
-                msp_id,
-                value_prop_id,
-                value_prop: value_prop.clone(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::ValuePropAdded {
+            msp_id,
+            value_prop_id,
+            value_prop: value_prop.clone(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the value proposition was added
@@ -1314,7 +1305,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1360,12 +1351,11 @@ mod benchmarks {
             value_prop_max_data_limit.into(),
         );
         let value_prop_id = value_prop.derive_id();
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropAdded {
-                msp_id,
-                value_prop_id,
-                value_prop,
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::ValuePropAdded {
+            msp_id,
+            value_prop_id,
+            value_prop,
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         /*********** Call the extrinsic to benchmark: ***********/
@@ -1375,7 +1365,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the value proposition being made unavailable was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropUnavailable {
+            <T as pallet::Config>::RuntimeEvent::from(Event::ValuePropUnavailable {
                 msp_id,
                 value_prop_id,
             });
@@ -1436,7 +1426,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1481,11 +1471,10 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the added multiaddress was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MultiAddressAdded {
-                provider_id: bsp_id,
-                new_multiaddress: new_multiaddress.clone(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MultiAddressAdded {
+            provider_id: bsp_id,
+            new_multiaddress: new_multiaddress.clone(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the multiaddress was added to the BSP
@@ -1541,7 +1530,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1610,7 +1599,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of removing a multiaddress was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MultiAddressRemoved {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MultiAddressRemoved {
                 provider_id: bsp_id,
                 removed_multiaddress: multiaddress_to_remove.clone(),
             });
@@ -1686,7 +1675,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the MSP requesting to sign up was emitted
         let msp_request_sign_up_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1695,7 +1684,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP actually signing up was emitted
         let msp_sign_up_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspSignUpSuccess {
                 who: user_account.clone(),
                 msp_id: msp_id,
                 multiaddresses: multiaddresses.clone(),
@@ -1765,7 +1754,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the BSP requesting to sign up was emitted
         let bsp_request_sign_up_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1774,7 +1763,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP actually signing up was emitted
         let bsp_sign_up_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspSignUpSuccess {
                 who: user_account.clone(),
                 bsp_id: bsp_id,
                 multiaddresses: multiaddresses.clone(),
@@ -1838,7 +1827,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1896,7 +1885,7 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the provider being slashed was emitted
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::<T>::Slashed {
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::Slashed {
             provider_id: bsp_id,
             amount: amount_to_slash,
         });
