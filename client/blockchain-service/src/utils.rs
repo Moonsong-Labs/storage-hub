@@ -1079,6 +1079,19 @@ where
         // Process the events in the block, specifically those that are related to the Forest root changes.
         match get_events_at_block(&self.client, &block.hash) {
             Ok(events) => {
+                // If we are reverting the Forest root changes in this block, we process the events in reverse order.
+                // Normally, the order for processing the events would be irrelevant, because adding or removing different
+                // file keys from the Forest is independent of the order in which they are processed. However, if for
+                // whatever unexpected reason, in the same block, we find two operations for the same file key (for instance,
+                // an addition first and a removal in a later transaction), we need to process them in reverse order (revert
+                // the removal first, by adding it, and revert the addition later, by removing it).
+                let events = if revert {
+                    events.into_iter().rev().collect::<Vec<_>>()
+                } else {
+                    events
+                };
+
+                // Iterate through the events and process them.
                 for ev in events {
                     match ev.event.clone() {
                         RuntimeEvent::ProofsDealer(
