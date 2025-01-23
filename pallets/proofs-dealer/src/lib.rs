@@ -731,7 +731,7 @@ pub mod pallet {
             Self::deposit_event(Event::ChallengesTickerSet { paused });
 
             // Return a successful DispatchResultWithPostInfo.
-			// This TX is free since is a sudo-only transaction used for testing.
+            // This TX is free since is a sudo-only transaction used for testing.
             Ok(Pays::No.into())
         }
     }
