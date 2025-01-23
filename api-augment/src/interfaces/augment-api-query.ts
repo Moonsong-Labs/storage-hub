@@ -1314,11 +1314,13 @@ declare module "@polkadot/api-base/types/storage" {
       lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
+       * The vector holding whether the last [`Config::BlockFullnessPeriod`] blocks were full or not.
        *
-       * This is used to check if the network is presumably under a spam attack.
+       * Each element in the vector represents a block, and is `true` if the block was full, and `false` if it was not.
+       * Note: Ideally we would use a `BitVec` to reduce storage, but since there's no bounded `BitVec` implementation
+       * we use a BoundedVec<bool> instead. This uses 7 more bits of storage per element.
        **/
-      notFullBlocksCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      pastBlocksStatus: AugmentedQuery<ApiType, () => Observable<Vec<bool>>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A mapping from block number to the weight used in that block.
