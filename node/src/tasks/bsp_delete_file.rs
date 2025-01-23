@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::events::{BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring};
+use shc_blockchain_service::events::FinalisedBspConfirmStoppedStoring;
 use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -45,29 +45,6 @@ where
         }
     }
 
-    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
-        // Remove the file key from the Forest.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-        {
-            let fs = self
-                .storage_hub_handler
-                .forest_storage_handler
-                .get(&current_forest_key)
-                .await
-                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
-
-            fs.write().await.delete_file_key(file_key).map_err(|e| {
-                warn!(target: LOG_TARGET, "Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nError: {:?}", e);
-                anyhow!(
-                    "Failed to remove file key from Forest storage: {:?}",
-                    e
-                )
-            })?;
-        };
-
-        Ok(())
-    }
-
     async fn remove_file_from_file_storage(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file from the File Storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
@@ -81,32 +58,6 @@ where
 
         // Release the file storage write lock.
         drop(write_file_storage);
-
-        Ok(())
-    }
-}
-
-impl<NT> EventHandler<BspConfirmStoppedStoring> for BspDeleteFileTask<NT>
-where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
-{
-    async fn handle_event(&mut self, event: BspConfirmStoppedStoring) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Deleting file {:?} for BSP {:?}",
-            event.file_key,
-            event.bsp_id
-        );
-
-        // Remove the file from the forest.
-        self.remove_file_from_forest(&event.file_key.into()).await?;
-
-        info!(
-            target: LOG_TARGET,
-            "File {:?} successfully removed from forest",
-            event.file_key,
-        );
 
         Ok(())
     }

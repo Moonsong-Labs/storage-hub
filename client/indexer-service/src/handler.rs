@@ -405,6 +405,7 @@ impl IndexerService {
         event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
+            pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. } => {}
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
             pallet_proofs_dealer::Event::ProofAccepted {

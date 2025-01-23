@@ -2247,10 +2247,17 @@ declare module "@polkadot/types/lookup" {
       readonly provider: H256;
       readonly maybeProviderAccount: Option<AccountId32>;
     } & Struct;
+    readonly isMutationsAppliedForProvider: boolean;
+    readonly asMutationsAppliedForProvider: {
+      readonly providerId: H256;
+      readonly mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
+      readonly oldRoot: H256;
+      readonly newRoot: H256;
+    } & Struct;
     readonly isMutationsApplied: boolean;
     readonly asMutationsApplied: {
-      readonly provider: H256;
       readonly mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
+      readonly oldRoot: H256;
       readonly newRoot: H256;
     } & Struct;
     readonly isChallengesTickerSet: boolean;
@@ -2265,6 +2272,7 @@ declare module "@polkadot/types/lookup" {
       | "SlashableProvider"
       | "NoRecordOfLastSubmittedProof"
       | "NewChallengeCycleInitialised"
+      | "MutationsAppliedForProvider"
       | "MutationsApplied"
       | "ChallengesTickerSet";
   }

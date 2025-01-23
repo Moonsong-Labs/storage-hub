@@ -13,8 +13,12 @@ use shc_common::types::{
     BlockNumber, CustomChallenge, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
     RejectedStorageRequestReason, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
 };
+use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::H256;
-use sp_runtime::{traits::Header, AccountId32, DispatchError, SaturatedConversion};
+use sp_runtime::{
+    traits::{Header, NumberFor},
+    AccountId32, DispatchError, SaturatedConversion,
+};
 
 use crate::handler::LOG_TARGET;
 
@@ -277,12 +281,12 @@ impl Default for RetryStrategy {
 /// Minimum block information needed to register what is the current best block
 /// and detect reorgs.
 #[derive(Debug, Clone, Encode, Decode, Default, Copy)]
-pub struct BestBlockInfo {
+pub struct MinimalBlockInfo {
     pub number: BlockNumber,
     pub hash: H256,
 }
 
-impl<Block> From<&BlockImportNotification<Block>> for BestBlockInfo
+impl<Block> From<&BlockImportNotification<Block>> for MinimalBlockInfo
 where
     Block: cumulus_primitives_core::BlockT<Hash = H256>,
 {
@@ -294,7 +298,7 @@ where
     }
 }
 
-impl<Block> From<BlockImportNotification<Block>> for BestBlockInfo
+impl<Block> From<BlockImportNotification<Block>> for MinimalBlockInfo
 where
     Block: cumulus_primitives_core::BlockT<Hash = H256>,
 {
@@ -306,20 +310,67 @@ where
     }
 }
 
+impl<Block> Into<HashAndNumber<Block>> for MinimalBlockInfo
+where
+    Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    NumberFor<Block>: From<BlockNumber>,
+{
+    fn into(self) -> HashAndNumber<Block> {
+        HashAndNumber {
+            hash: self.hash,
+            number: self.number.into(),
+        }
+    }
+}
+
+impl<Block> From<HashAndNumber<Block>> for MinimalBlockInfo
+where
+    Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    NumberFor<Block>: Into<BlockNumber>,
+{
+    fn from(hash_and_number: HashAndNumber<Block>) -> Self {
+        Self {
+            number: hash_and_number.number.into(),
+            hash: hash_and_number.hash,
+        }
+    }
+}
+
 /// When a new block is imported, the block is checked to see if it is one of the members
 /// of this enum.
-pub enum NewBlockNotificationKind {
+pub enum NewBlockNotificationKind<Block>
+where
+    Block: cumulus_primitives_core::BlockT<Hash = H256>,
+{
     /// The block is a new best block, built on top of the previous best block.
-    NewBestBlock(BestBlockInfo),
+    ///
+    /// - `last_best_block_processed`: The last best block that was processed by this node.
+    ///   This is not necessarily the parent of `new_best_block`, since this node might be
+    ///   coming out of syncing mode.
+    /// - `new_best_block`: The new best block that was imported.
+    /// - `tree_route`: The [`TreeRoute`] with `new_best_block` as the last element. The
+    ///   length of the `tree_route` is determined by the number of blocks between the
+    ///   `last_best_block_processed` and `new_best_block`, but if there are more than
+    ///   `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES` blocks between the two, the route
+    ///   will be trimmed to include the first `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES`
+    ///   before the `new_best_block`.
+    NewBestBlock {
+        last_best_block_processed: MinimalBlockInfo,
+        new_best_block: MinimalBlockInfo,
+        tree_route: TreeRoute<Block>,
+    },
     /// The block belongs to a fork that is not currently the best fork.
-    NewNonBestBlock(BestBlockInfo),
-    /// This fork causes a reorg, i.e. it is the new best block, but the previous best block
+    NewNonBestBlock(MinimalBlockInfo),
+    /// This block causes a reorg, i.e. it is the new best block, but the previous best block
     /// is not the parent of this one.
     ///
     /// The old best block (from the now non-best fork) is provided, as well as the new best block.
+    /// The [`TreeRoute`] between the two (both included) is also provided, where `old_best_block`
+    /// is the first element in the `tree_route`, and `new_best_block` is the last element.
     Reorg {
-        old_best_block: BestBlockInfo,
-        new_best_block: BestBlockInfo,
+        old_best_block: MinimalBlockInfo,
+        new_best_block: MinimalBlockInfo,
+        tree_route: TreeRoute<Block>,
     },
 }
 

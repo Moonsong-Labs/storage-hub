@@ -123,6 +123,8 @@ export const waitForBspVolunteerWithoutSealing = async (
  *
  * @param api - The ApiPromise instance to interact with the blockchain.
  * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
+ * @param shouldSealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
  * @returns A Promise that resolves when a BSP has confirmed storing a file.
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
@@ -130,7 +132,8 @@ export const waitForBspVolunteerWithoutSealing = async (
 export const waitForBspStored = async (
   api: ApiPromise,
   checkQuantity?: number,
-  bspAccount?: Address
+  bspAccount?: Address,
+  shouldSealBlock = true
 ) => {
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
@@ -173,13 +176,16 @@ export const waitForBspStored = async (
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspConfirmStoring`
         );
       }
-      const { events } = await sealBlock(api);
-      assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
+
+      if (shouldSealBlock) {
+        const { events } = await sealBlock(api);
+        assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
+      }
       break;
-    } catch {
+    } catch (error) {
       assert(
         i !== iterations,
-        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
+        `Failed to confirm BSP storage after ${(i * delay) / 1000}s. Last error: ${error}`
       );
     }
   }

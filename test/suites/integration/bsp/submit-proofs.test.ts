@@ -235,9 +235,9 @@ describeBspNet(
         "BspConfirmStoppedStoring"
       );
       // Wait for confirmation line in docker logs.
-      await bspThreeApi.assert.log({
-        searchString: "successfully removed from forest",
-        containerName: "sh-bsp-three"
+      await bspThreeApi.docker.waitForLog({
+        containerName: "sh-bsp-three",
+        searchString: "New local Forest root matches the one in the block for BSP"
       });
 
       // Make sure the new root was updated correctly.
@@ -614,7 +614,7 @@ describeBspNet(
       if (firstBspToRespond === ShConsts.DUMMY_BSP_ID) {
         const mutationsAppliedEvents = await userApi.assert.eventMany(
           "proofsDealer",
-          "MutationsApplied"
+          "MutationsAppliedForProvider"
         );
         strictEqual(
           mutationsAppliedEvents.length,
@@ -624,11 +624,12 @@ describeBspNet(
 
         // Check that the mutations applied event belongs to the dummy BSP.
         const mutationsAppliedEventDataBlob =
-          userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
-          mutationsAppliedEvents[0].event.data;
+          userApi.events.proofsDealer.MutationsAppliedForProvider.is(
+            mutationsAppliedEvents[0].event
+          ) && mutationsAppliedEvents[0].event.data;
         assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
         strictEqual(
-          mutationsAppliedEventDataBlob.provider.toString(),
+          mutationsAppliedEventDataBlob.providerId.toString(),
           ShConsts.DUMMY_BSP_ID,
           "The mutations applied event should belong to the dummy BSP"
         );
@@ -675,7 +676,7 @@ describeBspNet(
       if (secondBspToRespond === ShConsts.DUMMY_BSP_ID) {
         const mutationsAppliedEvents = await userApi.assert.eventMany(
           "proofsDealer",
-          "MutationsApplied"
+          "MutationsAppliedForProvider"
         );
         strictEqual(
           mutationsAppliedEvents.length,
@@ -685,11 +686,12 @@ describeBspNet(
 
         // Check that the mutations applied event belongs to the dummy BSP.
         const mutationsAppliedEventDataBlob =
-          userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
-          mutationsAppliedEvents[0].event.data;
+          userApi.events.proofsDealer.MutationsAppliedForProvider.is(
+            mutationsAppliedEvents[0].event
+          ) && mutationsAppliedEvents[0].event.data;
         assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
         strictEqual(
-          mutationsAppliedEventDataBlob.provider.toString(),
+          mutationsAppliedEventDataBlob.providerId.toString(),
           ShConsts.DUMMY_BSP_ID,
           "The mutations applied event should belong to the dummy BSP"
         );

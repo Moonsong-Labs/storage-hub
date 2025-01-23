@@ -1,7 +1,7 @@
-use std::sync::Arc;
+use std::{sync::Arc, vec};
 
-use anyhow::Result;
-use codec::Encode;
+use anyhow::{anyhow, Result};
+use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetProofSubmissionRecordError, ProofsDealerApi,
@@ -14,19 +14,24 @@ use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
+    consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ParachainClient, ProofsDealerProviderId, StorageProviderId, BCSV_KEY_TYPE,
+        BlockNumber, ParachainClient, ProofsDealerProviderId, StorageProviderId, TrieAddMutation,
+        TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
-use shc_forest_manager::traits::ForestStorageHandler;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shp_file_metadata::FileMetadata;
 use sp_api::ProvideRuntimeApi;
+use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::{Blake2Hasher, Get, Hasher, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
+    traits::Zero,
     SaturatedConversion,
 };
-use storage_hub_runtime::{Runtime, SignedExtra, UncheckedExtrinsic};
+use storage_hub_runtime::{Runtime, RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
@@ -38,15 +43,18 @@ use crate::{
         ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
         ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
     },
-    handler::LOG_TARGET,
+    handler::{LOG_TARGET, MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES},
     state::{
         OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BestBlockInfo, Extrinsic, NewBlockNotificationKind, Tip},
+    types::{Extrinsic, MinimalBlockInfo, NewBlockNotificationKind, Tip},
     BlockchainService,
 };
+
+// TODO: Make this configurable in the config file
+const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
 impl<FSH> BlockchainService<FSH>
 where
@@ -111,20 +119,20 @@ where
 
     /// From a [`BlockImportNotification`], gets the imported block, and checks if:
     /// 1. The block is not the new best block. For example, it could be a block from a non-best fork branch.
-    ///     - If so, it returns [`NewNonBestBlock`].
+    ///     - If so, it returns [`NewBlockNotificationKind::NewNonBestBlock`].
     /// 2. The block is the new best block, and its parent is the previous best block.
-    ///     - If so, it registers it as the new best block and returns [`NewBestBlock`].
+    ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::NewBestBlock`].
     /// 3. The block is the new best block, and its parent is NOT the previous best block (i.e. it's a reorg).
-    ///     - If so, it registers it as the new best block and returns [`Reorg`].
+    ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::Reorg`].
     pub(crate) fn register_best_block_and_check_reorg<Block>(
         &mut self,
         block_import_notification: &BlockImportNotification<Block>,
-    ) -> NewBlockNotificationKind
+    ) -> NewBlockNotificationKind<Block>
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let last_best_block = self.best_block;
-        let new_block_info: BestBlockInfo = block_import_notification.into();
+        let new_block_info: MinimalBlockInfo = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.
         if !block_import_notification.is_new_best {
@@ -138,7 +146,85 @@ where
 
         // If `tree_route` is `None`, this means that there was NO reorg while importing the block.
         if block_import_notification.tree_route.is_none() {
-            return NewBlockNotificationKind::NewBestBlock(new_block_info);
+            // Construct the tree route from the last best block processed and the new best block.
+            // Fetch the parents of the new best block until:
+            // - We reach the genesis block, or
+            // - The size of the route is equal to `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES`, or
+            // - The parent block is not found, or
+            // - We reach the last best block processed.
+            let mut route = vec![new_block_info.clone().into()];
+            let mut last_block_added = new_block_info.clone();
+            loop {
+                // Check if we are at the genesis block.
+                if last_block_added.number == BlockNumber::zero() {
+                    trace!(target: LOG_TARGET, "Reached genesis block while building tree route for new best block");
+                    break;
+                }
+
+                // Check if the route reached the maximum number of blocks to catch up on.
+                if route.len() == MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES as usize {
+                    trace!(target: LOG_TARGET, "Reached maximum blocks to catch up on while building tree route for new best block");
+                    break;
+                }
+
+                // Get the parent block.
+                let parent_hash = match self.client.header(last_block_added.hash) {
+                    Ok(Some(header)) => header.parent_hash,
+                    Ok(None) => {
+                        error!(target: LOG_TARGET, "Parent block hash not found for block {:?}", last_block_added.hash);
+                        break;
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get header for block {:?}: {:?}", last_block_added.hash, e);
+                        break;
+                    }
+                };
+                let parent_block = match self.client.block(parent_hash) {
+                    Ok(Some(block)) => block,
+                    Ok(None) => {
+                        error!(target: LOG_TARGET, "Block not found for block hash {:?}", parent_hash);
+                        break;
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Failed to get block for block hash {:?}: {:?}", parent_hash, e);
+                        break;
+                    }
+                };
+                let parent_block_info = MinimalBlockInfo {
+                    number: parent_block.block.header.number,
+                    hash: parent_block.block.hash(),
+                };
+
+                // Check if we reached the last best block processed.
+                if parent_block_info.hash == last_best_block.hash {
+                    trace!(target: LOG_TARGET, "Reached last best block processed while building tree route for new best block");
+                    break;
+                }
+
+                // Add the parent block to the route.
+                route.push(parent_block_info.into());
+
+                // Update last block added.
+                last_block_added = parent_block_info;
+            }
+
+            // The first element in the route is the last best block processed, which will also be the
+            // `pivot`, so it will be ignored when processing the `tree_route`.
+            route.push(last_best_block.clone().into());
+
+            // Revert the route so that it is in ascending order of blocks, from the last best block processed up to the new imported best block.
+            route.reverse();
+
+            // Build the tree route.
+            let tree_route = TreeRoute::new(route, 0).expect(
+                "Tree route with pivot at 0 index and a route with at least 2 elements should be valid; qed",
+            );
+
+            return NewBlockNotificationKind::NewBestBlock {
+                last_best_block_processed: last_best_block,
+                new_best_block: new_block_info,
+                tree_route,
+            };
         }
 
         // At this point we know that the new block is the new best block, and that it also caused a reorg.
@@ -147,11 +233,28 @@ where
             .as_ref()
             .expect("Tree route should exist, it was just checked to be `Some`; qed")
             .clone();
+
+        // Add the new best block to the tree route, so that it is also processed as part of the reorg.
+        let retracted = tree_route.retracted();
+        let common_block = tree_route.common_block().clone();
+        let enacted = tree_route.enacted();
+        let modified_route = retracted
+            .into_iter()
+            .chain(std::iter::once(&common_block))
+            .chain(enacted)
+            .chain(std::iter::once(&new_block_info.clone().into()))
+            .cloned()
+            .collect();
+
+        let tree_route = TreeRoute::new(modified_route, retracted.len()).expect(
+            "Tree route with one additional block to the enacted chain should be valid; qed",
+        );
         info!(target: LOG_TARGET, "🔀 New best block caused a reorg: {:?}", new_block_info);
         info!(target: LOG_TARGET, "⛓️ Tree route: {:?}", tree_route);
         NewBlockNotificationKind::Reorg {
             old_best_block: last_best_block,
             new_best_block: new_block_info,
+            tree_route,
         }
     }
 
@@ -367,11 +470,14 @@ where
         extrinsic_hash: H256,
     ) -> Result<Extrinsic> {
         // Get the block.
-        let block = self
-            .client
-            .block(block_hash)
-            .expect("Failed to get block. This shouldn't be possible for known existing block hash; qed")
-            .expect("Block returned None for known existing block hash. This shouldn't be the case for a block known to have at least one transaction; qed");
+        let maybe_block = self.client.block(block_hash).map_err(|e| {
+            error!(target: LOG_TARGET, "Failed to get block. Error: {:?}", e);
+            anyhow!("Failed to get block. Error: {:?}", e)
+        })?;
+        let block = maybe_block.ok_or_else(|| {
+            error!(target: LOG_TARGET, "Block returned None, i.e. block not found");
+            anyhow!("Block returned None, i.e. block not found")
+        })?;
 
         // Get the extrinsics.
         let extrinsics = block.block.extrinsics();
@@ -383,7 +489,10 @@ where
                 let hash = Blake2Hasher::hash(&e.encode());
                 hash == extrinsic_hash
             })
-            .expect("Extrinsic not found in block. This shouldn't be possible if we're looking into a block for which we got confirmation that the extrinsic was included; qed");
+            .ok_or_else(|| {
+                error!(target: LOG_TARGET, "Extrinsic with hash {:?} not found in block", extrinsic_hash);
+                anyhow!("Extrinsic not found in block")
+            })?;
 
         // Get the events from storage.
         let events_in_block = get_events_at_block(&self.client, &block_hash)?;
@@ -673,7 +782,7 @@ where
             // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
             if next_event_data.is_none() {
                 if next_event_data.is_none() {
-                    let max_batch_respond: u32 = 100;
+                    let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
 
                     // Batch multiple respond storing requests up to the runtime configured maximum.
                     let mut respond_storage_requests = Vec::new();
@@ -784,7 +893,7 @@ where
         }
     }
 
-    /// Emits a `MultipleNewChallengeSeeds` event with all the pending proof submissions for this provider.
+    /// Emits a [`MultipleNewChallengeSeeds`] event with all the pending proof submissions for this provider.
     /// This is used to catch up to the latest proof submissions that were missed due to a node restart.
     /// Also, it can help to catch up to proofs in case there is a change in the BSP's stake (therefore
     /// also a change in it's challenge period).
@@ -888,6 +997,31 @@ where
         }
     }
 
+    /// Applies Forest root changes found in a [`TreeRoute`].
+    ///
+    /// This function can be used both for new blocks as well as for reorgs.
+    /// For new blocks, `tree_route` should be one such that [`TreeRoute::pivot`] is 0, therefore
+    /// all blocks in [`TreeRoute::route`] are "enacted" blocks.
+    /// For reorgs, `tree_route` should be one such that [`TreeRoute::pivot`] is not 0, therefore
+    /// some blocks in [`TreeRoute::route`] are "retracted" blocks and some are "enacted" blocks.
+    pub(crate) async fn forest_root_changes_catchup<Block>(&self, tree_route: &TreeRoute<Block>)
+    where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+        // Retracted blocks, i.e. the blocks from the `TreeRoute` that are reverted in the reorg.
+        for block in tree_route.retracted() {
+            self.apply_forest_root_changes(block, true).await;
+        }
+
+        // Enacted blocks, i.e. the blocks from the `TreeRoute` that are applied in the reorg.
+        for block in tree_route.enacted() {
+            self.apply_forest_root_changes(block, false).await;
+        }
+
+        trace!(target: LOG_TARGET, "Applied Forest root changes for tree route {:?}", tree_route);
+    }
+
+    /// Gets the next tick for which a Provider (BSP) should submit a proof.
     pub(crate) fn get_next_challenge_tick_for_provider(
         &self,
         provider_id: &ProofsDealerProviderId,
@@ -909,12 +1043,248 @@ where
         }
     }
 
+    /// Checks if `block_number` is one where this Blockchain Service should emit a `NotifyPeriod` event.
     pub(crate) fn check_for_notify(&self, block_number: &BlockNumber) {
         if let Some(np) = self.notify_period {
             if block_number % np == 0 {
                 self.emit(NotifyPeriod {});
             }
         }
+    }
+
+    /// Applies the Forest root changes that happened in one block.
+    ///
+    /// Forest root changes can be [`TrieMutation`]s that are either [`TrieAddMutation`]s or [`TrieRemoveMutation`]s.
+    /// These two variants add or remove a key from the Forest root, respectively.
+    ///
+    /// If `revert` is set to `true`, the Forest root changes will be reverted, meaning that if a [`TrieAddMutation`]
+    /// is found in the block, it will be reverted with a [`TrieRemoveMutation`], and vice versa.
+    ///
+    /// A [`TrieRemoveMutation`] is not guaranteed to be convertible to a [`TrieAddMutation`], particularly if
+    /// the [`TrieRemoveMutation::maybe_value`] is `None`. In this case, the function will log an error and return.
+    ///
+    /// Two kinds of events are handled:
+    /// 1. [`pallet_proofs_dealer::Event::MutationsAppliedForProvider`]: for mutations applied to a BSP.
+    /// 2. [`pallet_proofs_dealer::Event::MutationsApplied`]: for mutations applied to the Buckets of an MSP.
+    async fn apply_forest_root_changes<Block>(&self, block: &HashAndNumber<Block>, revert: bool)
+    where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
+        if revert {
+            trace!(target: LOG_TARGET, "Reverting Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
+        } else {
+            trace!(target: LOG_TARGET, "Applying Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
+        }
+
+        // Process the events in the block, specifically those that are related to the Forest root changes.
+        match get_events_at_block(&self.client, &block.hash) {
+            Ok(events) => {
+                // If we are reverting the Forest root changes in this block, we process the events in reverse order.
+                // Normally, the order for processing the events would be irrelevant, because adding or removing different
+                // file keys from the Forest is independent of the order in which they are processed. However, if for
+                // whatever unexpected reason, in the same block, we find two operations for the same file key (for instance,
+                // an addition first and a removal in a later transaction), we need to process them in reverse order (revert
+                // the removal first, by adding it, and revert the addition later, by removing it).
+                let events = if revert {
+                    events.into_iter().rev().collect::<Vec<_>>()
+                } else {
+                    events
+                };
+
+                // Iterate through the events and process them.
+                for ev in events {
+                    match ev.event.clone() {
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                                provider_id,
+                                mutations,
+                                old_root,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(bsp_id)) =
+                                &self.provider_id
+                            {
+                                // Check if the `provider_id` is the BSP that this node is managing.
+                                if provider_id == *bsp_id {
+                                    trace!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
+                                    trace!(target: LOG_TARGET, "Mutations: {:?}", mutations);
+
+                                    // Apply forest root changes to the Forest Storage.
+                                    for (file_key, mutation) in &mutations {
+                                        // If we are reverting the Forest root changes, we need to revert the mutation.
+                                        let mutation = if revert {
+                                            trace!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                                            match self.revert_mutation(mutation) {
+                                                Ok(mutation) => mutation,
+                                                Err(e) => {
+                                                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to revert mutation. This is a bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                                                    return;
+                                                }
+                                            }
+                                        } else {
+                                            trace!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                                            mutation.clone()
+                                        };
+
+                                        // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
+                                        // and not to the File Storage.
+                                        // This is because if in a future block built on top of this one, the BSP needs to provide
+                                        // a proof, it will be against the Forest root with this change applied.
+                                        // For file deletions, we will remove the file from the File Storage only after finality is reached.
+                                        // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+                                        if let Err(e) = self
+                                            .apply_mutation_to_bsp_forest(file_key, &mutation)
+                                            .await
+                                        {
+                                            error!(target: LOG_TARGET, "Failed to apply mutation to BSP's Forest");
+                                            error!(target: LOG_TARGET, "BSP ID: {:?}", provider_id);
+                                            error!(target: LOG_TARGET, "Mutation: {:?}", mutation);
+                                            error!(target: LOG_TARGET, "Error: {:?}", e);
+                                        }
+                                    }
+
+                                    // Verify that the new Forest root matches the one in the block.
+                                    let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+                                    let fs = match self
+                                        .forest_storage_handler
+                                        .get(&current_forest_key.into())
+                                        .await
+                                    {
+                                        Some(fs) => fs,
+                                        None => {
+                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get Forest Storage.");
+                                            return;
+                                        }
+                                    };
+
+                                    let local_new_root = fs.read().await.root();
+
+                                    trace!(target: LOG_TARGET, "Mutations applied. New local Forest root: {:?}", local_new_root);
+
+                                    if revert {
+                                        if old_root != local_new_root {
+                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ New Forest root does not match the one in the block. This is a bug. Please report it to the StorageHub team.");
+                                            return;
+                                        }
+                                    } else {
+                                        if new_root != local_new_root {
+                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ New Forest root does not match the one in the block. This is a bug. Please report it to the StorageHub team.");
+                                            return;
+                                        }
+                                    }
+
+                                    info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
+                                }
+                            }
+                        }
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsApplied {
+                                mutations: _,
+                                old_root: _,
+                                new_root: _,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            // In which case the mutations are applied to a Bucket's Forest root.
+                            if let Some(StorageProviderId::MainStorageProvider(_msp_id)) =
+                                &self.provider_id
+                            {
+                                // TODO: Check if Bucket is managed by this MSP.
+                                // TODO: Apply forest root changes to the Bucket's Forest Storage.
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            Err(e) => {
+                error!(target: LOG_TARGET, "Failed to get events at block {:?}: {:?}", block.hash, e);
+            }
+        }
+    }
+
+    /// Applies a [`TrieMutation`] to the Forest of a BSP.
+    ///
+    /// If `mutation` is a [`TrieAddMutation`], it will decode the [`TrieAddMutation::value`] as a
+    /// [`FileMetadata`] and insert it into the Forest.
+    /// If `mutation` is a [`TrieRemoveMutation`], it will remove the file with the key `file_key` from the Forest.
+    async fn apply_mutation_to_bsp_forest(
+        &self,
+        file_key: &H256,
+        mutation: &TrieMutation,
+    ) -> Result<()> {
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let fs = self
+            .forest_storage_handler
+            .get(&current_forest_key.into())
+            .await
+            .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
+
+        // Write lock is released when exiting the scope of this `match` statement.
+        match mutation {
+            TrieMutation::Add(TrieAddMutation {
+                value: encoded_metadata,
+            }) => {
+                // Metadata comes encoded, so we need to decode it first to apply the mutation and add it to the Forest.
+                let metadata = FileMetadata::decode(&mut &encoded_metadata[..]).map_err(|e| {
+                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to decode metadata from encoded metadata when applying mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                    anyhow!("Failed to decode metadata from encoded metadata: {:?}", e)
+                })?;
+
+                fs.write()
+                    .await
+                    .insert_files_metadata(vec![metadata].as_slice()).map_err(|e| {
+                        error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                        anyhow!(
+                            "Failed to insert file key into Forest storage: {:?}",
+                            e
+                        )
+                    })?;
+            }
+            TrieMutation::Remove(_) => {
+                fs.write().await.delete_file_key(file_key).map_err(|e| {
+                          error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                          anyhow!(
+                              "Failed to remove file key from Forest storage: {:?}",
+                              e
+                          )
+                      })?;
+            }
+        };
+
+        Ok(())
+    }
+
+    /// Reverts a [`TrieMutation`].
+    ///
+    /// A [`TrieMutation`] can be either a [`TrieAddMutation`] or a [`TrieRemoveMutation`].
+    /// If the [`TrieMutation`] is a [`TrieAddMutation`], it will be reverted to a [`TrieRemoveMutation`].
+    /// If the [`TrieMutation`] is a [`TrieRemoveMutation`], it will be reverted to a [`TrieAddMutation`].
+    ///
+    /// This operation can fail if the [`TrieMutation`] is a [`TrieRemoveMutation`] but its [`TrieRemoveMutation::maybe_value`]
+    /// is `None`. In this case, the function will return an error.
+    fn revert_mutation(&self, mutation: &TrieMutation) -> Result<TrieMutation> {
+        let reverted_mutation = match mutation {
+            TrieMutation::Add(TrieAddMutation { value }) => {
+                TrieMutation::Remove(TrieRemoveMutation {
+                    maybe_value: Some(value.clone()),
+                })
+            }
+            TrieMutation::Remove(TrieRemoveMutation { maybe_value }) => {
+                let value = match maybe_value {
+                    Some(value) => value.clone(),
+                    None => {
+                        return Err(anyhow!("Failed to revert mutation: TrieRemoveMutation does not contain a value"));
+                    }
+                };
+
+                TrieMutation::Add(TrieAddMutation { value })
+            }
+        };
+
+        Ok(reverted_mutation)
     }
 }
 

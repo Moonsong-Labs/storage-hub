@@ -1,18 +1,30 @@
 // Auto-generated via `yarn polkadot-types-from-defs`, do not edit
 /* eslint-disable */
 
-import type { Bytes, Enum, Null, Struct, U8aFixed, bool, u32, u64 } from "@polkadot/types-codec";
+import type {
+  Bytes,
+  Enum,
+  Null,
+  Struct,
+  U8aFixed,
+  Vec,
+  bool,
+  u32,
+  u64
+} from "@polkadot/types-codec";
 import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 
 /** @name BackupStorageProvider */
 export interface BackupStorageProvider extends Struct {
-  readonly capacity: StorageData;
-  readonly data_used: StorageData;
-  readonly multiaddresses: Bytes;
+  readonly capacity: StorageDataUnit;
+  readonly capacity_used: StorageDataUnit;
+  readonly multiaddresses: Multiaddresses;
   readonly root: MerklePatriciaRoot;
   readonly last_capacity_change: BlockNumber;
   readonly owner_account: AccountId;
   readonly payment_account: AccountId;
+  readonly reputation_weight: ReputationWeightType;
+  readonly sign_up_block: BlockNumber;
 }
 
 /** @name BackupStorageProviderId */
@@ -149,7 +161,7 @@ export interface MainStorageProviderId extends H256 {}
 export interface MerklePatriciaRoot extends H256 {}
 
 /** @name Multiaddresses */
-export interface Multiaddresses extends Bytes {}
+export interface Multiaddresses extends Vec<Bytes> {}
 
 /** @name ProviderId */
 export interface ProviderId extends H256 {}
@@ -231,6 +243,9 @@ export interface QueryStorageProviderCapacityError extends Enum {
 /** @name RandomnessOutput */
 export interface RandomnessOutput extends H256 {}
 
+/** @name ReputationWeightType */
+export interface ReputationWeightType extends u32 {}
+
 /** @name SaveFileToDisk */
 export interface SaveFileToDisk extends Enum {
   readonly isFileNotFound: boolean;
@@ -245,10 +260,10 @@ export interface SaveFileToDisk extends Enum {
 export interface ShouldRemoveFile extends bool {}
 
 /** @name StorageData */
-export interface StorageData extends u32 {}
+export interface StorageData extends u64 {}
 
 /** @name StorageDataUnit */
-export interface StorageDataUnit extends u32 {}
+export interface StorageDataUnit extends u64 {}
 
 /** @name StorageProviderId */
 export interface StorageProviderId extends Enum {

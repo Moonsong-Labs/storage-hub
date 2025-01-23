@@ -1688,9 +1688,15 @@ export default {
         provider: "H256",
         maybeProviderAccount: "Option<AccountId32>"
       },
-      MutationsApplied: {
-        provider: "H256",
+      MutationsAppliedForProvider: {
+        providerId: "H256",
         mutations: "Vec<(H256,ShpTraitsTrieMutation)>",
+        oldRoot: "H256",
+        newRoot: "H256"
+      },
+      MutationsApplied: {
+        mutations: "Vec<(H256,ShpTraitsTrieMutation)>",
+        oldRoot: "H256",
         newRoot: "H256"
       },
       ChallengesTickerSet: {

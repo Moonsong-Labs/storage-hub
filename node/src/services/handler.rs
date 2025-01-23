@@ -7,10 +7,10 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
-        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForNewMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
@@ -25,18 +25,19 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::tasks::{
-    bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
-    bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
-    bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-    msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
-    msp_move_bucket::MspMoveBucketTask, msp_upload_file::MspUploadFileTask,
-    sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
-};
-
-use super::types::{
-    BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
-    ShStorageLayer, UserRole,
+use crate::{
+    services::types::{
+        BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
+        ShStorageLayer, UserRole,
+    },
+    tasks::{
+        bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
+        bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
+        bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
+        msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
+        msp_move_bucket::MspMoveBucketTask, msp_upload_file::MspUploadFileTask,
+        sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
+    },
 };
 
 /// Configuration parameters for Storage Providers.
@@ -400,15 +401,8 @@ where
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         move_bucket_expired_event_bus_listener.start();
 
-        // Task that listen for `BspConfirmStoppedStoring` to delete file and update forest root.
+        // Task that listen for `FinalisedBspConfirmStoppedStoring` to delete file
         let bsp_delete_file_task = BspDeleteFileTask::new(self.clone());
-        let bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
-            BspConfirmStoppedStoring,
-            _,
-        > = bsp_delete_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
-        bsp_confirm_stopped_storing_event_bus_listener.start();
         let finalised_bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
             FinalisedBspConfirmStoppedStoring,
             _,

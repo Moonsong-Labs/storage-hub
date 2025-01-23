@@ -1,11 +1,4 @@
-use std::{
-    cmp::max,
-    collections::{HashMap, HashSet},
-    ops::Add,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{cmp::max, collections::HashMap, ops::Add, str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -59,7 +52,7 @@ const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
 ///   and if it is valid, stores it, until the whole file is stored.
 /// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
 ///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
-///   before updating it's local Forest storage root.
+///   extrinsic, waiting for it to be successfully included in a block.
 pub struct BspUploadFileTask<NT>
 where
     NT: ShNodeType,
@@ -435,8 +428,7 @@ where
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
-        let events = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -458,71 +450,6 @@ where
                     e
                 )
             })?;
-
-        let maybe_new_root: Option<H256> = events.and_then(|events| {
-            events.into_iter().find_map(|event| {
-                if let storage_hub_runtime::RuntimeEvent::FileSystem(
-                    pallet_file_system::Event::BspConfirmedStoring {
-                        bsp_id,
-                        skipped_file_keys,
-                        new_root,
-                        ..
-                    },
-                ) = event.event
-                {
-                    if bsp_id == own_bsp_id {
-                        if !skipped_file_keys.is_empty() {
-                            warn!(
-                            target: LOG_TARGET,
-                            "Skipped confirmations for file keys: {:?}",
-                            skipped_file_keys
-                            );
-                            // Remove skipped confirmations
-                            let skipped_set: HashSet<_> = skipped_file_keys.into_iter().collect();
-                            file_metadatas.retain(|file_key, _| !skipped_set.contains(file_key));
-                        }
-                        Some(new_root)
-                    } else {
-                        debug!(
-                            target: LOG_TARGET,
-                            "Received confirmation for another BSP: {:?}",
-                            bsp_id
-                        );
-                        None
-                    }
-                } else {
-                    debug!(
-                        target: LOG_TARGET,
-                        "Received unexpected event: {:?}",
-                        event.event
-                    );
-                    None
-                }
-            })
-        });
-
-        let new_root = match maybe_new_root {
-            Some(new_root) => new_root,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. Failed to query BspConfirmedStoring new forest root after confirming storing.";
-                error!(target: LOG_TARGET, "{}", err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
-
-        // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
-        if !file_metadatas.is_empty() {
-            fs.write().await.insert_files_metadata(
-                file_metadatas.into_values().collect::<Vec<_>>().as_slice(),
-            )?;
-
-            if fs.read().await.root() != new_root {
-                let err_msg =
-                    "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. \nError forest root mismatch after confirming storing.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        }
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
