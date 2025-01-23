@@ -1,4 +1,4 @@
-use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, sync::Arc};
+use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, str::FromStr, sync::Arc};
 
 use jsonrpsee::{
     core::{async_trait, RpcResult},
@@ -21,7 +21,7 @@ use shc_common::{
         FILE_CHUNK_SIZE,
     },
 };
-use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
+use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -190,13 +190,14 @@ pub trait StorageHubClientApi {
     // buckets, users or file fingerprint). This method is required to call before deleting a file to
     // avoid re-uploading a file that has just been deleted.
     #[method(name = "addToExcludeList")]
-    async fn add_to_exclude_list(&self, file_key: H256) -> RpcResult<()>;
+    async fn add_to_exclude_list(&self, file_key: H256, exclude_type: String) -> RpcResult<()>;
 
     // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
     // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
     // list ban users, bucket or even file fingerprint.
     #[method(name = "removeFromExcludeList")]
-    async fn remove_from_exclude_list(&self, file_key: H256) -> RpcResult<()>;
+    async fn remove_from_exclude_list(&self, file_key: H256, exclude_type: String)
+        -> RpcResult<()>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -747,10 +748,12 @@ where
         Ok(())
     }
 
-    async fn add_to_exclude_list(&self, file_key: H256) -> RpcResult<()> {
+    async fn add_to_exclude_list(&self, file_key: H256, exclude_type: String) -> RpcResult<()> {
+        let et = ExcludeType::from_str(&exclude_type).map_err(into_rpc_error)?;
+
         let mut write_file_storage = self.file_storage.write().await;
         write_file_storage
-            .add_file_to_exclude_list(file_key)
+            .add_to_exclude_list(file_key, et)
             .map_err(into_rpc_error)?;
 
         drop(write_file_storage);
@@ -758,10 +761,16 @@ where
         Ok(())
     }
 
-    async fn remove_from_exclude_list(&self, file_key: H256) -> RpcResult<()> {
+    async fn remove_from_exclude_list(
+        &self,
+        file_key: H256,
+        exclude_type: String,
+    ) -> RpcResult<()> {
+        let et = ExcludeType::from_str(&exclude_type).map_err(into_rpc_error)?;
+
         let mut write_file_storage = self.file_storage.write().await;
         write_file_storage
-            .remove_file_from_exclude_list(&file_key)
+            .remove_from_exclude_list(&file_key, et)
             .map_err(into_rpc_error)?;
 
         drop(write_file_storage);

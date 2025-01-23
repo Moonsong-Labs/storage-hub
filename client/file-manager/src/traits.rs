@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use shc_common::types::{Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT};
 use trie_db::TrieLayout;
 
@@ -71,10 +73,16 @@ pub enum FileStorageError {
     FailedToDeleteFileChunk,
     /// Failed to convert raw bytes into partial root.
     FailedToParsePartialRoot,
-    /// Failed to convert raw bytes into [`HasherOutT`]
+    /// Failed to convert raw bytes into [`HasherOutT`].
     FailedToHasherOutput,
-    /// File has size zero
+    /// File has size zero.
     FileIsEmpty,
+    /// Failed to add entity to the exclude list.
+    FailedToAddEntityToExcludeList,
+    /// Failed to remove entity from the exclude list.
+    FailedToAddEntityFromExcludeList,
+    /// Trying to parse unknown exclude type.
+    ErrorParsingExcludeType,
 }
 
 #[derive(Debug)]
@@ -84,6 +92,28 @@ pub enum FileStorageWriteOutcome {
     FileComplete,
     /// The file was not completed after this chunk write.
     FileIncomplete,
+}
+
+#[derive(Eq, Hash, PartialEq)]
+pub enum ExcludeType {
+    File,
+    User,
+    Bucket,
+    Fingerprint,
+}
+
+impl FromStr for ExcludeType {
+    type Err = FileStorageError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "file" => Ok(ExcludeType::File),
+            "user" => Ok(ExcludeType::User),
+            "bucket" => Ok(ExcludeType::Bucket),
+            "fingerprint" => Ok(ExcludeType::Fingerprint),
+            _ => Err(FileStorageError::ErrorParsingExcludeType),
+        }
+    }
 }
 
 pub trait FileDataTrie<T: TrieLayout> {
@@ -175,12 +205,21 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError>;
 
-    fn is_allowed(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError>;
+    fn is_allowed(
+        &self,
+        key: &HasherOutT<T>,
+        exclude_type: ExcludeType,
+    ) -> Result<bool, FileStorageError>;
 
-    fn add_file_to_exclude_list(&mut self, key: HasherOutT<T>) -> Result<(), FileStorageError>;
+    fn add_to_exclude_list(
+        &mut self,
+        key: HasherOutT<T>,
+        exclude_type: ExcludeType,
+    ) -> Result<(), FileStorageError>;
 
-    fn remove_file_from_exclude_list(
+    fn remove_from_exclude_list(
         &mut self,
         key: &HasherOutT<T>,
+        exclude_type: ExcludeType,
     ) -> Result<(), FileStorageError>;
 }
