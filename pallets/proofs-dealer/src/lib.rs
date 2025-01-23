@@ -683,7 +683,8 @@ pub mod pallet {
             });
 
             // Return a successful DispatchResultWithPostInfo.
-            // If the proof is valid, the execution of this extrinsic should be refunded.
+            // If the proof is valid, the execution of this extrinsic should be refunded. This is
+            // to incentivise being a Provider in the network, since it diminishes the costs to be one substantially.
             Ok(Pays::No.into())
         }
 
@@ -706,6 +707,8 @@ pub mod pallet {
             <Self as ProofsDealerInterface>::initialise_challenge_cycle(&provider)?;
 
             // Return a successful DispatchResultWithPostInfo.
+            // This TX is free since is a sudo-only transaction used to fix potential issues
+            // and for testing.
             Ok(Pays::No.into())
         }
 
@@ -728,6 +731,7 @@ pub mod pallet {
             Self::deposit_event(Event::ChallengesTickerSet { paused });
 
             // Return a successful DispatchResultWithPostInfo.
+			// This TX is free since is a sudo-only transaction used for testing.
             Ok(Pays::No.into())
         }
     }

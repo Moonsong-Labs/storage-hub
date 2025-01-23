@@ -1403,7 +1403,7 @@ pub mod pallet {
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         ///
-        /// This is a free operation to incentivize the community to slash misbehaving providers.
+        /// This is a free operation to incentivise the community to slash misbehaving providers.
         #[pallet::call_index(13)]
         #[pallet::weight(T::WeightInfo::slash())]
         pub fn slash(
@@ -1415,6 +1415,9 @@ pub mod pallet {
 
             Self::do_slash(&provider_id)?;
 
+            // Return a successful DispatchResultWithPostInfo.
+            // If the extrinsic executed correctly and the Provider was slashed, the execution fee is refunded.
+            // This is to incentivise the community to slash misbehaving providers.
             Ok(Pays::No.into())
         }
 
@@ -1458,6 +1461,9 @@ pub mod pallet {
 
             Self::do_delete_provider(&provider_id)?;
 
+            // Return a successful DispatchResultWithPostInfo.
+            // If the extrinsic executed correctly and the Provider was deleted, the execution fee is refunded.
+            // This is to incentivise the community to delete insolvent providers, debloating state.
             Ok(Pays::No.into())
         }
 
