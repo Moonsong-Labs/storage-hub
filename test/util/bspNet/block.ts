@@ -88,6 +88,8 @@ export const extendFork = async (
  * @param api - The ApiPromise instance.
  * @param calls - Optional extrinsic(s) to include in the block.
  * @param signer - Optional signer for the extrinsics.
+ * @param nonce - Optional starting nonce for the extrinsics.
+ * @param parentHash - Optional parent hash to build the block on top of.
  * @param finaliseBlock - Whether to finalize the block. Defaults to true.
  * @returns A Promise resolving to a SealedBlock object containing block details and events.
  *

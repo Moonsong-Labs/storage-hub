@@ -350,7 +350,10 @@ where
     /// - `new_best_block`: The new best block that was imported.
     /// - `tree_route`: The [`TreeRoute`] with `new_best_block` as the last element. The
     ///   length of the `tree_route` is determined by the number of blocks between the
-    ///   `last_best_block_processed` and `new_best_block`, but
+    ///   `last_best_block_processed` and `new_best_block`, but if there are more than
+    ///   `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES` blocks between the two, the route
+    ///   will be trimmed to include the first `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES`
+    ///   before the `new_best_block`.
     NewBestBlock {
         last_best_block_processed: MinimalBlockInfo,
         new_best_block: MinimalBlockInfo,
@@ -358,7 +361,7 @@ where
     },
     /// The block belongs to a fork that is not currently the best fork.
     NewNonBestBlock(MinimalBlockInfo),
-    /// This fork causes a reorg, i.e. it is the new best block, but the previous best block
+    /// This block causes a reorg, i.e. it is the new best block, but the previous best block
     /// is not the parent of this one.
     ///
     /// The old best block (from the now non-best fork) is provided, as well as the new best block.
