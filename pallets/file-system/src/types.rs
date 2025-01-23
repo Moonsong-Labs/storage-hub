@@ -15,8 +15,8 @@ use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
     Config, Error, FileDeletionRequestExpirations, MoveBucketRequestExpirations,
-    NextAvailableFileDeletionRequestExpirationBlock, NextAvailableMoveBucketRequestExpirationBlock,
-    NextAvailableStorageRequestExpirationBlock, StorageRequestExpirations,
+    NextAvailableFileDeletionRequestExpirationTick, NextAvailableMoveBucketRequestExpirationTick,
+    NextAvailableStorageRequestExpirationTick, StorageRequestExpirations,
 };
 
 /// Ephemeral metadata of a storage request.
@@ -29,11 +29,10 @@ pub struct StorageRequestMetadata<T: Config> {
     /// cleaning up old requests.
     pub requested_at: TickNumber<T>,
 
-    /// Block number at which the storage request will expire.
+    /// Tick number at which the storage request will expire.
     ///
     /// Used to track what storage elements to clean when a storage request gets fulfilled.
-    /// Note: we use block numbers for expiration items instead of ticks. Maybe we should unify this.
-    pub expires_at: BlockNumberFor<T>,
+    pub expires_at: TickNumber<T>,
 
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
@@ -238,7 +237,7 @@ pub enum ExpirationItem<T: Config> {
 }
 
 impl<T: Config> ExpirationItem<T> {
-    pub(crate) fn get_ttl(&self) -> BlockNumberFor<T> {
+    pub(crate) fn get_ttl(&self) -> TickNumber<T> {
         match self {
             ExpirationItem::StorageRequest(_) => T::StorageRequestTtl::get().into(),
             ExpirationItem::PendingFileDeletionRequests(_) => {
@@ -248,61 +247,63 @@ impl<T: Config> ExpirationItem<T> {
         }
     }
 
-    pub(crate) fn get_next_expiration_block(&self) -> BlockNumberFor<T> {
-        // The expiration block is the maximum between the next available block and the current block number plus the TTL.
-        let current_block_plus_ttl = frame_system::Pallet::<T>::block_number() + self.get_ttl();
-        let next_available_block = match self {
+    pub(crate) fn get_next_expiration_tick(&self) -> TickNumber<T> {
+        // The expiration tick is the maximum between the next available tick and the current tick number plus the TTL.
+        let current_tick_plus_ttl =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick()
+                + self.get_ttl();
+        let next_available_tick = match self {
             ExpirationItem::StorageRequest(_) => {
-                NextAvailableStorageRequestExpirationBlock::<T>::get()
+                NextAvailableStorageRequestExpirationTick::<T>::get()
             }
             ExpirationItem::PendingFileDeletionRequests(_) => {
-                NextAvailableFileDeletionRequestExpirationBlock::<T>::get()
+                NextAvailableFileDeletionRequestExpirationTick::<T>::get()
             }
             ExpirationItem::MoveBucketRequest(_) => {
-                NextAvailableMoveBucketRequestExpirationBlock::<T>::get()
+                NextAvailableMoveBucketRequestExpirationTick::<T>::get()
             }
         };
 
-        max(next_available_block, current_block_plus_ttl)
+        max(next_available_tick, current_tick_plus_ttl)
     }
 
     pub(crate) fn try_append(
         &self,
-        expiration_block: BlockNumberFor<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let mut next_expiration_block = expiration_block;
+        expiration_tick: TickNumber<T>,
+    ) -> Result<TickNumber<T>, DispatchError> {
+        let mut next_expiration_tick = expiration_tick;
         while let Err(_) = match self {
             ExpirationItem::StorageRequest(storage_request) => {
-                <StorageRequestExpirations<T>>::try_append(next_expiration_block, *storage_request)
+                <StorageRequestExpirations<T>>::try_append(next_expiration_tick, *storage_request)
             }
             ExpirationItem::PendingFileDeletionRequests(pending_file_deletion_requests) => {
                 <FileDeletionRequestExpirations<T>>::try_append(
-                    next_expiration_block,
+                    next_expiration_tick,
                     pending_file_deletion_requests.clone(),
                 )
             }
             ExpirationItem::MoveBucketRequest(msp_bucket_id) => {
-                <MoveBucketRequestExpirations<T>>::try_append(next_expiration_block, *msp_bucket_id)
+                <MoveBucketRequestExpirations<T>>::try_append(next_expiration_tick, *msp_bucket_id)
             }
         } {
-            next_expiration_block = next_expiration_block
+            next_expiration_tick = next_expiration_tick
                 .checked_add(&1u8.into())
-                .ok_or(Error::<T>::MaxBlockNumberReached)?;
+                .ok_or(Error::<T>::MaxTickNumberReached)?;
         }
 
-        Ok(next_expiration_block)
+        Ok(next_expiration_tick)
     }
 
-    pub(crate) fn set_next_expiration_block(&self, next_expiration_block: BlockNumberFor<T>) {
+    pub(crate) fn set_next_expiration_tick(&self, next_expiration_tick: TickNumber<T>) {
         match self {
             ExpirationItem::StorageRequest(_) => {
-                NextAvailableStorageRequestExpirationBlock::<T>::set(next_expiration_block);
+                NextAvailableStorageRequestExpirationTick::<T>::set(next_expiration_tick);
             }
             ExpirationItem::PendingFileDeletionRequests(_) => {
-                NextAvailableFileDeletionRequestExpirationBlock::<T>::set(next_expiration_block);
+                NextAvailableFileDeletionRequestExpirationTick::<T>::set(next_expiration_tick);
             }
             ExpirationItem::MoveBucketRequest(_) => {
-                NextAvailableMoveBucketRequestExpirationBlock::<T>::set(next_expiration_block);
+                NextAvailableMoveBucketRequestExpirationTick::<T>::set(next_expiration_tick);
             }
         }
     }

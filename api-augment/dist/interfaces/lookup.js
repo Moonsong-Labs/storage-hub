@@ -4546,7 +4546,7 @@ export default {
       "BspNotEligibleToVolunteer",
       "StorageRequestExpiredNoSlotAvailable",
       "StorageRequestNotAuthorized",
-      "MaxBlockNumberReached",
+      "MaxTickNumberReached",
       "FailedToEncodeBsp",
       "FailedToEncodeFingerprint",
       "FailedToDecodeThreshold",
