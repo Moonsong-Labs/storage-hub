@@ -11,7 +11,6 @@ use frame_support::{
     },
 };
 use num_bigint::BigUint;
-use sp_core::H256;
 use sp_runtime::{
     traits::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,

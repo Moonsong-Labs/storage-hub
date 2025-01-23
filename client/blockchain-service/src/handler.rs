@@ -40,7 +40,8 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     types::{
-        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId, StorageRequestMetadata, TickNumber, BCSV_KEY_TYPE
+        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId,
+        StorageRequestMetadata, TickNumber, BCSV_KEY_TYPE,
     },
 };
 use shp_file_metadata::FileKey;
@@ -1198,22 +1199,22 @@ where
                 // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
                 // TODO: Catch up to Forest root writes in the Bucket's Forests.
 
-                // TODO: Call runtime here
-                let storage_requests: Vec<StorageRequestMetadata> = self
+                let storage_requests: Vec<(H256, StorageRequestMetadata)> = self
                     .client
                     .runtime_api()
-                    .storage_requests_by_msp(block_hash, msp_id).unwrap();
+                    .storage_requests_by_msp(block_hash, msp_id)
+                    .unwrap();
 
-                for sr in storage_requests {
+                for (file_key, sr) in storage_requests {
                     self.emit(NewStorageRequest {
                         who: sr.owner,
-                        file_key: ,
+                        file_key: file_key.into(),
                         bucket_id: sr.bucket_id,
                         location: sr.location,
-                        fingerprint: sr.fingerprint.into(),
+                        fingerprint: Fingerprint::from(sr.fingerprint.as_bytes()),
                         size: sr.size,
-                        user_peer_ids: ,
-                        expires_at: ,
+                        user_peer_ids: sr.user_peer_ids,
+                        expires_at: sr.expires_at,
                     })
                 }
             }
