@@ -64,6 +64,7 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
     use shp_file_metadata::ChunkId;
+    use shp_traits::ProofsDealerInterface;
     use sp_runtime::{
         traits::{
             Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating,
@@ -267,9 +268,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxDataServerMultiAddresses: Get<u32>;
 
-        /// Maximum number of expired items (per type) to clean up in a single block.
+        /// Maximum number of expired items (per type) to clean up in a single tick.
         #[pallet::constant]
-        type MaxExpiredItemsInBlock: Get<u32>;
+        type MaxExpiredItemsInTick: Get<u32>;
 
         /// Time-to-live for a storage request.
         #[pallet::constant]
@@ -291,9 +292,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxUserPendingMoveBucketRequests: Get<u32>;
 
-        /// Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
+        /// Number of ticks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
         #[pallet::constant]
-        type MinWaitForStopStoring: Get<BlockNumberFor<Self>>;
+        type MinWaitForStopStoring: Get<TickNumber<Self>>;
 
         /// Deposit held from the User when creating a new storage request
         #[pallet::constant]
@@ -302,6 +303,15 @@ pub mod pallet {
         /// Default replication target
         #[pallet::constant]
         type DefaultReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// Maximum replication target that a user can select for a new storage request.
+        #[pallet::constant]
+        type MaxReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
+        /// to arrive at its maximum value.
+        #[pallet::constant]
+        type TickRangeToMaximumThreshold: Get<TickNumber<Self>>;
     }
 
     #[pallet::pallet]
@@ -340,64 +350,64 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// A map of blocks to expired storage requests.
+    /// A map of ticks to expired storage requests.
     #[pallet::storage]
     pub type StorageRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<StorageRequestExpirationItem<T>, T::MaxExpiredItemsInBlock>,
+        TickNumber<T>,
+        BoundedVec<StorageRequestExpirationItem<T>, T::MaxExpiredItemsInTick>,
         ValueQuery,
     >;
 
-    /// A map of blocks to expired file deletion requests.
+    /// A map of ticks to expired file deletion requests.
     #[pallet::storage]
     pub type FileDeletionRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<FileDeletionRequestExpirationItem<T>, T::MaxExpiredItemsInBlock>,
+        TickNumber<T>,
+        BoundedVec<FileDeletionRequestExpirationItem<T>, T::MaxExpiredItemsInTick>,
         ValueQuery,
     >;
 
-    /// A map of blocks to expired move bucket requests.
+    /// A map of ticks to expired move bucket requests.
     #[pallet::storage]
     pub type MoveBucketRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<(ProviderIdFor<T>, BucketIdFor<T>), T::MaxExpiredItemsInBlock>,
+        TickNumber<T>,
+        BoundedVec<(ProviderIdFor<T>, BucketIdFor<T>), T::MaxExpiredItemsInTick>,
         ValueQuery,
     >;
 
-    /// A pointer to the earliest available block to insert a new storage request expiration.
+    /// A pointer to the earliest available tick to insert a new storage request expiration.
     ///
-    /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+    /// This should always be greater or equal than current tick + [`Config::StorageRequestTtl`].
     #[pallet::storage]
-    pub type NextAvailableStorageRequestExpirationBlock<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextAvailableStorageRequestExpirationTick<T: Config> =
+        StorageValue<_, TickNumber<T>, ValueQuery>;
 
-    /// A pointer to the earliest available block to insert a new file deletion request expiration.
+    /// A pointer to the earliest available tick to insert a new file deletion request expiration.
     ///
-    /// This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
+    /// This should always be greater or equal than current tick + [`Config::PendingFileDeletionRequestTtl`].
     #[pallet::storage]
-    pub type NextAvailableFileDeletionRequestExpirationBlock<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextAvailableFileDeletionRequestExpirationTick<T: Config> =
+        StorageValue<_, TickNumber<T>, ValueQuery>;
 
-    /// A pointer to the earliest available block to insert a new move bucket request expiration.
+    /// A pointer to the earliest available tick to insert a new move bucket request expiration.
     ///
-    /// This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
+    /// This should always be greater or equal than current tick + [`Config::MoveBucketRequestTtl`].
     #[pallet::storage]
-    pub type NextAvailableMoveBucketRequestExpirationBlock<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextAvailableMoveBucketRequestExpirationTick<T: Config> =
+        StorageValue<_, TickNumber<T>, ValueQuery>;
 
-    /// A pointer to the starting block to clean up expired items.
+    /// A pointer to the starting tick to clean up expired items.
     ///
-    /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-    /// attempt to advance this block pointer as close to or up to the current block number. This
+    /// If this tick is behind the current tick number, the cleanup algorithm in `on_idle` will
+    /// attempt to advance this tick pointer as close to or up to the current tick number. This
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
-    pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextStartingTickToCleanUp<T: Config> = StorageValue<_, TickNumber<T>, ValueQuery>;
 
     /// Pending file deletion requests.
     ///
@@ -447,46 +457,6 @@ pub mod pallet {
     pub type PendingBucketsToMove<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
 
-    // TODO: add this to pallet params instead of a storage element
-    /// Maximum number replication target allowed to be set for a storage request to be fulfilled.
-    #[pallet::storage]
-    pub type MaxReplicationTarget<T: Config> =
-        StorageValue<_, ReplicationTargetType<T>, ValueQuery>;
-
-    /// Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-    #[pallet::storage]
-    pub type TickRangeToMaximumThreshold<T: Config> = StorageValue<_, TickNumber<T>, ValueQuery>;
-
-    #[pallet::genesis_config]
-    pub struct GenesisConfig<T: Config> {
-        pub max_replication_target: ReplicationTargetType<T>,
-        pub tick_range_to_maximum_threshold: TickNumber<T>,
-    }
-
-    impl<T: Config> Default for GenesisConfig<T> {
-        fn default() -> Self {
-            // TODO: Find a better default value for this.
-            let max_replication_target = 10u32.into();
-            let tick_range_to_maximum_threshold = 10u32.into();
-
-            MaxReplicationTarget::<T>::put(max_replication_target);
-            TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
-
-            Self {
-                max_replication_target,
-                tick_range_to_maximum_threshold,
-            }
-        }
-    }
-
-    #[pallet::genesis_build]
-    impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-        fn build(&self) {
-            MaxReplicationTarget::<T>::put(self.max_replication_target);
-            TickRangeToMaximumThreshold::<T>::put(self.tick_range_to_maximum_threshold);
-        }
-    }
-
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -535,7 +505,7 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
             peer_ids: PeerIds<T>,
-            expires_at: BlockNumberFor<T>,
+            expires_at: TickNumber<T>,
         },
         /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
         ///
@@ -736,13 +706,13 @@ pub mod pallet {
         UnexpectedNumberOfRemovedVolunteeredBsps,
         /// BSP cannot volunteer at this current tick.
         BspNotEligibleToVolunteer,
-        /// No slot available found in blocks to insert storage request expiration time.
+        /// No slot available found in ticks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
         /// Not authorized to delete the storage request.
         StorageRequestNotAuthorized,
         /// Error created in 2024. If you see this, you are well beyond the singularity and should
         /// probably stop using this pallet.
-        MaxBlockNumberReached,
+        MaxTickNumberReached,
         /// Failed to encode BSP id as slice.
         FailedToEncodeBsp,
         /// Failed to encode fingerprint as slice.
@@ -1356,42 +1326,6 @@ pub mod pallet {
 
             Ok(())
         }
-
-        #[pallet::call_index(17)]
-        #[pallet::weight(T::WeightInfo::set_global_parameters())]
-        pub fn set_global_parameters(
-            origin: OriginFor<T>,
-            new_max_replication_target: Option<T::ReplicationTargetType>,
-            tick_range_to_maximum_threshold: Option<TickNumber<T>>,
-        ) -> DispatchResult {
-            // Check that the extrinsic was sent with root origin.
-            ensure_root(origin)?;
-
-            if let Some(new_max_replication_target) = new_max_replication_target {
-                ensure!(
-                    new_max_replication_target > T::ReplicationTargetType::zero(),
-                    Error::<T>::ReplicationTargetCannotBeZero
-                );
-
-                ensure!(
-                    new_max_replication_target >= T::DefaultReplicationTarget::get(),
-                    Error::<T>::MaxReplicationTargetSmallerThanDefault
-                );
-
-                MaxReplicationTarget::<T>::put(new_max_replication_target);
-            }
-
-            if let Some(tick_range_to_maximum_threshold) = tick_range_to_maximum_threshold {
-                ensure!(
-                    tick_range_to_maximum_threshold > TickNumber::<T>::zero(),
-                    Error::<T>::TickRangeToMaximumThresholdCannotBeZero
-                );
-
-                TickRangeToMaximumThreshold::<T>::put(tick_range_to_maximum_threshold);
-            }
-
-            Ok(().into())
-        }
     }
 
     #[pallet::hooks]
@@ -1400,9 +1334,14 @@ pub mod pallet {
             Self::do_on_poll(weight);
         }
 
-        fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+        fn on_idle(_n: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let mut meter = WeightMeter::with_limit(remaining_weight);
-            Self::do_on_idle(current_block, &mut meter);
+            // If there's enough weight to at least read the current tick number, do it and proceed.
+            if meter.can_consume(T::DbWeight::get().reads(1)) {
+                let current_tick = <T::ProofDealer as ProofsDealerInterface>::get_current_tick();
+                meter.consume(T::DbWeight::get().reads(1));
+                Self::do_on_idle(current_tick, &mut meter);
+            }
 
             meter.consumed()
         }
@@ -1412,11 +1351,29 @@ pub mod pallet {
         /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
             let default_replication_target = T::DefaultReplicationTarget::get();
+            let max_replication_target = T::MaxReplicationTarget::get();
+            let storage_request_ttl = T::StorageRequestTtl::get();
+            let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
+            let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();
+            let checkpoint_challenge_period =
+                <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::get_checkpoint_challenge_period();
 
             assert!(
                 default_replication_target > T::ReplicationTargetType::zero(),
                 "Default replication target cannot be zero."
             );
+
+            assert!(
+                max_replication_target >= default_replication_target,
+                "Max replication target cannot be smaller than default replication target."
+            );
+
+            assert!(tick_range_to_max_threshold < storage_request_ttl.into(), "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring.");
+
+            // The checkpoint challenge period already greater than the longest challenge period a BSP can have + the tolerance,
+            // so by ensuring the minimum wait for stop storing is greater than the checkpoint challenge period, we ensure that
+            // the BSP cannot immediately stop storing a file it has lost when receiving a challenge for it.
+            assert!(min_wait_for_stop_storing > checkpoint_challenge_period, "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be smaller than the checkpoint challenge period.");
         }
     }
 }

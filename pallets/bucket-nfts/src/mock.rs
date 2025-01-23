@@ -146,7 +146,7 @@ impl pallet_balances::Config for Test {
 pub(crate) type ThresholdType = u32;
 
 parameter_types! {
-    pub const MinWaitForStopStoring: BlockNumber = 1;
+    pub const MinWaitForStopStoring: BlockNumber = 30;
     pub const StorageRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
@@ -235,6 +235,10 @@ impl ProofsDealerInterface for MockProofsDealer {
     fn get_current_tick() -> Self::TickNumber {
         System::block_number()
     }
+
+    fn get_checkpoint_challenge_period() -> Self::TickNumber {
+        5
+    }
 }
 
 impl pallet_file_system::Config for Test {
@@ -264,7 +268,7 @@ impl pallet_file_system::Config for Test {
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
     type MaxDataServerMultiAddresses = ConstU32<5>;
-    type MaxExpiredItemsInBlock = ConstU32<100u32>;
+    type MaxExpiredItemsInTick = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
@@ -273,6 +277,8 @@ impl pallet_file_system::Config for Test {
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
     type DefaultReplicationTarget = ConstU32<2>;
+    type MaxReplicationTarget = ConstU32<6>;
+    type TickRangeToMaximumThreshold = ConstU64<30>;
 }
 
 pub struct MockUserSolvency;

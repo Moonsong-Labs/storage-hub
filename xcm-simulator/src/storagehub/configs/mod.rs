@@ -843,10 +843,10 @@ where
 }
 
 type ThresholdType = u32;
+pub type ReplicationTargetType = u32;
 
 parameter_types! {
     pub const MaxBatchConfirmStorageRequests: u32 = 10;
-    pub const MinWaitForStopStoring: BlockNumber = 10;
     pub const StorageRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
@@ -881,15 +881,21 @@ impl pallet_file_system::Config for Runtime {
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
-    type MaxExpiredItemsInBlock = ConstU32<100>;
-    type StorageRequestTtl = ConstU32<40>;
+    type MaxExpiredItemsInTick = ConstU32<100>;
+    type StorageRequestTtl = runtime_params::dynamic_params::runtime_config::StorageRequestTtl;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
-    type MinWaitForStopStoring = MinWaitForStopStoring;
+    type MinWaitForStopStoring =
+        runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
-    type DefaultReplicationTarget = ConstU32<2>;
+    type DefaultReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
+    type MaxReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
+    type TickRangeToMaximumThreshold =
+        runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

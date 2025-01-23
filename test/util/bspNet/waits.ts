@@ -204,12 +204,15 @@ export const waitForBspStored = async (
  *
  * @throws Will throw an error if the expected extrinsic is not found.
  */
-export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForBspStoredWithoutSealing = async (
+  api: ApiPromise,
+  options?: { checkQuantity?: number; timeout?: number }
+) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "bspConfirmStoring",
-    checkQuantity,
-    timeout: 10000
+    checkQuantity: options?.checkQuantity,
+    timeout: options?.timeout ?? 10_000
   });
 };
 

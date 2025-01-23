@@ -6,11 +6,11 @@ use crate::{
         FileKeyWithProof, FileLocation, MoveBucketRequestMetadata, PeerIds,
         PendingFileDeletionRequest, PendingFileDeletionRequestTtl, ProviderIdFor, StorageData,
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, ValuePropId,
+        StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
     },
-    Config, Error, Event, MaxReplicationTarget, NextAvailableStorageRequestExpirationBlock,
-    PendingBucketsToMove, PendingMoveBucketRequests, PendingStopStoringRequests,
-    StorageRequestExpirations, StorageRequests, TickRangeToMaximumThreshold,
+    Config, Error, Event, NextAvailableStorageRequestExpirationTick, PendingBucketsToMove,
+    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
+    StorageRequests,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -22,7 +22,6 @@ use frame_support::{
     },
     weights::Weight,
 };
-use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_proofs_dealer::types::CustomChallenge;
 use pallet_proofs_dealer::{PriorityChallengesQueue, ProviderToProofSubmissionRecord};
 use pallet_storage_providers::types::{Bucket, StorageProviderId, ValueProposition};
@@ -34,8 +33,8 @@ use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     bounded_vec,
-    traits::{BlakeTwo256, Get, Zero},
-    BoundedVec, DispatchError,
+    traits::{BlakeTwo256, Get},
+    BoundedVec,
 };
 use sp_std::cmp::max;
 use sp_trie::CompactProof;
@@ -1244,10 +1243,10 @@ mod request_move_bucket {
 
                 // Check move bucket request expires after MoveBucketRequestTtl
                 let move_bucket_request_ttl: u32 = <Test as Config>::MoveBucketRequestTtl::get();
-                let move_bucket_request_ttl: BlockNumber = move_bucket_request_ttl.into();
-                let expiration = move_bucket_request_ttl + System::block_number();
+                let move_bucket_request_ttl: TickNumber<Test> = move_bucket_request_ttl.into();
+                let expiration = move_bucket_request_ttl + <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-                // Move block number to expiration
+                // Move tick number to expiration
                 roll_to(expiration);
 
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
@@ -1941,7 +1940,9 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        Some(MaxReplicationTarget::<Test>::get() + 1)
+                        Some(
+                            <<Test as crate::Config>::MaxReplicationTarget as Get<u32>>::get() + 1
+                        )
                     ),
                     Error::<Test>::ReplicationTargetExceedsMaximum
                 );
@@ -2027,12 +2028,13 @@ mod request_storage {
                 let owner_initial_balance =
                     <Test as file_system::Config>::Currency::free_balance(&owner_account_id);
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2059,7 +2061,7 @@ mod request_storage {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -2070,7 +2072,7 @@ mod request_storage {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request
+                        expires_at: next_expiration_tick_storage_request
                     })
                 );
 
@@ -2099,7 +2101,7 @@ mod request_storage {
                         fingerprint,
                         size: 4,
                         peer_ids,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     }
                     .into(),
                 );
@@ -2138,7 +2140,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(MaxReplicationTarget::<Test>::get())
+                    Some(<Test as crate::Config>::MaxReplicationTarget::get())
                 ),);
             });
         }
@@ -2167,12 +2169,13 @@ mod request_storage {
                     value_prop_id,
                 );
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2199,7 +2202,7 @@ mod request_storage {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id: bucket_id.clone(),
                         location: file_1_location.clone(),
@@ -2210,7 +2213,7 @@ mod request_storage {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request
+                        expires_at: next_expiration_tick_storage_request
                     })
                 );
 
@@ -2238,7 +2241,7 @@ mod request_storage {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: file_2_location.clone(),
@@ -2249,7 +2252,7 @@ mod request_storage {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request
+                        expires_at: next_expiration_tick_storage_request
                     })
                 );
 
@@ -2263,7 +2266,7 @@ mod request_storage {
                         fingerprint,
                         size,
                         peer_ids,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     }
                     .into(),
                 );
@@ -2333,12 +2336,13 @@ mod request_storage {
                     value_prop_id,
                 );
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2365,7 +2369,7 @@ mod request_storage {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -2376,7 +2380,7 @@ mod request_storage {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request
+                        expires_at: next_expiration_tick_storage_request
                     })
                 );
 
@@ -2389,33 +2393,33 @@ mod request_storage {
                 );
 
                 let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
-                let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
-                let expiration_block = System::block_number() + storage_request_ttl;
+                let storage_request_ttl: TickNumber<Test> = storage_request_ttl.into();
+                let expiration_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick() + storage_request_ttl;
 
-                // Assert that the next expiration block number is the storage request ttl since a single storage request was made
+                // Assert that the next expiration tick number is the storage request ttl since a single storage request was made
                 assert_eq!(
-                    file_system::NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    expiration_block
+                    file_system::NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    expiration_tick
                 );
 
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
-                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_tick),
                     vec![file_key]
                 );
 
-                roll_to(expiration_block + 1);
+                roll_to(expiration_tick + 1);
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
-                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_tick),
                     vec![]
                 );
             });
         }
 
         #[test]
-        fn request_storage_expiration_current_block_increment_success() {
+        fn request_storage_expiration_current_tick_increment_success() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner = RuntimeOrigin::signed(owner_account_id.clone());
@@ -2444,16 +2448,15 @@ mod request_storage {
                     fingerprint,
                 );
 
-                let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
-                let expected_expiration_block_number: BlockNumberFor<Test> =
-                    expected_expiration_block_number.into();
+                let expected_expiration_tick_number: u32 = StorageRequestTtl::<Test>::get();
+                let expected_expiration_tick_number: TickNumber<Test> =
+                    expected_expiration_tick_number.into();
 
                 // Append storage request expiration to the list at `StorageRequestTtl`
-                let max_expired_items_in_block: u32 =
-                    <Test as Config>::MaxExpiredItemsInBlock::get();
-                for _ in 0..max_expired_items_in_block {
+                let max_expired_items_in_tick: u32 = <Test as Config>::MaxExpiredItemsInTick::get();
+                for _ in 0..max_expired_items_in_tick {
                     assert_ok!(StorageRequestExpirations::<Test>::try_append(
-                        expected_expiration_block_number,
+                        expected_expiration_tick_number,
                         file_key
                     ));
                 }
@@ -2473,19 +2476,19 @@ mod request_storage {
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
                     file_system::StorageRequestExpirations::<Test>::get(
-                        expected_expiration_block_number
+                        expected_expiration_tick_number
                     )
                     .len(),
-                    max_expired_items_in_block as usize
+                    max_expired_items_in_tick as usize
                 );
 
-                // Go to block number after which the storage request expirations should be removed
-                roll_to(expected_expiration_block_number);
+                // Go to tick number after which the storage request expirations should be removed
+                roll_to(expected_expiration_tick_number);
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
                     file_system::StorageRequestExpirations::<Test>::get(
-                        expected_expiration_block_number
+                        expected_expiration_tick_number
                     ),
                     vec![]
                 );
@@ -2516,7 +2519,7 @@ mod request_storage {
 
                 // Append storage request expiration to the list at `StorageRequestTtl`
                 let max_storage_request_expiry: u32 =
-                    <Test as Config>::MaxExpiredItemsInBlock::get();
+                    <Test as Config>::MaxExpiredItemsInTick::get();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -2526,13 +2529,13 @@ mod request_storage {
                     fingerprint,
                 );
 
-                let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
-                let expected_expiration_block_number: BlockNumberFor<Test> =
-                    expected_expiration_block_number.into();
+                let expected_expiration_tick_number: u32 = StorageRequestTtl::<Test>::get();
+                let expected_expiration_tick_number: TickNumber<Test> =
+                    expected_expiration_tick_number.into();
 
                 for _ in 0..max_storage_request_expiry {
                     assert_ok!(StorageRequestExpirations::<Test>::try_append(
-                        expected_expiration_block_number,
+                        expected_expiration_tick_number,
                         file_key
                     ));
                 }
@@ -2549,20 +2552,20 @@ mod request_storage {
                     None
                 ));
 
-                let expected_expiration_block_number: u32 = StorageRequestTtl::<Test>::get();
-                let expected_expiration_block_number: BlockNumberFor<Test> =
-                    expected_expiration_block_number.into();
+                let expected_expiration_tick_number: u32 = StorageRequestTtl::<Test>::get();
+                let expected_expiration_tick_number: TickNumber<Test> =
+                    expected_expiration_tick_number.into();
 
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
                     file_system::StorageRequestExpirations::<Test>::get(
-                        expected_expiration_block_number
+                        expected_expiration_tick_number
                     )
                     .len(),
                     max_storage_request_expiry as usize
                 );
 
-                let used_weight = FileSystem::on_idle(System::block_number(), Weight::zero());
+                let used_weight = FileSystem::on_idle(<<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(), Weight::zero());
 
                 // Assert that the weight used is zero
                 assert_eq!(used_weight, Weight::zero());
@@ -2570,27 +2573,27 @@ mod request_storage {
                 // Assert that the storage request expirations storage is at max capacity
                 assert_eq!(
                     file_system::StorageRequestExpirations::<Test>::get(
-                        expected_expiration_block_number
+                        expected_expiration_tick_number
                     )
                     .len(),
                     max_storage_request_expiry as usize
                 );
 
-                // Go to block number after which the storage request expirations should be removed
-                roll_to(expected_expiration_block_number + 1);
+                // Go to tick number after which the storage request expirations should be removed
+                roll_to(expected_expiration_tick_number + 1);
 
                 // Assert that the storage request expiration was removed from the list at `StorageRequestTtl`
                 assert_eq!(
                     file_system::StorageRequestExpirations::<Test>::get(
-                        expected_expiration_block_number
+                        expected_expiration_tick_number
                     ),
                     vec![]
                 );
 
-                // Assert that the `NextExpirationInsertionBlockNumber` storage is set to the next block number
+                // Assert that the `NextExpirationInsertionTickNumber` storage is set to the next tick number
                 assert_eq!(
-                    file_system::NextStartingBlockToCleanUp::<Test>::get(),
-                    System::block_number() + 1
+                    file_system::NextStartingTickToCleanUp::<Test>::get(),
+                    <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick() + 1
                 );
             });
         }
@@ -2708,12 +2711,12 @@ mod revoke_storage_request {
                 );
 
                 let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
-                let storage_request_ttl: BlockNumberFor<Test> = storage_request_ttl.into();
-                let expiration_block = System::block_number() + storage_request_ttl;
+                let storage_request_ttl: TickNumber<Test> = storage_request_ttl.into();
+                let expiration_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick() + storage_request_ttl;
 
                 // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
                 assert_eq!(
-                    file_system::StorageRequestExpirations::<Test>::get(expiration_block),
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_tick),
                     vec![file_key]
                 );
 
@@ -2759,7 +2762,7 @@ mod revoke_storage_request {
                     None
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account.clone(),
@@ -2768,6 +2771,21 @@ mod revoke_storage_request {
                     4,
                     fingerprint,
                 );
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -2833,6 +2851,21 @@ mod revoke_storage_request {
                     4,
                     fingerprint,
                 );
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -3429,12 +3462,13 @@ mod msp_respond_storage_request {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch a storage request.
@@ -3460,9 +3494,24 @@ mod msp_respond_storage_request {
 
                 // Ensure the storage request expiration item was added to the expiration queue
                 assert!(file_system::StorageRequestExpirations::<Test>::get(
-                    next_expiration_block_storage_request
+                    next_expiration_tick_storage_request
                 )
                 .contains(&file_key));
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch the BSP volunteer
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -3513,7 +3562,7 @@ mod msp_respond_storage_request {
 
                 // And the storage request expiration item should have been removed from the queue
                 assert!(!file_system::StorageRequestExpirations::<Test>::get(
-                    next_expiration_block_storage_request
+                    next_expiration_tick_storage_request
                 )
                 .contains(&file_key));
             });
@@ -3725,7 +3774,7 @@ mod msp_respond_storage_request {
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -3794,7 +3843,7 @@ mod msp_respond_storage_request {
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -4027,7 +4076,7 @@ mod msp_respond_storage_request {
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -4100,7 +4149,7 @@ mod msp_respond_storage_request {
                 StorageRequests::<Test>::insert(
                     file_key,
                     StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -4265,6 +4314,21 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
 
@@ -4380,12 +4444,8 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                // Set very high block range to maximum threshold.
-                assert_ok!(FileSystem::set_global_parameters(
-                    RuntimeOrigin::root(),
-                    None,
-                    Some(u32::MAX.into())
-                ));
+                // Set very high global weight so BSP does not have priority
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX);
 
                 // Dispatch BSP volunteer.
                 assert_noop!(
@@ -4444,12 +4504,8 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                // Set a somewhat high block range to maximum threshold.
-                assert_ok!(FileSystem::set_global_parameters(
-                    RuntimeOrigin::root(),
-                    None,
-                    Some(40)
-                ));
+                // Set a high enough global weight so BSP does not have priority
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX);
 
                 // Calculate how many ticks until this BSP can volunteer for the file.
                 let current_tick = ProofsDealer::get_current_tick();
@@ -4576,7 +4632,22 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
@@ -4608,7 +4679,7 @@ mod bsp_volunteer {
         }
 
         #[test]
-        fn bsp_volunteer_succeeds_after_waiting_enough_blocks_without_spam() {
+        fn bsp_volunteer_succeeds_after_waiting_enough_ticks_without_spam() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
@@ -4656,12 +4727,8 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                // Set a somewhat high block range to maximum threshold.
-                assert_ok!(FileSystem::set_global_parameters(
-                    RuntimeOrigin::root(),
-                    None,
-                    Some(40)
-                ));
+                // Set a high enough global weight so BSP does not have priority
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX / 2);
 
                 // Calculate how many ticks until this BSP can volunteer for the file.
                 let current_tick = ProofsDealer::get_current_tick();
@@ -4948,6 +5015,21 @@ mod bsp_confirm {
                     Some((msp_id, true))
                 );
 
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_bob_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_bob_signed.clone(), file_key,));
 
@@ -5133,22 +5215,6 @@ mod bsp_confirm {
                 // Setup BSP
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let default_replication_target: u32 =
-                    <Test as Config>::DefaultReplicationTarget::get();
-
-                // Set global parameters
-                FileSystem::set_global_parameters(
-                    RuntimeOrigin::root(),
-                    Some(default_replication_target + 1),
-                    Some(1),
-                )
-                .unwrap();
-                assert_eq!(
-                    MaxReplicationTarget::<Test>::get(),
-                    default_replication_target + 1
-                );
-                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
-
                 // Create file keys with different file locations
                 let location =
                     FileLocation::<Test>::try_from(format!("test-location").into_bytes()).unwrap();
@@ -5172,6 +5238,22 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
+                // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
 
                 // Pre-confirm one file key to simulate a previous BSP already confirming it
@@ -5244,6 +5326,21 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
@@ -5305,12 +5402,13 @@ mod bsp_confirm {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -5334,6 +5432,21 @@ mod bsp_confirm {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -5360,7 +5473,7 @@ mod bsp_confirm {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -5371,7 +5484,7 @@ mod bsp_confirm {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -5475,22 +5588,6 @@ mod bsp_confirm {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
-                let default_replication_target: u32 =
-                    <Test as Config>::DefaultReplicationTarget::get();
-
-                // Set global parameters
-                FileSystem::set_global_parameters(
-                    RuntimeOrigin::root(),
-                    Some(default_replication_target + 1),
-                    Some(1),
-                )
-                .unwrap();
-                assert_eq!(
-                    MaxReplicationTarget::<Test>::get(),
-                    default_replication_target + 1
-                );
-                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
-
                 // Create file keys with different file locations
                 let locations: Vec<FileLocation<Test>> = (0..3)
                     .map(|i| {
@@ -5498,7 +5595,7 @@ mod bsp_confirm {
                     })
                     .collect();
 
-                // Issue storage requests and volunteer for each
+                // Issue storage requests for each file
                 let file_keys: Vec<_> = locations
                     .iter()
                     .map(|location| {
@@ -5522,10 +5619,35 @@ mod bsp_confirm {
                             fingerprint,
                         );
 
-                        assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
                         file_key
                     })
                     .collect();
+
+                // Calculate in how many ticks the BSP can volunteer for the files
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = file_keys
+                    .iter()
+                    .map(|&file_key| {
+                        FileSystem::query_earliest_file_volunteer_tick(
+                            Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                            file_key,
+                        )
+                        .unwrap()
+                    })
+                    .max()
+                    .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
+                // Volunteer for all files
+                for &file_key in &file_keys {
+                    assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                }
 
                 // Pre-confirm one file key to simulate a previous BSP already confirming it
                 let pre_confirmed_file_key = file_keys[0];
@@ -5608,12 +5730,13 @@ mod bsp_confirm {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -5637,6 +5760,21 @@ mod bsp_confirm {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -5663,7 +5801,7 @@ mod bsp_confirm {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -5674,7 +5812,7 @@ mod bsp_confirm {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -5741,16 +5879,16 @@ mod bsp_confirm {
                 assert!(amount_provided_payment_stream.is_some());
                 assert_eq!(amount_provided_payment_stream.unwrap(), size);
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch another storage request.
-                let current_block = System::block_number();
                 let new_size = 8;
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -5771,8 +5909,21 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                // Advance a few blocks and dispatch BSP volunteer.
-                roll_to(current_block + 10);
+                // Advance a few ticks and dispatch BSP volunteer.
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
                 // Dispatch BSP confirm storing.
@@ -5794,7 +5945,7 @@ mod bsp_confirm {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: current_block,
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -5805,7 +5956,7 @@ mod bsp_confirm {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -5882,13 +6033,14 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                // Compute the expiration block for the storage request to issue.
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+                // Compute the expiration tick for the storage request to issue.
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch the storage request.
@@ -5905,9 +6057,24 @@ mod bsp_confirm {
 
                 // Ensure the storage request expiration item was added to the expiration queue.
                 assert!(StorageRequestExpirations::<Test>::get(
-                    next_expiration_block_storage_request
+                    next_expiration_tick_storage_request
                 )
                 .contains(&file_key));
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch the BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -5951,7 +6118,7 @@ mod bsp_confirm {
 
                 // Assert that the storage request was removed from the expiration queue
                 assert!(!StorageRequestExpirations::<Test>::get(
-                    next_expiration_block_storage_request
+                    next_expiration_tick_storage_request
                 )
                 .contains(&file_key));
 
@@ -6099,12 +6266,13 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -6127,7 +6295,22 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -6161,7 +6344,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6172,7 +6355,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -6228,12 +6411,13 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -6257,6 +6441,21 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -6290,7 +6489,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6301,7 +6500,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -6360,12 +6559,13 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -6388,7 +6588,22 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -6422,7 +6637,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6433,7 +6648,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -6507,12 +6722,13 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -6535,7 +6751,22 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -6569,7 +6800,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6580,7 +6811,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -6614,7 +6845,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6625,7 +6856,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -6688,12 +6919,13 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -6717,6 +6949,21 @@ mod bsp_stop_storing {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -6750,7 +6997,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6761,7 +7008,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -6801,7 +7048,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6812,7 +7059,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -6856,12 +7103,13 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -6884,7 +7132,22 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -6918,7 +7181,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6929,7 +7192,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -6980,7 +7243,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -6991,7 +7254,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -7078,8 +7341,9 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-				let current_block_plus_storage_request_ttl = frame_system::Pallet::<Test>::block_number() + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(NextAvailableStorageRequestExpirationBlock::<Test>::get(), current_block_plus_storage_request_ttl);
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+				let current_tick_plus_storage_request_ttl = current_tick + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_tick_storage_request = max(NextAvailableStorageRequestExpirationTick::<Test>::get(), current_tick_plus_storage_request_ttl);
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7102,13 +7366,28 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
 					&bsp_id,
 					&owner_account_id
 				).is_none());
+
+				// Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -7158,7 +7437,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -7169,7 +7448,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-						expires_at: next_expiration_block_storage_request,
+						expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -7203,7 +7482,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -7214,7 +7493,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-						expires_at: next_expiration_block_storage_request,
+						expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -7295,8 +7574,9 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-				let current_block_plus_storage_request_ttl = frame_system::Pallet::<Test>::block_number() + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-				let next_expiration_block_storage_request = max(NextAvailableStorageRequestExpirationBlock::<Test>::get(), current_block_plus_storage_request_ttl);
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+				let current_tick_plus_storage_request_ttl = current_tick + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+				let next_expiration_tick_storage_request = max(NextAvailableStorageRequestExpirationTick::<Test>::get(), current_tick_plus_storage_request_ttl);
 
                 // Dispatch first storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7337,7 +7617,7 @@ mod bsp_stop_storing {
 					second_file_fingerprint,
 				);
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(
@@ -7347,6 +7627,25 @@ mod bsp_stop_storing {
 					)
 					.is_none()
 				);
+
+				// Calculate in how many ticks the BSP can volunteer for the files
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = max(FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    first_file_key,
+                )
+                .unwrap(), FileSystem::query_earliest_file_volunteer_tick(
+					Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+					second_file_key,
+				)
+				.unwrap());
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteers.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), first_file_key,));
@@ -7420,7 +7719,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(first_file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: first_file_location.clone(),
@@ -7431,13 +7730,13 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-						expires_at: next_expiration_block_storage_request,
+						expires_at: next_expiration_tick_storage_request,
                     })
                 );
 				assert_eq!(
                     file_system::StorageRequests::<Test>::get(second_file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: second_file_location.clone(),
@@ -7448,7 +7747,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-						expires_at: next_expiration_block_storage_request,
+						expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -7474,7 +7773,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(first_file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: first_file_location.clone(),
@@ -7485,7 +7784,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-						expires_at: next_expiration_block_storage_request,
+						expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -7572,12 +7871,13 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -7600,7 +7900,22 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
@@ -7650,7 +7965,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -7661,7 +7976,7 @@ mod bsp_stop_storing {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -7700,12 +8015,13 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -7755,7 +8071,7 @@ mod bsp_stop_storing {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -7766,7 +8082,7 @@ mod bsp_stop_storing {
                         bsps_required: current_bsps_required.checked_add(1).unwrap(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -7819,12 +8135,13 @@ mod bsp_stop_storing {
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch BSP stop storing.
@@ -7857,7 +8174,7 @@ mod bsp_stop_storing {
                         bsps_required: 1,
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -7871,81 +8188,6 @@ mod bsp_stop_storing {
                     }
                     .into(),
                 );
-            });
-        }
-    }
-}
-
-mod set_global_parameters_tests {
-    use super::*;
-
-    mod failure {
-        use super::*;
-        #[test]
-        fn set_global_parameters_non_root_signer_fail() {
-            new_test_ext().execute_with(|| {
-                let non_root = Keyring::Bob.to_account_id();
-                let non_root_signed = RuntimeOrigin::signed(non_root.clone());
-
-                // Assert BadOrigin error when non-root account tries to set the threshold
-                assert_noop!(
-                    FileSystem::set_global_parameters(non_root_signed, None, None),
-                    DispatchError::BadOrigin
-                );
-            });
-        }
-
-        #[test]
-        fn set_global_parameters_0_value() {
-            new_test_ext().execute_with(|| {
-                assert_noop!(
-                    FileSystem::set_global_parameters(RuntimeOrigin::root(), Some(0), None),
-                    Error::<Test>::ReplicationTargetCannotBeZero
-                );
-
-                assert_noop!(
-                    FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(0)),
-                    Error::<Test>::TickRangeToMaximumThresholdCannotBeZero
-                );
-            });
-        }
-
-        #[test]
-        fn set_global_parameters_max_replication_target_less_than_default() {
-            new_test_ext().execute_with(|| {
-                let default_replication_target: u32 =
-                    <Test as Config>::DefaultReplicationTarget::get();
-
-                assert_noop!(
-                    FileSystem::set_global_parameters(
-                        RuntimeOrigin::root(),
-                        Some(default_replication_target - 1),
-                        None
-                    ),
-                    Error::<Test>::MaxReplicationTargetSmallerThanDefault
-                );
-            });
-        }
-    }
-
-    mod success {
-        use super::*;
-
-        #[test]
-        fn set_global_parameters() {
-            new_test_ext().execute_with(|| {
-                let root = RuntimeOrigin::root();
-
-                // Set the global parameters
-                assert_ok!(FileSystem::set_global_parameters(
-                    root.clone(),
-                    Some(3),
-                    Some(10)
-                ));
-
-                // Assert that the global parameters were set correctly
-                assert_eq!(MaxReplicationTarget::<Test>::get(), 3);
-                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 10);
             });
         }
     }
@@ -8302,13 +8544,13 @@ mod delete_file_and_pending_deletions_tests {
 
                 let pending_file_deletion_request_ttl: u32 =
                     PendingFileDeletionRequestTtl::<Test>::get();
-                let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
+                let pending_file_deletion_request_ttl: TickNumber<Test> =
                     pending_file_deletion_request_ttl.into();
-                let expiration_block = pending_file_deletion_request_ttl + System::block_number();
+                let expiration_tick = pending_file_deletion_request_ttl + <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
                     vec![FileDeletionRequestExpirationItem {
                         user: owner_account_id.clone(),
                         file_key,
@@ -8320,12 +8562,12 @@ mod delete_file_and_pending_deletions_tests {
                 // Delete the bucket manually
                 pallet_storage_providers::Buckets::<Test>::remove(bucket_id);
 
-                // Roll past the expiration block
+                // Roll past the expiration tick
                 roll_to(pending_file_deletion_request_ttl + 1);
 
                 // Item expiration should be removed
                 assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
                     vec![]
                 );
 
@@ -8578,13 +8820,13 @@ mod delete_file_and_pending_deletions_tests {
 
                 let pending_file_deletion_request_ttl: u32 =
                     PendingFileDeletionRequestTtl::<Test>::get();
-                let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
+                let pending_file_deletion_request_ttl: TickNumber<Test> =
                     pending_file_deletion_request_ttl.into();
-                let expiration_block = pending_file_deletion_request_ttl + System::block_number();
+                let expiration_tick = pending_file_deletion_request_ttl + <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
                     vec![FileDeletionRequestExpirationItem {
                         user: owner_account_id.clone(),
                         file_key,
@@ -8593,12 +8835,12 @@ mod delete_file_and_pending_deletions_tests {
                     }]
                 );
 
-                // Roll past the expiration block
+                // Roll past the expiration tick
                 roll_to(pending_file_deletion_request_ttl + 1);
 
                 // Item expiration should be removed
                 assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
                     vec![]
                 );
 
@@ -8989,13 +9231,13 @@ mod delete_file_and_pending_deletions_tests {
 
                 let pending_file_deletion_request_ttl: u32 =
                     PendingFileDeletionRequestTtl::<Test>::get();
-                let pending_file_deletion_request_ttl: BlockNumberFor<Test> =
+                let pending_file_deletion_request_ttl: TickNumber<Test> =
                     pending_file_deletion_request_ttl.into();
-                let expiration_block = pending_file_deletion_request_ttl + System::block_number();
+                let expiration_tick = pending_file_deletion_request_ttl + <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
                 // Assert that the pending file deletion request was added to storage
                 assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
                     vec![FileDeletionRequestExpirationItem {
                         user: owner_account_id.clone(),
                         file_key,
@@ -9006,12 +9248,12 @@ mod delete_file_and_pending_deletions_tests {
 
                 pallet_payment_streams::UsersWithoutFunds::<Test>::insert(owner_account_id.clone(), System::block_number());
 
-                // Roll past the expiration block
+                // Roll past the expiration tick
                 roll_to(pending_file_deletion_request_ttl + 1);
 
                 // Item expiration should be removed
                 assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_block),
+                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
                     vec![]
                 );
 
@@ -9097,10 +9339,10 @@ mod compute_threshold {
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
-                let block_number =
+                let tick_number =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
-                assert!(frame_system::Pallet::<Test>::block_number() <= block_number);
+                assert!(<<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick() <= tick_number);
             });
         }
 
@@ -9158,10 +9400,6 @@ mod compute_threshold {
 
                 let storage_request = file_system::StorageRequests::<Test>::get(file_key).unwrap();
 
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
-
-                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
-
                 let (threshold_to_succeed, slope) =
                     FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
                         .unwrap();
@@ -9172,25 +9410,16 @@ mod compute_threshold {
                 );
                 assert!(slope > 0);
 
-                let block_number =
+                let volunteer_tick_number_only_bsp =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
-                // BSP should be able to volunteer immediately for the storage request since the TickRangeToMaximumThreshold is 1
-                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
-
-                let starting_bsp_weight: pallet_storage_providers::types::ReputationWeightType<
-                    Test,
-                > = <Test as pallet_storage_providers::Config>::StartingReputationWeight::get();
-
-                // Simulate there being many BSPs in the network with high reputation weight
-                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(
-                    1000u32.saturating_mul(starting_bsp_weight.into()),
+                // BSP should be able to volunteer either this block or in the future.
+                assert!(
+                    volunteer_tick_number_only_bsp >= frame_system::Pallet::<Test>::block_number()
                 );
 
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1000000000))
-                    .unwrap();
-
-                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1000000000);
+                // Simulate there being many BSPs in the network with high reputation weight
+                pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(u32::MAX);
 
                 let (threshold_to_succeed, slope) =
                     FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
@@ -9202,11 +9431,16 @@ mod compute_threshold {
                 );
                 assert!(slope > 0);
 
-                let block_number =
+                let volunteer_tick_number_many_bsps =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP can only volunteer after some number of blocks have passed.
-                assert!(block_number > frame_system::Pallet::<Test>::block_number());
+                assert!(
+                    volunteer_tick_number_many_bsps > frame_system::Pallet::<Test>::block_number()
+                );
+
+                // BSP can volunteer further in the future compared to when it was the only BSP.
+                assert!(volunteer_tick_number_many_bsps > volunteer_tick_number_only_bsp);
 
                 // Set reputation weight of BSP to max
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -9230,11 +9464,11 @@ mod compute_threshold {
                 );
                 assert!(slope > 0);
 
-                let block_number =
+                let tick_number =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
-                // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
-                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
+                // BSP should be able to volunteer immediately for the storage request since its reputation weight is so high.
+                assert_eq!(tick_number, <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick());
             });
         }
 
@@ -9302,21 +9536,17 @@ mod compute_threshold {
                     }
                 });
 
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
-
-                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
-
                 let (threshold_to_succeed, slope) =
                     FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
 
                 assert_eq!(threshold_to_succeed, ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let block_number =
+                let tick_number =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
-                assert_eq!(block_number, frame_system::Pallet::<Test>::block_number());
+                assert_eq!(tick_number, <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick());
             });
         }
         #[test]
@@ -9332,39 +9562,11 @@ mod compute_threshold {
                 // Set global_weight to zero
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(0);
 
-                let requested_at = frame_system::Pallet::<Test>::block_number();
+                let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
                 let result = FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at);
 
                 assert_noop!(result, Error::<Test>::NoGlobalReputationWeightSet);
-            });
-        }
-
-        #[test]
-        fn compute_threshold_to_succeed_with_one_block_range() {
-            new_test_ext().execute_with(|| {
-                // Setup: create a BSP
-                let bsp_account_id = Keyring::Bob.to_account_id();
-                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
-                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
-
-                // Set TickRangeToMaximumThreshold to one
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(1)).unwrap();
-
-                assert_eq!(TickRangeToMaximumThreshold::<Test>::get(), 1);
-
-                let requested_at = frame_system::Pallet::<Test>::block_number();
-
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at).unwrap();
-
-                // Check that base_slope is set to one due to division by zero handling
-                assert!(slope > ThresholdType::<Test>::zero());
-
-                // Ensure threshold_to_succeed is greater than zero
-                assert!(threshold_to_succeed > ThresholdType::<Test>::zero());
             });
         }
 
@@ -9381,12 +9583,6 @@ mod compute_threshold {
                 // Set global_weight to 1
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
 
-                // Set ReplicationTarget to 2
-                MaxReplicationTarget::<Test>::set(2);
-
-                // Set TickRangeToMaximumThreshold to a non-zero value
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
-
                 // Set max reputation weight
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
                     match bsp {
@@ -9399,7 +9595,7 @@ mod compute_threshold {
                     }
                 });
 
-                let requested_at = frame_system::Pallet::<Test>::block_number();
+                let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
                 let (_threshold_to_succeed, slope) =
                     FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at).unwrap();
@@ -9428,13 +9624,7 @@ mod compute_threshold {
                 // Set global_weight to the sum of the two BSPs reputation weights
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(10 + 1);
 
-                // Set ReplicationTarget to 2
-                MaxReplicationTarget::<Test>::set(2);
-
-                // Set TickRangeToMaximumThreshold to a non-zero value
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
-
-                let requested_at = frame_system::Pallet::<Test>::block_number();
+                let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
                 let (_threshold_to_succeed, slope_bsp_1) =
                     FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
@@ -9480,13 +9670,7 @@ mod compute_threshold {
                 // Set global_weight to the sum of the weights of the BSPs
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1 + 1);
 
-                // Set ReplicationTarget to 2
-                MaxReplicationTarget::<Test>::set(2);
-
-                // Set TickRangeToMaximumThreshold to a non-zero value
-                FileSystem::set_global_parameters(RuntimeOrigin::root(), None, Some(100)).unwrap();
-
-                let requested_at = frame_system::Pallet::<Test>::block_number();
+                let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
                 let (_threshold_to_succeed, slope_bsp_1) =
                     FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
@@ -9535,12 +9719,13 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -9564,6 +9749,21 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -9590,7 +9790,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -9601,7 +9801,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -9738,12 +9938,13 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -9765,6 +9966,21 @@ mod stop_storing_for_insolvent_user {
                     size,
                     fingerprint,
                 );
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -9815,7 +10031,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -9826,7 +10042,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -9912,12 +10128,13 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -9941,6 +10158,21 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -9967,7 +10199,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -9978,7 +10210,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -10157,12 +10389,13 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -10186,6 +10419,21 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -10212,7 +10460,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -10223,7 +10471,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
@@ -10377,12 +10625,13 @@ mod stop_storing_for_insolvent_user {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let current_block_plus_storage_request_ttl =
-                    frame_system::Pallet::<Test>::block_number()
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
                         + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
-                let next_expiration_block_storage_request = max(
-                    NextAvailableStorageRequestExpirationBlock::<Test>::get(),
-                    current_block_plus_storage_request_ttl,
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
                 );
 
                 // Dispatch storage request.
@@ -10406,6 +10655,21 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
@@ -10432,7 +10696,7 @@ mod stop_storing_for_insolvent_user {
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
                     Some(StorageRequestMetadata {
-                        requested_at: System::block_number(),
+                        requested_at: current_tick,
                         owner: owner_account_id.clone(),
                         bucket_id,
                         location: location.clone(),
@@ -10443,7 +10707,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
-                        expires_at: next_expiration_block_storage_request,
+                        expires_at: next_expiration_tick_storage_request,
                     })
                 );
 
