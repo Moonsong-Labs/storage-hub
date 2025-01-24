@@ -1380,6 +1380,46 @@ where
                 Error::<T>::InsufficientAvailableCapacity
             );
 
+            // Check if a payment stream between the user and provider already exists.
+            // If it does not, create it. If it does, update it.
+            match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
+				Some(previous_amount_provided) => {
+					// Update the payment stream.
+                    let new_amount_provided = &previous_amount_provided.checked_add(&storage_request_metadata.size).ok_or(ArithmeticError::Overflow)?;
+					if let Err(_) = <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						new_amount_provided,
+					) {
+                        // Skip file key if we could not successfully update the payment stream
+                        expect_or_err!(
+                            skipped_file_keys.try_insert(file_key),
+                            "Failed to push file key to skipped_file_keys",
+                            Error::<T>::TooManyStorageRequestResponses,
+                            result
+                        );
+                        continue;
+                    }
+				},
+				None => {
+					// Create the payment stream.
+					if let Err(_) = <T::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						&storage_request_metadata.size,
+					) {
+                        // Skip file key if we could not successfully create the payment stream
+                        expect_or_err!(
+                            skipped_file_keys.try_insert(file_key),
+                            "Failed to push file key to skipped_file_keys",
+                            Error::<T>::TooManyStorageRequestResponses,
+                            result
+                        );
+                        continue;
+                    }
+				}
+			}
+
             // Increment the number of BSPs confirmed.
             match storage_request_metadata
                 .bsps_confirmed
@@ -1418,28 +1458,6 @@ where
                 &bsp_id,
                 storage_request_metadata.size,
             )?;
-
-            // Check if a payment stream between the user and provider already exists.
-            // If it does not, create it. If it does, update it.
-            match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
-				Some(previous_amount_provided) => {
-					// Update the payment stream.
-                    let new_amount_provided = &previous_amount_provided.checked_add(&storage_request_metadata.size).ok_or(ArithmeticError::Overflow)?;
-					<T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-						&bsp_id,
-						&storage_request_metadata.owner,
-						new_amount_provided,
-					)?;
-				},
-				None => {
-					// Create the payment stream.
-					<T::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
-						&bsp_id,
-						&storage_request_metadata.owner,
-						&storage_request_metadata.size,
-					)?;
-				}
-			}
 
             // Get the file metadata to insert into the Provider's trie under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
