@@ -51,10 +51,11 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
-        FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
-        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
-        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForNewMsp, NewStorageRequest, SlashableProvider,
+        SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -1007,6 +1008,21 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_file_deletion_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
+                    // We check right away if we can process the request so we don't waste time.
+                    self.check_pending_forest_root_writes();
+                    match callback.send(Ok(())) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1498,6 +1514,32 @@ where
                                 })
                             }
                         }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::FileDeletionRequest {
+                                user,
+                                file_key,
+                                file_size,
+                                bucket_id,
+                                msp_id,
+                                proof_of_inclusion,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_msp_id == &msp_id {
+                                    self.emit(FileDeletionRequest {
+                                        user,
+                                        file_key: file_key.into(),
+                                        file_size: file_size.into(),
+                                        bucket_id,
+                                        msp_id,
+                                        proof_of_inclusion,
+                                    });
+                                }
+                            }
+                        }
                         // Ignore all other events.
                         _ => {}
                     }
@@ -1593,6 +1635,33 @@ where
                                         bsp_id,
                                         file_key: file_key.into(),
                                         new_root,
+                                    });
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
+                                msp_id,
+                                user,
+                                file_key,
+                                file_size,
+                                bucket_id,
+                                proof_of_inclusion,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                // Only emit the event if the MSP provided a proof of inclusion, meaning the file key was deleted from the bucket's forest.
+                                if managed_msp_id == &msp_id && proof_of_inclusion {
+                                    self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
+                                        user,
+                                        file_key: file_key.into(),
+                                        file_size: file_size.into(),
+                                        bucket_id,
+                                        msp_id,
+                                        proof_of_inclusion,
                                     });
                                 }
                             }

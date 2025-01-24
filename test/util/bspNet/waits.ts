@@ -371,6 +371,31 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
 };
 
 /**
+ * Waits for a MSP to submit a proof for a pending file deletion request.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a short period to allow the node to react.
+ * 2. Checks for the presence of a 'pendingFileDeletionRequestSubmitProof' extrinsic in the transaction pool.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @returns A Promise that resolves when a MSP has submitted a proof for a pending file deletion request.
+ *
+ * @throws Will throw an error if the expected extrinsic is not found.
+ */
+export const waitForMspPendingFileDeletionRequestSubmitProof = async (
+  api: ApiPromise,
+  checkQuantity?: number
+) => {
+  await waitForTxInPool(api, {
+    module: "fileSystem",
+    method: "pendingFileDeletionRequestSubmitProof",
+    checkQuantity,
+    timeout: 10000
+  });
+};
+
+/**
  * Waits for a block where the given address has no pending extrinsics.
  *
  * This can be used to wait for a block where it is safe to send a transaction signed by the given address,

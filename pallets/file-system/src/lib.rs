@@ -592,16 +592,18 @@ pub mod pallet {
         FileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a proof has been submitted for a pending file deletion request.
         ProofSubmittedForPendingFileDeletionRequest {
-            msp_id: ProviderIdFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
+            msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
@@ -1287,6 +1289,7 @@ pub mod pallet {
             Self::deposit_event(Event::FileDeletionRequest {
                 user: who,
                 file_key,
+                file_size: size,
                 bucket_id,
                 msp_id,
                 proof_of_inclusion,
@@ -1317,10 +1320,11 @@ pub mod pallet {
             )?;
 
             Self::deposit_event(Event::ProofSubmittedForPendingFileDeletionRequest {
-                msp_id,
                 user,
                 file_key,
+                file_size,
                 bucket_id,
+                msp_id,
                 proof_of_inclusion,
             });
 

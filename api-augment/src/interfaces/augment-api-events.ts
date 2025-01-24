@@ -531,15 +531,17 @@ declare module "@polkadot/api-base/types/events" {
         [
           user: AccountId32,
           fileKey: H256,
+          fileSize: u64,
           bucketId: H256,
-          mspId: Option<H256>,
+          mspId: H256,
           proofOfInclusion: bool
         ],
         {
           user: AccountId32;
           fileKey: H256;
+          fileSize: u64;
           bucketId: H256;
-          mspId: Option<H256>;
+          mspId: H256;
           proofOfInclusion: bool;
         }
       >;
@@ -668,8 +670,22 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<
         ApiType,
-        [mspId: H256, user: AccountId32, fileKey: H256, bucketId: H256, proofOfInclusion: bool],
-        { mspId: H256; user: AccountId32; fileKey: H256; bucketId: H256; proofOfInclusion: bool }
+        [
+          user: AccountId32,
+          fileKey: H256,
+          fileSize: u64,
+          bucketId: H256,
+          mspId: H256,
+          proofOfInclusion: bool
+        ],
+        {
+          user: AccountId32;
+          fileKey: H256;
+          fileSize: u64;
+          bucketId: H256;
+          mspId: H256;
+          proofOfInclusion: bool;
+        }
       >;
       /**
        * Notifies that a SP has stopped storing a file because its owner has become insolvent.

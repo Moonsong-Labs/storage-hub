@@ -8521,8 +8521,9 @@ mod delete_file_and_pending_deletions_tests {
                     Event::FileDeletionRequest {
                         user: owner_account_id.clone(),
                         file_key,
+                        file_size: size,
                         bucket_id,
-                        msp_id: Some(msp_id),
+                        msp_id,
                         proof_of_inclusion: false,
                     }
                         .into(),
@@ -8707,8 +8708,9 @@ mod delete_file_and_pending_deletions_tests {
                     Event::FileDeletionRequest {
                         user: owner_account_id.clone(),
                         file_key,
+                        file_size: size,
                         bucket_id,
-                        msp_id: Some(msp_id),
+                        msp_id,
                         proof_of_inclusion: true,
                     }
                     .into(),
@@ -8794,8 +8796,9 @@ mod delete_file_and_pending_deletions_tests {
                     Event::FileDeletionRequest {
                         user: owner_account_id.clone(),
                         file_key,
+                        file_size: size,
                         bucket_id,
-                        msp_id: Some(msp_id),
+                        msp_id,
                         proof_of_inclusion: false,
                     }
                         .into(),
@@ -9001,6 +9004,7 @@ mod delete_file_and_pending_deletions_tests {
                         msp_id,
                         user: owner_account_id.clone(),
                         file_key,
+                        file_size: size,
                         bucket_id,
                         proof_of_inclusion: true,
                     }
@@ -9096,6 +9100,7 @@ mod delete_file_and_pending_deletions_tests {
                         msp_id,
                         user: owner_account_id.clone(),
                         file_key,
+                        file_size: size,
                         bucket_id,
                         proof_of_inclusion: false,
                     }
@@ -9206,7 +9211,8 @@ mod delete_file_and_pending_deletions_tests {
                         user: owner_account_id.clone(),
                         file_key,
                         bucket_id,
-                        msp_id: Some(msp_id),
+                        file_size: size,
+                        msp_id,
                         proof_of_inclusion: false,
                     }
                         .into(),

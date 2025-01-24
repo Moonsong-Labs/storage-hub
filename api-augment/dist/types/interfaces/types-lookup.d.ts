@@ -1993,16 +1993,18 @@ declare module "@polkadot/types/lookup" {
     readonly asFileDeletionRequest: {
       readonly user: AccountId32;
       readonly fileKey: H256;
+      readonly fileSize: u64;
       readonly bucketId: H256;
-      readonly mspId: Option<H256>;
+      readonly mspId: H256;
       readonly proofOfInclusion: bool;
     } & Struct;
     readonly isProofSubmittedForPendingFileDeletionRequest: boolean;
     readonly asProofSubmittedForPendingFileDeletionRequest: {
-      readonly mspId: H256;
       readonly user: AccountId32;
       readonly fileKey: H256;
+      readonly fileSize: u64;
       readonly bucketId: H256;
+      readonly mspId: H256;
       readonly proofOfInclusion: bool;
     } & Struct;
     readonly isBspChallengeCycleInitialised: boolean;

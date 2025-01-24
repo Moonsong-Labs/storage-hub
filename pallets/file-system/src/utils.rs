@@ -2009,7 +2009,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
-    ) -> Result<(bool, Option<ProviderIdFor<T>>), DispatchError> {
+    ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
             sender.clone(),
@@ -2033,10 +2033,9 @@ where
 
         let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
-        ensure!(
-            msp_id.is_some(),
-            Error::<T>::OperationNotAllowedWhileBucketIsNotStoredByMsp
-        );
+        // The bucket must be stored by an MSP before deletion to maintain consistency between the bucket root and runtime state.
+        // This is required because the runtime needs the MSP to provide a proof of inclusion to apply a remove delta for an existing file key.
+        let msp_id = msp_id.ok_or(Error::<T>::OperationNotAllowedWhileBucketIsNotStoredByMsp)?;
 
         let file_key_included = match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.
@@ -2065,10 +2064,8 @@ where
                 )
                 .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
-                // If the bucket is stored by a MSP, remove the MSP from the privileged providers list.
-                if let Some(msp_id) = msp_id {
-                    <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
-                }
+                // Remove the MSP from the privileged providers list.
+                <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
 
                 // Queue the expiration item.
                 let expiration_item = ExpirationItem::PendingFileDeletionRequests(
@@ -2120,12 +2117,10 @@ where
                 // Decrease size of the bucket.
                 <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
 
-                // If the bucket has a MSP, decrease its used capacity.
-                if let Some(msp_id) = msp_id {
-                    <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-                        &msp_id, size,
-                    )?;
-                }
+                // Decrease its used capacity.
+                <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                    &msp_id, size,
+                )?;
 
                 // Initiate the priority challenge to remove the file key from all the providers.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(

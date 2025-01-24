@@ -1571,15 +1571,17 @@ export default {
       FileDeletionRequest: {
         user: "AccountId32",
         fileKey: "H256",
+        fileSize: "u64",
         bucketId: "H256",
-        mspId: "Option<H256>",
+        mspId: "H256",
         proofOfInclusion: "bool"
       },
       ProofSubmittedForPendingFileDeletionRequest: {
-        mspId: "H256",
         user: "AccountId32",
         fileKey: "H256",
+        fileSize: "u64",
         bucketId: "H256",
+        mspId: "H256",
         proofOfInclusion: "bool"
       },
       BspChallengeCycleInitialised: {
