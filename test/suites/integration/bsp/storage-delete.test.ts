@@ -75,7 +75,7 @@ describeBspNet(
       });
 
       // Add the file key to the exclude list
-      bspApi.rpc.storagehubclient.addToExcludeList(fileKey);
+      bspApi.rpc.storagehubclient.addToExcludeList(fileKey, "file");
 
       // Request to stop storing a file with Dummy BSP
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [

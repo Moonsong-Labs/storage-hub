@@ -622,13 +622,6 @@ declare module "@polkadot/api-base/types/submittable" {
         (fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
-      setGlobalParameters: AugmentedSubmittable<
-        (
-          newMaxReplicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
-          tickRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
-        ) => SubmittableExtrinsic<ApiType>,
-        [Option<u32>, Option<u32>]
-      >;
       /**
        * Executed by a SP to stop storing a file from an insolvent user.
        *

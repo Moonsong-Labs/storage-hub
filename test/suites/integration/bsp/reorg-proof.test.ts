@@ -31,9 +31,17 @@ describeBspNet(
     });
 
     it("Set tick range to maximum threshold to immediately accept volunteers", async () => {
-      // Set global parameters
+      const tickRangeToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 1]
+        }
+      };
       const { extSuccess } = await userApi.block.seal({
-        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))]
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+          )
+        ]
       });
 
       strictEqual(extSuccess, true, "Extrinsic should be successful");

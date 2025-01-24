@@ -8,7 +8,7 @@ use crate::{schema::paymentstream, DbConnection};
 #[diesel(table_name = paymentstream)]
 pub struct PaymentStream {
     // postgres attributed ID for this payment stream
-    pub id: i32,
+    pub id: i64,
     // Account ID of the payer
     pub account: String,
     // ID of the payee (msp or bsp)
@@ -57,7 +57,7 @@ impl PaymentStream {
 
     pub async fn update_total_amount<'a>(
         conn: &mut DbConnection<'a>,
-        ps_id: i32,
+        ps_id: i64,
         new_total_amount: BigDecimal,
         last_tick_charged: i64,
         charged_at_tick: i64,

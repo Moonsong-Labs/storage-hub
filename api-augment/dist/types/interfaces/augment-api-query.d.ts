@@ -306,7 +306,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * A map of blocks to expired file deletion requests.
+       * A map of ticks to expired file deletion requests.
        **/
       fileDeletionRequestExpirations: AugmentedQuery<
         ApiType,
@@ -317,12 +317,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
-       * Maximum number replication target allowed to be set for a storage request to be fulfilled.
-       **/
-      maxReplicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
-      /**
-       * A map of blocks to expired move bucket requests.
+       * A map of ticks to expired move bucket requests.
        **/
       moveBucketRequestExpirations: AugmentedQuery<
         ApiType,
@@ -331,46 +326,46 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
-       * A pointer to the earliest available block to insert a new file deletion request expiration.
+       * A pointer to the earliest available tick to insert a new file deletion request expiration.
        *
-       * This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
+       * This should always be greater or equal than current tick + [`Config::PendingFileDeletionRequestTtl`].
        **/
-      nextAvailableFileDeletionRequestExpirationBlock: AugmentedQuery<
+      nextAvailableFileDeletionRequestExpirationTick: AugmentedQuery<
         ApiType,
         () => Observable<u32>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the earliest available block to insert a new move bucket request expiration.
+       * A pointer to the earliest available tick to insert a new move bucket request expiration.
        *
-       * This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
+       * This should always be greater or equal than current tick + [`Config::MoveBucketRequestTtl`].
        **/
-      nextAvailableMoveBucketRequestExpirationBlock: AugmentedQuery<
+      nextAvailableMoveBucketRequestExpirationTick: AugmentedQuery<
         ApiType,
         () => Observable<u32>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the earliest available block to insert a new storage request expiration.
+       * A pointer to the earliest available tick to insert a new storage request expiration.
        *
-       * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+       * This should always be greater or equal than current tick + [`Config::StorageRequestTtl`].
        **/
-      nextAvailableStorageRequestExpirationBlock: AugmentedQuery<
+      nextAvailableStorageRequestExpirationTick: AugmentedQuery<
         ApiType,
         () => Observable<u32>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the starting block to clean up expired items.
+       * A pointer to the starting tick to clean up expired items.
        *
-       * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-       * attempt to advance this block pointer as close to or up to the current block number. This
+       * If this tick is behind the current tick number, the cleanup algorithm in `on_idle` will
+       * attempt to advance this tick pointer as close to or up to the current tick number. This
        * will execute provided that there is enough remaining weight to do so.
        **/
-      nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      nextStartingTickToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * Bookkeeping of buckets that are pending to be moved to a new MSP.
@@ -445,7 +440,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * A map of blocks to expired storage requests.
+       * A map of ticks to expired storage requests.
        **/
       storageRequestExpirations: AugmentedQuery<
         ApiType,
@@ -461,11 +456,6 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
-      /**
-       * Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-       **/
-      tickRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query
        **/

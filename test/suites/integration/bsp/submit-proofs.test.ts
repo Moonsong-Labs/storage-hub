@@ -4,7 +4,7 @@ import {
   bspThreeKey,
   describeBspNet,
   shUser,
-  sleep,
+  waitFor,
   type EnrichedBspApi,
   type FileMetadata
 } from "../../../util";
@@ -311,16 +311,17 @@ describeBspNet(
       // Finally, advance two challenge ticks ahead.
       await userApi.block.skipTo(nextChallengeTick);
 
-      // Wait for BSP to submit proof.
-      await sleep(1000);
-
-      // There should be at least one pending submit proof transaction.
       const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
         checkTxPool: true
       });
-      assert(submitProofsPending.length > 0);
+
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        checkTxPool: true
+      });
 
       // Seal block and check that the transaction was successful.
       await userApi.block.seal();
@@ -355,16 +356,14 @@ describeBspNet(
       await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
-      // And give some time to process the latest blocks.
-      await sleep(1000);
-
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
         async () => {
           await userApi.assert.extrinsicPresent({
             module: "fileSystem",
             method: "bspVolunteer",
-            checkTxPool: true
+            checkTxPool: true,
+            timeout: 2000
           });
         },
         /No matching extrinsic found for fileSystem\.bspVolunteer/,
@@ -374,10 +373,7 @@ describeBspNet(
 
     it("BSP-Two still correctly responds to challenges with same forest root", async () => {
       // Advance some blocks to allow the BSP to process the challenges and submit proofs.
-      for (let i = 0; i < 20; i++) {
-        await userApi.block.seal();
-        await sleep(500);
-      }
+      await userApi.block.skip(20);
 
       // Advance to next challenge tick for BSP-Two.
       // First we get the last tick for which the BSP submitted a proof.
@@ -591,7 +587,11 @@ describeBspNet(
       }
 
       // Wait for BSP to generate the proof and advance one more block.
-      await sleep(500);
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
       await userApi.block.seal();
 
       // Check for a ProofAccepted event.
@@ -648,7 +648,11 @@ describeBspNet(
         }
 
         // Wait for BSP to generate the proof and advance one more block.
-        await sleep(500);
+        await userApi.assert.extrinsicPresent({
+          module: "proofsDealer",
+          method: "submitProof",
+          checkTxPool: true
+        });
         await userApi.block.seal();
       }
 
@@ -707,10 +711,13 @@ describeBspNet(
         "The root should have been updated on chain"
       );
 
-      // Wait for BSP to update his local forest root.
-      await sleep(500);
+      await waitFor({
+        lambda: async () => (await bspApi.rpc.storagehubclient.getForestRoot(null)).isSome
+      });
+
       // Check that the runtime root matches the forest root of the BSP.
       const forestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+
       strictEqual(
         bspMetadataAfterDeletionBlob.root.toString(),
         forestRoot.toString(),

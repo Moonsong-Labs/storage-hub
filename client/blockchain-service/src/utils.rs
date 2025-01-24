@@ -208,11 +208,11 @@ where
                 last_block_added = parent_block_info;
             }
 
-            // The first element in the route is the last block processed, which will also be the
+            // The first element in the route is the last best block processed, which will also be the
             // `pivot`, so it will be ignored when processing the `tree_route`.
             route.push(last_best_block.clone().into());
 
-            // Revert the route so that it is in ascending order of blocks.
+            // Revert the route so that it is in ascending order of blocks, from the last best block processed up to the new imported best block.
             route.reverse();
 
             // Build the tree route.

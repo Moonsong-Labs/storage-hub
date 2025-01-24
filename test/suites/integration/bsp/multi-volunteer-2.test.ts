@@ -31,8 +31,15 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 2", ({ before, it, createUse
     });
 
     // 1 block to maxthreshold (i.e. instant acceptance)
+    const tickToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 1]
+      }
+    };
     await api.block.seal({
-      calls: [api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1))]
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter))
+      ]
     });
 
     await api.docker.onboardBsp({

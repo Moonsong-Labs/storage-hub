@@ -9,7 +9,6 @@ use frame_support::{
         Get,
     },
 };
-use frame_system::pallet_prelude::BlockNumberFor;
 use num_bigint::BigUint;
 use sp_runtime::{
     traits::{
@@ -29,7 +28,7 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_file_metadata::ChunkId;
 use shp_traits::{
     CommitRevealRandomnessInterface, MutateBucketsInterface, MutateStorageProvidersInterface,
-    PaymentStreamsInterface, ReadBucketsInterface, ReadProvidersInterface,
+    PaymentStreamsInterface, ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
     ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
@@ -45,10 +44,9 @@ use crate::{
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
-    BucketsWithStorageRequests, Error, Event, HoldReason, MaxReplicationTarget, Pallet,
-    PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
-    TickRangeToMaximumThreshold,
+    BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingBucketsToMove,
+    PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
+    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -641,7 +639,7 @@ where
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
         }
 
-        if replication_target > MaxReplicationTarget::<T>::get().into() {
+        if replication_target > T::MaxReplicationTarget::get() {
             return Err(Error::<T>::ReplicationTargetExceedsMaximum)?;
         }
 
@@ -665,7 +663,7 @@ where
 
         // Enqueue an expiration item for the storage request to clean it up if it expires without being fulfilled or cancelled.
         let expiration_item = ExpirationItem::StorageRequest(file_key);
-        let expiration_block = Self::enqueue_expiration_item(expiration_item)?;
+        let expiration_tick = Self::enqueue_expiration_item(expiration_item)?;
 
         // Create the storage request's metadata.
         let zero = ReplicationTargetType::<T>::zero();
@@ -681,7 +679,7 @@ where
             bsps_required: replication_target,
             bsps_confirmed: zero,
             bsps_volunteered: zero,
-            expires_at: expiration_block,
+            expires_at: expiration_tick,
         };
 
         // Hold the deposit from the user
@@ -705,22 +703,13 @@ where
             fingerprint,
             size,
             peer_ids: user_peer_ids.unwrap_or_default(),
-            expires_at: expiration_block,
+            expires_at: expiration_tick,
         });
 
         Ok(file_key)
     }
 
     /// Accepts or rejects batches of storage requests assumed to be grouped by bucket.
-    ///
-    /// This is using a best-effort strategy to process as many file keys as possible, returning
-    /// the ones that were accepted, rejected, or failed to be processed.
-    ///
-    /// File keys that are not part of the bucket they belong to will be skipped (failed).
-    ///
-    /// All file keys will be processed (unless there are duplicates, they are simply skipped) and any errors
-    /// while processing them will be marked as a failed key and continue processing the rest. It is up to the
-    /// caller to verify the final result and apply only the file keys that have been successfully accepted.
     pub(crate) fn do_msp_respond_storage_request(
         sender: T::AccountId,
         storage_request_msp_response: StorageRequestMspResponse<T>,
@@ -820,7 +809,8 @@ where
     /// 1. Verify the non-inclusion proof.
     /// 2. For each file key: Verify and process the acceptance. If any operation fails during the processing of a file key,
     /// the entire function will fail and no changes will be applied.
-    /// 3. If all file keys are successfully processed, apply the delta with all the accepted keys to the root of the bucket.
+    /// 3. If all file keys are successfully processed, apply the delta with all the accepted keys to the root of the bucket which are part of the set of
+    /// non-inclusion file keys (since it is possible that the file key was already stored by the MSP).
     /// 4. If any step fails, the function will return an error and no changes will be made to the storage state.
     fn do_msp_accept_storage_request(
         msp_id: ProviderIdFor<T>,
@@ -849,7 +839,7 @@ where
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
                 &bucket_root,
                 file_keys.as_slice(),
-                &accepted_file_keys.non_inclusion_forest_proof,
+                &accepted_file_keys.forest_proof,
             )?;
 
         let mut accepted_files_metadata = Vec::new();
@@ -859,51 +849,44 @@ where
                 <StorageRequests<T>>::get(&file_key_with_proof.file_key)
                     .ok_or(Error::<T>::StorageRequestNotFound)?;
 
-            // Ensure that the file key IS NOT part of the bucket's forest.
-            if proven_keys.contains(&file_key_with_proof.file_key) {
-                return Err(Error::<T>::ExpectedNonInclusionProof.into());
-            }
-
             // Check that the storage request bucket ID matches the provided bucket ID.
-            if storage_request_metadata.bucket_id != bucket_id {
-                return Err(Error::<T>::InvalidBucketIdFileKeyPair.into());
-            }
+            ensure!(
+                storage_request_metadata.bucket_id == bucket_id,
+                Error::<T>::InvalidBucketIdFileKeyPair
+            );
 
             // Check that the MSP is the one storing the bucket.
-            if !<T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
-                &msp_id,
-                &storage_request_metadata.bucket_id,
-            ) {
-                return Err(Error::<T>::MspNotStoringBucket.into());
-            }
+            ensure!(
+                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
+                    &msp_id,
+                    &storage_request_metadata.bucket_id
+                ),
+                Error::<T>::MspNotStoringBucket
+            );
 
             // Check that the storage request has a MSP.
-            if storage_request_metadata.msp.is_none() {
-                return Err(Error::<T>::RequestWithoutMsp.into());
-            }
+            ensure!(
+                storage_request_metadata.msp.is_some(),
+                Error::<T>::RequestWithoutMsp
+            );
 
             let (request_msp_id, confirm_status) = storage_request_metadata.msp.unwrap();
 
             // Check that the sender corresponds to the MSP in the storage request and that it hasn't yet confirmed storing the file.
-            if request_msp_id != msp_id {
-                return Err(Error::<T>::NotSelectedMsp.into());
-            }
+            ensure!(request_msp_id == msp_id, Error::<T>::NotSelectedMsp);
 
-            if confirm_status {
-                return Err(Error::<T>::MspAlreadyConfirmed.into());
-            }
+            // Check that the MSP hasn't already confirmed storing the file.
+            ensure!(!confirm_status, Error::<T>::MspAlreadyConfirmed);
 
             // Check that the MSP still has enough available capacity to store the file.
-            if <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
-                < storage_request_metadata.size
-            {
-                return Err(Error::<T>::InsufficientAvailableCapacity.into());
-            }
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
+                    >= storage_request_metadata.size,
+                Error::<T>::InsufficientAvailableCapacity
+            );
 
             // Get the file metadata to insert into the bucket under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
-
-            accepted_files_metadata.push(file_metadata);
 
             let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 msp_id,
@@ -911,32 +894,39 @@ where
                 &storage_request_metadata,
             );
 
-            // Check that the key proof is valid.
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
-                &file_key_with_proof.file_key,
-                &chunk_challenges,
-                &file_key_with_proof.proof,
-            )?;
+            // Only check the key proof, increase the bucket size and capacity used if the file key is not in the forest proof, and
+            // add the file metadata to the `accepted_files_metadata` since all keys in this array will be added to the bucket forest via an apply delta.
+            // This can happen if the storage request was issued again by the user and the MSP has already stored the file.
+            if !proven_keys.contains(&file_key_with_proof.file_key) {
+                accepted_files_metadata.push((file_metadata, file_key_with_proof));
 
-            // Increase size of the bucket.
-            <T::Providers as MutateBucketsInterface>::increase_bucket_size(
-                &storage_request_metadata.bucket_id,
-                storage_request_metadata.size,
-            )?;
+                // Check that the key proof is valid.
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
+                    &file_key_with_proof.file_key,
+                    &chunk_challenges,
+                    &file_key_with_proof.proof,
+                )?;
 
-            // Increase the used capacity of the MSP
-            // This should not fail since we checked that the MSP has enough available capacity to store the file.
-            expect_or_err!(
-                <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
-                    &msp_id,
+                // Increase size of the bucket.
+                <T::Providers as MutateBucketsInterface>::increase_bucket_size(
+                    &storage_request_metadata.bucket_id,
                     storage_request_metadata.size,
-                ),
-                "Failed to increase capacity used for MSP",
-                Error::<T>::TooManyStorageRequestResponses,
-                result
-            );
+                )?;
 
-            // Notify that the storage request has been accepted by an MSP.
+                // Increase the used capacity of the MSP
+                // This should not fail since we checked that the MSP has enough available capacity to store the file.
+                expect_or_err!(
+                    <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
+                        &msp_id,
+                        storage_request_metadata.size,
+                    ),
+                    "Failed to increase capacity used for MSP",
+                    Error::<T>::TooManyStorageRequestResponses,
+                    result
+                );
+            }
+
+            // Notify that the storage request has been accepted by the MSP.
             Self::deposit_event(Event::MspAcceptedStorageRequest {
                 file_key: file_key_with_proof.file_key,
             });
@@ -944,8 +934,8 @@ where
             // Check if all BSPs have confirmed storing the file.
             if storage_request_metadata.bsps_confirmed == storage_request_metadata.bsps_required {
                 // Remove the storage request from the expiration queue.
-                let expiration_block = storage_request_metadata.expires_at;
-                <StorageRequestExpirations<T>>::mutate(expiration_block, |expiration_items| {
+                let expiration_tick = storage_request_metadata.expires_at;
+                <StorageRequestExpirations<T>>::mutate(expiration_tick, |expiration_items| {
                     expiration_items.retain(|item| item != &file_key_with_proof.file_key);
                 });
 
@@ -992,6 +982,11 @@ where
             }
         }
 
+        // If there are no mutations to apply, return the current root of the bucket.
+        if accepted_files_metadata.is_empty() {
+            return Ok(bucket_root);
+        }
+
         // Get the current root of the bucket where the file will be stored.
         let bucket_root = expect_or_err!(
             <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id),
@@ -1005,7 +1000,6 @@ where
                 &bucket_root,
                 accepted_files_metadata
                     .iter()
-                    .zip(accepted_file_keys.file_keys_and_proofs)
                     .map(|(file_metadata, file_key_with_proof)| {
                         (
                             file_key_with_proof.file_key,
@@ -1328,8 +1322,8 @@ where
                     .unwrap_or(true)
             {
                 // Remove the storage request from the expiration queue.
-                let expiration_block = storage_request_metadata.expires_at;
-                <StorageRequestExpirations<T>>::mutate(expiration_block, |expiration_items| {
+                let expiration_tick = storage_request_metadata.expires_at;
+                <StorageRequestExpirations<T>>::mutate(expiration_tick, |expiration_items| {
                     expiration_items.retain(|item| item != &file_key);
                 });
 
@@ -1525,8 +1519,8 @@ where
         );
 
         // Remove the storage request from the expiration queue.
-        let expiration_block = storage_request_metadata.expires_at;
-        <StorageRequestExpirations<T>>::mutate(expiration_block, |expiration_items| {
+        let expiration_tick = storage_request_metadata.expires_at;
+        <StorageRequestExpirations<T>>::mutate(expiration_tick, |expiration_items| {
             expiration_items.retain(|item| item != &file_key);
         });
 
@@ -1716,7 +1710,7 @@ where
             &bsp_id,
             &file_key,
             PendingStopStoringRequest {
-                tick_when_requested: frame_system::Pallet::<T>::block_number(),
+                tick_when_requested: <T::ProofDealer as ProofsDealerInterface>::get_current_tick(),
                 file_owner: owner,
                 file_size: size,
             },
@@ -1743,7 +1737,7 @@ where
 
         // Get the block when the pending stop storing request of the BSP for the file key was opened.
         let PendingStopStoringRequest {
-            tick_when_requested: block_when_opened,
+            tick_when_requested,
             file_size,
             file_owner,
         } = <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
@@ -1751,8 +1745,8 @@ where
 
         // Check that enough time has passed since the pending stop storing request was opened.
         ensure!(
-            frame_system::Pallet::<T>::block_number()
-                >= block_when_opened.saturating_add(T::MinWaitForStopStoring::get()),
+            <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::get_current_tick()
+                >= tick_when_requested.saturating_add(T::MinWaitForStopStoring::get()),
             Error::<T>::MinWaitForStopStoringNotReached
         );
 
@@ -2276,18 +2270,18 @@ where
         T::Nfts::create_collection(&owner, &owner, &config)
     }
 
-    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
+    /// Compute the next tick number to insert an expiring item, and insert it in the corresponding expiration queue.
     ///
-    /// This function attempts to insert a the expiration item at the next available block starting from
-    /// the current next available block.
+    /// This function attempts to insert a the expiration item at the next available tick starting from
+    /// the current next available tick.
     pub(crate) fn enqueue_expiration_item(
         expiration_item: ExpirationItem<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let expiration_block = expiration_item.get_next_expiration_block();
-        let new_expiration_block = expiration_item.try_append(expiration_block)?;
-        expiration_item.set_next_expiration_block(new_expiration_block);
+    ) -> Result<TickNumber<T>, DispatchError> {
+        let expiration_tick = expiration_item.get_next_expiration_tick();
+        let new_expiration_tick = expiration_item.try_append(expiration_tick)?;
+        expiration_item.set_next_expiration_tick(new_expiration_tick);
 
-        Ok(new_expiration_block)
+        Ok(new_expiration_tick)
     }
 
     pub fn compute_file_key(
@@ -2362,7 +2356,7 @@ where
         let threshold_global_starting_point = maximum_threshold
             .checked_div(&global_weight)
             .unwrap_or(T::ThresholdType::one())
-            .checked_mul(&MaxReplicationTarget::<T>::get().into()).unwrap_or({
+            .checked_mul(&T::MaxReplicationTarget::get().into()).unwrap_or({
                 log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
                 maximum_threshold
             })
@@ -2380,7 +2374,7 @@ where
         let base_slope = maximum_threshold
             .saturating_sub(threshold_global_starting_point)
             .checked_div(&T::ThresholdTypeToTickNumber::convert_back(
-                TickRangeToMaximumThreshold::<T>::get(),
+                T::TickRangeToMaximumThreshold::get(),
             ))
             .unwrap_or(T::ThresholdType::one());
 
@@ -2413,18 +2407,17 @@ where
 mod hooks {
     use crate::{
         pallet,
-        types::{MerkleHash, RejectedStorageRequestReason, ReplicationTargetType},
+        types::{MerkleHash, RejectedStorageRequestReason, ReplicationTargetType, TickNumber},
         utils::{
             BucketIdFor, EitherAccountIdOrMspId, FileDeletionRequestExpirationItem, ProviderIdFor,
         },
         weights::WeightInfo,
         BucketsWithStorageRequests, Event, FileDeletionRequestExpirations, HoldReason,
-        MaxReplicationTarget, MoveBucketRequestExpirations, NextStartingBlockToCleanUp, Pallet,
-        PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        MoveBucketRequestExpirations, NextStartingTickToCleanUp, Pallet, PendingBucketsToMove,
+        PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
+        StorageRequestExpirations, StorageRequests,
     };
     use frame_support::traits::{fungible::MutateHold, tokens::Precision};
-    use frame_system::pallet_prelude::BlockNumberFor;
     use sp_runtime::{
         traits::{Get, One},
         Saturating,
@@ -2454,34 +2447,34 @@ mod hooks {
         }
 
         pub(crate) fn do_on_idle(
-            current_block: BlockNumberFor<T>,
+            current_tick: TickNumber<T>,
             mut meter: &mut WeightMeter,
         ) -> &mut WeightMeter {
             let db_weight = T::DbWeight::get();
 
-            // If there's enough weight to get from storage the next block to clean up and possibly update it afterwards, continue
+            // If there's enough weight to get from storage the next tick to clean up and possibly update it afterwards, continue
             if meter.can_consume(T::DbWeight::get().reads_writes(1, 1)) {
-                // Get the next block for which to clean up expired items
-                let mut block_to_clean = NextStartingBlockToCleanUp::<T>::get();
-                let initial_block_to_clean = block_to_clean;
+                // Get the next tick for which to clean up expired items
+                let mut tick_to_clean = NextStartingTickToCleanUp::<T>::get();
+                let initial_tick_to_clean = tick_to_clean;
 
-                // While the block to clean up is less than or equal to the current block, process the expired items for that block.
-                while block_to_clean <= current_block {
-                    // Process the expired items for the current block to cleanup.
+                // While the tick to clean up is less than or equal to the current tick, process the expired items for that tick.
+                while tick_to_clean <= current_tick {
+                    // Process the expired items for the current tick to cleanup.
                     let exited_early =
-                        Self::process_block_expired_items(block_to_clean, &mut meter, &db_weight);
+                        Self::process_tick_expired_items(tick_to_clean, &mut meter, &db_weight);
 
                     // If processing had to exit early because of weight limitations, stop processing expired items.
                     if exited_early {
                         break;
                     }
-                    // Otherwise, increment the block to clean up and continue processing the next block.
-                    block_to_clean.saturating_accrue(BlockNumberFor::<T>::one());
+                    // Otherwise, increment the tick to clean up and continue processing the next tick.
+                    tick_to_clean.saturating_accrue(TickNumber::<T>::one());
                 }
 
-                // Update the next starting block for cleanup
-                if block_to_clean > initial_block_to_clean {
-                    NextStartingBlockToCleanUp::<T>::put(block_to_clean);
+                // Update the next starting tick for cleanup
+                if tick_to_clean > initial_tick_to_clean {
+                    NextStartingTickToCleanUp::<T>::put(tick_to_clean);
                     meter.consume(db_weight.writes(1));
                 }
             }
@@ -2489,11 +2482,11 @@ mod hooks {
             meter
         }
 
-        // This function cleans up the expired items for the current block to cleanup.
-        // It returns a boolean which indicates if the function had to exit early for this block because of weight limitations.
-        // This is to allow the caller to know if it should continue processing the next block or stop.
-        fn process_block_expired_items(
-            block: BlockNumberFor<T>,
+        // This function cleans up the expired items for the current tick to cleanup.
+        // It returns a boolean which indicates if the function had to exit early for this tick because of weight limitations.
+        // This is to allow the caller to know if it should continue processing the next tick or stop.
+        fn process_tick_expired_items(
+            tick: TickNumber<T>,
             meter: &mut WeightMeter,
             db_weight: &RuntimeDbWeight,
         ) -> bool {
@@ -2501,16 +2494,16 @@ mod hooks {
 
             // Expired storage requests clean up section:
             // If there's enough weight to get from storage the maximum amount of BSPs required for a storage request
-            // and get the storage request expirations for the current block, continue.
+            // and get the storage request expirations for the current tick, continue.
             if meter.can_consume(db_weight.reads_writes(2, 1)) {
                 // Get the maximum amount of BSPs required for a storage request.
                 // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
                 // We could increase this potential weight to account for potentially more volunteers.
-                let max_bsp_required: u64 = MaxReplicationTarget::<T>::get().into();
+                let max_bsp_required: u64 = T::MaxReplicationTarget::get().into();
                 meter.consume(db_weight.reads(1));
 
-                // Get the storage request expirations for the current block.
-                let mut expired_storage_requests = StorageRequestExpirations::<T>::take(&block);
+                // Get the storage request expirations for the current tick.
+                let mut expired_storage_requests = StorageRequestExpirations::<T>::take(&tick);
                 meter.consume(db_weight.reads_writes(1, 1));
 
                 // Get the required weight to process an expired storage request in its worst case scenario.
@@ -2543,7 +2536,7 @@ mod hooks {
 
                 // If the expired storage requests were not fully processed, re-insert them into storage.
                 if !expired_storage_requests.is_empty() {
-                    StorageRequestExpirations::<T>::insert(&block, expired_storage_requests);
+                    StorageRequestExpirations::<T>::insert(&tick, expired_storage_requests);
                     meter.consume(db_weight.writes(1));
                 }
             }
@@ -2555,7 +2548,7 @@ mod hooks {
             }
 
             let mut expired_file_deletion_requests =
-                FileDeletionRequestExpirations::<T>::take(&block);
+                FileDeletionRequestExpirations::<T>::take(&tick);
             meter.consume(db_weight.reads_writes(1, 1));
 
             while let Some(expired_file_deletion_request) = expired_file_deletion_requests.pop() {
@@ -2563,16 +2556,16 @@ mod hooks {
             }
 
             if !expired_file_deletion_requests.is_empty() {
-                FileDeletionRequestExpirations::<T>::insert(&block, expired_file_deletion_requests);
+                FileDeletionRequestExpirations::<T>::insert(&tick, expired_file_deletion_requests);
                 meter.consume(db_weight.writes(1));
             }
 
             // Expired move bucket requests clean up section:
             // If there's enough weight to get from storage the expired move bucket requests, continue.
             if meter.can_consume(db_weight.reads_writes(1, 1)) {
-                // Get the expired move bucket requests for the current block.
+                // Get the expired move bucket requests for the current tick.
                 let mut expired_move_bucket_requests =
-                    MoveBucketRequestExpirations::<T>::take(&block);
+                    MoveBucketRequestExpirations::<T>::take(&tick);
                 meter.consume(db_weight.reads_writes(1, 1));
 
                 // Get the required weight to process one expired move bucket request.
@@ -2598,7 +2591,7 @@ mod hooks {
 
                 // If the expired move bucket requests were not fully processed, re-insert them into storage.
                 if !expired_move_bucket_requests.is_empty() {
-                    MoveBucketRequestExpirations::<T>::insert(&block, expired_move_bucket_requests);
+                    MoveBucketRequestExpirations::<T>::insert(&tick, expired_move_bucket_requests);
                     meter.consume(db_weight.writes(1));
                 }
             }

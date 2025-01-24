@@ -234,11 +234,16 @@ export class BspNetTestApi implements AsyncDisposable {
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
-       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @param options - Optional configuration object
+       * @param options.expectedExts - Optional number of expected extrinsics
+       * @param options.timeoutMs - Optional timeout in milliseconds
        * @returns A promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
        */
-      bspStoredInTxPool: (expectedExts?: number) =>
-        Waits.waitForBspStoredWithoutSealing(this._api, expectedExts),
+      bspStoredInTxPool: (options?: { expectedExts?: number; timeoutMs?: number }) =>
+        Waits.waitForBspStoredWithoutSealing(this._api, {
+          checkQuantity: options?.expectedExts,
+          timeout: options?.timeoutMs
+        }),
 
       /**
        * Waits for a Storage Provider to complete storing a file key.
@@ -431,17 +436,34 @@ export class BspNetTestApi implements AsyncDisposable {
       skipToChallengePeriod: (nextChallengeTick: number, provider: string) =>
         BspNetBlock.runToNextChallengePeriodBlock(this._api, nextChallengeTick, provider),
       /**
-       * Skips a specified number of blocks.
-       * Note: This skips too quickly for nodes to BSPs to react. Use skipTo where reaction extrinsics are required.
-       * @param blocksToAdvance - The number of blocks to skip.
+       * Skips a specified number of blocks quickly.
+       * Use this when you just need to advance the chain and don't care about BSP reactions.
+       *
+       * @param input - Either:
+       *   - A number specifying how many blocks to advance, or
+       *   - An options object with:
+       *     @param blocksToAdvance - The number of blocks to skip
+       *     @param paddingMs - Time in milliseconds to wait between blocks
        * @returns A promise that resolves when the specified number of blocks have been skipped.
        */
-      skip: (blocksToAdvance: number) => BspNetBlock.skipBlocks(this._api, blocksToAdvance),
+      skip: (input: number | { blocksToAdvance: number; paddingMs?: number }) => {
+        if (typeof input === "number") {
+          return BspNetBlock.skipBlocks(this._api, input);
+        }
+        return BspNetBlock.skipBlocks(this._api, input.blocksToAdvance, input.paddingMs);
+      },
       /**
-       * Advances the chain to a specific block number.
-       * @param blockNumber - The target block number to advance to.
-       * @param options - Optional parameters for waiting between blocks and watching for BSP proofs.
-       * @returns A promise that resolves when the specified block number is reached.
+       * Advances the chain to a specific block number, allowing time for BSPs to react.
+       * Use this when you need BSPs to have time to submit proofs or other reactions.
+       *
+       * @param blockNumber - The target block number to advance to
+       * @param options - Optional configuration:
+       *   @param options.waitBetweenBlocks - Time to wait between blocks (ms), or true for default wait
+       *   @param options.watchForBspProofs - Array of BSP addresses to watch for proofs from
+       *   @param options.finalised - Whether to finalize the blocks
+       *   @param options.spam - Whether to include spam transactions
+       *   @param options.verbose - Whether to log detailed progress
+       * @returns A promise that resolves when the specified block number is reached
        */
       skipTo: (
         blockNumber: number,

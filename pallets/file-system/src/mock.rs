@@ -579,7 +579,7 @@ impl pallet_bucket_nfts::Config for Test {
 pub(crate) type ThresholdType = u32;
 
 parameter_types! {
-    pub const MinWaitForStopStoring: BlockNumber = 1;
+    pub const MinWaitForStopStoring: BlockNumber = 30;
     pub const StorageRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
@@ -611,7 +611,7 @@ impl crate::Config for Test {
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
     type MaxDataServerMultiAddresses = ConstU32<5>;
-    type MaxExpiredItemsInBlock = ConstU32<100u32>;
+    type MaxExpiredItemsInTick = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
@@ -620,6 +620,8 @@ impl crate::Config for Test {
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
     type DefaultReplicationTarget = ConstU32<2>;
+    type MaxReplicationTarget = ConstU32<6>;
+    type TickRangeToMaximumThreshold = ConstU64<30>;
 }
 
 // If we ever require a better mock that doesn't just return true if it is Eve, change this.
@@ -710,13 +712,6 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
     let mut t = frame_system::GenesisConfig::<Test>::default()
         .build_storage()
         .unwrap();
-
-    crate::GenesisConfig::<Test> {
-        max_replication_target: 10,
-        tick_range_to_maximum_threshold: 1,
-    }
-    .assimilate_storage(&mut t)
-    .unwrap();
 
     pallet_balances::GenesisConfig::<Test> {
         balances: vec![
