@@ -4,8 +4,10 @@ use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
     types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
+    Extensions,
 };
 use log::{debug, error, info};
+use sc_rpc_api::check_if_safe;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use tokio::{fs, fs::create_dir_all, sync::RwLock};
@@ -101,7 +103,6 @@ pub enum GetFileFromFileStorageResult {
 /// Used by the `rpc` macro from `jsonrpsee`
 /// to generate the trait that is actually going to be implemented.
 #[rpc(server, namespace = "storagehubclient")]
-#[async_trait]
 pub trait StorageHubClientApi {
     #[method(name = "loadFileInStorage")]
     async fn load_file_in_storage(
@@ -180,22 +181,22 @@ pub trait StorageHubClientApi {
         file_key: H256,
     ) -> RpcResult<Vec<u8>>;
 
-    #[method(name = "insertBcsvKeys")]
+    #[method(name = "insertBcsvKeys", with_extensions)]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
 
-    #[method(name = "removeBcsvKeys")]
+    #[method(name = "removeBcsvKeys", with_extensions)]
     async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()>;
 
     // Note: This RPC method allow BSP administrator to add a file to the exclude list (and later
     // buckets, users or file fingerprint). This method is required to call before deleting a file to
     // avoid re-uploading a file that has just been deleted.
-    #[method(name = "addToExcludeList")]
+    #[method(name = "addToExcludeList", with_extensions)]
     async fn add_to_exclude_list(&self, file_key: H256, exclude_type: String) -> RpcResult<()>;
 
     // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
     // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
     // list ban users, bucket or even file fingerprint.
-    #[method(name = "removeFromExcludeList")]
+    #[method(name = "removeFromExcludeList", with_extensions)]
     async fn remove_from_exclude_list(&self, file_key: H256, exclude_type: String)
         -> RpcResult<()>;
 }
@@ -706,7 +707,9 @@ where
     // In the case a seed is not provided, we delegate generation and insertion to `sr25519_generate_new`, which
     // internally uses the block number as a seed.
     // See https://paritytech.github.io/polkadot-sdk/master/sc_keystore/struct.LocalKeystore.html#method.sr25519_generate_new
-    async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String> {
+    async fn insert_bcsv_keys(&self, ext: &Extensions, seed: Option<String>) -> RpcResult<String> {
+        check_if_safe(ext)?;
+
         let seed = seed.as_deref();
 
         let new_pub_key = match seed {
@@ -729,7 +732,9 @@ where
     }
 
     // Deletes all files with keys of type BCSV from the Keystore.
-    async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()> {
+    async fn remove_bcsv_keys(&self, ext: &Extensions, keystore_path: String) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
         let pub_keys = self.keystore.keys(BCSV_KEY_TYPE).map_err(into_rpc_error)?;
         let key_path = PathBuf::from(keystore_path);
 
@@ -748,7 +753,14 @@ where
         Ok(())
     }
 
-    async fn add_to_exclude_list(&self, file_key: H256, exclude_type: String) -> RpcResult<()> {
+    async fn add_to_exclude_list(
+        &self,
+        ext: &Extensions,
+        file_key: H256,
+        exclude_type: String,
+    ) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
         let et = ExcludeType::from_str(&exclude_type).map_err(into_rpc_error)?;
 
         let mut write_file_storage = self.file_storage.write().await;
@@ -763,9 +775,12 @@ where
 
     async fn remove_from_exclude_list(
         &self,
+        ext: &Extensions,
         file_key: H256,
         exclude_type: String,
     ) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
         let et = ExcludeType::from_str(&exclude_type).map_err(into_rpc_error)?;
 
         let mut write_file_storage = self.file_storage.write().await;

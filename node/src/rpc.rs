@@ -13,6 +13,7 @@ use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
+use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 use shc_common::types::{
     BackupStorageProviderId, BlockNumber, ChunkId, CustomChallenge, ForestLeaf,
@@ -101,6 +102,9 @@ where
             ManualSeal::new(command_sink).into_rpc(),
         )?;
     };
+
+    // Deny unsafe RPCs.
+    io.extensions_mut().insert(DenyUnsafe::Yes);
 
     Ok(io)
 }
