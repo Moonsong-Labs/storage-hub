@@ -2168,6 +2168,7 @@ declare module "@polkadot/types/lookup" {
       readonly mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
       readonly oldRoot: H256;
       readonly newRoot: H256;
+      readonly eventInfo: Option<Bytes>;
     } & Struct;
     readonly isChallengesTickerSet: boolean;
     readonly asChallengesTickerSet: {

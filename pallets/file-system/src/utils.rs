@@ -1009,6 +1009,7 @@ where
                     .collect::<Vec<_>>()
                     .as_slice(),
                 &accepted_file_keys.forest_proof,
+                Some(bucket_id.encode()),
             )?;
 
         // Update root of the bucket.
@@ -1950,6 +1951,7 @@ where
                     &bucket_root,
                     &[(file_key, TrieRemoveMutation::default().into())],
                     &inclusion_forest_proof,
+                    Some(bucket_id.encode()),
                 )?;
 
             // Update root of the Bucket.
@@ -2110,6 +2112,7 @@ where
                         &bucket_root,
                         &[(file_key, TrieRemoveMutation::default().into())],
                         &inclusion_forest_proof,
+                        Some(bucket_id.encode()),
                     )?;
 
                 // Update root of the Bucket.
@@ -2206,6 +2209,7 @@ where
                     &bucket_root,
                     &[(file_key, TrieRemoveMutation::default().into())],
                     &forest_proof,
+                    Some(bucket_id.encode()),
                 )?;
 
             // Update root of the Bucket.
