@@ -1008,7 +1008,7 @@ where
                     })
                     .collect::<Vec<_>>()
                     .as_slice(),
-                &accepted_file_keys.non_inclusion_forest_proof,
+                &accepted_file_keys.forest_proof,
                 Some(bucket_id.encode()),
             )?;
 
