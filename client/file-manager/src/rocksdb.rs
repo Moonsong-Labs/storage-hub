@@ -20,24 +20,50 @@ use crate::{
     LOG_TARGET,
 };
 use codec::{Decode, Encode};
+use strum::{EnumCount, VariantArray};
 
-const METADATA_COLUMN: u32 = 0;
-const ROOTS_COLUMN: u32 = 1;
-const CHUNKS_COLUMN: u32 = 2;
-const CHUNK_COUNT_COLUMN: u32 = 3;
-const BUCKET_PREFIX_COLUMN: u32 = 4;
-const EXCLUDE_FILE_COLUMN: u32 = 5;
-const EXCLUDE_USER_COLUMN: u32 = 6;
-const EXCLUDE_BUCKET_COLUMN: u32 = 7;
-const EXCLUDE_FINGERPRINT_COLUMN: u32 = 8;
+#[derive(Debug, Clone, Copy, EnumCount, VariantArray)]
+pub enum Column {
+    Metadata,
+    /// Stores keys of 32 bytes representing the final `root` of the file based on the [`FileMetadata::fingerprint`] with values
+    /// being the current `root` of the constructed file trie based on the chunks stored in the [`Column::Chunks`] for that `file_key`.
+    ///
+    /// Used for keeping track of the current root of the file Trie for each `file_key`.
+    Roots,
+    /// Stores keys of 32 bytes representing the `file_key`.
+    ///
+    /// Used for storing the chunks of the file.
+    Chunks,
+    /// Stores keys of 32 bytes representing the `file_key`.
+    ///
+    /// Used for counting the number of chunks currently stored for the `file_key`.
+    ChunkCount,
+    /// Stores keys of 64 bytes representing the concatenation of `bucket_id` and `file_key`.
+    ///
+    /// Used for deleting all files in a bucket efficiently.
+    BucketPrefix,
+    ExcludeFile,
+    ExcludeUser,
+    ExcludeBucket,
+    ExcludeFingerprint,
+}
+
+impl Into<u32> for Column {
+    fn into(self) -> u32 {
+        self as u32
+    }
+}
+
+// Replace NUMBER_OF_COLUMNS definition
+const NUMBER_OF_COLUMNS: u32 = Column::COUNT as u32;
 
 // Helper function to map ExcludeType enum to their matching rocksdb column.
 fn get_exclude_type_db_column(exclude_type: ExcludeType) -> u32 {
     match exclude_type {
-        ExcludeType::File => EXCLUDE_FILE_COLUMN,
-        ExcludeType::User => EXCLUDE_USER_COLUMN,
-        ExcludeType::Bucket => EXCLUDE_BUCKET_COLUMN,
-        ExcludeType::Fingerprint => EXCLUDE_FINGERPRINT_COLUMN,
+        ExcludeType::File => Column::ExcludeFile.into(),
+        ExcludeType::User => Column::ExcludeUser.into(),
+        ExcludeType::Bucket => Column::ExcludeBucket.into(),
+        ExcludeType::Fingerprint => Column::ExcludeFingerprint.into(),
     }
 }
 
@@ -47,7 +73,7 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Databas
     path.push(db_path.as_str());
     path.push("storagehub/file_storage/");
 
-    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(9);
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(NUMBER_OF_COLUMNS);
 
     let path_str = path
         .to_str()
@@ -59,7 +85,8 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Databas
     Ok(db)
 }
 
-/// Storage backend for RocksDB.
+/// Storage backend implementation for RocksDB.
+/// Provides low-level storage operations for the file system.
 pub struct StorageDb<T, DB> {
     pub db: Arc<DB>,
     pub _marker: std::marker::PhantomData<T>,
@@ -71,6 +98,8 @@ where
     DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
+    /// Writes a transaction to the database.
+    /// Returns an error if the write operation fails.
     fn write(&mut self, transaction: DBTransaction) -> Result<(), ErrorT<T>> {
         self.db.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to write to DB: {}", e);
@@ -80,6 +109,8 @@ where
         Ok(())
     }
 
+    /// Reads data from the specified column and key.
+    /// Returns the value if found or None if the key doesn't exist.
     fn read(&self, column: u32, key: &[u8]) -> Result<Option<Vec<u8>>, ErrorT<T>> {
         let value = self.db.get(column, key.as_ref()).map_err(|e| {
             warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
@@ -102,13 +133,16 @@ impl<T, DB> Clone for StorageDb<T, DB> {
 impl<T: TrieLayout + Send + Sync, DB: KeyValueDB> Storage<HashT<T>> for StorageDb<T, DB> {
     fn get(&self, key: &HasherOutT<T>, prefix: Prefix) -> Result<Option<DBValue>, String> {
         let prefixed_key = prefixed_key::<HashT<T>>(key, prefix);
-        self.db.get(CHUNKS_COLUMN, &prefixed_key).map_err(|e| {
-            warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
-            format!("Failed to read from DB: {}", e)
-        })
+        self.db
+            .get(Column::Chunks.into(), &prefixed_key)
+            .map_err(|e| {
+                warn!(target: LOG_TARGET, "Failed to read from DB: {}", e);
+                format!("Failed to read from DB: {}", e)
+            })
     }
 }
 
+/// Converts raw bytes into a [`HasherOutT<T>`].
 fn convert_raw_bytes_to_hasher_out<T>(key: Vec<u8>) -> Result<HasherOutT<T>, ErrorT<T>>
 where
     T: TrieLayout,
@@ -127,6 +161,8 @@ where
     Ok(key)
 }
 
+/// File data trie implementation using RocksDB for persistent storage.
+/// Manages file chunks and their proofs in a merkle trie structure.
 pub struct RocksDbFileDataTrie<T: TrieLayout, DB> {
     // Persistent storage.
     storage: StorageDb<T, DB>,
@@ -142,6 +178,7 @@ where
     DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
+    /// Creates a new empty file data trie.
     fn new(storage: StorageDb<T, DB>) -> Self {
         let (overlay, root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
 
@@ -152,6 +189,7 @@ where
         }
     }
 
+    /// Creates a file data trie from existing root and storage.
     fn from_existing(storage: StorageDb<T, DB>, root: &HasherOutT<T>) -> Self {
         RocksDbFileDataTrie::<T, DB> {
             root: *root,
@@ -160,9 +198,8 @@ where
         }
     }
 
-    /// Persists the changes applied to the overlay.
-    /// If the root has not changed, the commit will be skipped.
-    /// The `overlay` will be cleared.
+    /// Commits changes in the overlay to persistent storage.
+    /// Skips if root hasn't changed. Clears the overlay after commit.
     pub fn commit(&mut self, new_root: HasherOutT<T>) -> Result<(), ErrorT<T>> {
         // Skip commit if the root has not changed.
         if self.root == new_root {
@@ -183,15 +220,15 @@ where
         Ok(())
     }
 
-    /// Build [`DBTransaction`] from the overlay and clear it.
+    /// Builds a database transaction from the overlay and clears it.
     fn changes(&mut self) -> DBTransaction {
         let mut transaction = DBTransaction::new();
 
         for (key, (value, rc)) in self.overlay.drain() {
             if rc <= 0 {
-                transaction.delete(CHUNKS_COLUMN, &key);
+                transaction.delete(Column::Chunks.into(), &key);
             } else {
-                transaction.put_vec(CHUNKS_COLUMN, &key, value);
+                transaction.put_vec(Column::Chunks.into(), &key, value);
             }
         }
 
@@ -222,12 +259,13 @@ where
     DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
-    // Returns internal root representation kept for immediate access.
+    /// Returns the current root hash of the trie.
     fn get_root(&self) -> &HasherOutT<T> {
         &self.root
     }
 
-    // Generates a [`FileProof`] for requested chunks.
+    /// Generates a proof for the specified chunk IDs.
+    /// Returns a [`FileProof`] containing the merkle proof and fingerprint.
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
         let db = self.as_hash_db();
         let recorder: Recorder<T::Hash> = Recorder::default();
@@ -274,6 +312,8 @@ where
     }
 
     // TODO: make it accept a list of chunks to be retrieved
+    /// Retrieves a chunk from the trie by its ID.
+    /// Returns error if chunk doesn't exist or retrieval fails.
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
         let db = self.as_hash_db();
         let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
@@ -296,6 +336,8 @@ where
     }
 
     // TODO: make it accept a list of chunks to be written
+    /// Writes a chunk to the trie with its ID.
+    /// Returns error if write fails or chunk already exists.
     fn write_chunk(
         &mut self,
         chunk_id: &ChunkId,
@@ -341,7 +383,7 @@ where
         Ok(())
     }
 
-    // Deletes itself from the underlying db.
+    /// Deletes all chunks and data associated with this file trie.
     fn delete(&mut self) -> Result<(), FileStorageWriteError> {
         let mut root = self.root;
         let db = self.as_hash_db_mut();
@@ -378,7 +420,7 @@ where
 
         // TODO: improve error handling
         // Commit the changes to disk.
-        self.commit(trie_root_key).map_err(|e| {
+        self.commit(new_root).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to commit changes to persistent storage: {}", e);
             FileStorageWriteError::FailedToPersistChanges
         })?;
@@ -436,6 +478,7 @@ where
     }
 }
 
+/// Manages file metadata, chunks, and proofs using RocksDB as backend.
 pub struct RocksDbFileStorage<T, DB>
 where
     T: TrieLayout + 'static,
@@ -451,6 +494,7 @@ where
     DB: KeyValueDB,
     HasherOutT<T>: TryFrom<[u8; H_LENGTH]>,
 {
+    /// Creates a new file storage instance with the given storage backend.
     pub fn new(storage: StorageDb<T, DB>) -> Self {
         Self { storage }
     }
@@ -470,6 +514,10 @@ where
         })
     }
 
+    /// Constructs a [`RocksDbFileDataTrie`] from the given [`FileMetadata`].
+    ///
+    /// Since files can be partially uploaded (i.e. not all chunks have been inserted to result in the root being the file metadata's fingerprint),
+    /// the constructed trie is based on the current `partial_root` representing the current state of the file we are interested in.
     fn get_file_trie(
         &self,
         metadata: &FileMetadata,
@@ -478,15 +526,15 @@ where
         T: TrieLayout + Send + Sync + 'static,
         DB: KeyValueDB + 'static,
     {
-        let raw_final_root = metadata.fingerprint.as_ref();
-        let final_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
+        let b_fingerprint = metadata.fingerprint.as_ref();
+        let h_fingerprint =
+            convert_raw_bytes_to_hasher_out::<T>(b_fingerprint.to_vec()).map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToParseFingerprint
             })?;
         let raw_partial_root = self
             .storage
-            .read(ROOTS_COLUMN, final_root.as_ref())
+            .read(Column::Roots.into(), h_fingerprint.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -511,17 +559,19 @@ where
 {
     type FileDataTrie = RocksDbFileDataTrie<T, DB>;
 
+    /// Creates a new empty file data trie instance.
     fn new_file_data_trie(&self) -> Self::FileDataTrie {
         RocksDbFileDataTrie::new(self.storage.clone())
     }
 
+    /// Retrieves a chunk by file key and chunk ID.
     fn get_chunk(
         &self,
-        key: &HasherOutT<T>,
+        file_key: &HasherOutT<T>,
         chunk_id: &ChunkId,
     ) -> Result<Chunk, FileStorageError> {
         let metadata = self
-            .get_metadata(key)?
+            .get_metadata(file_key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let file_trie = self.get_file_trie(&metadata)?;
@@ -529,11 +579,12 @@ where
         file_trie.get_chunk(chunk_id)
     }
 
-    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
-        // Read from CHUNK_COUNT_COLUMN
+    /// Returns the number of chunks currently stored for a given file key tracked by [`CHUNK_COUNT_COLUMN`].
+    fn stored_chunks_count(&self, file_key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
+        // Read from CHUNK_COUNT_COLUMN using the file key
         let current_count = self
             .storage
-            .read(CHUNK_COUNT_COLUMN, key.as_ref())
+            .read(Column::ChunkCount.into(), file_key.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -544,14 +595,18 @@ where
         Ok(current_count)
     }
 
+    /// Writes a chunk to storage with file key and chunk ID.
+    ///
+    /// Returns [`FileStorageWriteOutcome`] indicating if file is complete. This outcome is based on
+    /// the current number of chunks stored (tracked by [`CHUNK_COUNT_COLUMN`]) and the file metadata's [`FileMetadata::chunks_count`].
     fn write_chunk(
         &mut self,
-        key: &HasherOutT<T>,
+        file_key: &HasherOutT<T>,
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
         let metadata = self
-            .get_metadata(key)
+            .get_metadata(file_key)
             .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
             .ok_or(FileStorageWriteError::FileDoesNotExist)?;
 
@@ -569,20 +624,24 @@ where
         let new_partial_root = file_trie.get_root();
         let mut transaction = DBTransaction::new();
         transaction.put(
-            ROOTS_COLUMN,
+            Column::Roots.into(),
             metadata.fingerprint.as_ref(),
             new_partial_root.as_ref(),
         );
 
         // Get current chunk count or initialize to 0
-        let current_count = self.stored_chunks_count(key).map_err(|e| {
+        let current_count = self.stored_chunks_count(file_key).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
             FileStorageWriteError::FailedToGetStoredChunksCount
         })?;
 
         // Increment chunk count
         let new_count = current_count + 1;
-        transaction.put(CHUNK_COUNT_COLUMN, key.as_ref(), &new_count.to_le_bytes());
+        transaction.put(
+            Column::ChunkCount.into(),
+            file_key.as_ref(),
+            &new_count.to_le_bytes(),
+        );
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -597,21 +656,13 @@ where
         Ok(FileStorageWriteOutcome::FileComplete)
     }
 
-    /// Check if all the chunks of a file are stored.
-    fn is_file_complete(&self, key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
+    /// Checks if all chunks are stored for a given file key.
+    fn is_file_complete(&self, file_key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
         let metadata = self
-            .get_metadata(key)?
+            .get_metadata(file_key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let stored_chunks = self
-            .storage
-            .read(CHUNK_COUNT_COLUMN, key.as_ref())
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
-            .unwrap_or(0);
+        let stored_chunks = self.stored_chunks_count(file_key)?;
 
         let file_trie = self.get_file_trie(&metadata)?;
 
@@ -628,12 +679,11 @@ where
         Ok(metadata.chunks_count() == stored_chunks)
     }
 
-    /// Stores file metadata and an empty root.
-    /// Should only be used if no chunks have been written yet.
-    /// Otherwise use [`Self::insert_file_with_data`]
+    /// Stores file metadata with an empty root.
+    /// Should be used before writing any chunks using [`Self::write_chunk`].
     fn insert_file(
         &mut self,
-        key: HasherOutT<T>,
+        file_key: HasherOutT<T>,
         metadata: FileMetadata,
     ) -> Result<(), FileStorageError> {
         let mut transaction = DBTransaction::new();
@@ -643,15 +693,23 @@ where
         })?;
 
         let (_, empty_root) = PrefixedMemoryDB::<HashT<T>>::default_with_root();
-        transaction.put(METADATA_COLUMN, key.as_ref(), &serialized_metadata);
+        transaction.put(
+            Column::Metadata.into(),
+            file_key.as_ref(),
+            &serialized_metadata,
+        );
         // Stores an empty root to allow for later initialization of the trie.
         transaction.put(
-            ROOTS_COLUMN,
+            Column::Roots.into(),
             metadata.fingerprint.as_ref(),
             empty_root.as_ref(),
         );
         // Initialize chunk count to 0
-        transaction.put(CHUNK_COUNT_COLUMN, key.as_ref(), &0u64.to_le_bytes());
+        transaction.put(
+            Column::ChunkCount.into(),
+            file_key.as_ref(),
+            &0u64.to_le_bytes(),
+        );
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -672,7 +730,7 @@ where
     /// [`Self::generate_proof`]s for the file.
     fn insert_file_with_data(
         &mut self,
-        key: HasherOutT<T>,
+        file_key: HasherOutT<T>,
         metadata: FileMetadata,
         file_data: Self::FileDataTrie,
     ) -> Result<(), FileStorageError> {
@@ -683,21 +741,18 @@ where
 
         let mut transaction = DBTransaction::new();
 
-        transaction.put(METADATA_COLUMN, key.as_ref(), &raw_metadata);
+        transaction.put(Column::Metadata.into(), file_key.as_ref(), &raw_metadata);
 
         // Stores the current root of the trie.
         // if the file is complete, key and value will be equal.
         transaction.put(
-            ROOTS_COLUMN,
+            Column::Roots.into(),
             metadata.fingerprint.as_ref(),
             file_data.get_root().as_ref(),
         );
 
-        let file_trie = self.get_file_trie(&metadata)?;
-
-        // Count all chunks in the file trie
-        let db = file_trie.as_hash_db();
-        let trie = TrieDBBuilder::<T>::new(&db, file_trie.get_root()).build();
+        let mem_db = file_data.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&mem_db, file_data.get_root()).build();
 
         let chunk_count = trie
             .iter()
@@ -707,16 +762,20 @@ where
             })?
             .count();
 
-        transaction.put(CHUNK_COUNT_COLUMN, key.as_ref(), &chunk_count.to_le_bytes());
+        transaction.put(
+            Column::ChunkCount.into(),
+            file_key.as_ref(),
+            &chunk_count.to_le_bytes(),
+        );
 
         let full_key = metadata
             .bucket_id
             .into_iter()
-            .chain(key.as_ref().into_iter().cloned())
+            .chain(file_key.as_ref().into_iter().cloned())
             .collect::<Vec<_>>();
 
         // Store the key prefixed by bucket id
-        transaction.put(BUCKET_PREFIX_COLUMN, full_key.as_ref(), &[]);
+        transaction.put(Column::BucketPrefix.into(), full_key.as_ref(), &[]);
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -726,10 +785,14 @@ where
         Ok(())
     }
 
-    fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Option<FileMetadata>, FileStorageError> {
+    /// Retrieves file metadata by file key.
+    fn get_metadata(
+        &self,
+        file_key: &HasherOutT<T>,
+    ) -> Result<Option<FileMetadata>, FileStorageError> {
         let raw_metadata = self
             .storage
-            .read(METADATA_COLUMN, key.as_ref())
+            .read(Column::Metadata.into(), file_key.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET,"{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -746,18 +809,21 @@ where
         }
     }
 
+    /// Generates a proof for specified chunks of a file.
+    ///
+    /// Returns error if file is incomplete or proof generation fails.
     fn generate_proof(
         &self,
-        key: &HasherOutT<T>,
+        file_key: &HasherOutT<T>,
         chunk_ids: &Vec<ChunkId>,
     ) -> Result<FileKeyProof, FileStorageError> {
         let metadata = self
-            .get_metadata(key)?
+            .get_metadata(file_key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let file_trie = self.get_file_trie(&metadata)?;
 
-        let stored_chunks = self.stored_chunks_count(key)?;
+        let stored_chunks = self.stored_chunks_count(file_key)?;
         if metadata.chunks_count() != stored_chunks {
             return Err(FileStorageError::IncompleteFile);
         }
@@ -777,19 +843,20 @@ where
             .to_file_key_proof(metadata.clone()))
     }
 
-    fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
+    /// Deletes a file and all its associated data.
+    fn delete_file(&mut self, file_key: &HasherOutT<T>) -> Result<(), FileStorageError> {
         let metadata = self
-            .get_metadata(key)?
+            .get_metadata(file_key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let raw_root = metadata.fingerprint.as_ref();
-        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec()).map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageError::FailedToParseFingerprint
-        })?;
+        let b_fingerprint = metadata.fingerprint.as_ref();
+        let h_fingerprint =
+            convert_raw_bytes_to_hasher_out::<T>(b_fingerprint.to_vec()).map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToParseFingerprint
+            })?;
 
-        let mut file_trie =
-            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut root);
+        let mut file_trie = self.get_file_trie(&metadata)?;
 
         file_trie.delete().map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -797,18 +864,17 @@ where
         })?;
 
         let mut transaction = DBTransaction::new();
-        transaction.delete(METADATA_COLUMN, key.as_ref());
-        transaction.delete(ROOTS_COLUMN, raw_root);
-        transaction.delete(CHUNK_COUNT_COLUMN, key.as_ref());
-        transaction.delete(
-            BUCKET_PREFIX_COLUMN,
-            metadata
-                .bucket_id
-                .into_iter()
-                .chain(key.as_ref().iter().cloned())
-                .collect::<Vec<_>>()
-                .as_ref(),
-        );
+
+        transaction.delete(Column::Metadata.into(), file_key.as_ref());
+        transaction.delete(Column::Roots.into(), h_fingerprint.as_ref());
+        transaction.delete(Column::ChunkCount.into(), file_key.as_ref());
+
+        let full_key = metadata
+            .bucket_id
+            .into_iter()
+            .chain(file_key.as_ref().iter().cloned())
+            .collect::<Vec<_>>();
+        transaction.delete(Column::BucketPrefix.into(), full_key.as_ref());
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -818,45 +884,54 @@ where
         Ok(())
     }
 
-    fn delete_files_with_prefix(&mut self, prefix: &[u8; 32]) -> Result<(), FileStorageError> {
-        let mut keys_to_delete = Vec::new();
+    /// Deletes all files with a matching bucket ID prefix.
+    fn delete_files_with_prefix(
+        &mut self,
+        bucket_id_prefix: &[u8; 32],
+    ) -> Result<(), FileStorageError> {
+        let mut file_keys_to_delete = Vec::new();
 
         {
             let mut iter = self
                 .storage
                 .db
-                .iter_with_prefix(BUCKET_PREFIX_COLUMN, prefix);
+                .iter_with_prefix(Column::BucketPrefix.into(), bucket_id_prefix);
 
             while let Some(Ok((key, _))) = iter.next() {
                 // Remove the prefix from the key.
-                let key = key.iter().skip(prefix.len()).copied().collect::<Vec<u8>>();
+                let file_key = key
+                    .iter()
+                    .skip(bucket_id_prefix.len())
+                    .copied()
+                    .collect::<Vec<u8>>();
 
-                let key = convert_raw_bytes_to_hasher_out::<T>(key).map_err(|e| {
+                let h_file_key = convert_raw_bytes_to_hasher_out::<T>(file_key).map_err(|e| {
                     error!(target: LOG_TARGET, "{:?}", e);
-                    FileStorageError::FailedToParseFingerprint
+                    FileStorageError::FailedToParseKey
                 })?;
 
-                keys_to_delete.push(key);
+                file_keys_to_delete.push(h_file_key);
             }
         }
 
-        for key in keys_to_delete {
-            self.delete_file(&key)?;
+        for h_file_key in file_keys_to_delete {
+            self.delete_file(&h_file_key)?;
         }
 
         Ok(())
     }
 
+    /// Checks if a key is allowed based on the exclude type.
     fn is_allowed(
         &self,
-        key: &HasherOutT<T>,
+        file_key: &HasherOutT<T>,
         exclude_type: ExcludeType,
     ) -> Result<bool, FileStorageError> {
         let exclude_column = get_exclude_type_db_column(exclude_type);
         let find = self
             .storage
             .db
-            .get(exclude_column, key.as_ref())
+            .get(exclude_column, file_key.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
@@ -868,41 +943,43 @@ where
         }
     }
 
+    /// Adds a key to the specified exclude list.
     fn add_to_exclude_list(
         &mut self,
-        key: HasherOutT<T>,
+        file_key: HasherOutT<T>,
         exclude_type: ExcludeType,
     ) -> Result<(), FileStorageError> {
         let exclude_column = get_exclude_type_db_column(exclude_type);
 
         let mut transaction = DBTransaction::new();
-        transaction.put(exclude_column, key.as_ref(), &Vec::<u8>::new());
+        transaction.put(exclude_column, file_key.as_ref(), &Vec::<u8>::new());
 
         self.storage.db.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to write to DB: {}", e);
             FileStorageError::FailedToWriteToStorage
         })?;
 
-        info!("Key added to the exclude list : {:?}", key);
+        info!("Key added to the exclude list : {:?}", file_key);
         Ok(())
     }
 
+    /// Removes a key from the specified exclude list.
     fn remove_from_exclude_list(
         &mut self,
-        key: &HasherOutT<T>,
+        file_key: &HasherOutT<T>,
         exclude_type: ExcludeType,
     ) -> Result<(), FileStorageError> {
         let exclude_column = get_exclude_type_db_column(exclude_type);
 
         let mut transaction = DBTransaction::new();
-        transaction.delete(exclude_column, key.as_ref());
+        transaction.delete(exclude_column, file_key.as_ref());
 
         self.storage.db.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to write to DB: {}", e);
             FileStorageError::FailedToWriteToStorage
         })?;
 
-        info!("Key removed to the exclude list : {:?}", key);
+        info!("Key removed to the exclude list : {:?}", file_key);
         Ok(())
     }
 }
@@ -937,7 +1014,7 @@ mod tests {
     #[test]
     fn file_trie_create_empty_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -960,7 +1037,7 @@ mod tests {
     #[test]
     fn file_trie_write_chunk_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -979,7 +1056,7 @@ mod tests {
     #[test]
     fn file_trie_get_chunk_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -995,7 +1072,7 @@ mod tests {
     #[test]
     fn file_trie_stored_chunks_count_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -1016,7 +1093,7 @@ mod tests {
     #[test]
     fn file_trie_generate_proof_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -1053,7 +1130,7 @@ mod tests {
     #[test]
     fn file_trie_delete_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -1096,12 +1173,12 @@ mod tests {
         ];
 
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
         let user_storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -1157,7 +1234,7 @@ mod tests {
     #[test]
     fn file_storage_insert_file_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -1211,7 +1288,7 @@ mod tests {
     #[test]
     fn file_storage_delete_file_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -1276,12 +1353,12 @@ mod tests {
         ];
 
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
         let user_storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(3)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
@@ -1366,7 +1443,7 @@ mod tests {
     #[test]
     fn delete_files_with_prefix_works() {
         let storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(4)),
+            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
             _marker: Default::default(),
         };
 
