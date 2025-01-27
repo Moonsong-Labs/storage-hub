@@ -10,7 +10,6 @@ import {
   ShConsts,
   describeMspNet,
   shUser,
-  sleep,
   type EnrichedBspApi
 } from "../../../util";
 
@@ -61,9 +60,30 @@ describeMspNet(
 
     it("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
       // Replicate to 2 BSPs, 5 blocks to maxthreshold
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 5))
-      );
+      const maxReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          MaxReplicationTarget: [null, 2]
+        }
+      };
+      const tickRangeToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 5]
+        }
+      };
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+          )
+        ]
+      });
 
       await userApi.docker.onboardBsp({
         bspSigner: bspTwoKey,
@@ -125,10 +145,12 @@ describeMspNet(
           )
         );
       }
-      await userApi.sealBlock(txs, shUser);
+      await userApi.block.seal({ calls: txs, signer: shUser });
     });
 
     it("MSP 1 receives files from user and accepts them", async () => {
+      const originalRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+
       // Get the events of the storage requests to extract the file keys and check
       // that the MSP received them.
       const events = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
@@ -140,41 +162,54 @@ describeMspNet(
       }
 
       // Allow time for the MSP to receive and store the files from the user
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(3000);
+      await waitFor({
+        lambda: async () => {
+          try {
+            // Check if the MSP received the files.
+            const fileKeys: string[] = [];
 
-      // Check if the MSP received the files.
-      for (const e of matchedEvents) {
-        const newStorageRequestDataBlob =
-          userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
+            for (const e of matchedEvents) {
+              const newStorageRequestDataBlob =
+                userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
 
-        if (!newStorageRequestDataBlob) {
-          throw new Error("Event doesn't match NewStorageRequest type");
+              if (!newStorageRequestDataBlob) {
+                throw new Error("Event doesn't match NewStorageRequest type");
+              }
+
+              const result = await msp1Api.rpc.storagehubclient.isFileInFileStorage(
+                newStorageRequestDataBlob.fileKey
+              );
+
+              if (!result.isFileFound) {
+                throw new Error(
+                  `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
+                );
+              }
+
+              fileKeys.push(newStorageRequestDataBlob.fileKey.toString());
+            }
+
+            allBucketFiles.push(...new Set(allBucketFiles));
+            return true;
+          } catch {
+            return false;
+          }
         }
-
-        const result = await msp1Api.rpc.storagehubclient.isFileInFileStorage(
-          newStorageRequestDataBlob.fileKey
-        );
-
-        if (!result.isFileFound) {
-          throw new Error(
-            `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
-          );
-        }
-
-        allBucketFiles.push(newStorageRequestDataBlob.fileKey.toString());
-      }
+      });
 
       // Seal block containing the MSP's first response.
       // MSPs batch responses to achieve higher throughput in periods of high demand. But they
       // also prioritise a fast response, so if the Forest Write Lock is available, it will send
       // the first response it can immediately.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Give time for the MSP to update the local forest root.
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(1000);
+      await waitFor({
+        lambda: async () =>
+          (await msp1Api.rpc.storagehubclient.getForestRoot(bucketId)).toHex() !==
+          originalRoot.toHex()
+      });
 
       // Check that the local forest root is updated, and matches th on-chain root.
       const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
@@ -214,11 +249,14 @@ describeMspNet(
       // An additional block needs to be sealed to accept the rest of the files.
       // There should be a pending transaction to accept the rest of the files.
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Give time for the MSP to update the local forest root.
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(1000);
+      await waitFor({
+        lambda: async () =>
+          (await msp1Api.rpc.storagehubclient.getForestRoot(bucketId)).toHex() !==
+          localBucketRoot.toHex()
+      });
 
       // Check that the local forest root is updated, and matches th on-chain root.
       const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
@@ -262,19 +300,14 @@ describeMspNet(
       }
 
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
-      for (let i = 0; i < 5; i++) {
-        await sleep(500);
-        const block = await userApi.sealBlock();
-
-        await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
-      }
+      await userApi.block.skip({ blocksToAdvance: 5, paddingMs: 500 });
     });
 
     it("User moves bucket to second MSP", async () => {
-      const requestMoveBucketResult = await userApi.sealBlock(
-        userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2),
-        shUser
-      );
+      const requestMoveBucketResult = await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2)],
+        signer: shUser
+      });
 
       assertEventPresent(
         userApi,
@@ -288,7 +321,7 @@ describeMspNet(
         method: "mspRespondMoveBucketRequest"
       });
 
-      const { events } = await userApi.sealBlock();
+      const { events } = await userApi.block.seal();
 
       assertEventPresent(userApi, "fileSystem", "MoveBucketAccepted", events);
 

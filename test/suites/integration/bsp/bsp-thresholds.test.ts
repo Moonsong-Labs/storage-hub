@@ -16,61 +16,143 @@ import {
 describeBspNet(
   "BSPNet: BSP Volunteering Thresholds",
   { initialised: false, bspStartingWeight: 5n, networkConfig: "standard" },
-  ({ before, it, createUserApi, createBspApi, beforeEach }) => {
+  ({ before, it, createUserApi, createBspApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
 
     before(async () => {
       userApi = await createUserApi();
       bspApi = await createBspApi();
+      const maxReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          MaxReplicationTarget: [null, 1]
+        }
+      };
+      const tickRangeToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 1]
+        }
+      };
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+          )
+        ]
+      });
     });
 
-    beforeEach(async () => {
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(1, 1))
-      );
-    });
-
-    it("Can set params with setGlobalParams", async () => {
-      // Set global params
-      const { extSuccess } = await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(87, 200))
-      );
-
+    it("Can set parameters of the file-system pallet", async () => {
+      const maxReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          MaxReplicationTarget: [null, 87]
+        }
+      };
+      const tickRangeToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 200]
+        }
+      };
+      const { extSuccess } = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
       strictEqual(extSuccess, true, "Extrinsic should be successful");
+      const { extSuccess: extSuccessTwo } = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+          )
+        ]
+      });
+      strictEqual(extSuccessTwo, true, "Extrinsic should be successful");
 
       strictEqual(
-        (await userApi.query.fileSystem.tickRangeToMaximumThreshold()).toNumber(),
+        (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              TickRangeToMaximumThreshold: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asTickRangeToMaximumThreshold.toNumber(),
         200,
         "Threshold should have changed"
       );
-      const maxReplicationTarget = await userApi.query.fileSystem.maxReplicationTarget();
 
       strictEqual(
-        maxReplicationTarget.toNumber(),
+        (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              MaxReplicationTarget: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asMaxReplicationTarget.toNumber(),
         87,
         "Max replication target should have changed"
       );
     });
 
-    it("Shouldn't be able to setGlobalParams without sudo", async () => {
-      const { extSuccess } = await userApi.sealBlock(
-        userApi.tx.fileSystem.setGlobalParameters(13, 37)
-      );
-
+    it("Shouldn't be able to set parameters without sudo", async () => {
+      const maxReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          MaxReplicationTarget: [null, 13]
+        }
+      };
+      const tickRangeToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 37]
+        }
+      };
+      const { extSuccess } = await userApi.block.seal({
+        calls: [userApi.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter)]
+      });
       strictEqual(extSuccess, false, "Extrinsic should be unsuccessful");
+      const { extSuccess: extSuccessTwo } = await userApi.block.seal({
+        calls: [userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)]
+      });
+      strictEqual(extSuccessTwo, false, "Extrinsic should be unsuccessful");
+
       const { data } = await userApi.assert.eventPresent("system", "ExtrinsicFailed");
       const error = data[0].toString();
       strictEqual(error, "BadOrigin", "Extrinsic should fail with BadOrigin");
 
       strictEqual(
-        (await userApi.query.fileSystem.tickRangeToMaximumThreshold()).toNumber(),
+        (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              TickRangeToMaximumThreshold: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asTickRangeToMaximumThreshold.toNumber(),
         200,
         "Threshold should not have changed"
       );
-      const maxReplicationTarget = await userApi.query.fileSystem.maxReplicationTarget();
       strictEqual(
-        maxReplicationTarget.toNumber(),
+        (
+          await userApi.query.parameters.parameters({
+            RuntimeConfig: {
+              MaxReplicationTarget: null
+            }
+          })
+        )
+          .unwrap()
+          .asRuntimeConfig.asMaxReplicationTarget.toNumber(),
         87,
         "Max replication target should not have changed"
       );
@@ -107,15 +189,26 @@ describeBspNet(
           DefaultReplicationTarget: [null, 5]
         }
       };
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
-        )
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
 
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 500))
-      );
+      const tickToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 500]
+        }
+      };
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter)
+          )
+        ]
+      });
 
       // Create a new BSP and onboard with no reputation
       const { rpcPort } = await addBsp(userApi, bspDownKey, {
@@ -191,15 +284,26 @@ describeBspNet(
           DefaultReplicationTarget: [null, 2]
         }
       };
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(
-          userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
-        )
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
 
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 20))
-      );
+      const tickToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 20]
+        }
+      };
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter)
+          )
+        ]
+      });
 
       // Add the second BSP
       const { rpcPort } = await addBsp(userApi, bspTwoKey, {
@@ -271,10 +375,31 @@ describeBspNet(
       // Wait for it to catch up to the top of the chain
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
-      // Set global params to small numbers
-      await userApi.sealBlock(
-        userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(5, 100))
-      );
+      // Set max replication target and tick to maximum threshold to small numbers
+      const maxReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          MaxReplicationTarget: [null, 5]
+        }
+      };
+      const tickRangeToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 100]
+        }
+      };
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+          )
+        ]
+      });
 
       // Create a new storage request
       const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
@@ -337,15 +462,26 @@ describeBspNet(
             DefaultReplicationTarget: [null, 2]
           }
         };
-        await userApi.sealBlock(
-          userApi.tx.sudo.sudo(
-            userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
-          )
-        );
+        await userApi.block.seal({
+          calls: [
+            userApi.tx.sudo.sudo(
+              userApi.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter)
+            )
+          ]
+        });
 
-        await userApi.sealBlock(
-          userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 50))
-        );
+        const tickToMaximumThresholdRuntimeParameter = {
+          RuntimeConfig: {
+            TickRangeToMaximumThreshold: [null, 50]
+          }
+        };
+        await userApi.block.seal({
+          calls: [
+            userApi.tx.sudo.sudo(
+              userApi.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter)
+            )
+          ]
+        });
 
         const { fileKey } = await userApi.file.createBucketAndSendNewStorageRequest(
           "res/cloud.jpg",

@@ -33,4 +33,7 @@ res/benchmarking
 test/dist/*
 
 # Ignore cSpell config files
-cSpell.json
+cspell.json
+
+# Don't commit your config file
+config.toml

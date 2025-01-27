@@ -13705,6 +13705,7 @@ dependencies = [
  "shp-file-key-verifier",
  "shp-file-metadata",
  "sp-api 34.0.0",
+ "sp-blockchain",
  "sp-core 34.0.0",
  "sp-keystore 0.40.0",
  "sp-runtime 39.0.5",
@@ -13903,6 +13904,7 @@ dependencies = [
  "log",
  "pallet-file-system-runtime-api",
  "pallet-proofs-dealer-runtime-api",
+ "sc-rpc-api",
  "serde",
  "shc-common",
  "shc-file-manager",
@@ -16236,6 +16238,7 @@ dependencies = [
  "substrate-prometheus-endpoint",
  "thiserror 1.0.69",
  "tokio",
+ "toml 0.8.19",
 ]
 
 [[package]]

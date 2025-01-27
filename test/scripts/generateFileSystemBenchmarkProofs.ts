@@ -175,7 +175,7 @@ async function generateBenchmarkProofs() {
 
       await userApi.wait.bspVolunteerInTxPool(1);
       await userApi.wait.mspResponseInTxPool(1);
-      await userApi.sealBlock();
+      await userApi.block.seal();
       await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
       await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
       await userApi.wait.bspStored(1);
@@ -277,19 +277,21 @@ async function generateBenchmarkProofs() {
   );
 
   // * For a MSP accepting storage requests, we need to generate a non-inclusion proof to be used
-  // * when accepting from 1 to 10 (MaxBatchMspRespondStorageRequests) file keys and rejecting 1 to 10 (MaxBatchMspRespondStorageRequests)
-  // * file keys. This has to be done for 1 to 10 (MaxBatchMspRespondStorageRequests) buckets.
+  // * when accepting from 1 to 10 file keys and rejecting 1 to 10 file keys. This has to be done for 1 to 10 buckets.
+  // * The reason we use 1 to 10 as the range is because it's big enough for Substrate to extrapolate the information
+  // * given by the benchmarks to other cases with good precision while being small enough to not take ages to run.
   // * We also need to generate the file key proofs for each one of the file keys to be accepted.
   // To do this, we generate a non-inclusion forest proof for N file keys (which must be the ones not
   // added to the Forest in the previous step of this script) and add the proof to the array. Then, generate for each file key its proof.
   // Finally, repeat this for each bucket.
   // * For a BSP confirming storing, we need the same thing (a non-inclusion forest proof for 1 to 10 file keys that
   // * the BSP wants to confirm) and the file key proofs for each one of the file keys.
-  // Since the BSP only requires one non-inclusion proof and 1 to 10 (MaxBatchBspConfirmStoring) file key proofs, we reutilise the
-  // non-inclusion proof from the first bucket and generate the corresponding file key proofs since the challenges for the BSP are different.
+  // Since the BSP only requires one non-inclusion proof and 1 to 10 (MaxBatchBspConfirmStoring) file key proofs, we reuse the
+  // non-inclusion proof from the first bucket (setting the root of the BSP to the root of that bucket) but generate the corresponding
+  // file key proofs since the challenges for the BSP are different.
 
-  const maxBatchMspRespondStorageRequests = 10;
-  for (let i = 1; i <= maxBatchMspRespondStorageRequests; i++) {
+  const amountOfNonInclusionProofsToGenerate = 10;
+  for (let i = 1; i <= amountOfNonInclusionProofsToGenerate; i++) {
     // We generate a non-inclusion proof for i file keys of the nonStoredFileKeys array for each bucket.
     const nonInclusionProofsForCase: string[] = [];
     const allFileKeysToAccept: string[] = [];

@@ -6,8 +6,8 @@ use crate::{
         SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
         ValuePropositionWithId,
     },
-    AwaitingTopUpFromProviders, Error, Event, InsolventProviders, MainStorageProviders,
-    ProviderTopUpExpirations,
+    AwaitingTopUpFromProviders, BackupStorageProviders, Error, Event, InsolventProviders,
+    MainStorageProviders, ProviderTopUpExpirations,
 };
 
 use core::u32;
@@ -2567,6 +2567,93 @@ mod sign_off {
                     // Check that the counter of registered BSPs has decreased
                     assert_eq!(StorageProviders::get_bsp_count(), 0);
 
+                    // Verify that the proof challenge cycle has been stopped
+                    assert!(
+                        pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                            &alice_bsp_id
+                        )
+                        .is_none()
+                    );
+
+                    // Check the BSP Sign Off event was emitted
+                    System::assert_has_event(
+                        Event::<Test>::BspSignOffSuccess {
+                            who: alice,
+                            bsp_id: alice_bsp_id,
+                        }
+                        .into(),
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_sign_off_stop_cycles_before_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = accounts::ALICE.0;
+                    let storage_amount: StorageDataUnit<Test> = 100;
+                    let (deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        accounts::ALICE.1 - deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_amount
+                    );
+
+                    // Check the capacity of all the BSPs
+                    assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
+                    // Check the counter of registered BSPs
+                    assert_eq!(StorageProviders::get_bsp_count(), 1);
+
+                    // Get the BSP ID of Alice
+                    let alice_bsp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                    // Advance enough blocks for the BSP to sign off
+                    let bsp_sign_up_lock_period: u64 =
+                        <Test as crate::Config>::BspSignUpLockPeriod::get();
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number() + bsp_sign_up_lock_period,
+                    );
+
+                    // Stop all cycles before signing off Alice with the account origin
+                    assert_ok!(StorageProviders::stop_all_cycles(RuntimeOrigin::signed(
+                        alice
+                    )));
+
+                    // Sign off Alice as a Backup Storage Provider
+                    assert_ok!(StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)));
+
+                    // Check the new capacity of all BSPs
+                    assert_eq!(StorageProviders::get_total_bsp_capacity(), 0);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        0
+                    );
+
+                    // Check that Alice is not a Backup Storage Provider anymore
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
+                    assert!(alice_sp_id.is_none());
+
+                    // Check that the counter of registered BSPs has decreased
+                    assert_eq!(StorageProviders::get_bsp_count(), 0);
+
+                    // Verify that the proof challenge cycle has been stopped
+                    assert!(
+                        pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                            &alice_bsp_id
+                        )
+                        .is_none()
+                    );
+
                     // Check the BSP Sign Off event was emitted
                     System::assert_has_event(
                         Event::<Test>::BspSignOffSuccess {
@@ -3861,7 +3948,7 @@ mod add_bucket {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -3872,7 +3959,7 @@ mod add_bucket {
                 // Try to add the bucket for Alice with the same bucket id
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -3897,7 +3984,7 @@ mod add_bucket {
                 // Try to add a bucket to a non-registered MSP
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        Some(MainStorageProviderId::<Test>::default()),
+                        MainStorageProviderId::<Test>::default(),
                         bucket_owner,
                         bucket_id,
                         false,
@@ -3934,7 +4021,7 @@ mod add_bucket {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4017,7 +4104,7 @@ mod add_bucket {
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -4109,7 +4196,7 @@ mod unassign_msp_from_bucket {
                 );
 
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4197,7 +4284,7 @@ mod assign_msp_to_bucket {
 
                 // Add bucket
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4249,7 +4336,7 @@ mod assign_msp_to_bucket {
 
                 // Add bucket
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(alice_msp_id),
+                    alice_msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4366,7 +4453,7 @@ mod remove_root_bucket {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4433,7 +4520,7 @@ mod remove_root_bucket {
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -4573,7 +4660,7 @@ mod increase_bucket_size {
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -4648,7 +4735,7 @@ mod increase_bucket_size {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -4735,7 +4822,7 @@ mod decrease_bucket_size {
                         bucket_name,
                     );
                     assert_ok!(StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -4840,7 +4927,7 @@ mod decrease_bucket_size {
 
                 // Add a bucket for Alice
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -6172,7 +6259,7 @@ mod make_value_prop_unavailable {
                 // Try to add a bucket with an unavailable value proposition
                 assert_noop!(
                     StorageProviders::add_bucket(
-                        Some(msp_id),
+                        msp_id,
                         bucket_owner,
                         bucket_id,
                         false,
@@ -6228,7 +6315,7 @@ mod delete_provider {
 
                 // Add a bucket for Alice which creates a payment stream
                 assert_ok!(StorageProviders::add_bucket(
-                    Some(msp_id),
+                    msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
@@ -6271,6 +6358,78 @@ mod delete_provider {
                     RuntimeOrigin::signed(alice),
                     msp_id
                 ));
+            });
+        }
+    }
+}
+
+mod stop_all_cycles {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn stop_all_cycles_fails_for_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                assert_noop!(
+                    StorageProviders::stop_all_cycles(RuntimeOrigin::signed(alice)),
+                    Error::<Test>::BspOnlyOperation
+                );
+            });
+        }
+
+        #[test]
+        fn stop_all_cycles_requires_default_root() {
+            ExtBuilder::build().execute_with(|| {
+                // register BSP
+                let bob: AccountId = accounts::BOB.0;
+                let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
+
+                let bsp_id = StorageProviders::get_provider_id(bob).unwrap();
+
+                // Simulate non-default root for BSP before stopping all cycles
+                BackupStorageProviders::<Test>::mutate(bsp_id, |bsp| {
+                    let bsp = bsp.as_mut().unwrap();
+                    bsp.root = H256::from_slice(&[1; 32]);
+                });
+
+                assert_noop!(
+                    StorageProviders::stop_all_cycles(RuntimeOrigin::signed(bob),),
+                    Error::<Test>::CannotStopCycleWithNonDefaultRoot
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn stop_all_cycles_works() {
+            ExtBuilder::build().execute_with(|| {
+                // register BSP
+                let bob: AccountId = accounts::BOB.0;
+                let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
+
+                let provider_id = StorageProviders::get_provider_id(bob).unwrap();
+
+                assert_ok!(StorageProviders::stop_all_cycles(RuntimeOrigin::signed(
+                    bob
+                ),));
+
+                // Verify that the proof challenge cycle has been stopped
+                assert!(
+                    pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                        &provider_id
+                    )
+                    .is_none()
+                );
             });
         }
     }

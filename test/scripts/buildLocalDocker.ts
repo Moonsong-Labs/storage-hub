@@ -36,7 +36,7 @@ async function main() {
 
   try {
     // TODO: Replace with dockerode
-    execSync("docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile --load .", {
+    execSync("docker build -t storage-hub:local -f docker/storage-hub-node.Dockerfile .", {
       stdio: "inherit"
     });
     console.log("Docker image built successfully.");

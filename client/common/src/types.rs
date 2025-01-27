@@ -1,4 +1,7 @@
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use codec::{Decode, Encode};
 use frame_system::EventRecord;
@@ -32,8 +35,6 @@ pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
 pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
 pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
-pub type MaxBatchMspRespondStorageRequests =
-    pallet_file_system::types::MaxBatchMspRespondStorageRequests<Runtime>;
 pub type StorageRequestMspBucketResponse =
     pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;
 pub type StorageRequestMspResponse = pallet_file_system::types::StorageRequestMspResponse<Runtime>;
@@ -59,6 +60,7 @@ pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
 pub type CustomChallenge = pallet_proofs_dealer::types::CustomChallenge<Runtime>;
 pub type TrieMutation = shp_traits::TrieMutation;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
+pub type TrieAddMutation = shp_traits::TrieAddMutation;
 pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
 pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
 pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;
@@ -138,6 +140,16 @@ pub struct ForestProof<T: TrieLayout> {
     pub root: HasherOutT<T>,
 }
 
+impl<T: TrieLayout> ForestProof<T> {
+    /// Returns whether a file key was found in the forest proof.
+    pub fn contains_file_key(&self, file_key: &HasherOutT<T>) -> bool {
+        self.proven.iter().any(|proven| match proven {
+            Proven::ExactKey(leaf) => leaf.key.as_ref() == file_key.as_ref(),
+            _ => false,
+        })
+    }
+}
+
 #[derive(Clone, Encode, Decode)]
 pub struct FileProof {
     /// The compact proof.
@@ -168,7 +180,21 @@ impl DownloadRequestId {
     }
 
     pub fn next(&self) -> Self {
-        let next = self.0 + 1;
-        DownloadRequestId(next)
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        DownloadRequestId(COUNTER.fetch_add(1, Ordering::SeqCst))
+    }
+}
+
+#[derive(Clone, Eq, Hash, PartialEq, Debug)]
+pub struct UploadRequestId(u64);
+
+impl UploadRequestId {
+    pub fn new(id: u64) -> Self {
+        UploadRequestId(id)
+    }
+
+    pub fn next(&self) -> Self {
+        static COUNTER: AtomicU64 = AtomicU64::new(1);
+        UploadRequestId(COUNTER.fetch_add(1, Ordering::SeqCst))
     }
 }

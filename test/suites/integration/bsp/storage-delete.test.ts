@@ -50,7 +50,10 @@ describeBspNet(
       await userApi.wait.bspStored(2);
 
       // Revoke the storage request otherwise the new storage request event is not being triggered
-      await userApi.sealBlock(userApi.tx.fileSystem.revokeStorageRequest(fileKey), shUser);
+      await userApi.block.seal({
+        calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
+        signer: shUser
+      });
 
       await userApi.assert.eventPresent("fileSystem", "StorageRequestRevoked");
 
@@ -72,26 +75,28 @@ describeBspNet(
       });
 
       // Add the file key to the exclude list
-      bspApi.rpc.storagehubclient.addToExcludeList(fileKey);
+      bspApi.rpc.storagehubclient.addToExcludeList(fileKey, "file");
 
       // Request to stop storing a file with Dummy BSP
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKey
       ]);
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
-      await userApi.sealBlock(
-        bspApi.tx.fileSystem.bspRequestStopStoring(
-          fileKey,
-          bucketId,
-          location,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          fingerprint,
-          fileSize,
-          false,
-          inclusionForestProof.toString()
-        ),
-        bspKey
-      );
+      await userApi.block.seal({
+        calls: [
+          bspApi.tx.fileSystem.bspRequestStopStoring(
+            fileKey,
+            bucketId,
+            location,
+            userApi.shConsts.NODE_INFOS.user.AddressId,
+            fingerprint,
+            fileSize,
+            false,
+            inclusionForestProof.toString()
+          )
+        ],
+        signer: bspKey
+      });
 
       await userApi.assert.eventPresent("fileSystem", "BspRequestedToStopStoring");
 
@@ -115,13 +120,15 @@ describeBspNet(
       // TODO: commented out since this extrinsic will inevitably fail. The reason being is that the revoke storage request executed above
       // TODO: created a checkpoint challenge remove mutation which the bsp responded to and removed the file key from the forest before executing this extrinsic
       // TODO: we should remove this entirely and implement a task or rpc to handle automatic stop storing
-      // await userApi.sealBlock(
-      //   userApi.tx.fileSystem.bspConfirmStopStoring(
-      //     fileKey,
-      //     inclusionForestProof
-      //   ),
-      //   bspKey
-      // );
+      // await userApi.block.seal({
+      //   calls: [
+      //     userApi.tx.fileSystem.bspConfirmStopStoring(
+      //       fileKey,
+      //       inclusionForestProof
+      //     )
+      //   ],
+      //   signer: bspKey
+      // });
 
       // await userApi.assert.eventPresent(
       //   "fileSystem",

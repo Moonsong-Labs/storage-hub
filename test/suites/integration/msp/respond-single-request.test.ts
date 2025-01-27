@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeMspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
 
 describeMspNet(
   "Single MSP accepting storage request",
@@ -47,21 +47,20 @@ describeMspNet(
       strictEqual(fingerprint.toString(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
       strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
 
-      await userApi.sealBlock(
-        userApi.tx.fileSystem.issueStorageRequest(
-          newBucketEventDataBlob.bucketId,
-          destination,
-          userApi.shConsts.TEST_ARTEFACTS[source].fingerprint,
-          userApi.shConsts.TEST_ARTEFACTS[source].size,
-          userApi.shConsts.DUMMY_MSP_ID,
-          [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
-        ),
-        shUser
-      );
-
-      // Allow time for the MSP to receive and store the file from the user
-      await sleep(3000);
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.issueStorageRequest(
+            newBucketEventDataBlob.bucketId,
+            destination,
+            userApi.shConsts.TEST_ARTEFACTS[source].fingerprint,
+            userApi.shConsts.TEST_ARTEFACTS[source].size,
+            userApi.shConsts.DUMMY_MSP_ID,
+            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
+            null
+          )
+        ],
+        signer: shUser
+      });
 
       const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
@@ -92,12 +91,13 @@ describeMspNet(
         userApi.shConsts.NODE_INFOS.user.expectedPeerId
       );
 
-      const result = await mspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey);
-
-      assert(result.isFileFound, "File not found in storage");
+      await waitFor({
+        lambda: async () =>
+          (await mspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey)).isFileFound
+      });
 
       await userApi.wait.mspResponseInTxPool();
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       let mspAcceptedStorageRequestDataBlob: any = undefined;
       let storageRequestFulfilledDataBlob: any = undefined;
@@ -155,8 +155,14 @@ describeMspNet(
       );
 
       // Allow time for the MSP to update the local forest root
-      await sleep(3000);
-
+      await waitFor({
+        lambda: async () =>
+          (
+            await mspApi.rpc.storagehubclient.getForestRoot(
+              newBucketEventDataBlob.bucketId.toString()
+            )
+          ).isSome
+      });
       const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
         newBucketEventDataBlob.bucketId.toString()
       );

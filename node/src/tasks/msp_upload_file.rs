@@ -5,7 +5,7 @@ use pallet_file_system::types::RejectedStorageRequest;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest, Tip};
-use sp_core::{bounded_vec, H256};
+use sp_core::H256;
 use sp_runtime::AccountId32;
 
 use shc_actors_framework::event_bus::EventHandler;
@@ -129,246 +129,35 @@ where
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
-        let proven = match event
-            .file_key_proof
-            .proven::<StorageProofsMerkleTrieLayout>()
-        {
-            Ok(proven) => {
-                if proven.len() != 1 {
-                    Err(anyhow::anyhow!(
-                        "Expected exactly one proven chunk but got {}.",
-                        proven.len()
-                    ))
-                } else {
-                    Ok(proven[0].clone())
-                }
-            }
-            Err(e) => Err(anyhow::anyhow!(
-                "Failed to verify and get proven file key chunks: {:?}",
-                e
-            )),
-        };
-
-        let bucket_id = match self
-            .storage_hub_handler
-            .file_storage
-            .read()
-            .await
-            .get_metadata(&event.file_key.into())
-        {
-            Ok(metadata) => match metadata {
-                Some(metadata) => H256(metadata.bucket_id.try_into().unwrap()),
-                None => {
-                    let err_msg = format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key);
-                    error!(target: LOG_TARGET, err_msg);
-                    return Err(anyhow!(err_msg));
-                }
-            },
+        let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
+            Ok(complete) => complete,
             Err(e) => {
-                let err_msg = format!("Failed to get file metadata: {:?}", e);
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
-
-        // Reject storage request if the proof is invalid.
-        let proven = match proven {
-            Ok(proven) => proven,
-            Err(e) => {
-                warn!(target: LOG_TARGET, "{}", e);
-
-                let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                    pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                        storage_request_msp_response: bounded_vec![
-                            StorageRequestMspBucketResponse {
-                                bucket_id,
-                                accept: None,
-                                reject: bounded_vec![RejectedStorageRequest {
-                                    file_key: H256(event.file_key.into()),
-                                    reason: RejectedStorageRequestReason::ReceivedInvalidProof,
-                                }],
-                            }
-                        ],
-                    },
-                );
-
-                self.storage_hub_handler
-                    .blockchain
-                    .send_extrinsic(call, Tip::from(0))
-                    .await?
-                    .with_timeout(Duration::from_secs(60))
-                    .watch_for_success(&self.storage_hub_handler.blockchain)
-                    .await?;
-
-                // Unregister the file.
-                self.unregister_file(event.file_key.into()).await?;
+                // Send error response through FileTransferService
+                if let Err(e) = self
+                    .storage_hub_handler
+                    .file_transfer
+                    .upload_response(false, event.request_id)
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to send error response: {:?}", e);
+                }
                 return Err(e);
             }
         };
 
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        let write_chunk_result =
-            write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data);
-        // Release the file storage write lock as soon as possible.
-        drop(write_file_storage);
+        // Send completion status through FileTransferService
+        if let Err(e) = self
+            .storage_hub_handler
+            .file_transfer
+            .upload_response(file_complete, event.request_id)
+            .await
+        {
+            error!(target: LOG_TARGET, "Failed to send response: {:?}", e);
+        }
 
-        match write_chunk_result {
-            Ok(outcome) => match outcome {
-                FileStorageWriteOutcome::FileComplete => {
-                    self.on_file_complete(&event.file_key.into()).await?;
-                }
-                FileStorageWriteOutcome::FileIncomplete => {}
-            },
-            Err(error) => match error {
-                FileStorageWriteError::FileChunkAlreadyExists => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Received duplicate chunk with key: {:?}",
-                        proven.key
-                    );
-
-                    // TODO: Consider informing this to the file transfer service so that it can handle reputation for this peer id.
-                }
-                FileStorageWriteError::FileDoesNotExist => {
-                    let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                            storage_request_msp_response: bounded_vec![
-                                StorageRequestMspBucketResponse {
-                                    bucket_id,
-                                    accept: None,
-                                    reject: bounded_vec![RejectedStorageRequest {
-                                        file_key: H256(event.file_key.into()),
-                                        reason: RejectedStorageRequestReason::InternalError,
-                                    }],
-                                }
-                            ],
-                        },
-                    );
-
-                    self.storage_hub_handler
-                        .blockchain
-                        .send_extrinsic(call, Tip::from(0))
-                        .await?
-                        .with_timeout(Duration::from_secs(60))
-                        .watch_for_success(&self.storage_hub_handler.blockchain)
-                        .await?;
-
-                    // Unregister the file.
-                    self.unregister_file(event.file_key.into()).await?;
-
-                    return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
-                }
-                FileStorageWriteError::FailedToGetFileChunk
-                | FileStorageWriteError::FailedToInsertFileChunk
-                | FileStorageWriteError::FailedToDeleteChunk
-                | FileStorageWriteError::FailedToPersistChanges
-                | FileStorageWriteError::FailedToParseFileMetadata
-                | FileStorageWriteError::FailedToParseFingerprint
-                | FileStorageWriteError::FailedToReadStorage
-                | FileStorageWriteError::FailedToUpdatePartialRoot
-                | FileStorageWriteError::FailedToParsePartialRoot
-                | FileStorageWriteError::FailedToGetStoredChunksCount => {
-                    // This internal error should not happen.
-                    let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                            storage_request_msp_response: bounded_vec![
-                                StorageRequestMspBucketResponse {
-                                    bucket_id,
-                                    accept: None,
-                                    reject: bounded_vec![RejectedStorageRequest {
-                                        file_key: H256(event.file_key.into()),
-                                        reason: RejectedStorageRequestReason::InternalError,
-                                    }],
-                                }
-                            ],
-                        },
-                    );
-
-                    self.storage_hub_handler
-                        .blockchain
-                        .send_extrinsic(call, Tip::from(0))
-                        .await?
-                        .with_timeout(Duration::from_secs(60))
-                        .watch_for_success(&self.storage_hub_handler.blockchain)
-                        .await?;
-
-                    // Unregister the file.
-                    self.unregister_file(event.file_key.into()).await?;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "Internal trie read/write error {:?}:{:?}",
-                        event.file_key, proven.key
-                    )));
-                }
-                FileStorageWriteError::FingerprintAndStoredFileMismatch => {
-                    // This should never happen, given that the first check in the handler is verifying the proof.
-                    // This means that something is seriously wrong, so we error out the whole task.
-                    let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                            storage_request_msp_response: bounded_vec![
-                                StorageRequestMspBucketResponse {
-                                    bucket_id,
-                                    accept: None,
-                                    reject: bounded_vec![RejectedStorageRequest {
-                                        file_key: H256(event.file_key.into()),
-                                        reason: RejectedStorageRequestReason::InternalError,
-                                    }],
-                                }
-                            ],
-                        },
-                    );
-
-                    self.storage_hub_handler
-                        .blockchain
-                        .send_extrinsic(call, Tip::from(0))
-                        .await?
-                        .with_timeout(Duration::from_secs(60))
-                        .watch_for_success(&self.storage_hub_handler.blockchain)
-                        .await?;
-
-                    // Unregister the file.
-                    self.unregister_file(event.file_key.into()).await?;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
-                        event.file_key
-                    )));
-                }
-                FileStorageWriteError::FailedToConstructTrieIter => {
-                    // This should never happen for a well constructed trie.
-                    // This means that something is seriously wrong, so we error out the whole task.
-                    let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                            storage_request_msp_response: bounded_vec![
-                                StorageRequestMspBucketResponse {
-                                    bucket_id,
-                                    accept: None,
-                                    reject: bounded_vec![RejectedStorageRequest {
-                                        file_key: H256(event.file_key.into()),
-                                        reason: RejectedStorageRequestReason::InternalError,
-                                    }],
-                                }
-                            ],
-                        },
-                    );
-
-                    self.storage_hub_handler
-                        .blockchain
-                        .send_extrinsic(call, Tip::from(0))
-                        .await?
-                        .with_timeout(Duration::from_secs(60))
-                        .watch_for_success(&self.storage_hub_handler.blockchain)
-                        .await?;
-
-                    // Unregister the file.
-                    self.unregister_file(event.file_key.into()).await?;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "This is a bug! Failed to construct trie iter for key {:?}.",
-                        event.file_key
-                    )));
-                }
-            },
+        // Handle file completion if the entire file is uploaded or is already being stored.
+        if file_complete {
+            self.on_file_complete(&event.file_key.into()).await?;
         }
 
         Ok(())
@@ -498,7 +287,7 @@ where
                     .map(|file_key_with_proof| file_key_with_proof.file_key)
                     .collect();
 
-                let non_inclusion_forest_proof = match fs.read().await.generate_proof(file_keys) {
+                let forest_proof = match fs.read().await.generate_proof(file_keys) {
                     Ok(proof) => proof,
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to generate non-inclusion forest proof: {:?}", e);
@@ -507,11 +296,8 @@ where
                 };
 
                 Some(StorageRequestMspAcceptedFileKeys {
-                    file_keys_and_proofs: accept
-                        .clone()
-                        .try_into()
-                        .map_err(|_| anyhow!("Failed to convert accepts to bounded vec"))?,
-                    non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
+                    file_keys_and_proofs: accept.clone(),
+                    forest_proof: forest_proof.proof,
                 })
             } else {
                 None
@@ -520,19 +306,13 @@ where
             storage_request_msp_response.push(StorageRequestMspBucketResponse {
                 bucket_id: *bucket_id,
                 accept,
-                reject: reject
-                    .clone()
-                    .try_into()
-                    .map_err(|_| anyhow!("Failed to convert rejects to bounded vec"))?,
+                reject: reject.clone(),
             });
         }
 
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                storage_request_msp_response: storage_request_msp_response
-                    .clone()
-                    .try_into()
-                    .map_err(|_| anyhow!("Failed to convert file key responses to bounded vec"))?,
+                storage_request_msp_response: storage_request_msp_response.clone(),
             },
         );
 
@@ -661,7 +441,7 @@ where
 
         if let Some(msp_id) = msp_id_of_bucket_id {
             if own_msp_id != msp_id {
-                warn!(target: LOG_TARGET, "Skipping storage request - MSP ID does not match own MSP ID for bucket ID {:?}", event.bucket_id);
+                trace!(target: LOG_TARGET, "Skipping storage request - MSP ID does not match own MSP ID for bucket ID {:?}", event.bucket_id);
                 return Ok(());
             }
         } else {
@@ -691,65 +471,16 @@ where
             .await;
         let read_fs = fs.read().await;
 
-        // Reject the storage request if file key already exists in the forest storage.
-        if read_fs.contains_file_key(&file_key.into())? {
-            let err_msg = format!("File key {:?} already exists in forest storage.", file_key);
-            debug!(target: LOG_TARGET, "{}", err_msg);
-
-            // Reject the storage request.
-            let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                    storage_request_msp_response: bounded_vec![StorageRequestMspBucketResponse {
-                        bucket_id: event.bucket_id,
-                        accept: None,
-                        reject: bounded_vec![RejectedStorageRequest {
-                            file_key: H256(file_key.into()),
-                            reason: RejectedStorageRequestReason::FileKeyAlreadyStored,
-                        }],
-                    }],
-                },
-            );
-
-            self.storage_hub_handler
-                .blockchain
-                .send_extrinsic(call, Tip::from(0))
-                .await?
-                .with_timeout(Duration::from_secs(60))
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await?;
-
-            return Ok(());
-        }
-
-        let available_capacity = self
-            .storage_hub_handler
-            .blockchain
-            .query_available_storage_capacity(own_msp_id)
-            .await
-            .map_err(|e| {
-                let err_msg = format!("Failed to query available storage capacity: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        // Increase storage capacity if the available capacity is less than the file size.
-        if available_capacity < event.size {
-            warn!(
-                target: LOG_TARGET,
-                "Insufficient storage capacity to accept file: {:?}",
-                event.file_key
-            );
-
-            let current_capacity = self
+        // If we do not have the file already in forest storage, we must take into account the
+        // available storage capacity.
+        if !read_fs.contains_file_key(&file_key.into())? {
+            let available_capacity = self
                 .storage_hub_handler
                 .blockchain
-                .query_storage_provider_capacity(own_msp_id)
+                .query_available_storage_capacity(own_msp_id)
                 .await
                 .map_err(|e| {
-                    let err_msg = format!("Failed to query storage provider capacity: {:?}", e);
+                    let err_msg = format!("Failed to query available storage capacity: {:?}", e);
                     error!(
                         target: LOG_TARGET,
                         err_msg
@@ -757,93 +488,65 @@ where
                     anyhow::anyhow!(err_msg)
                 })?;
 
-            let max_storage_capacity = self
-                .storage_hub_handler
-                .provider_config
-                .max_storage_capacity;
-
-            if max_storage_capacity == current_capacity {
-                let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
-                warn!(
-                    target: LOG_TARGET, err_msg
-                );
-                return Err(anyhow::anyhow!(err_msg));
-            }
-
-            let new_capacity = self.calculate_capacity(&event, current_capacity)?;
-
-            let call = storage_hub_runtime::RuntimeCall::Providers(
-                pallet_storage_providers::Call::change_capacity { new_capacity },
-            );
-
-            let earliest_change_capacity_block = self
-                .storage_hub_handler
-                .blockchain
-                .query_earliest_change_capacity_block(own_msp_id)
-                .await
-                .map_err(|e| {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to query storage provider capacity: {:?}", e
-                    );
-                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
-                })?;
-
-            // Wait for the earliest block where the capacity can be changed.
-            self.storage_hub_handler
-                .blockchain
-                .wait_for_block(earliest_change_capacity_block)
-                .await?;
-
-            self.storage_hub_handler
-                .blockchain
-                .send_extrinsic(call, Tip::from(0))
-                .await?
-                .with_timeout(Duration::from_secs(60))
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await?;
-
-            info!(
-                target: LOG_TARGET,
-                "Increased storage capacity to {:?} bytes",
-                new_capacity
-            );
-
-            let available_capacity = self
-                .storage_hub_handler
-                .blockchain
-                .query_available_storage_capacity(own_msp_id)
-                .await
-                .map_err(|e| {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to query available storage capacity: {:?}", e
-                    );
-                    anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
-                })?;
-
-            // Reject storage request if the new available capacity is still less than the file size.
+            // Increase storage capacity if the available capacity is less than the file size.
             if available_capacity < event.size {
-                let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Rejecting storage request.";
                 warn!(
-                    target: LOG_TARGET, "{}", err_msg
+                    target: LOG_TARGET,
+                    "Insufficient storage capacity to accept file: {:?}",
+                    event.file_key
                 );
 
-                // Build extrinsic.
-                let call = storage_hub_runtime::RuntimeCall::FileSystem(
-                    pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                        storage_request_msp_response: bounded_vec![
-                            StorageRequestMspBucketResponse {
-                                bucket_id: event.bucket_id,
-                                accept: None,
-                                reject: bounded_vec![RejectedStorageRequest {
-                                    file_key: H256(event.file_key.into()),
-                                    reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
-                                }],
-                            }
-                        ],
-                    },
+                let current_capacity = self
+                    .storage_hub_handler
+                    .blockchain
+                    .query_storage_provider_capacity(own_msp_id)
+                    .await
+                    .map_err(|e| {
+                        let err_msg = format!("Failed to query storage provider capacity: {:?}", e);
+                        error!(
+                            target: LOG_TARGET,
+                            err_msg
+                        );
+                        anyhow::anyhow!(err_msg)
+                    })?;
+
+                let max_storage_capacity = self
+                    .storage_hub_handler
+                    .provider_config
+                    .max_storage_capacity;
+
+                if max_storage_capacity == current_capacity {
+                    let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
+                    warn!(
+                        target: LOG_TARGET, err_msg
+                    );
+                    return Err(anyhow::anyhow!(err_msg));
+                }
+
+                let new_capacity = self.calculate_capacity(&event, current_capacity)?;
+
+                let call = storage_hub_runtime::RuntimeCall::Providers(
+                    pallet_storage_providers::Call::change_capacity { new_capacity },
                 );
+
+                let earliest_change_capacity_block = self
+                    .storage_hub_handler
+                    .blockchain
+                    .query_earliest_change_capacity_block(own_msp_id)
+                    .await
+                    .map_err(|e| {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to query storage provider capacity: {:?}", e
+                        );
+                        anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                    })?;
+
+                // Wait for the earliest block where the capacity can be changed.
+                self.storage_hub_handler
+                    .blockchain
+                    .wait_for_block(earliest_change_capacity_block)
+                    .await?;
 
                 self.storage_hub_handler
                     .blockchain
@@ -853,13 +556,84 @@ where
                     .watch_for_success(&self.storage_hub_handler.blockchain)
                     .await?;
 
-                return Err(anyhow::anyhow!(err_msg));
+                info!(
+                    target: LOG_TARGET,
+                    "Increased storage capacity to {:?} bytes",
+                    new_capacity
+                );
+
+                let available_capacity = self
+                    .storage_hub_handler
+                    .blockchain
+                    .query_available_storage_capacity(own_msp_id)
+                    .await
+                    .map_err(|e| {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to query available storage capacity: {:?}", e
+                        );
+                        anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                    })?;
+
+                // Reject storage request if the new available capacity is still less than the file size.
+                if available_capacity < event.size {
+                    let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Rejecting storage request.";
+                    warn!(
+                        target: LOG_TARGET, "{}", err_msg
+                    );
+
+                    // Build extrinsic.
+                    let call = storage_hub_runtime::RuntimeCall::FileSystem(
+                        pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
+                            storage_request_msp_response: vec![StorageRequestMspBucketResponse {
+                                bucket_id: event.bucket_id,
+                                accept: None,
+                                reject: vec![RejectedStorageRequest {
+                                    file_key: H256(event.file_key.into()),
+                                    reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
+                                }],
+                            }],
+                        },
+                    );
+
+                    self.storage_hub_handler
+                        .blockchain
+                        .send_extrinsic(call, Tip::from(0))
+                        .await?
+                        .with_timeout(Duration::from_secs(60))
+                        .watch_for_success(&self.storage_hub_handler.blockchain)
+                        .await?;
+
+                    return Err(anyhow::anyhow!(err_msg));
+                }
             }
         }
 
         self.file_key_cleanup = Some(file_key.into());
 
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+
+        // Create file in file storage if it is not present so we can write uploaded chunks as soon as possible.
+        if write_file_storage
+            .get_metadata(&file_key.into())
+            .map_err(|e| anyhow!("Failed to get metadata from file storage: {:?}", e))?
+            .is_none()
+        {
+            write_file_storage
+                .insert_file(
+                    metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
+                    metadata,
+                )
+                .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+        }
+
+        drop(write_file_storage);
+
         // Register the file for upload in the file transfer service.
+        // Even though we could already have the entire file in file storage, we
+        // allow the user to connect to us and upload the file. Once they do, we will
+        // send back the `file_complete` flag to true signaling to the user that we have
+        // the entire file so that the file uploading process is complete.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
                 Ok(str_slice) => PeerId::from_str(str_slice).map_err(|e| {
@@ -875,15 +649,197 @@ where
                 .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
 
-        // Create file in file storage so we can write uploaded chunks as soon as possible.
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage
-            .insert_file(
-                metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
-                metadata,
-            )
-            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
-        drop(write_file_storage);
+        Ok(())
+    }
+
+    async fn handle_remote_upload_request_event(
+        &mut self,
+        event: RemoteUploadRequest,
+    ) -> anyhow::Result<bool> {
+        let bucket_id = match self
+            .storage_hub_handler
+            .file_storage
+            .read()
+            .await
+            .get_metadata(&event.file_key.into())
+        {
+            Ok(metadata) => match metadata {
+                Some(metadata) => H256(metadata.bucket_id.try_into().unwrap()),
+                None => {
+                    let err_msg = format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key);
+                    error!(target: LOG_TARGET, err_msg);
+                    return Err(anyhow!(err_msg));
+                }
+            },
+            Err(e) => {
+                let err_msg = format!("Failed to get file metadata: {:?}", e);
+                error!(target: LOG_TARGET, err_msg);
+                return Err(anyhow!(err_msg));
+            }
+        };
+
+        let proven = match event
+            .file_key_proof
+            .proven::<StorageProofsMerkleTrieLayout>()
+        {
+            Ok(proven) => {
+                if proven.len() != 1 {
+                    Err(anyhow::anyhow!(
+                        "Expected exactly one proven chunk but got {}.",
+                        proven.len()
+                    ))
+                } else {
+                    Ok(proven[0].clone())
+                }
+            }
+            Err(e) => Err(anyhow::anyhow!(
+                "Failed to verify and get proven file key chunks: {:?}",
+                e
+            )),
+        };
+
+        // Handle invalid proof case
+        let proven = match proven {
+            Ok(proven) => proven,
+            Err(e) => {
+                warn!(target: LOG_TARGET, "{}", e);
+                self.handle_rejected_storage_request(
+                    &event.file_key.into(),
+                    bucket_id,
+                    RejectedStorageRequestReason::ReceivedInvalidProof,
+                )
+                .await?;
+                return Err(e);
+            }
+        };
+
+        let write_result = {
+            let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+            write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data)
+        };
+
+        match write_result {
+            Ok(outcome) => match outcome {
+                FileStorageWriteOutcome::FileComplete => Ok(true),
+                FileStorageWriteOutcome::FileIncomplete => Ok(false),
+            },
+            Err(error) => match error {
+                FileStorageWriteError::FileChunkAlreadyExists => {
+                    trace!(
+                        target: LOG_TARGET,
+                        "Received duplicate chunk with key: {:?}",
+                        proven.key
+                    );
+                    // Check if the file is already complete
+                    let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+                    match read_file_storage.is_file_complete(&event.file_key.into()) {
+                        Ok(is_complete) => Ok(is_complete),
+                        Err(e) => {
+                            self.handle_rejected_storage_request(
+                                &event.file_key.into(),
+                                bucket_id,
+                                RejectedStorageRequestReason::InternalError,
+                            )
+                            .await?;
+                            let err_msg = format!(
+                                "Received duplicate chunk but failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
+                                event.file_key, e
+                            );
+                            error!(target: LOG_TARGET, "{}", err_msg);
+                            Err(anyhow::anyhow!(err_msg))
+                        }
+                    }
+                }
+                FileStorageWriteError::FileDoesNotExist => {
+                    self.handle_rejected_storage_request(
+                        &event.file_key.into(),
+                        bucket_id,
+                        RejectedStorageRequestReason::InternalError,
+                    )
+                    .await?;
+                    Err(anyhow::anyhow!(format!(
+                            "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                            event.file_key
+                        )))
+                }
+                FileStorageWriteError::FailedToGetFileChunk
+                | FileStorageWriteError::FailedToInsertFileChunk
+                | FileStorageWriteError::FailedToDeleteChunk
+                | FileStorageWriteError::FailedToPersistChanges
+                | FileStorageWriteError::FailedToParseFileMetadata
+                | FileStorageWriteError::FailedToParseFingerprint
+                | FileStorageWriteError::FailedToReadStorage
+                | FileStorageWriteError::FailedToUpdatePartialRoot
+                | FileStorageWriteError::FailedToParsePartialRoot
+                | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                    self.handle_rejected_storage_request(
+                        &event.file_key.into(),
+                        bucket_id,
+                        RejectedStorageRequestReason::InternalError,
+                    )
+                    .await?;
+                    Err(anyhow::anyhow!(format!(
+                        "Internal trie read/write error {:?}:{:?}",
+                        event.file_key, proven.key
+                    )))
+                }
+                FileStorageWriteError::FingerprintAndStoredFileMismatch => {
+                    self.handle_rejected_storage_request(
+                        &event.file_key.into(),
+                        bucket_id,
+                        RejectedStorageRequestReason::InternalError,
+                    )
+                    .await?;
+                    Err(anyhow::anyhow!(format!(
+                            "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
+                            event.file_key
+                        )))
+                }
+                FileStorageWriteError::FailedToConstructTrieIter => {
+                    self.handle_rejected_storage_request(
+                        &event.file_key.into(),
+                        bucket_id,
+                        RejectedStorageRequestReason::InternalError,
+                    )
+                    .await?;
+                    Err(anyhow::anyhow!(format!(
+                        "This is a bug! Failed to construct trie iter for key {:?}.",
+                        event.file_key
+                    )))
+                }
+            },
+        }
+    }
+
+    async fn handle_rejected_storage_request(
+        &self,
+        file_key: &H256,
+        bucket_id: H256,
+        reason: RejectedStorageRequestReason,
+    ) -> anyhow::Result<()> {
+        let call = storage_hub_runtime::RuntimeCall::FileSystem(
+            pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
+                storage_request_msp_response: vec![StorageRequestMspBucketResponse {
+                    bucket_id,
+                    accept: None,
+                    reject: vec![RejectedStorageRequest {
+                        file_key: *file_key,
+                        reason,
+                    }],
+                }],
+            },
+        );
+
+        self.storage_hub_handler
+            .blockchain
+            .send_extrinsic(call, Tip::from(0))
+            .await?
+            .with_timeout(Duration::from_secs(60))
+            .watch_for_success(&self.storage_hub_handler.blockchain)
+            .await?;
+
+        // Unregister the file
+        self.unregister_file(*file_key).await?;
 
         Ok(())
     }
@@ -900,7 +856,7 @@ where
         current_capacity: StorageDataUnit,
     ) -> Result<StorageDataUnit, anyhow::Error> {
         let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (event.size + jump_capacity - 1) / jump_capacity;
+        let jumps_needed = event.size.div_ceil(jump_capacity);
         let jumps = max(jumps_needed, 1);
         let bytes_to_add = jumps * jump_capacity;
         let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {

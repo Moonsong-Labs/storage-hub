@@ -4,7 +4,7 @@ import {
   bspThreeKey,
   describeBspNet,
   shUser,
-  sleep,
+  waitFor,
   type EnrichedBspApi,
   type FileMetadata
 } from "../../../util";
@@ -77,7 +77,7 @@ describeBspNet(
       });
 
       // Seal one more block with the pending extrinsics.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -177,19 +177,21 @@ describeBspNet(
         [fileMetadata.fileKey]
       );
       await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
-      const blockResult = await userApi.sealBlock(
-        bspThreeApi.tx.fileSystem.bspRequestStopStoring(
-          fileMetadata.fileKey,
-          fileMetadata.bucketId,
-          fileMetadata.location,
-          fileMetadata.owner,
-          fileMetadata.fingerprint,
-          fileMetadata.fileSize,
-          false,
-          inclusionForestProof.toString()
-        ),
-        bspThreeKey
-      );
+      const blockResult = await userApi.block.seal({
+        calls: [
+          bspThreeApi.tx.fileSystem.bspRequestStopStoring(
+            fileMetadata.fileKey,
+            fileMetadata.bucketId,
+            fileMetadata.location,
+            fileMetadata.owner,
+            fileMetadata.fingerprint,
+            fileMetadata.fileSize,
+            false,
+            inclusionForestProof.toString()
+          )
+        ],
+        signer: bspThreeKey
+      });
       assert(blockResult.extSuccess, "Extrinsic was part of the block so its result should exist.");
       assert(
         blockResult.extSuccess === true,
@@ -203,33 +205,39 @@ describeBspNet(
     });
 
     it("BSP can correctly delete a file from its forest and runtime correctly updates its root", async () => {
+      // Generate the inclusion proof for the file key that BSP-Three requested to stop storing.
       const inclusionForestProof = await bspThreeApi.rpc.storagehubclient.generateForestProof(
         null,
         [fileMetadata.fileKey]
       );
+
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const cooldown =
         currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
       await userApi.block.skipTo(cooldown);
+      await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
+
       // Confirm the request of deletion. Make sure the extrinsic doesn't fail and the root is updated correctly.
-      await userApi.sealBlock(
-        bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
-          fileMetadata.fileKey,
-          inclusionForestProof.toString()
-        ),
-        bspThreeKey
-      );
+      await userApi.block.seal({
+        calls: [
+          bspThreeApi.tx.fileSystem.bspConfirmStopStoring(
+            fileMetadata.fileKey,
+            inclusionForestProof.toString()
+          )
+        ],
+        signer: bspThreeKey
+      });
       // Check for the confirm stopped storing event.
       const confirmStopStoringEvent = await userApi.assert.eventPresent(
         "fileSystem",
         "BspConfirmStoppedStoring"
       );
       // Wait for confirmation line in docker logs.
-      await bspThreeApi.assert.log({
-        searchString: "successfully removed from forest",
-        containerName: "sh-bsp-three"
+      await bspThreeApi.docker.waitForLog({
+        containerName: "sh-bsp-three",
+        searchString: "New local Forest root matches the one in the block for BSP"
       });
 
       // Make sure the new root was updated correctly.
@@ -303,19 +311,26 @@ describeBspNet(
       // Finally, advance two challenge ticks ahead.
       await userApi.block.skipTo(nextChallengeTick);
 
-      // Wait for BSP to submit proof.
-      await sleep(1000);
-
-      // There should be at least one pending submit proof transaction.
       const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
         checkTxPool: true
       });
-      assert(submitProofsPending.length > 0);
+
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        checkTxPool: true
+      });
+
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        checkTxPool: true
+      });
 
       // Seal block and check that the transaction was successful.
-      await userApi.sealBlock();
+      await userApi.block.seal();
 
       // Assert for the event of the proof successfully submitted and verified.
       const proofAcceptedEvents = await userApi.assert.eventMany("proofsDealer", "ProofAccepted");
@@ -347,16 +362,14 @@ describeBspNet(
       await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
-      // And give some time to process the latest blocks.
-      await sleep(1000);
-
       // There shouldn't be any pending volunteer transactions.
       await assert.rejects(
         async () => {
           await userApi.assert.extrinsicPresent({
             module: "fileSystem",
             method: "bspVolunteer",
-            checkTxPool: true
+            checkTxPool: true,
+            timeout: 2000
           });
         },
         /No matching extrinsic found for fileSystem\.bspVolunteer/,
@@ -366,10 +379,7 @@ describeBspNet(
 
     it("BSP-Two still correctly responds to challenges with same forest root", async () => {
       // Advance some blocks to allow the BSP to process the challenges and submit proofs.
-      for (let i = 0; i < 20; i++) {
-        await userApi.block.seal();
-        await sleep(500);
-      }
+      await userApi.block.skip(20);
 
       // Advance to next challenge tick for BSP-Two.
       // First we get the last tick for which the BSP submitted a proof.
@@ -459,31 +469,26 @@ describeBspNet(
       );
 
       // User sends file deletion request.
-      await userApi.sealBlock(
-        userApi.tx.fileSystem.deleteFile(
-          oneBspfileMetadata.bucketId,
-          oneBspfileMetadata.fileKey,
-          oneBspfileMetadata.location,
-          oneBspfileMetadata.fileSize,
-          oneBspfileMetadata.fingerprint,
-          null
-        ),
-        shUser
-      );
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.deleteFile(
+            oneBspfileMetadata.bucketId,
+            oneBspfileMetadata.fileKey,
+            oneBspfileMetadata.location,
+            oneBspfileMetadata.fileSize,
+            oneBspfileMetadata.fingerprint,
+            null
+          )
+        ],
+        signer: shUser
+      });
 
       // Check for a file deletion request event.
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequest");
 
-      // Advance until the deletion request expires so that it can be processed.
-      const deletionRequestTtl = Number(userApi.consts.fileSystem.pendingFileDeletionRequestTtl);
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      await userApi.block.skipTo(currentBlockNumber + deletionRequestTtl, {
-        watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
-      });
-
-      // Check for a file deletion request event.
-      await userApi.assert.eventPresent("fileSystem", "PriorityChallengeForFileDeletionQueued");
+      // Wait for MSP to submit proof for the pending file deletion request
+      await userApi.wait.mspPendingFileDeletionRequestSubmitProof();
+      await userApi.block.seal();
     });
 
     it("Priority challenge is included in checkpoint challenge round", async () => {
@@ -534,7 +539,13 @@ describeBspNet(
       assert(dummyBspChallengePeriodResult.isOk);
       const dummyBspChallengePeriod = dummyBspChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
-      const dummyBspNextChallengeTick = lastTickBspSubmittedProof + dummyBspChallengePeriod;
+      let dummyBspNextChallengeTick = lastTickBspSubmittedProof + dummyBspChallengePeriod;
+      // Increment challenge periods until we get a number that is greater than the current tick.
+      const currentTick = (await userApi.call.proofsDealerApi.getCurrentTick()).toNumber();
+      while (currentTick > dummyBspNextChallengeTick) {
+        // Go one challenge period forward.
+        dummyBspNextChallengeTick += dummyBspChallengePeriod;
+      }
 
       // Calculate next challenge tick for BSP-Two.
       // We first get the last tick for which the BSP submitted a proof.
@@ -549,7 +560,12 @@ describeBspNet(
       assert(bspTwoChallengePeriodResult.isOk);
       const bspTwoChallengePeriod = bspTwoChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
-      const bspTwoNextChallengeTick = bspTwoLastTickBspTwoSubmittedProof + bspTwoChallengePeriod;
+      let bspTwoNextChallengeTick = bspTwoLastTickBspTwoSubmittedProof + bspTwoChallengePeriod;
+      // Increment challenge periods until we get a number that is greater than the current tick.
+      while (currentTick > bspTwoNextChallengeTick) {
+        // Go one challenge period forward.
+        bspTwoNextChallengeTick += bspTwoChallengePeriod;
+      }
 
       const firstBspToRespond =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick
@@ -581,8 +597,12 @@ describeBspNet(
       }
 
       // Wait for BSP to generate the proof and advance one more block.
-      await sleep(500);
-      await userApi.sealBlock();
+      await userApi.assert.extrinsicPresent({
+        module: "proofsDealer",
+        method: "submitProof",
+        checkTxPool: true
+      });
+      await userApi.block.seal();
 
       // Check for a ProofAccepted event.
       const firstChallengeBlockEvents = await userApi.assert.eventMany(
@@ -604,7 +624,7 @@ describeBspNet(
       if (firstBspToRespond === ShConsts.DUMMY_BSP_ID) {
         const mutationsAppliedEvents = await userApi.assert.eventMany(
           "proofsDealer",
-          "MutationsApplied"
+          "MutationsAppliedForProvider"
         );
         strictEqual(
           mutationsAppliedEvents.length,
@@ -614,11 +634,12 @@ describeBspNet(
 
         // Check that the mutations applied event belongs to the dummy BSP.
         const mutationsAppliedEventDataBlob =
-          userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
-          mutationsAppliedEvents[0].event.data;
+          userApi.events.proofsDealer.MutationsAppliedForProvider.is(
+            mutationsAppliedEvents[0].event
+          ) && mutationsAppliedEvents[0].event.data;
         assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
         strictEqual(
-          mutationsAppliedEventDataBlob.provider.toString(),
+          mutationsAppliedEventDataBlob.providerId.toString(),
           ShConsts.DUMMY_BSP_ID,
           "The mutations applied event should belong to the dummy BSP"
         );
@@ -637,8 +658,12 @@ describeBspNet(
         }
 
         // Wait for BSP to generate the proof and advance one more block.
-        await sleep(500);
-        await userApi.sealBlock();
+        await userApi.assert.extrinsicPresent({
+          module: "proofsDealer",
+          method: "submitProof",
+          checkTxPool: true
+        });
+        await userApi.block.seal();
       }
 
       // Check for a ProofAccepted event.
@@ -661,7 +686,7 @@ describeBspNet(
       if (secondBspToRespond === ShConsts.DUMMY_BSP_ID) {
         const mutationsAppliedEvents = await userApi.assert.eventMany(
           "proofsDealer",
-          "MutationsApplied"
+          "MutationsAppliedForProvider"
         );
         strictEqual(
           mutationsAppliedEvents.length,
@@ -671,11 +696,12 @@ describeBspNet(
 
         // Check that the mutations applied event belongs to the dummy BSP.
         const mutationsAppliedEventDataBlob =
-          userApi.events.proofsDealer.MutationsApplied.is(mutationsAppliedEvents[0].event) &&
-          mutationsAppliedEvents[0].event.data;
+          userApi.events.proofsDealer.MutationsAppliedForProvider.is(
+            mutationsAppliedEvents[0].event
+          ) && mutationsAppliedEvents[0].event.data;
         assert(mutationsAppliedEventDataBlob, "Event doesn't match Type");
         strictEqual(
-          mutationsAppliedEventDataBlob.provider.toString(),
+          mutationsAppliedEventDataBlob.providerId.toString(),
           ShConsts.DUMMY_BSP_ID,
           "The mutations applied event should belong to the dummy BSP"
         );
@@ -695,10 +721,13 @@ describeBspNet(
         "The root should have been updated on chain"
       );
 
-      // Wait for BSP to update his local forest root.
-      await sleep(500);
+      await waitFor({
+        lambda: async () => (await bspApi.rpc.storagehubclient.getForestRoot(null)).isSome
+      });
+
       // Check that the runtime root matches the forest root of the BSP.
       const forestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
+
       strictEqual(
         bspMetadataAfterDeletionBlob.root.toString(),
         forestRoot.toString(),

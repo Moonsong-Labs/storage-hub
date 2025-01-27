@@ -1244,7 +1244,7 @@ mod users {
                 storagehub::RuntimeCall::FileSystem(pallet_file_system::Call::<
                     storagehub::Runtime,
                 >::create_bucket {
-                    msp_id: Some(alice_msp_id),
+                    msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
                     value_prop_id: Some(value_prop_id),
@@ -1314,7 +1314,7 @@ mod users {
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
                     size,
-                    msp_id: Some(alice_msp_id.clone()),
+                    msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
                     replication_target: None,
                 });
@@ -1349,9 +1349,18 @@ mod users {
                     .is_some()
             );
 
-            // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            // In the config we set to reach the maximum threshold after 1 block
-            sh_run_to_block(storagehub::System::block_number() + 1);
+            // Calculate in how many ticks Bob can volunteer for the file
+            let current_tick = storagehub::ProofsDealer::get_current_tick();
+            let tick_when_bob_can_volunteer =
+                storagehub::FileSystem::query_earliest_file_volunteer_tick(bob_bsp_id, file_key)
+                    .unwrap();
+            if tick_when_bob_can_volunteer > current_tick {
+                let ticks_to_advance = tick_when_bob_can_volunteer - current_tick + 1;
+                let current_block = storagehub::System::block_number();
+
+                // Advance enough blocks to make sure Bob can volunteer according to the threshold
+                sh_run_to_block(current_block + ticks_to_advance);
+            }
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(
@@ -1604,7 +1613,7 @@ mod users {
                 storagehub::RuntimeCall::FileSystem(pallet_file_system::Call::<
                     storagehub::Runtime,
                 >::create_bucket {
-                    msp_id: Some(alice_msp_id),
+                    msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
                     value_prop_id: Some(value_prop_id),
@@ -1686,7 +1695,7 @@ mod users {
                     location: file_location.clone(),
                     fingerprint: file_fingerprint.clone(),
                     size,
-                    msp_id: Some(alice_msp_id.clone()),
+                    msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
                     replication_target: None,
                 });
@@ -1732,9 +1741,18 @@ mod users {
                     .is_some()
             );
 
-            // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            // In the config we set to reach the maximum threshold after 1 block
-            sh_run_to_block(storagehub::System::block_number() + 1);
+            // Calculate in how many ticks Bob can volunteer for the file
+            let current_tick = storagehub::ProofsDealer::get_current_tick();
+            let tick_when_bob_can_volunteer =
+                storagehub::FileSystem::query_earliest_file_volunteer_tick(bob_bsp_id, file_key)
+                    .unwrap();
+            if tick_when_bob_can_volunteer > current_tick {
+                let ticks_to_advance = tick_when_bob_can_volunteer - current_tick + 1;
+                let current_block = storagehub::System::block_number();
+
+                // Advance enough blocks to make sure Bob can volunteer according to the threshold
+                sh_run_to_block(current_block + ticks_to_advance);
+            }
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(

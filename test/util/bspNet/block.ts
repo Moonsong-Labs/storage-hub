@@ -88,6 +88,8 @@ export const extendFork = async (
  * @param api - The ApiPromise instance.
  * @param calls - Optional extrinsic(s) to include in the block.
  * @param signer - Optional signer for the extrinsics.
+ * @param nonce - Optional starting nonce for the extrinsics.
+ * @param parentHash - Optional parent hash to build the block on top of.
  * @param finaliseBlock - Whether to finalize the block. Defaults to true.
  * @returns A Promise resolving to a SealedBlock object containing block details and events.
  *
@@ -99,6 +101,8 @@ export const sealBlock = async (
     | SubmittableExtrinsic<"promise", ISubmittableResult>
     | SubmittableExtrinsic<"promise", ISubmittableResult>[],
   signer?: KeyringPair,
+  nonce?: number,
+  parentHash?: string,
   finaliseBlock = true
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
@@ -118,7 +122,8 @@ export const sealBlock = async (
   const callArray = Array.isArray(calls) ? calls : calls ? [calls] : [];
 
   if (callArray.length > 0) {
-    const nonce = await api.rpc.system.accountNextIndex((signer || alice).address);
+    const nonceToUse =
+      nonce ?? (await api.rpc.system.accountNextIndex((signer || alice).address)).toNumber();
 
     // Send all transactions in sequence
     for (let i = 0; i < callArray.length; i++) {
@@ -128,15 +133,22 @@ export const sealBlock = async (
       if (call.isSigned) {
         hash = await call.send();
       } else {
-        hash = await call.signAndSend(signer || alice, { nonce: nonce.addn(i) });
+        hash = await call.signAndSend(signer || alice, { nonce: nonceToUse + i });
       }
 
       results.hashes.push(hash);
     }
   }
 
+  let blockReceipt: CreatedBlock;
+  if (parentHash) {
+    blockReceipt = await api.rpc.engine.createBlock(true, finaliseBlock, parentHash);
+  } else {
+    blockReceipt = await api.rpc.engine.createBlock(true, finaliseBlock);
+  }
+
   const sealedResults = {
-    blockReceipt: await api.rpc.engine.createBlock(true, finaliseBlock),
+    blockReceipt,
     txHashes: results.hashes.map((hash) => hash.toString())
   };
 
@@ -152,17 +164,37 @@ export const sealBlock = async (
     };
 
     // Print any errors in the extrinsics to console for easier debugging
-    for (const { event } of allEvents.filter(
+    for (const { event, phase } of allEvents.filter(
       ({ event }) => api.events.system.ExtrinsicFailed.is(event) && event.data
     )) {
       const errorEventDataBlob = api.events.system.ExtrinsicFailed.is(event) && event.data;
       assert(errorEventDataBlob, "Must have errorEventDataBlob since array is filtered for it");
+
+      console.log(`Transaction failed in block ${blockHash.toString()}`);
+
+      // Get the index of the extrinsic that failed in the block
+      const extIndex = phase.isApplyExtrinsic ? phase.asApplyExtrinsic.toNumber() : -1;
+
+      if (extIndex >= 0) {
+        // Retrieve the extrinsic causing the error
+        const failedExtrinsic = results.blockData?.block.extrinsics[extIndex];
+
+        if (failedExtrinsic) {
+          const { method, section } = failedExtrinsic.method;
+          const args = failedExtrinsic.method.args.map((arg) => arg.toHuman());
+
+          console.log(`Failed Extrinsic: ${section}.${method} with args ${JSON.stringify(args)}`);
+        }
+      }
+
       if (errorEventDataBlob.dispatchError.isModule) {
         const decoded = api.registry.findMetaError(errorEventDataBlob.dispatchError.asModule);
         const { docs, method, section } = decoded;
-        console.log(`${section}.${method}: ${docs.join(" ")}`);
+        console.log(`Error: ${section}.${method}: ${docs.join(" ")}`);
       } else {
-        console.log(errorEventDataBlob.dispatchError.toString());
+        console.log(
+          `Unable to link error to module, printing raw error message: ${errorEventDataBlob.dispatchError.toString()}`
+        );
       }
     }
 
@@ -204,13 +236,14 @@ export const sealBlock = async (
  *
  * @param api - The ApiPromise instance.
  * @param blocksToSkip - The number of blocks to skip.
+ * @param paddingMs - Optional. The time to wait between blocks in milliseconds. Defaults to 50ms.
  * @returns A Promise that resolves when all blocks have been skipped.
  */
-export const skipBlocks = async (api: ApiPromise, blocksToSkip: number) => {
+export const skipBlocks = async (api: ApiPromise, blocksToSkip: number, paddingMs = 50) => {
   console.log(`\tSkipping ${blocksToSkip} blocks...`);
   for (let i = 0; i < blocksToSkip; i++) {
     await sealBlock(api);
-    await sleep(50);
+    await sleep(paddingMs);
   }
 };
 
@@ -373,7 +406,7 @@ export const advanceToBlock = async (
       }
     }
 
-    blockResult = await sealBlock(api, [], undefined, options.finalised);
+    blockResult = await sealBlock(api, [], undefined, undefined, undefined, options.finalised);
     currentBlockNumber += 1;
 
     const blockWeight = await api.query.system.blockWeight();

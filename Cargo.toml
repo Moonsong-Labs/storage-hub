@@ -67,6 +67,7 @@ serde_json = { version = "1.0.121", default-features = false }
 smallvec = "1.11.0"
 thiserror = "1.0.48"
 tokio = "1.36.0"
+toml = "0.8.19"
 trie-db = { version = "0.29.1", default-features = false }
 
 # Substrate
@@ -114,6 +115,7 @@ sc-transaction-pool = { git = "https://github.com/paritytech/polkadot-sdk.git", 
 sc-transaction-pool-api = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 sc-utils = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 sp-weights = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
+sc-rpc-api = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 substrate-frame-rpc-system = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 substrate-prometheus-endpoint = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
 substrate-wasm-builder = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }

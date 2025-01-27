@@ -288,7 +288,7 @@ pub trait MutateBucketsInterface {
     /// If `privacy` is true, the bucket will be private and optionally the `read_access_group_id` will be used to
     /// determine the collection of NFTs that can access the bucket.
     fn add_bucket(
-        provider_id: Option<Self::ProviderId>,
+        provider_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
@@ -817,6 +817,12 @@ pub trait ProofsDealerInterface {
     /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
     /// challenges and making sure that Providers respond to them in time.
     fn get_current_tick() -> Self::TickNumber;
+
+    /// Get the checkpoint challenge period.
+    ///
+    /// The Proofs Dealer pallet uses the checkpoint challenge period to determine the time period
+    /// between checkpoint challenges.
+    fn get_checkpoint_challenge_period() -> Self::TickNumber;
 }
 
 /// A trait to verify proofs based on commitments and challenges.

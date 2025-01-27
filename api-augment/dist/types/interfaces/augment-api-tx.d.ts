@@ -587,12 +587,12 @@ declare module "@polkadot/api-base/types/submittable" {
       >;
       createBucket: AugmentedSubmittable<
         (
-          mspId: Option<H256> | null | Uint8Array | H256 | string,
+          mspId: H256 | string | Uint8Array,
           name: Bytes | string | Uint8Array,
           private: bool | boolean | Uint8Array,
           valuePropId: Option<H256> | null | Uint8Array | H256 | string
         ) => SubmittableExtrinsic<ApiType>,
-        [Option<H256>, Bytes, bool, Option<H256>]
+        [H256, Bytes, bool, Option<H256>]
       >;
       /**
        * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
@@ -635,11 +635,11 @@ declare module "@polkadot/api-base/types/submittable" {
           location: Bytes | string | Uint8Array,
           fingerprint: H256 | string | Uint8Array,
           size: u64 | AnyNumber | Uint8Array,
-          mspId: Option<H256> | null | Uint8Array | H256 | string,
+          mspId: H256 | string | Uint8Array,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u64, Option<H256>, Vec<Bytes>, Option<u32>]
+        [H256, Bytes, H256, u64, H256, Vec<Bytes>, Option<u32>]
       >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (
@@ -714,13 +714,6 @@ declare module "@polkadot/api-base/types/submittable" {
       revokeStorageRequest: AugmentedSubmittable<
         (fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
-      >;
-      setGlobalParameters: AugmentedSubmittable<
-        (
-          newMaxReplicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
-          tickRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
-        ) => SubmittableExtrinsic<ApiType>,
-        [Option<u32>, Option<u32>]
       >;
       /**
        * Executed by a SP to stop storing a file from an insolvent user.
@@ -3715,6 +3708,17 @@ declare module "@polkadot/api-base/types/submittable" {
         (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
+      /**
+       * BSP operation to stop all of your automatic cycles.
+       *
+       * This includes:
+       *
+       * - Commit reveal randomness cycle
+       * - Proof challenge cycle
+       *
+       * If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
+       **/
+      stopAllCycles: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**
        * Dispatchable extrinsic to top-up the deposit of a Storage Provider.
        *

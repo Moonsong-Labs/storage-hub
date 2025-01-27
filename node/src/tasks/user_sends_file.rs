@@ -133,10 +133,7 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        self.send_chunks_to_provider(peer_ids, &file_metadata)
-            .await?;
-
-        Ok(())
+        self.send_chunks_to_provider(peer_ids, &file_metadata).await
     }
 }
 
@@ -232,8 +229,15 @@ where
                         .await;
 
                     match upload_response {
-                        Ok(_) => {
+                        Ok(r) => {
                             debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id);
+
+                            // If the provider signals they have the entire file, we can stop
+                            if r.file_complete {
+                                info!(target: LOG_TARGET, "Stopping file upload process. Peer {:?} has the entire file {:?}", peer_id, file_metadata.fingerprint);
+                                return Ok(());
+                            }
+
                             break;
                         }
                         // Retry if the request was refused by the peer (MSP). This could happen if the user was too fast

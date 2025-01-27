@@ -456,12 +456,72 @@ declare module "@polkadot/api-base/types/events" {
         { who: AccountId32; bucketId: H256; collectionId: Option<u32>; private: bool }
       >;
       /**
-       * Notifies that a priority challenge failed to be queued for pending file deletion.
+       * Failed to decrease bucket size for expired file deletion request
+       **/
+      FailedToDecreaseBucketSize: AugmentedEvent<
+        ApiType,
+        [
+          user: AccountId32,
+          bucketId: H256,
+          fileKey: H256,
+          fileSize: u64,
+          error: SpRuntimeDispatchError
+        ],
+        {
+          user: AccountId32;
+          bucketId: H256;
+          fileKey: H256;
+          fileSize: u64;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
+       * Failed to decrease MSP's used capacity for expired file deletion request
+       **/
+      FailedToDecreaseMspUsedCapacity: AugmentedEvent<
+        ApiType,
+        [
+          user: AccountId32,
+          mspId: H256,
+          fileKey: H256,
+          fileSize: u64,
+          error: SpRuntimeDispatchError
+        ],
+        {
+          user: AccountId32;
+          mspId: H256;
+          fileKey: H256;
+          fileSize: u64;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
+       * Failed to get the MSP owner of the bucket for an expired file deletion request
+       * This is different from the bucket not having a MSP, which is allowed and won't error
+       **/
+      FailedToGetMspOfBucket: AugmentedEvent<
+        ApiType,
+        [bucketId: H256, error: SpRuntimeDispatchError],
+        { bucketId: H256; error: SpRuntimeDispatchError }
+      >;
+      /**
+       * Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
+       * This can happen if the priority challenge queue is full, and the failed challenge should be manually
+       * queued at a later time.
        **/
       FailedToQueuePriorityChallenge: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256],
-        { user: AccountId32; fileKey: H256 }
+        [fileKey: H256, error: SpRuntimeDispatchError],
+        { fileKey: H256; error: SpRuntimeDispatchError }
+      >;
+      /**
+       * Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+       * the return of that storage request's deposit to the user failed.
+       **/
+      FailedToReleaseStorageRequestCreationDeposit: AugmentedEvent<
+        ApiType,
+        [fileKey: H256, owner: AccountId32, amountToReturn: u128, error: SpRuntimeDispatchError],
+        { fileKey: H256; owner: AccountId32; amountToReturn: u128; error: SpRuntimeDispatchError }
       >;
       /**
        * Notifies that a file will be deleted.
@@ -471,15 +531,17 @@ declare module "@polkadot/api-base/types/events" {
         [
           user: AccountId32,
           fileKey: H256,
+          fileSize: u64,
           bucketId: H256,
-          mspId: Option<H256>,
+          mspId: H256,
           proofOfInclusion: bool
         ],
         {
           user: AccountId32;
           fileKey: H256;
+          fileSize: u64;
           bucketId: H256;
-          mspId: Option<H256>;
+          mspId: H256;
           proofOfInclusion: bool;
         }
       >;
@@ -542,7 +604,7 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [
           who: AccountId32,
-          mspId: Option<H256>,
+          mspId: H256,
           bucketId: H256,
           name: Bytes,
           root: H256,
@@ -552,7 +614,7 @@ declare module "@polkadot/api-base/types/events" {
         ],
         {
           who: AccountId32;
-          mspId: Option<H256>;
+          mspId: H256;
           bucketId: H256;
           name: Bytes;
           root: H256;
@@ -581,7 +643,8 @@ declare module "@polkadot/api-base/types/events" {
           location: Bytes,
           fingerprint: H256,
           size_: u64,
-          peerIds: Vec<Bytes>
+          peerIds: Vec<Bytes>,
+          expiresAt: u32
         ],
         {
           who: AccountId32;
@@ -591,6 +654,7 @@ declare module "@polkadot/api-base/types/events" {
           fingerprint: H256;
           size_: u64;
           peerIds: Vec<Bytes>;
+          expiresAt: u32;
         }
       >;
       /**
@@ -606,8 +670,22 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<
         ApiType,
-        [mspId: H256, user: AccountId32, fileKey: H256, bucketId: H256, proofOfInclusion: bool],
-        { mspId: H256; user: AccountId32; fileKey: H256; bucketId: H256; proofOfInclusion: bool }
+        [
+          user: AccountId32,
+          fileKey: H256,
+          fileSize: u64,
+          bucketId: H256,
+          mspId: H256,
+          proofOfInclusion: bool
+        ],
+        {
+          user: AccountId32;
+          fileKey: H256;
+          fileSize: u64;
+          bucketId: H256;
+          mspId: H256;
+          proofOfInclusion: bool;
+        }
       >;
       /**
        * Notifies that a SP has stopped storing a file because its owner has become insolvent.
@@ -1581,12 +1659,33 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ChallengesTickerSet: AugmentedEvent<ApiType, [paused: bool], { paused: bool }>;
       /**
-       * A set of mutations has been applied to the Forest.
+       * A set of mutations has been applied to a given Forest.
+       * This is the generic version of [`MutationsAppliedForProvider`](Event::MutationsAppliedForProvider)
+       * when [`generic_apply_delta`](ProofsDealerInterface::generic_apply_delta) is used
+       * and the root is not necessarily linked to a specific Provider.
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, newRoot: H256],
-        { provider: H256; mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>; newRoot: H256 }
+        [mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, oldRoot: H256, newRoot: H256],
+        { mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>; oldRoot: H256; newRoot: H256 }
+      >;
+      /**
+       * A set of mutations has been applied to the Forest of a given Provider.
+       **/
+      MutationsAppliedForProvider: AugmentedEvent<
+        ApiType,
+        [
+          providerId: H256,
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>,
+          oldRoot: H256,
+          newRoot: H256
+        ],
+        {
+          providerId: H256;
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
+          oldRoot: H256;
+          newRoot: H256;
+        }
       >;
       /**
        * A manual challenge was submitted.

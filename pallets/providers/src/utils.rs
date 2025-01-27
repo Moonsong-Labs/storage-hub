@@ -464,6 +464,9 @@ where
             Error::<T>::SignOffPeriodNotPassed
         );
 
+        // Stop all cycles before deleting the BSP since this function will check if the BSP has default root
+        Self::do_stop_all_cycles(who)?;
+
         // Update the BSPs storage, removing the signer as an BSP
         AccountIdToBackupStorageProviderId::<T>::remove(who);
         BackupStorageProviders::<T>::remove(&bsp_id);
@@ -858,7 +861,7 @@ where
         // Clear the accrued failed proof submissions for the Storage Provider
         <T::ProvidersProofSubmitters as ProofSubmittersInterface>::clear_accrued_failed_proof_submissions(&provider_id);
 
-        // Slash the held deposit since there's not enough free balance
+        // Slash the held deposit
         let actual_slashed = T::NativeBalance::transfer_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
             &account_id,
@@ -1185,6 +1188,28 @@ where
                 provider_id: *provider_id,
             });
         }
+
+        Ok(())
+    }
+
+    pub(crate) fn do_stop_all_cycles(account_id: &T::AccountId) -> DispatchResult {
+        let provider_id = AccountIdToBackupStorageProviderId::<T>::get(account_id)
+            .ok_or(Error::<T>::BspOnlyOperation)?;
+
+        if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+            ensure!(
+                provider.root == T::DefaultMerkleRoot::get(),
+                Error::<T>::CannotStopCycleWithNonDefaultRoot
+            );
+        } else {
+            return Err(Error::<T>::BspOnlyOperation.into());
+        }
+
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&provider_id)?;
+
+        <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::stop_randomness_cycle(
+            &provider_id,
+        )?;
 
         Ok(())
     }
@@ -1654,7 +1679,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ValuePropId = ValuePropIdFor<T>;
 
     fn add_bucket(
-        provider_id: Option<Self::ProviderId>,
+        provider_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
@@ -1673,25 +1698,21 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             Fortitude::Polite,
         );
 
-        if let Some(provider_id) = provider_id {
-            // Check if the MSP exists
+        // Check if the MSP exists
+        ensure!(
+            MainStorageProviders::<T>::contains_key(&provider_id),
+            Error::<T>::NotRegistered
+        );
+
+        if let Some(value_prop_id) = value_prop_id {
+            let value_prop =
+                MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
             ensure!(
-                MainStorageProviders::<T>::contains_key(&provider_id),
-                Error::<T>::NotRegistered
+                value_prop.available,
+                Error::<T>::ValuePropositionNotAvailable
             );
-
-            if let Some(value_prop_id) = value_prop_id {
-                let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                    &provider_id,
-                    &value_prop_id,
-                )
-                .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
-                ensure!(
-                    value_prop.available,
-                    Error::<T>::ValuePropositionNotAvailable
-                );
-            }
         }
 
         let deposit = T::BucketDeposit::get();
@@ -1706,7 +1727,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
-            msp_id: provider_id,
+            msp_id: Some(provider_id),
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
             user_id: user_id.clone(),
@@ -1716,16 +1737,14 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         Buckets::<T>::insert(&bucket_id, &bucket);
 
-        if let Some(provider_id) = provider_id {
-            MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
+        MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
 
-            Self::apply_delta_fixed_rate_payment_stream(
-                &provider_id,
-                &bucket_id,
-                &user_id,
-                RateDeltaParam::NewBucket,
-            )?;
-        }
+        Self::apply_delta_fixed_rate_payment_stream(
+            &provider_id,
+            &bucket_id,
+            &user_id,
+            RateDeltaParam::NewBucket,
+        )?;
 
         Ok(())
     }

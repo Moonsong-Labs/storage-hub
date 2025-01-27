@@ -1,11 +1,4 @@
-use std::{
-    cmp::max,
-    collections::{HashMap, HashSet},
-    ops::Add,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{cmp::max, collections::HashMap, ops::Add, str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -59,7 +52,7 @@ const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
 ///   and if it is valid, stores it, until the whole file is stored.
 /// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
 ///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
-///   before updating it's local Forest storage root.
+///   extrinsic, waiting for it to be successfully included in a block.
 pub struct BspUploadFileTask<NT>
 where
     NT: ShNodeType,
@@ -95,6 +88,91 @@ where
             file_key_cleanup: None,
             capacity_queue: Arc::new(Mutex::new(0_u64)),
         }
+    }
+
+    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let mut is_allowed = read_file_storage
+            .is_allowed(
+                &event.file_key.into(),
+                shc_file_manager::traits::ExcludeType::File,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.fingerprint.as_hash().into(),
+                shc_file_manager::traits::ExcludeType::Fingerprint,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File fingerprint is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        let owner = H256::from(event.who.as_ref());
+        is_allowed = read_file_storage
+            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Owner is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.bucket_id,
+                shc_file_manager::traits::ExcludeType::Bucket,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Bucket is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        drop(read_file_storage);
+
+        return Ok(true);
     }
 }
 
@@ -141,111 +219,55 @@ where
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
-        let proven = match event
-            .file_key_proof
-            .proven::<StorageProofsMerkleTrieLayout>()
-        {
-            Ok(proven) => {
-                if proven.len() != 1 {
-                    Err(anyhow::anyhow!(
-                        "Expected exactly one proven chunk but got {}.",
-                        proven.len()
-                    ))
-                } else {
-                    Ok(proven[0].clone())
-                }
-            }
-            Err(e) => Err(anyhow::anyhow!(
-                "Failed to verify and get proven file key chunks: {:?}",
-                e
-            )),
-        };
-
-        let proven = match proven {
-            Ok(proven) => proven,
+        let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
+            Ok(complete) => complete,
             Err(e) => {
-                warn!(target: LOG_TARGET, "{}", e);
-
-                // Unvolunteer the file.
-                self.unvolunteer_file(event.file_key.into()).await;
+                // Send error response through FileTransferService
+                if let Err(e) = self
+                    .storage_hub_handler
+                    .file_transfer
+                    .upload_response(false, event.request_id)
+                    .await
+                {
+                    error!(target: LOG_TARGET, "Failed to send error response: {:?}", e);
+                }
                 return Err(e);
             }
         };
 
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        let write_chunk_result =
-            write_file_storage.write_chunk(&event.file_key.into(), &proven.key, &proven.data);
-        // Release the file storage write lock as soon as possible.
-        drop(write_file_storage);
+        // Send completion status through FileTransferService
+        if let Err(e) = self
+            .storage_hub_handler
+            .file_transfer
+            .upload_response(file_complete, event.request_id)
+            .await
+        {
+            error!(target: LOG_TARGET, "Failed to send response: {:?}", e);
+        }
 
-        match write_chunk_result {
-            Ok(outcome) => match outcome {
-                FileStorageWriteOutcome::FileComplete => {
-                    self.on_file_complete(&event.file_key.into()).await?
-                }
-                FileStorageWriteOutcome::FileIncomplete => {}
-            },
-            Err(error) => match error {
-                FileStorageWriteError::FileChunkAlreadyExists => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Received duplicate chunk with key: {:?}",
-                        proven.key
-                    );
+        // Handle file completion if the entire file is uploaded
+        if file_complete {
+            if let Err(e) = self
+                .storage_hub_handler
+                .file_transfer
+                .unregister_file(event.file_key)
+                .await
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to unregister file {:?} from file transfer service: {:?}",
+                    event.file_key,
+                    e
+                );
+            }
 
-                    // TODO: Consider informing this to the file transfer service so that it can handle reputation for this peer id.
-                }
-                FileStorageWriteError::FileDoesNotExist => {
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
-
-                    return Err(anyhow::anyhow!(format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key)));
-                }
-                FileStorageWriteError::FailedToGetFileChunk
-                | FileStorageWriteError::FailedToInsertFileChunk
-                | FileStorageWriteError::FailedToDeleteChunk
-                | FileStorageWriteError::FailedToPersistChanges
-                | FileStorageWriteError::FailedToParseFileMetadata
-                | FileStorageWriteError::FailedToParseFingerprint
-                | FileStorageWriteError::FailedToReadStorage
-                | FileStorageWriteError::FailedToUpdatePartialRoot
-                | FileStorageWriteError::FailedToParsePartialRoot
-                | FileStorageWriteError::FailedToGetStoredChunksCount => {
-                    // This internal error should not happen.
-
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "Internal trie read/write error {:?}:{:?}",
-                        event.file_key, proven.key
-                    )));
-                }
-                FileStorageWriteError::FingerprintAndStoredFileMismatch => {
-                    // This should never happen, given that the first check in the handler is verifying the proof.
-                    // This means that something is seriously wrong, so we error out the whole task.
-
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
-                        event.file_key
-                    )));
-                }
-                FileStorageWriteError::FailedToConstructTrieIter => {
-                    // This should never happen for a well constructed trie.
-                    // This means that something is seriously wrong, so we error out the whole task.
-
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
-
-                    return Err(anyhow::anyhow!(format!(
-                        "This is a bug! Failed to construct trie iter for key {:?}.",
-                        event.file_key
-                    )));
-                }
-            },
+            self.storage_hub_handler
+                .blockchain
+                .queue_confirm_bsp_request(ConfirmStoringRequest {
+                    file_key: event.file_key.into(),
+                    try_count: 0,
+                })
+                .await?;
         }
 
         Ok(())
@@ -406,8 +428,7 @@ where
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
-        let events = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -430,71 +451,6 @@ where
                 )
             })?;
 
-        let maybe_new_root: Option<H256> = events.and_then(|events| {
-            events.into_iter().find_map(|event| {
-                if let storage_hub_runtime::RuntimeEvent::FileSystem(
-                    pallet_file_system::Event::BspConfirmedStoring {
-                        bsp_id,
-                        skipped_file_keys,
-                        new_root,
-                        ..
-                    },
-                ) = event.event
-                {
-                    if bsp_id == own_bsp_id {
-                        if !skipped_file_keys.is_empty() {
-                            warn!(
-                            target: LOG_TARGET,
-                            "Skipped confirmations for file keys: {:?}",
-                            skipped_file_keys
-                            );
-                            // Remove skipped confirmations
-                            let skipped_set: HashSet<_> = skipped_file_keys.into_iter().collect();
-                            file_metadatas.retain(|file_key, _| !skipped_set.contains(file_key));
-                        }
-                        Some(new_root)
-                    } else {
-                        debug!(
-                            target: LOG_TARGET,
-                            "Received confirmation for another BSP: {:?}",
-                            bsp_id
-                        );
-                        None
-                    }
-                } else {
-                    debug!(
-                        target: LOG_TARGET,
-                        "Received unexpected event: {:?}",
-                        event.event
-                    );
-                    None
-                }
-            })
-        });
-
-        let new_root = match maybe_new_root {
-            Some(new_root) => new_root,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. Failed to query BspConfirmedStoring new forest root after confirming storing.";
-                error!(target: LOG_TARGET, "{}", err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
-
-        // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
-        if !file_metadatas.is_empty() {
-            fs.write().await.insert_files_metadata(
-                file_metadatas.into_values().collect::<Vec<_>>().as_slice(),
-            )?;
-
-            if fs.read().await.root() != new_root {
-                let err_msg =
-                    "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. \nError forest root mismatch after confirming storing.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        }
-
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
             .blockchain
@@ -513,22 +469,9 @@ where
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
         // First check if the file is not on our exclude list
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let is_allowed = read_file_storage
-            .is_allowed(&event.file_key.into())
-            .map_err(|e| {
-                let err_msg = format!("Failed to read exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        drop(read_file_storage);
+        let is_allowed = self.is_allowed(&event).await?;
 
         if !is_allowed {
-            info!("File is in the exclude list");
             return Ok(());
         }
 
@@ -828,6 +771,109 @@ where
         Ok(())
     }
 
+    /// Handles the [`RemoteUploadRequest`] event.
+    ///
+    /// Returns `true` if the file is complete, `false` if the file is incomplete.
+    async fn handle_remote_upload_request_event(
+        &mut self,
+        event: RemoteUploadRequest,
+    ) -> anyhow::Result<bool> {
+        let file_key = event.file_key.into();
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+
+        // Verify and extract chunk from proof
+        let proven = event
+            .file_key_proof
+            .proven::<StorageProofsMerkleTrieLayout>()
+            .map_err(|e| anyhow!("Failed to verify proof: {:?}", e))?;
+        if proven.len() != 1 {
+            return Err(anyhow!(
+                "Expected exactly one proven chunk but got {}",
+                proven.len()
+            ));
+        }
+
+        let proven_chunk: &shp_file_metadata::Leaf<shp_file_metadata::ChunkId, Vec<u8>> =
+            &proven[0];
+
+        match write_file_storage.write_chunk(&file_key, &proven_chunk.key, &proven_chunk.data) {
+            Ok(outcome) => match outcome {
+                FileStorageWriteOutcome::FileComplete => Ok(true),
+                FileStorageWriteOutcome::FileIncomplete => Ok(false),
+            },
+            Err(e) => match e {
+                FileStorageWriteError::FileChunkAlreadyExists => {
+                    // Check if the file is already complete
+                    let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+                    match read_file_storage.is_file_complete(&file_key) {
+                        Ok(is_complete) => Ok(is_complete),
+                        Err(e) => {
+                            // Unvolunteer the file.
+                            self.unvolunteer_file(event.file_key.into()).await;
+
+                            let err_msg = format!(
+                            "Received duplicate chunk but failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
+                            event.file_key, e
+                        );
+                            error!(target: LOG_TARGET, "{}", err_msg);
+                            Err(anyhow::anyhow!(err_msg))
+                        }
+                    }
+                }
+                FileStorageWriteError::FileDoesNotExist => {
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(event.file_key.into()).await;
+
+                    Err(anyhow::anyhow!(format!(
+                        "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                        event.file_key
+                    )))
+                }
+                FileStorageWriteError::FailedToGetFileChunk
+                | FileStorageWriteError::FailedToInsertFileChunk
+                | FileStorageWriteError::FailedToDeleteChunk
+                | FileStorageWriteError::FailedToPersistChanges
+                | FileStorageWriteError::FailedToParseFileMetadata
+                | FileStorageWriteError::FailedToParseFingerprint
+                | FileStorageWriteError::FailedToReadStorage
+                | FileStorageWriteError::FailedToUpdatePartialRoot
+                | FileStorageWriteError::FailedToParsePartialRoot
+                | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                    // This internal error should not happen.
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(event.file_key.into()).await;
+
+                    Err(anyhow::anyhow!(format!(
+                        "Internal trie read/write error {:?}:{:?}",
+                        event.file_key, proven_chunk.key
+                    )))
+                }
+                FileStorageWriteError::FingerprintAndStoredFileMismatch => {
+                    // This should never happen, given that the first check in the handler is verifying the proof.
+                    // This means that something is seriously wrong, so we error out the whole task.
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(event.file_key.into()).await;
+
+                    Err(anyhow::anyhow!(format!(
+                        "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
+                        event.file_key
+                    )))
+                }
+                FileStorageWriteError::FailedToConstructTrieIter => {
+                    // This should never happen for a well constructed trie.
+                    // This means that something is seriously wrong, so we error out the whole task.
+                    // Unvolunteer the file.
+                    self.unvolunteer_file(event.file_key.into()).await;
+
+                    Err(anyhow::anyhow!(format!(
+                        "This is a bug! Failed to construct trie iter for key {:?}.",
+                        event.file_key
+                    )))
+                }
+            },
+        }
+    }
+
     /// Calculate the new capacity after adding the required capacity for the file.
     ///
     /// The new storage capacity will be increased by the jump capacity until it reaches the
@@ -840,7 +886,7 @@ where
         current_capacity: StorageDataUnit,
     ) -> Result<StorageDataUnit, anyhow::Error> {
         let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (required_additional_capacity + jump_capacity - 1) / jump_capacity;
+        let jumps_needed = required_additional_capacity.div_ceil(jump_capacity);
         let jumps = max(jumps_needed, 1);
         let bytes_to_add = jumps * jump_capacity;
         let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
@@ -870,36 +916,23 @@ where
             .unregister_file(file_key.as_ref().into())
             .await
         {
-            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to unregister file {:?} from file transfer service: {:?}", file_key, e);
+            error!(
+                target: LOG_TARGET,
+                "[unvolunteer_file] Failed to unregister file {:?} from file transfer service: {:?}",
+                file_key,
+                e
+            );
         }
 
-        // TODO: Send transaction to runtime to unvolunteer the file.
-
-        // Delete the file from the file storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-
-        // TODO: Handle error
         if let Err(e) = write_file_storage.delete_file(&file_key) {
-            warn!(target: LOG_TARGET, "[unvolunteer_file] Failed to delete file {:?} from file storage: {:?}", file_key, e);
+            error!(
+                target: LOG_TARGET,
+                "[unvolunteer_file] Failed to delete file {:?} from file storage: {:?}",
+                file_key,
+                e
+            );
         }
-    }
-
-    async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
-
-        // Unregister the file from the file transfer service.
-        self.storage_hub_handler
-            .file_transfer
-            .unregister_file((*file_key).into())
-            .await
-            .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
-
-        // Queue a request to confirm the storing of the file.
-        self.storage_hub_handler
-            .blockchain
-            .queue_confirm_bsp_request(ConfirmStoringRequest::new(*file_key))
-            .await?;
-
-        Ok(())
+        drop(write_file_storage);
     }
 }

@@ -14,6 +14,7 @@ use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::{ApiError, ProvideRuntimeApi};
+use sp_blockchain::TreeRoute;
 use sp_core::H256;
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
@@ -50,10 +51,11 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
-        FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
-        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
-        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForNewMsp, NewStorageRequest, SlashableProvider,
+        SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -63,7 +65,7 @@ use crate::{
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
-        BestBlockInfo, ForestStorageSnapshotInfo, NewBlockNotificationKind,
+        ForestStorageSnapshotInfo, MinimalBlockInfo, NewBlockNotificationKind,
         StopStoringForInsolventUserRequest, SubmitProofRequest,
     },
 };
@@ -76,11 +78,22 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// continuing to process incoming events.
 ///
 /// TODO: Define properly the number of blocks to come out of sync mode
+/// TODO: Make this configurable in the config file
 pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
 
 /// On blocks that are multiples of this number, the blockchain service will trigger the catch
 /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
+///
+/// TODO: Make this configurable in the config file
 pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
+
+/// The maximum number of blocks from the past that will be processed for catching up the root
+/// changes (see [`BlockchainService::forest_root_changes_catchup`]). This constant determines
+/// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
+/// variant.
+///
+/// TODO: Make this configurable in the config file
+pub(crate) const MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES: BlockNumber = 10;
 
 /// The BlockchainService actor.
 ///
@@ -103,12 +116,12 @@ where
     ///
     /// This is used to manage Forest Storage instances and update their roots when there are
     /// Forest-root-changing events on-chain, for the Storage Provider managed by this service.
-    pub(crate) _forest_storage_handler: FSH,
+    pub(crate) forest_storage_handler: FSH,
     /// The hash and number of the last best block processed by the BlockchainService.
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
-    pub(crate) best_block: BestBlockInfo,
+    pub(crate) best_block: MinimalBlockInfo,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
@@ -995,6 +1008,21 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
+                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                    state_store_context
+                        .pending_file_deletion_request_deque()
+                        .push_back(request);
+                    state_store_context.commit();
+                    // We check right away if we can process the request so we don't waste time.
+                    self.check_pending_forest_root_writes();
+                    match callback.send(Ok(())) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                        }
+                    }
+                }
             }
         }
     }
@@ -1022,8 +1050,8 @@ where
             client,
             keystore,
             rpc_handlers,
-            _forest_storage_handler: forest_storage_handler,
-            best_block: BestBlockInfo::default(),
+            forest_storage_handler,
+            best_block: MinimalBlockInfo::default(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
@@ -1042,22 +1070,30 @@ where
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        let last_block_processed = self.best_block.number;
+        let last_block_processed = self.best_block;
+
+        // Check if this new imported block is the new best, and if it causes a reorg.
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
-        let BestBlockInfo {
-            number: block_number,
-            hash: block_hash,
-        } = match new_block_notification_kind {
-            NewBlockNotificationKind::NewBestBlock(new_best_block_info) => new_best_block_info,
+
+        // Get the new best block info, and the `TreeRoute`, i.e. the blocks from the old best block to the new best block.
+        // A new non-best block is ignored and not processed.
+        let (block_info, tree_route) = match new_block_notification_kind {
+            NewBlockNotificationKind::NewBestBlock {
+                last_best_block_processed: _,
+                new_best_block,
+                tree_route,
+            } => (new_best_block, tree_route),
             NewBlockNotificationKind::NewNonBestBlock(_) => return,
             NewBlockNotificationKind::Reorg {
                 old_best_block: _,
                 new_best_block,
-            } => {
-                // TODO: Handle catch up of reorgs.
-                new_best_block
-            }
+                tree_route,
+            } => (new_best_block, tree_route),
         };
+        let MinimalBlockInfo {
+            number: block_number,
+            hash: block_hash,
+        } = block_info;
 
         info!(target: LOG_TARGET, "📥 Block import notification (#{}): {}", block_number, block_hash);
 
@@ -1068,11 +1104,12 @@ where
         // Check if we just came out of syncing mode.
         // We use saturating_sub because in a reorg, there is a potential scenario where the last
         // block processed is higher than the current block number.
-        if block_number.saturating_sub(last_block_processed) > SYNC_MODE_MIN_BLOCKS_BEHIND {
+        if block_number.saturating_sub(last_block_processed.number) > SYNC_MODE_MIN_BLOCKS_BEHIND {
             self.handle_initial_sync(notification).await;
         }
 
-        self.process_block_import(&block_hash, &block_number).await;
+        self.process_block_import(&block_hash, &block_number, tree_route)
+            .await;
     }
 
     fn pre_block_processing_checks(&mut self, block_hash: &H256) {
@@ -1166,8 +1203,18 @@ where
         }
     }
 
-    async fn process_block_import(&mut self, block_hash: &H256, block_number: &BlockNumber) {
+    async fn process_block_import<Block>(
+        &mut self,
+        block_hash: &H256,
+        block_number: &BlockNumber,
+        tree_route: TreeRoute<Block>,
+    ) where
+        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
+
+        // Before triggering any task, we make sure to be caught up to the Forest roots on-chain.
+        self.forest_root_changes_catchup(&tree_route).await;
 
         // Trigger catch up of proofs if the block is a multiple of `CHECK_FOR_PENDING_PROOFS_PERIOD`.
         // This is only relevant if this node is managing a BSP.
@@ -1208,6 +1255,7 @@ where
                                 fingerprint,
                                 size,
                                 peer_ids,
+                                expires_at,
                             },
                         ) => self.emit(NewStorageRequest {
                             who,
@@ -1217,6 +1265,7 @@ where
                             fingerprint: fingerprint.as_ref().into(),
                             size,
                             user_peer_ids: peer_ids,
+                            expires_at,
                         }),
                         // A Provider's challenge cycle has been initialised.
                         RuntimeEvent::ProofsDealer(
@@ -1465,6 +1514,32 @@ where
                                 })
                             }
                         }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::FileDeletionRequest {
+                                user,
+                                file_key,
+                                file_size,
+                                bucket_id,
+                                msp_id,
+                                proof_of_inclusion,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_msp_id == &msp_id {
+                                    self.emit(FileDeletionRequest {
+                                        user,
+                                        file_key: file_key.into(),
+                                        file_size: file_size.into(),
+                                        bucket_id,
+                                        msp_id,
+                                        proof_of_inclusion,
+                                    });
+                                }
+                            }
+                        }
                         // Ignore all other events.
                         _ => {}
                     }
@@ -1502,11 +1577,11 @@ where
                 // Process the events.
                 for ev in block_events {
                     match ev.event.clone() {
-                        // New storage request event coming from pallet-file-system.
                         RuntimeEvent::ProofsDealer(
-                            pallet_proofs_dealer::Event::MutationsApplied {
-                                provider: provider_id,
+                            pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                                provider_id,
                                 mutations,
+                                old_root: _,
                                 new_root,
                             },
                         ) => {
@@ -1560,6 +1635,33 @@ where
                                         bsp_id,
                                         file_key: file_key.into(),
                                         new_root,
+                                    });
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
+                                msp_id,
+                                user,
+                                file_key,
+                                file_size,
+                                bucket_id,
+                                proof_of_inclusion,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                // Only emit the event if the MSP provided a proof of inclusion, meaning the file key was deleted from the bucket's forest.
+                                if managed_msp_id == &msp_id && proof_of_inclusion {
+                                    self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
+                                        user,
+                                        file_key: file_key.into(),
+                                        file_size: file_size.into(),
+                                        bucket_id,
+                                        msp_id,
+                                        proof_of_inclusion,
                                     });
                                 }
                             }

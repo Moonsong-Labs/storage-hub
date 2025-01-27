@@ -11,11 +11,11 @@ use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
 use sp_runtime::{traits::CheckedAdd, DispatchError};
-use sp_std::fmt::Debug;
+use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
-    Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationBlock,
-    NextAvailableStorageRequestExpirationBlock, StorageRequestExpirations,
+    Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationTick,
+    NextAvailableStorageRequestExpirationTick, StorageRequestExpirations,
 };
 
 /// Ephemeral metadata of a storage request.
@@ -27,6 +27,11 @@ pub struct StorageRequestMetadata<T: Config> {
     /// Used primarily for tracking the age of the request which is useful for
     /// cleaning up old requests.
     pub requested_at: TickNumber<T>,
+
+    /// Tick number at which the storage request will expire.
+    ///
+    /// Used to track what storage elements to clean when a storage request gets fulfilled.
+    pub expires_at: TickNumber<T>,
 
     /// AccountId of the user who owns the data being stored.
     pub owner: T::AccountId,
@@ -119,16 +124,18 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct StorageRequestMspAcceptedFileKeys<T: Config> {
-    pub file_keys_and_proofs: BoundedVec<FileKeyWithProof<T>, MaxBatchMspRespondStorageRequests<T>>,
-    pub non_inclusion_forest_proof: ForestProof<T>,
+    pub file_keys_and_proofs: Vec<FileKeyWithProof<T>>,
+    /// File keys which have already been accepted by the MSP in a previous storage request should be included
+    /// in the proof.
+    pub forest_proof: ForestProof<T>,
 }
 
 impl<T: Config> Debug for StorageRequestMspAcceptedFileKeys<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "StorageRequestMspAcceptedFileKeys(file_keys_and_proofs: {:?}, non_inclusion_forest_proof: {:?})",
-            self.file_keys_and_proofs, self.non_inclusion_forest_proof
+            "StorageRequestMspAcceptedFileKeys(file_keys_and_proofs: {:?}, forest_proof: {:?})",
+            self.file_keys_and_proofs, self.forest_proof
         )
     }
 }
@@ -164,7 +171,7 @@ impl<T: Config> Debug for RejectedStorageRequest<T> {
 pub struct StorageRequestMspBucketResponse<T: Config> {
     pub bucket_id: BucketIdFor<T>,
     pub accept: Option<StorageRequestMspAcceptedFileKeys<T>>,
-    pub reject: BoundedVec<RejectedStorageRequest<T>, MaxBatchMspRespondStorageRequests<T>>,
+    pub reject: Vec<RejectedStorageRequest<T>>,
 }
 
 impl<T: Config> Debug for StorageRequestMspBucketResponse<T> {
@@ -177,14 +184,13 @@ impl<T: Config> Debug for StorageRequestMspBucketResponse<T> {
     }
 }
 
-/// Input for MSPs to respond to storage request(s).
+/// Unbounded input for MSPs to respond to storage request(s).
 ///
 /// The input is a list of bucket responses, where each response contains:
 /// - The bucket ID
 /// - Optional accepted file keys and proof for the whole list
 /// - List of rejected file keys and rejection reasons
-pub type StorageRequestMspResponse<T> =
-    BoundedVec<StorageRequestMspBucketResponse<T>, MaxBatchMspRespondStorageRequests<T>>;
+pub type StorageRequestMspResponse<T> = Vec<StorageRequestMspBucketResponse<T>>;
 
 /// Ephemeral BSP storage request tracking metadata.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -216,7 +222,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct PendingStopStoringRequest<T: Config> {
-    pub tick_when_requested: BlockNumberFor<T>,
+    pub tick_when_requested: TickNumber<T>,
     pub file_owner: T::AccountId,
     pub file_size: StorageData<T>,
 }
@@ -229,56 +235,58 @@ pub enum ExpirationItem<T: Config> {
 }
 
 impl<T: Config> ExpirationItem<T> {
-    pub(crate) fn get_ttl(&self) -> BlockNumberFor<T> {
+    pub(crate) fn get_ttl(&self) -> TickNumber<T> {
         match self {
             ExpirationItem::StorageRequest(_) => T::StorageRequestTtl::get().into(),
             ExpirationItem::MoveBucketRequest(_) => T::MoveBucketRequestTtl::get().into(),
         }
     }
 
-    pub(crate) fn get_next_expiration_block(&self) -> BlockNumberFor<T> {
-        // The expiration block is the maximum between the next available block and the current block number plus the TTL.
-        let current_block_plus_ttl = frame_system::Pallet::<T>::block_number() + self.get_ttl();
-        let next_available_block = match self {
+    pub(crate) fn get_next_expiration_tick(&self) -> TickNumber<T> {
+        // The expiration tick is the maximum between the next available tick and the current tick number plus the TTL.
+        let current_tick_plus_ttl =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick()
+                + self.get_ttl();
+        let next_available_tick = match self {
             ExpirationItem::StorageRequest(_) => {
-                NextAvailableStorageRequestExpirationBlock::<T>::get()
+                NextAvailableStorageRequestExpirationTick::<T>::get()
             }
             ExpirationItem::MoveBucketRequest(_) => {
-                NextAvailableMoveBucketRequestExpirationBlock::<T>::get()
+                NextAvailableMoveBucketRequestExpirationTick::<T>::get()
             }
         };
 
-        max(next_available_block, current_block_plus_ttl)
+        max(next_available_tick, current_tick_plus_ttl)
     }
 
     pub(crate) fn try_append(
         &self,
-        expiration_block: BlockNumberFor<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let mut next_expiration_block = expiration_block;
+        expiration_tick: TickNumber<T>,
+    ) -> Result<TickNumber<T>, DispatchError> {
+        let mut next_expiration_tick = expiration_tick;
         while let Err(_) = match self {
             ExpirationItem::StorageRequest(storage_request) => {
-                <StorageRequestExpirations<T>>::try_append(next_expiration_block, *storage_request)
+                <StorageRequestExpirations<T>>::try_append(next_expiration_tick, *storage_request)
             }
             ExpirationItem::MoveBucketRequest(msp_bucket_id) => {
-                <MoveBucketRequestExpirations<T>>::try_append(next_expiration_block, *msp_bucket_id)
+                <MoveBucketRequestExpirations<T>>::try_append(next_expiration_tick, *msp_bucket_id)
             }
         } {
-            next_expiration_block = next_expiration_block
+            next_expiration_tick = next_expiration_tick
                 .checked_add(&1u8.into())
-                .ok_or(Error::<T>::MaxBlockNumberReached)?;
+                .ok_or(Error::<T>::MaxTickNumberReached)?;
         }
 
-        Ok(next_expiration_block)
+        Ok(next_expiration_tick)
     }
 
-    pub(crate) fn set_next_expiration_block(&self, next_expiration_block: BlockNumberFor<T>) {
+    pub(crate) fn set_next_expiration_tick(&self, next_expiration_tick: TickNumber<T>) {
         match self {
             ExpirationItem::StorageRequest(_) => {
-                NextAvailableStorageRequestExpirationBlock::<T>::set(next_expiration_block);
+                NextAvailableStorageRequestExpirationTick::<T>::set(next_expiration_tick);
             }
             ExpirationItem::MoveBucketRequest(_) => {
-                NextAvailableMoveBucketRequestExpirationBlock::<T>::set(next_expiration_block);
+                NextAvailableMoveBucketRequestExpirationTick::<T>::set(next_expiration_tick);
             }
         }
     }
@@ -337,10 +345,6 @@ pub type FileKeyHasher<T> =
 
 /// Alias for the `MaxBatchConfirmStorageRequests` type used in the FileSystem pallet.
 pub type MaxBatchConfirmStorageRequests<T> = <T as crate::Config>::MaxBatchConfirmStorageRequests;
-
-/// Alias for the `MaxBatchMspRespondStorageRequests` type used in the FileSystem pallet.
-pub type MaxBatchMspRespondStorageRequests<T> =
-    <T as crate::Config>::MaxBatchMspRespondStorageRequests;
 
 /// Alias for the `MaxFilePathSize` type used in the FileSystem pallet.
 pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;

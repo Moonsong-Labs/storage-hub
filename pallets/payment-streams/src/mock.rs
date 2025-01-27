@@ -12,8 +12,8 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::PalletFeatures;
 use shp_constants::GIGAUNIT;
 use shp_traits::{
-    CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, ReadProvidersInterface, TrieMutation,
-    TrieProofDeltaApplier,
+    CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
+    ReadProvidersInterface, TrieMutation, TrieProofDeltaApplier,
 };
 use shp_treasury_funding::NoCutTreasuryCutCalculator;
 use sp_core::{hashing::blake2_256, ConstU128, ConstU32, ConstU64, Hasher, H256};
@@ -217,12 +217,28 @@ parameter_types! {
     pub const ProviderTopUpTtl: u64 = 10;
 }
 
+pub struct MockCommitRevealRandomness;
+impl CommitRevealRandomnessInterface for MockCommitRevealRandomness {
+    type ProviderId = <Test as pallet_storage_providers::Config>::ProviderId;
+
+    fn initialise_randomness_cycle(
+        _who: &Self::ProviderId,
+    ) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+
+    fn stop_randomness_cycle(_who: &Self::ProviderId) -> frame_support::dispatch::DispatchResult {
+        Ok(())
+    }
+}
+
 impl pallet_storage_providers::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
     type ProvidersRandomness = MockRandomness;
     type FileMetadataManager = MockFileMetadataManager;
     type NativeBalance = Balances;
+    type CrRandomness = MockCommitRevealRandomness;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type PaymentStreams = PaymentStreams;

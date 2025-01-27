@@ -91,6 +91,11 @@ pub mod pallet {
             + freeze::Inspect<Self::AccountId>
             + freeze::Mutate<Self::AccountId>;
 
+        /// The trait to initialise a Provider's randomness commit-reveal cycle.
+        type CrRandomness: shp_traits::CommitRevealRandomnessInterface<
+            ProviderId = ProviderIdFor<Self>,
+        >;
+
         /// The overarching hold reason
         type RuntimeHoldReason: From<HoldReason>;
 
@@ -752,6 +757,10 @@ pub mod pallet {
         ///
         /// Call `can_delete_provider` runtime API to check if the provider can be deleted.
         DeleteProviderConditionsNotMet,
+        /// Cannot stop BSP cycles without a default root
+        CannotStopCycleWithNonDefaultRoot,
+        /// An operation dedicated to BSPs only
+        BspOnlyOperation,
 
         // `MutateChallengeableProvidersInterface` errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -842,7 +851,7 @@ pub mod pallet {
             })?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
+            Self::deposit_event(Event::MspRequestSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
@@ -903,7 +912,7 @@ pub mod pallet {
             Self::do_request_bsp_sign_up(&bsp_info)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {
+            Self::deposit_event(Event::BspRequestSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
@@ -981,7 +990,7 @@ pub mod pallet {
             Self::do_cancel_sign_up(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::SignUpRequestCanceled { who });
+            Self::deposit_event(Event::SignUpRequestCanceled { who });
 
             Ok(().into())
         }
@@ -1010,7 +1019,7 @@ pub mod pallet {
             let msp_id = Self::do_msp_sign_off(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspSignOffSuccess { who, msp_id });
+            Self::deposit_event(Event::MspSignOffSuccess { who, msp_id });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -1041,7 +1050,7 @@ pub mod pallet {
             let bsp_id = Self::do_bsp_sign_off(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspSignOffSuccess { who, bsp_id });
+            Self::deposit_event(Event::BspSignOffSuccess { who, bsp_id });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -1093,7 +1102,7 @@ pub mod pallet {
             let (provider_id, old_capacity) = Self::do_change_capacity(&who, new_capacity)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::CapacityChanged {
+            Self::deposit_event(Event::CapacityChanged {
                 who,
                 provider_id,
                 old_capacity,
@@ -1132,7 +1141,7 @@ pub mod pallet {
             )?;
 
             // Emit event
-            Self::deposit_event(Event::<T>::ValuePropAdded {
+            Self::deposit_event(Event::ValuePropAdded {
                 msp_id,
                 value_prop_id: value_prop.derive_id(),
                 value_prop,
@@ -1158,7 +1167,7 @@ pub mod pallet {
             let msp_id = Self::do_make_value_prop_unavailable(&who, value_prop_id)?;
 
             // Emit event
-            Self::deposit_event(Event::<T>::ValuePropUnavailable {
+            Self::deposit_event(Event::ValuePropUnavailable {
                 msp_id,
                 value_prop_id,
             });
@@ -1195,7 +1204,7 @@ pub mod pallet {
             let provider_id = Self::do_add_multiaddress(&who, &new_multiaddress)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MultiAddressAdded {
+            Self::deposit_event(Event::MultiAddressAdded {
                 provider_id,
                 new_multiaddress,
             });
@@ -1232,7 +1241,7 @@ pub mod pallet {
             let provider_id = Self::do_remove_multiaddress(&who, &multiaddress)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MultiAddressRemoved {
+            Self::deposit_event(Event::MultiAddressRemoved {
                 provider_id,
                 removed_multiaddress: multiaddress,
             });
@@ -1303,7 +1312,7 @@ pub mod pallet {
             Self::do_request_msp_sign_up(sign_up_request.clone())?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
+            Self::deposit_event(Event::MspRequestSignUpSuccess {
                 who: who.clone(),
                 multiaddresses,
                 capacity,
@@ -1371,7 +1380,7 @@ pub mod pallet {
             Self::do_request_bsp_sign_up(&bsp_info)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {
+            Self::deposit_event(Event::BspRequestSignUpSuccess {
                 who: who.clone(),
                 multiaddresses,
                 capacity,
@@ -1447,6 +1456,25 @@ pub mod pallet {
             ensure_signed(origin)?;
 
             Self::do_delete_provider(&provider_id)?;
+
+            Ok(Pays::No.into())
+        }
+
+        /// BSP operation to stop all of your automatic cycles.
+        ///
+        /// This includes:
+        ///
+        /// - Commit reveal randomness cycle
+        /// - Proof challenge cycle
+        ///
+        /// If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
+        #[pallet::call_index(16)]
+        #[pallet::weight(T::WeightInfo::stop_all_cycles())]
+        pub fn stop_all_cycles(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was signed.
+            let who = ensure_signed(origin)?;
+
+            Self::do_stop_all_cycles(&who)?;
 
             Ok(Pays::No.into())
         }
