@@ -1095,24 +1095,6 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         ) => Observable<Bytes>
       >;
       /**
-       * Generate a SCALE-encoded proof for a file key to allow a BSP to confirm storing it.
-       **/
-      generateFileKeyProofBspConfirm: AugmentedRpc<
-        (
-          bsp_id: H256 | string | Uint8Array,
-          file_key: H256 | string | Uint8Array
-        ) => Observable<Bytes>
-      >;
-      /**
-       * Generate a SCALE-encoded proof for a file key to allow a MSP to accept storing it.
-       **/
-      generateFileKeyProofMspAccept: AugmentedRpc<
-        (
-          msp_id: H256 | string | Uint8Array,
-          file_key: H256 | string | Uint8Array
-        ) => Observable<Bytes>
-      >;
-      /**
        * Generate a SCALE-encoded proof for a group of file keys that might or might not be in the forest.
        **/
       generateForestProof: AugmentedRpc<

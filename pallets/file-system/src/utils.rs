@@ -45,7 +45,7 @@ use crate::{
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, MspsAmountOfPendingFileDeletionRequests,
     Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestBsps, StorageRequests,
+    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -949,10 +949,10 @@ where
                 let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key_with_proof.file_key)
                     .fold(0, |acc, _| acc.saturating_add(One::one()));
 
-                // Make sure that the expected number of bsps were removed.
+                // Make sure that the expected number of BSPs were removed.
                 expect_or_err!(
                     storage_request_metadata.bsps_volunteered == removed.into(),
-                    "Number of volunteered bsps for storage request should have been removed",
+                    "Number of volunteered BSPs for storage request should have been removed",
                     Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                     bool
                 );
@@ -1064,7 +1064,7 @@ where
 
         expect_or_err!(
             storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
-            "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
+            "Storage request should never have confirmed BSPs equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
         );
@@ -1111,7 +1111,7 @@ where
             },
         );
 
-        // Increment the number of bsps volunteered.
+        // Increment the number of BSPs volunteered.
         match storage_request_metadata
             .bsps_volunteered
             .checked_add(&ReplicationTargetType::<T>::one())
@@ -1339,7 +1339,7 @@ where
                 // Make sure that the expected number of BSPs were removed.
                 expect_or_err!(
                     storage_request_metadata.bsps_volunteered == removed.into(),
-                    "Number of volunteered bsps for storage request should have been removed",
+                    "Number of volunteered BSPs for storage request should have been removed",
                     Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                     bool
                 );
@@ -1485,6 +1485,9 @@ where
     /// issued to force the BSPs to update their storage root to uninclude the file from their storage.
     ///
     /// All BSPs that have volunteered to store the file are removed from the storage request and the storage request is deleted.
+    ///
+    /// TODO: We should also clean up the MSP (decreasing its used capacity, the bucket size, etc) if it has already confirmed storing the file,
+    /// but we can't apply delta... so we need to think about how to do this.
     fn cleanup_storage_request(
         revoker: EitherAccountIdOrMspId<T>,
         file_key: MerkleHash<T>,
@@ -1508,10 +1511,10 @@ where
         let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key)
             .fold(0, |acc, _| acc.saturating_add(One::one()));
 
-        // Make sure that the expected number of bsps were removed.
+        // Make sure that the expected number of BSPs were removed.
         expect_or_err!(
             storage_request_metadata.bsps_volunteered == removed.into(),
-            "Number of volunteered bsps for storage request should have been removed",
+            "Number of volunteered BSPs for storage request should have been removed",
             Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
             bool
         );
@@ -1643,7 +1646,7 @@ where
             Some(mut storage_request_metadata) => {
                 match <StorageRequestBsps<T>>::get(&file_key, &bsp_id) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
-                    // We need to decrement the number of bsps confirmed and volunteered, remove the BSP as a data server and from the storage request.
+                    // We need to decrement the number of BSPs confirmed and volunteered, remove the BSP as a data server and from the storage request.
                     Some(bsp) => {
                         expect_or_err!(
                             bsp.confirmed,
@@ -1663,7 +1666,7 @@ where
                         <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
                     }
                     // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
-                    // We need to increment the number of bsps required.
+                    // We need to increment the number of BSPs required.
                     None => {
                         storage_request_metadata.bsps_required = storage_request_metadata
                             .bsps_required
@@ -2038,9 +2041,8 @@ where
 
         let file_key_included = match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.
-            // This will leave a window of time for the MSP to provide the proof of (non-)inclusion. Until the MSP provides the proof, it is
+            // This will allow the MSP to provide the proof of (non-)inclusion. Until the MSP provides the proof, it is
             // removed from the privileged providers' list, which means it is not allowed to charge users.
-            // If the proof is not provided within the TTL, the hook will queue a priority challenge to remove the file key from all the providers.
             None => {
                 let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&sender);
 
@@ -2065,6 +2067,11 @@ where
 
                 // Remove the MSP from the privileged providers list.
                 <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
+
+                // Add one to the amount of pending file deletion requests for the MSP.
+                MspsAmountOfPendingFileDeletionRequests::<T>::mutate(&msp_id, |amount| {
+                    *amount = amount.saturating_add(1);
+                });
 
                 false
             }
@@ -2105,7 +2112,7 @@ where
                 // Decrease size of the bucket.
                 <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
 
-                // Decrease its used capacity.
+                // Decrease the MSP's used capacity.
                 <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
                     &msp_id, size,
                 )?;
@@ -2405,7 +2412,7 @@ mod hooks {
     use sp_weights::{RuntimeDbWeight, WeightMeter};
 
     impl<T: pallet::Config> Pallet<T> {
-        pub(crate) fn do_on_poll(_weight: &mut WeightMeter) {
+        pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
             let current_data_price_per_giga_unit =
                 <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
 

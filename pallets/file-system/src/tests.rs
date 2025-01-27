@@ -8881,26 +8881,6 @@ mod delete_file_and_pending_deletions_tests {
                     other_fingerprint,
                     size,
                     msp_id,
-                    peer_ids.clone(),
-                    None
-                ));
-
-				// Issue another storage request
-				let other_fingerprint = BlakeTwo256::hash(&b"other".to_vec());
-				let other_file_key = FileSystem::compute_file_key(
-					owner_account_id.clone(),
-					bucket_id,
-					location.clone(),
-					size,
-					other_fingerprint,
-				);
-                assert_ok!(FileSystem::issue_storage_request(
-                    owner_signed.clone(),
-                    bucket_id,
-                    location.clone(),
-                    other_fingerprint,
-                    size,
-                    msp_id,
                     peer_ids,
                     None
                 ));
