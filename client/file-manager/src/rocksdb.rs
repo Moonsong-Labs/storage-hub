@@ -24,11 +24,12 @@ use codec::{Decode, Encode};
 const METADATA_COLUMN: u32 = 0;
 const ROOTS_COLUMN: u32 = 1;
 const CHUNKS_COLUMN: u32 = 2;
-const BUCKET_PREFIX_COLUMN: u32 = 3;
-const EXCLUDE_FILE_COLUMN: u32 = 4;
-const EXCLUDE_USER_COLUMN: u32 = 5;
-const EXCLUDE_BUCKET_COLUMN: u32 = 6;
-const EXCLUDE_FINGERPRINT_COLUMN: u32 = 7;
+const CHUNK_COUNT_COLUMN: u32 = 3;
+const BUCKET_PREFIX_COLUMN: u32 = 4;
+const EXCLUDE_FILE_COLUMN: u32 = 5;
+const EXCLUDE_USER_COLUMN: u32 = 6;
+const EXCLUDE_BUCKET_COLUMN: u32 = 7;
+const EXCLUDE_FINGERPRINT_COLUMN: u32 = 8;
 
 // Helper function to map ExcludeType enum to their matching rocksdb column.
 fn get_exclude_type_db_column(exclude_type: ExcludeType) -> u32 {
@@ -46,7 +47,7 @@ fn open_or_creating_rocksdb(db_path: String) -> io::Result<kvdb_rocksdb::Databas
     path.push(db_path.as_str());
     path.push("storagehub/file_storage/");
 
-    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(8);
+    let db_config = kvdb_rocksdb::DatabaseConfig::with_columns(9);
 
     let path_str = path
         .to_str()
@@ -226,22 +227,6 @@ where
         &self.root
     }
 
-    // Returns the amount of chunks currently in storage.
-    fn stored_chunks_count(&self) -> Result<u64, FileStorageError> {
-        let db = self.as_hash_db();
-        let trie = TrieDBBuilder::<T>::new(&db, &self.root).build();
-
-        let count = trie
-            .iter()
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "Failed to construct Trie iterator: {}", e);
-                FileStorageError::FailedToConstructTrieIter
-            })?
-            .count();
-
-        Ok(count as u64)
-    }
-
     // Generates a [`FileProof`] for requested chunks.
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
         let db = self.as_hash_db();
@@ -359,26 +344,32 @@ where
     // Deletes itself from the underlying db.
     fn delete(&mut self) -> Result<(), FileStorageWriteError> {
         let mut root = self.root;
-        let stored_chunks_count = self.stored_chunks_count().map_err(|e| {
-            error!(target: LOG_TARGET, "{:?}", e);
-            FileStorageWriteError::FailedToGetStoredChunksCount
-        })?;
         let db = self.as_hash_db_mut();
         let trie_root_key = root;
         let mut trie = TrieDBMutBuilder::<T>::from_existing(db, &mut root).build();
 
-        for chunk_id in 0..stored_chunks_count {
-            trie.remove(&ChunkId::new(chunk_id as u64).as_trie_key())
-                .map_err(|e| {
-                    error!(target: LOG_TARGET, "Failed to delete chunk from RocksDb: {}", e);
-                    FileStorageWriteError::FailedToDeleteChunk
-                })?;
+        let mut chunk_id = 0;
+        loop {
+            let chunk_id_struct = ChunkId::new(chunk_id as u64);
+            if !trie.contains(&chunk_id_struct.as_trie_key()).map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to check if chunk exists: {}", e);
+                FileStorageWriteError::FailedToDeleteChunk
+            })? {
+                break;
+            }
+
+            trie.remove(&chunk_id_struct.as_trie_key()).map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to delete chunk from RocksDb: {}", e);
+                FileStorageWriteError::FailedToDeleteChunk
+            })?;
+
+            chunk_id += 1;
         }
 
         // Remove the root from the trie.
         trie.remove(trie_root_key.as_ref()).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to delete root from RocksDb: {}", e);
-            FileStorageWriteError::FailedToDeleteChunk
+            FileStorageWriteError::FailedToDeleteRoot
         })?;
 
         let new_root = *trie.root();
@@ -478,6 +469,38 @@ where
             _marker: Default::default(),
         })
     }
+
+    fn get_file_trie(
+        &self,
+        metadata: &FileMetadata,
+    ) -> Result<RocksDbFileDataTrie<T, DB>, FileStorageError>
+    where
+        T: TrieLayout + Send + Sync + 'static,
+        DB: KeyValueDB + 'static,
+    {
+        let raw_final_root = metadata.fingerprint.as_ref();
+        let final_root =
+            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToParseFingerprint
+            })?;
+        let raw_partial_root = self
+            .storage
+            .read(ROOTS_COLUMN, final_root.as_ref())
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToReadStorage
+            })?
+            .expect("Failed to find partial root");
+        let mut partial_root =
+            convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToParsePartialRoot
+            })?;
+        let file_trie =
+            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
+        Ok(file_trie)
+    }
 }
 
 impl<T, DB> FileStorage<T> for RocksDbFileStorage<T, DB>
@@ -501,32 +524,24 @@ where
             .get_metadata(key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let raw_final_root = metadata.fingerprint.as_ref();
-        let final_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
-                error!(target: LOG_TARGET,"{:?}", e);
-                FileStorageError::FailedToParseFingerprint
-            })?;
+        let file_trie = self.get_file_trie(&metadata)?;
 
-        let raw_partial_root = self
+        file_trie.get_chunk(chunk_id)
+    }
+
+    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
+        // Read from CHUNK_COUNT_COLUMN
+        let current_count = self
             .storage
-            .read(ROOTS_COLUMN, final_root.as_ref())
+            .read(CHUNK_COUNT_COLUMN, key.as_ref())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
             })?
-            .expect("Failed to find partial root");
+            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+            .unwrap_or(0);
 
-        let mut partial_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToParsePartialRoot
-            })?;
-
-        let file_trie =
-            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
-
-        file_trie.get_chunk(chunk_id)
+        Ok(current_count)
     }
 
     fn write_chunk(
@@ -540,29 +555,11 @@ where
             .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
             .ok_or(FileStorageWriteError::FileDoesNotExist)?;
 
-        let raw_final_root = metadata.fingerprint.as_ref();
-        let final_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageWriteError::FailedToParseFingerprint
-            })?;
+        let mut file_trie = self.get_file_trie(&metadata).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageWriteError::FailedToContructFileTrie
+        })?;
 
-        let raw_partial_root = self
-            .storage
-            .read(ROOTS_COLUMN, final_root.as_ref())
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageWriteError::FailedToReadStorage
-            })?
-            .expect("Failed to find partial root");
-        let mut partial_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageWriteError::FailedToParsePartialRoot
-            })?;
-
-        let mut file_trie =
-            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
         file_trie.write_chunk(chunk_id, data).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
             FileStorageWriteError::FailedToInsertFileChunk
@@ -571,18 +568,29 @@ where
         // Update partial root.
         let new_partial_root = file_trie.get_root();
         let mut transaction = DBTransaction::new();
-        transaction.put(ROOTS_COLUMN, raw_final_root, new_partial_root.as_ref());
+        transaction.put(
+            ROOTS_COLUMN,
+            metadata.fingerprint.as_ref(),
+            new_partial_root.as_ref(),
+        );
+
+        // Get current chunk count or initialize to 0
+        let current_count = self.stored_chunks_count(key).map_err(|e| {
+            error!(target: LOG_TARGET, "{:?}", e);
+            FileStorageWriteError::FailedToGetStoredChunksCount
+        })?;
+
+        // Increment chunk count
+        let new_count = current_count + 1;
+        transaction.put(CHUNK_COUNT_COLUMN, key.as_ref(), &new_count.to_le_bytes());
+
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
             FileStorageWriteError::FailedToUpdatePartialRoot
         })?;
 
-        // Check if we have all the chunks for the file.
-        let stored_chunks = file_trie.stored_chunks_count().map_err(|e| {
-            error!(target: LOG_TARGET,"{:?}", e);
-            FileStorageWriteError::FailedToConstructTrieIter
-        })?;
-        if metadata.chunks_count() != stored_chunks {
+        // Check if we have all the chunks for the file using the count
+        if metadata.chunks_count() != new_count {
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
@@ -595,32 +603,28 @@ where
             .get_metadata(key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let raw_final_root = metadata.fingerprint.as_ref();
-        let final_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
-                error!(target: LOG_TARGET,"{:?}", e);
-                FileStorageError::FailedToParseFingerprint
-            })?;
-
-        let raw_partial_root = self
+        let stored_chunks = self
             .storage
-            .read(ROOTS_COLUMN, final_root.as_ref())
+            .read(CHUNK_COUNT_COLUMN, key.as_ref())
             .map_err(|e| {
-                error!(target: LOG_TARGET,"{:?}", e);
+                error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToReadStorage
             })?
-            .expect("Failed to find partial root");
+            .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))
+            .unwrap_or(0);
 
-        let mut partial_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
-                error!(target: LOG_TARGET,"{:?}", e);
-                FileStorageError::FailedToParsePartialRoot
-            })?;
+        let file_trie = self.get_file_trie(&metadata)?;
 
-        let file_trie =
-            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
+        if metadata.fingerprint
+            != file_trie
+                .get_root()
+                .as_ref()
+                .try_into()
+                .expect("Hasher output mismatch!")
+        {
+            return Ok(false);
+        }
 
-        let stored_chunks = file_trie.stored_chunks_count()?;
         Ok(metadata.chunks_count() == stored_chunks)
     }
 
@@ -646,6 +650,9 @@ where
             metadata.fingerprint.as_ref(),
             empty_root.as_ref(),
         );
+        // Initialize chunk count to 0
+        transaction.put(CHUNK_COUNT_COLUMN, key.as_ref(), &0u64.to_le_bytes());
+
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
             FileStorageError::FailedToWriteToStorage
@@ -656,7 +663,13 @@ where
 
     /// Stores file information with its (partial or final) root.
     /// Should be used if any chunks have already been written.
-    /// Otherwise use [`Self::insert_file`]
+    /// Otherwise use [`Self::insert_file`].
+    ///
+    /// This is an expensive operation since it assumes that the file chunks were written
+    /// via the [`RocksDbFileDataTrie::write_chunk`] method instead of [`Self::write_chunk`] and
+    /// therefore iterates over all keys in `file_data` to count the number of chunks and update
+    /// the chunk count in the [`CHUNK_COUNT_COLUMN`] column. This data is necessary to
+    /// [`Self::generate_proof`]s for the file.
     fn insert_file_with_data(
         &mut self,
         key: HasherOutT<T>,
@@ -680,6 +693,22 @@ where
             file_data.get_root().as_ref(),
         );
 
+        let file_trie = self.get_file_trie(&metadata)?;
+
+        // Count all chunks in the file trie
+        let db = file_trie.as_hash_db();
+        let trie = TrieDBBuilder::<T>::new(&db, file_trie.get_root()).build();
+
+        let chunk_count = trie
+            .iter()
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to construct Trie iterator: {}", e);
+                FileStorageError::FailedToConstructTrieIter
+            })?
+            .count();
+
+        transaction.put(CHUNK_COUNT_COLUMN, key.as_ref(), &chunk_count.to_le_bytes());
+
         let full_key = metadata
             .bucket_id
             .into_iter()
@@ -695,20 +724,6 @@ where
         })?;
 
         Ok(())
-    }
-
-    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
-        let metadata = self
-            .get_metadata(key)?
-            .ok_or(FileStorageError::FileDoesNotExist)?;
-
-        let raw_root = metadata.fingerprint.as_ref();
-        let mut root = convert_raw_bytes_to_hasher_out::<T>(raw_root.to_vec())
-            .map_err(|_| FileStorageError::FailedToParseFingerprint)?;
-        let file_trie =
-            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut root);
-
-        file_trie.stored_chunks_count()
     }
 
     fn get_metadata(&self, key: &HasherOutT<T>) -> Result<Option<FileMetadata>, FileStorageError> {
@@ -740,32 +755,9 @@ where
             .get_metadata(key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let raw_final_root = metadata.fingerprint.as_ref();
-        let final_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_final_root.to_vec()).map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToParseFingerprint
-            })?;
+        let file_trie = self.get_file_trie(&metadata)?;
 
-        let raw_partial_root = self
-            .storage
-            .read(ROOTS_COLUMN, final_root.as_ref())
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToReadStorage
-            })?
-            .expect("Failed to find partial root");
-
-        let mut partial_root =
-            convert_raw_bytes_to_hasher_out::<T>(raw_partial_root).map_err(|e| {
-                error!(target: LOG_TARGET, "{:?}", e);
-                FileStorageError::FailedToParsePartialRoot
-            })?;
-
-        let file_trie =
-            RocksDbFileDataTrie::<T, DB>::from_existing(self.storage.clone(), &mut partial_root);
-
-        let stored_chunks = file_trie.stored_chunks_count()?;
+        let stored_chunks = self.stored_chunks_count(key)?;
         if metadata.chunks_count() != stored_chunks {
             return Err(FileStorageError::IncompleteFile);
         }
@@ -807,6 +799,7 @@ where
         let mut transaction = DBTransaction::new();
         transaction.delete(METADATA_COLUMN, key.as_ref());
         transaction.delete(ROOTS_COLUMN, raw_root);
+        transaction.delete(CHUNK_COUNT_COLUMN, key.as_ref());
         transaction.delete(
             BUCKET_PREFIX_COLUMN,
             metadata
@@ -924,6 +917,23 @@ mod tests {
     use sp_runtime::AccountId32;
     use sp_trie::LayoutV1;
 
+    fn stored_chunks_count(
+        trie: &RocksDbFileDataTrie<LayoutV1<BlakeTwo256>, InMemory>,
+    ) -> Result<u64, FileStorageError> {
+        let db = trie.as_hash_db();
+        let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&db, &trie.root).build();
+
+        let count = trie
+            .iter()
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "Failed to construct Trie iterator: {}", e);
+                FileStorageError::FailedToConstructTrieIter
+            })?
+            .count();
+
+        Ok(count as u64)
+    }
+
     #[test]
     fn file_trie_create_empty_works() {
         let storage = StorageDb {
@@ -991,14 +1001,15 @@ mod tests {
 
         let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64)];
         let chunks = vec![Chunk::from([0u8; 1024]), Chunk::from([1u8; 1024])];
+
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
     }
 
@@ -1020,15 +1031,15 @@ mod tests {
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_proof = file_trie.generate_proof(&chunk_ids).unwrap();
@@ -1057,15 +1068,15 @@ mod tests {
         let mut file_trie = RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         file_trie.delete().unwrap();
@@ -1073,7 +1084,7 @@ mod tests {
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_err());
 
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 0);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 0);
     }
 
     #[test]
@@ -1166,15 +1177,15 @@ mod tests {
             RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_metadata = FileMetadata {
@@ -1219,15 +1230,15 @@ mod tests {
         let mut file_trie =
             RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_metadata = FileMetadata {

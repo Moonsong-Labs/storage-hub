@@ -765,6 +765,7 @@ where
                 FileStorageWriteError::FailedToGetFileChunk
                 | FileStorageWriteError::FailedToInsertFileChunk
                 | FileStorageWriteError::FailedToDeleteChunk
+                | FileStorageWriteError::FailedToDeleteRoot
                 | FileStorageWriteError::FailedToPersistChanges
                 | FileStorageWriteError::FailedToParseFileMetadata
                 | FileStorageWriteError::FailedToParseFingerprint
@@ -795,7 +796,8 @@ where
                             event.file_key
                         )))
                 }
-                FileStorageWriteError::FailedToConstructTrieIter => {
+                FileStorageWriteError::FailedToConstructTrieIter
+                | FileStorageWriteError::FailedToContructFileTrie => {
                     self.handle_rejected_storage_request(
                         &event.file_key.into(),
                         bucket_id,

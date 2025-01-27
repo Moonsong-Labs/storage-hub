@@ -832,6 +832,7 @@ where
                 FileStorageWriteError::FailedToGetFileChunk
                 | FileStorageWriteError::FailedToInsertFileChunk
                 | FileStorageWriteError::FailedToDeleteChunk
+                | FileStorageWriteError::FailedToDeleteRoot
                 | FileStorageWriteError::FailedToPersistChanges
                 | FileStorageWriteError::FailedToParseFileMetadata
                 | FileStorageWriteError::FailedToParseFingerprint
@@ -859,7 +860,8 @@ where
                         event.file_key
                     )))
                 }
-                FileStorageWriteError::FailedToConstructTrieIter => {
+                FileStorageWriteError::FailedToConstructTrieIter
+                | FileStorageWriteError::FailedToContructFileTrie => {
                     // This should never happen for a well constructed trie.
                     // This means that something is seriously wrong, so we error out the whole task.
                     // Unvolunteer the file.
