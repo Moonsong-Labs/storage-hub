@@ -8928,7 +8928,7 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
 				// Issue another storage request
