@@ -72,6 +72,25 @@ pub mod dynamic_params {
             .saturating_mul(110)
             .saturating_div(100);
 
+        /// The following parameters are the replication targets for the different security levels
+        /// that a storage request (and thus the file it represents) can have.
+        ///
+        /// These are associated with the probability that a malicious actor could hold the file hostage by controlling
+        /// all BSPs that volunteered and confirmed storing it.
+        /// The values were calculated from the probabilities derived using binomial distribution calculations,
+        /// where the total number of BSPs is set to 1000, the fraction of malicious BSPs is 1/3, and the target number of BSPs
+        /// is incremented until the probability of all selected BSPs being malicious falls below the required percentage.
+        ///
+        /// The formula used is:
+        ///     num_bsps = 1000
+        ///     fraction_evil = 1/3
+        ///     n_evil = int(num_bsps * fraction_evil)  // = 333
+        ///     target = range(1, num_bsps)
+        ///     p_init = target / num_bsps
+        ///     prob = binomial_cdf_at_least(n_evil, target, p_init)
+        ///
+        /// This ensures that the replication targets were selected optimally to balance security and storage efficiency.
+        /// --------------------------------------------------------------------------------------------------------------------
         /// The amount of BSPs that a basic security storage request should use as the replication target.
         ///
         /// This must be the lowest amount of BSPs that guarantee that the probability that a malicious
