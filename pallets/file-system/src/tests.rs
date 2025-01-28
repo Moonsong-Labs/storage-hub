@@ -8245,7 +8245,7 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
-				
+
 				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
 				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
