@@ -800,6 +800,7 @@ pub type ReplicationTargetType = u32;
 
 parameter_types! {
     pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const FileDeletionRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
@@ -835,13 +836,13 @@ impl pallet_file_system::Config for Runtime {
     type MaxDataServerMultiAddresses = ConstU32<10>;
     type MaxExpiredItemsInTick = ConstU32<100>;
     type StorageRequestTtl = runtime_params::dynamic_params::runtime_config::StorageRequestTtl;
-    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring =
         runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
     type DefaultReplicationTarget =
         runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
     type MaxReplicationTarget =
