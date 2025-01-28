@@ -1169,7 +1169,7 @@ mod users {
     use crate::{sh_sibling_account_account_id, CHARLIE, SH_PARA_ID};
     use pallet_file_system::types::{
         FileKeyWithProof, MaxFilePathSize, MaxNumberOfPeerIds, MaxPeerIdSize,
-        PendingFileDeletionRequest,
+        PendingFileDeletionRequest, ReplicationTarget,
     };
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
@@ -1312,7 +1312,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: None,
+                    replication_target: ReplicationTarget::Standard,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1695,7 +1695,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: None,
+                    replication_target: ReplicationTarget::Standard,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub

@@ -64,7 +64,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          1
+          {
+            Custom: 1
+          }
         )
       );
     }
@@ -202,7 +204,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
             file_size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            1
+            {
+              Custom: 1
+            }
           )
         );
       }
