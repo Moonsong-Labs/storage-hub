@@ -1365,7 +1365,7 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * The vector holding whether the last [`Config::BlockFullnessPeriod`] blocks were full or not.
        *
-       * Each element in the vector represents a block, and is `true` if the block was full, and `false` if it was not.
+       * Each element in the vector represents a block, and is `true` if the block was full, and `false` otherwise.
        * Note: Ideally we would use a `BitVec` to reduce storage, but since there's no bounded `BitVec` implementation
        * we use a BoundedVec<bool> instead. This uses 7 more bits of storage per element.
        **/
