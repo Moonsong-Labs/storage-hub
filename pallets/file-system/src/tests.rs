@@ -4714,7 +4714,7 @@ mod bsp_volunteer {
             });
         }
 
-		#[test]
+        #[test]
         fn bsp_volunteer_is_correctly_paid_from_user_deposit() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
