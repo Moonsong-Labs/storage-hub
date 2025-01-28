@@ -318,9 +318,10 @@ where
                 };
 
                 // Emit event of mutation applied.
-                Self::deposit_event(Event::MutationsApplied {
-                    provider: *submitter,
-                    mutations,
+                Self::deposit_event(Event::MutationsAppliedForProvider {
+                    provider_id: *submitter,
+                    mutations: mutations.to_vec(),
+                    old_root: root,
                     new_root,
                 });
             }
@@ -1071,6 +1072,14 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             )
             .map_err(|_| Error::<T>::FailedToApplyDelta)?;
 
+        // Emit event of mutation applied.
+        Self::deposit_event(Event::MutationsAppliedForProvider {
+            provider_id: *provider_id,
+            mutations: mutations.to_vec(),
+            old_root: root,
+            new_root,
+        });
+
         Ok(new_root)
     }
 
@@ -1079,13 +1088,20 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
     ) -> Result<Self::MerkleHash, DispatchError> {
-        Ok(
+        let (_, new_root, _) =
             <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
                 &root, mutations, proof,
             )
-            .map_err(|_| Error::<T>::FailedToApplyDelta)?
-            .1,
-        )
+            .map_err(|_| Error::<T>::FailedToApplyDelta)?;
+
+        // Emit event of mutation applied.
+        Self::deposit_event(Event::MutationsApplied {
+            mutations: mutations.to_vec(),
+            old_root: *root,
+            new_root,
+        });
+
+        Ok(new_root)
     }
 
     // Remove a provider from challenge cycle.

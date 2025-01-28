@@ -299,11 +299,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;
       /**
-       * Error created in 2024. If you see this, you are well beyond the singularity and should
-       * probably stop using this pallet.
-       **/
-      MaxBlockNumberReached: AugmentedError<ApiType>;
-      /**
        * Maximum threshold cannot be zero.
        **/
       MaximumThresholdCannotBeZero: AugmentedError<ApiType>;
@@ -311,6 +306,11 @@ declare module "@polkadot/api-base/types/errors" {
        * Max replication target cannot be smaller than default replication target.
        **/
       MaxReplicationTargetSmallerThanDefault: AugmentedError<ApiType>;
+      /**
+       * Error created in 2024. If you see this, you are well beyond the singularity and should
+       * probably stop using this pallet.
+       **/
+      MaxTickNumberReached: AugmentedError<ApiType>;
       /**
        * Max number of user pending deletion requests reached.
        **/
@@ -424,7 +424,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageRequestExists: AugmentedError<ApiType>;
       /**
-       * No slot available found in blocks to insert storage request expiration time.
+       * No slot available found in ticks to insert storage request expiration time.
        **/
       StorageRequestExpiredNoSlotAvailable: AugmentedError<ApiType>;
       /**

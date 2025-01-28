@@ -92,9 +92,9 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxDataServerMultiAddresses: u32 & AugmentedConst<ApiType>;
       /**
-       * Maximum number of expired items (per type) to clean up in a single block.
+       * Maximum number of expired items (per type) to clean up in a single tick.
        **/
-      maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;
+      maxExpiredItemsInTick: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum byte size of a file path.
        **/

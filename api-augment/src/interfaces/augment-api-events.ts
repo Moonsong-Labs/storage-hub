@@ -531,15 +531,17 @@ declare module "@polkadot/api-base/types/events" {
         [
           user: AccountId32,
           fileKey: H256,
+          fileSize: u64,
           bucketId: H256,
-          mspId: Option<H256>,
+          mspId: H256,
           proofOfInclusion: bool
         ],
         {
           user: AccountId32;
           fileKey: H256;
+          fileSize: u64;
           bucketId: H256;
-          mspId: Option<H256>;
+          mspId: H256;
           proofOfInclusion: bool;
         }
       >;
@@ -668,8 +670,22 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<
         ApiType,
-        [mspId: H256, user: AccountId32, fileKey: H256, bucketId: H256, proofOfInclusion: bool],
-        { mspId: H256; user: AccountId32; fileKey: H256; bucketId: H256; proofOfInclusion: bool }
+        [
+          user: AccountId32,
+          fileKey: H256,
+          fileSize: u64,
+          bucketId: H256,
+          mspId: H256,
+          proofOfInclusion: bool
+        ],
+        {
+          user: AccountId32;
+          fileKey: H256;
+          fileSize: u64;
+          bucketId: H256;
+          mspId: H256;
+          proofOfInclusion: bool;
+        }
       >;
       /**
        * Notifies that a SP has stopped storing a file because its owner has become insolvent.
@@ -1643,12 +1659,33 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ChallengesTickerSet: AugmentedEvent<ApiType, [paused: bool], { paused: bool }>;
       /**
-       * A set of mutations has been applied to the Forest.
+       * A set of mutations has been applied to a given Forest.
+       * This is the generic version of [`MutationsAppliedForProvider`](Event::MutationsAppliedForProvider)
+       * when [`generic_apply_delta`](ProofsDealerInterface::generic_apply_delta) is used
+       * and the root is not necessarily linked to a specific Provider.
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [provider: H256, mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, newRoot: H256],
-        { provider: H256; mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>; newRoot: H256 }
+        [mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, oldRoot: H256, newRoot: H256],
+        { mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>; oldRoot: H256; newRoot: H256 }
+      >;
+      /**
+       * A set of mutations has been applied to the Forest of a given Provider.
+       **/
+      MutationsAppliedForProvider: AugmentedEvent<
+        ApiType,
+        [
+          providerId: H256,
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>,
+          oldRoot: H256,
+          newRoot: H256
+        ],
+        {
+          providerId: H256;
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
+          oldRoot: H256;
+          newRoot: H256;
+        }
       >;
       /**
        * A manual challenge was submitted.

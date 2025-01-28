@@ -1993,16 +1993,18 @@ declare module "@polkadot/types/lookup" {
     readonly asFileDeletionRequest: {
       readonly user: AccountId32;
       readonly fileKey: H256;
+      readonly fileSize: u64;
       readonly bucketId: H256;
-      readonly mspId: Option<H256>;
+      readonly mspId: H256;
       readonly proofOfInclusion: bool;
     } & Struct;
     readonly isProofSubmittedForPendingFileDeletionRequest: boolean;
     readonly asProofSubmittedForPendingFileDeletionRequest: {
-      readonly mspId: H256;
       readonly user: AccountId32;
       readonly fileKey: H256;
+      readonly fileSize: u64;
       readonly bucketId: H256;
+      readonly mspId: H256;
       readonly proofOfInclusion: bool;
     } & Struct;
     readonly isBspChallengeCycleInitialised: boolean;
@@ -2156,10 +2158,17 @@ declare module "@polkadot/types/lookup" {
       readonly provider: H256;
       readonly maybeProviderAccount: Option<AccountId32>;
     } & Struct;
+    readonly isMutationsAppliedForProvider: boolean;
+    readonly asMutationsAppliedForProvider: {
+      readonly providerId: H256;
+      readonly mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
+      readonly oldRoot: H256;
+      readonly newRoot: H256;
+    } & Struct;
     readonly isMutationsApplied: boolean;
     readonly asMutationsApplied: {
-      readonly provider: H256;
       readonly mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
+      readonly oldRoot: H256;
       readonly newRoot: H256;
     } & Struct;
     readonly isChallengesTickerSet: boolean;
@@ -2174,6 +2183,7 @@ declare module "@polkadot/types/lookup" {
       | "SlashableProvider"
       | "NoRecordOfLastSubmittedProof"
       | "NewChallengeCycleInitialised"
+      | "MutationsAppliedForProvider"
       | "MutationsApplied"
       | "ChallengesTickerSet";
   }
@@ -5577,7 +5587,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBspNotEligibleToVolunteer: boolean;
     readonly isStorageRequestExpiredNoSlotAvailable: boolean;
     readonly isStorageRequestNotAuthorized: boolean;
-    readonly isMaxBlockNumberReached: boolean;
+    readonly isMaxTickNumberReached: boolean;
     readonly isFailedToEncodeBsp: boolean;
     readonly isFailedToEncodeFingerprint: boolean;
     readonly isFailedToDecodeThreshold: boolean;
@@ -5654,7 +5664,7 @@ declare module "@polkadot/types/lookup" {
       | "BspNotEligibleToVolunteer"
       | "StorageRequestExpiredNoSlotAvailable"
       | "StorageRequestNotAuthorized"
-      | "MaxBlockNumberReached"
+      | "MaxTickNumberReached"
       | "FailedToEncodeBsp"
       | "FailedToEncodeFingerprint"
       | "FailedToDecodeThreshold"

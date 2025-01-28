@@ -1,5 +1,5 @@
 import { strictEqual } from "node:assert";
-import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, shUser, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
@@ -95,9 +95,6 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       ],
       signer: shUser
     });
-
-    // wait for the bsp to volunteer
-    await sleep(500);
 
     const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
@@ -210,9 +207,6 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       signer: shUser
     });
 
-    // wait for the bsp to volunteer
-    await sleep(500);
-
     const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     const dataBlob = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
@@ -247,8 +241,6 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       ],
       signer: shUser
     });
-
-    await sleep(500);
 
     strictEqual(issueStorageRequestResultTwice.extSuccess, false);
   });

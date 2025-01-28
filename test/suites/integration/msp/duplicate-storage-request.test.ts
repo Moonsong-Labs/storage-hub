@@ -51,9 +51,6 @@ describeMspNet(
         signer: shUser
       });
 
-      // Allow time for the MSP to receive and store the file from the user
-      await sleep(3000);
-
       const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
       const newStorageRequestDataBlob =
@@ -94,7 +91,7 @@ describeMspNet(
       }
 
       // Allow time for the MSP to update the local forest root
-      await sleep(3000);
+      await sleep(3000); // Mandatory sleep to check nothing has changed
 
       // Check that the MSP has not updated the local forest root of the bucket
       strictEqual(

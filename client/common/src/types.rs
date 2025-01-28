@@ -60,6 +60,7 @@ pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
 pub type CustomChallenge = pallet_proofs_dealer::types::CustomChallenge<Runtime>;
 pub type TrieMutation = shp_traits::TrieMutation;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
+pub type TrieAddMutation = shp_traits::TrieAddMutation;
 pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
 pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
 pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;
@@ -137,6 +138,16 @@ pub struct ForestProof<T: TrieLayout> {
     pub proof: CompactProof,
     /// The root hash of the trie.
     pub root: HasherOutT<T>,
+}
+
+impl<T: TrieLayout> ForestProof<T> {
+    /// Returns whether a file key was found in the forest proof.
+    pub fn contains_file_key(&self, file_key: &HasherOutT<T>) -> bool {
+        self.proven.iter().any(|proven| match proven {
+            Proven::ExactKey(leaf) => leaf.key.as_ref() == file_key.as_ref(),
+            _ => false,
+        })
+    }
 }
 
 #[derive(Clone, Encode, Decode)]

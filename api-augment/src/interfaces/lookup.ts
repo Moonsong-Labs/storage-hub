@@ -1573,15 +1573,17 @@ export default {
       FileDeletionRequest: {
         user: "AccountId32",
         fileKey: "H256",
+        fileSize: "u64",
         bucketId: "H256",
-        mspId: "Option<H256>",
+        mspId: "H256",
         proofOfInclusion: "bool"
       },
       ProofSubmittedForPendingFileDeletionRequest: {
-        mspId: "H256",
         user: "AccountId32",
         fileKey: "H256",
+        fileSize: "u64",
         bucketId: "H256",
+        mspId: "H256",
         proofOfInclusion: "bool"
       },
       BspChallengeCycleInitialised: {
@@ -1690,9 +1692,15 @@ export default {
         provider: "H256",
         maybeProviderAccount: "Option<AccountId32>"
       },
-      MutationsApplied: {
-        provider: "H256",
+      MutationsAppliedForProvider: {
+        providerId: "H256",
         mutations: "Vec<(H256,ShpTraitsTrieMutation)>",
+        oldRoot: "H256",
+        newRoot: "H256"
+      },
+      MutationsApplied: {
+        mutations: "Vec<(H256,ShpTraitsTrieMutation)>",
+        oldRoot: "H256",
         newRoot: "H256"
       },
       ChallengesTickerSet: {
@@ -4596,7 +4604,7 @@ export default {
       "BspNotEligibleToVolunteer",
       "StorageRequestExpiredNoSlotAvailable",
       "StorageRequestNotAuthorized",
-      "MaxBlockNumberReached",
+      "MaxTickNumberReached",
       "FailedToEncodeBsp",
       "FailedToEncodeFingerprint",
       "FailedToDecodeThreshold",

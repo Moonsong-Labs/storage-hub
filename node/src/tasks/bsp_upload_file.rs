@@ -1,11 +1,4 @@
-use std::{
-    cmp::max,
-    collections::{HashMap, HashSet},
-    ops::Add,
-    str::FromStr,
-    sync::Arc,
-    time::Duration,
-};
+use std::{cmp::max, collections::HashMap, ops::Add, str::FromStr, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -59,7 +52,7 @@ const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
 ///   and if it is valid, stores it, until the whole file is stored.
 /// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
 ///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
-///   before updating it's local Forest storage root.
+///   extrinsic, waiting for it to be successfully included in a block.
 pub struct BspUploadFileTask<NT>
 where
     NT: ShNodeType,
@@ -95,6 +88,91 @@ where
             file_key_cleanup: None,
             capacity_queue: Arc::new(Mutex::new(0_u64)),
         }
+    }
+
+    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let mut is_allowed = read_file_storage
+            .is_allowed(
+                &event.file_key.into(),
+                shc_file_manager::traits::ExcludeType::File,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.fingerprint.as_hash().into(),
+                shc_file_manager::traits::ExcludeType::Fingerprint,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File fingerprint is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        let owner = H256::from(event.who.as_ref());
+        is_allowed = read_file_storage
+            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Owner is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.bucket_id,
+                shc_file_manager::traits::ExcludeType::Bucket,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Bucket is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        drop(read_file_storage);
+
+        return Ok(true);
     }
 }
 
@@ -350,8 +428,7 @@ where
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
-        let events = self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -374,71 +451,6 @@ where
                 )
             })?;
 
-        let maybe_new_root: Option<H256> = events.and_then(|events| {
-            events.into_iter().find_map(|event| {
-                if let storage_hub_runtime::RuntimeEvent::FileSystem(
-                    pallet_file_system::Event::BspConfirmedStoring {
-                        bsp_id,
-                        skipped_file_keys,
-                        new_root,
-                        ..
-                    },
-                ) = event.event
-                {
-                    if bsp_id == own_bsp_id {
-                        if !skipped_file_keys.is_empty() {
-                            warn!(
-                            target: LOG_TARGET,
-                            "Skipped confirmations for file keys: {:?}",
-                            skipped_file_keys
-                            );
-                            // Remove skipped confirmations
-                            let skipped_set: HashSet<_> = skipped_file_keys.into_iter().collect();
-                            file_metadatas.retain(|file_key, _| !skipped_set.contains(file_key));
-                        }
-                        Some(new_root)
-                    } else {
-                        debug!(
-                            target: LOG_TARGET,
-                            "Received confirmation for another BSP: {:?}",
-                            bsp_id
-                        );
-                        None
-                    }
-                } else {
-                    debug!(
-                        target: LOG_TARGET,
-                        "Received unexpected event: {:?}",
-                        event.event
-                    );
-                    None
-                }
-            })
-        });
-
-        let new_root = match maybe_new_root {
-            Some(new_root) => new_root,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. Failed to query BspConfirmedStoring new forest root after confirming storing.";
-                error!(target: LOG_TARGET, "{}", err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
-
-        // Save `FileMetadata` of the successfully retrieved stored files in the forest storage (executed in closure to drop the read lock on the forest storage).
-        if !file_metadatas.is_empty() {
-            fs.write().await.insert_files_metadata(
-                file_metadatas.into_values().collect::<Vec<_>>().as_slice(),
-            )?;
-
-            if fs.read().await.root() != new_root {
-                let err_msg =
-                    "CRITICAL❗️❗️ This is a critical bug! Please report it to the StorageHub team. \nError forest root mismatch after confirming storing.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        }
-
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
             .blockchain
@@ -457,22 +469,9 @@ where
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
         // First check if the file is not on our exclude list
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let is_allowed = read_file_storage
-            .is_allowed(&event.file_key.into())
-            .map_err(|e| {
-                let err_msg = format!("Failed to read exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        drop(read_file_storage);
+        let is_allowed = self.is_allowed(&event).await?;
 
         if !is_allowed {
-            info!("File is in the exclude list");
             return Ok(());
         }
 
@@ -922,7 +921,7 @@ where
         current_capacity: StorageDataUnit,
     ) -> Result<StorageDataUnit, anyhow::Error> {
         let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (required_additional_capacity + jump_capacity - 1) / jump_capacity;
+        let jumps_needed = required_additional_capacity.div_ceil(jump_capacity);
         let jumps = max(jumps_needed, 1);
         let bytes_to_add = jumps * jump_capacity;
         let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {

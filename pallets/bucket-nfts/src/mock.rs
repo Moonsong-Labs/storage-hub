@@ -268,7 +268,7 @@ impl pallet_file_system::Config for Test {
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
     type MaxDataServerMultiAddresses = ConstU32<5>;
-    type MaxExpiredItemsInBlock = ConstU32<100u32>;
+    type MaxExpiredItemsInTick = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
     type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;

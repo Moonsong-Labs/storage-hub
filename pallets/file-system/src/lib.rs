@@ -269,9 +269,9 @@ pub mod pallet {
         #[pallet::constant]
         type MaxDataServerMultiAddresses: Get<u32>;
 
-        /// Maximum number of expired items (per type) to clean up in a single block.
+        /// Maximum number of expired items (per type) to clean up in a single tick.
         #[pallet::constant]
-        type MaxExpiredItemsInBlock: Get<u32>;
+        type MaxExpiredItemsInTick: Get<u32>;
 
         /// Time-to-live for a storage request.
         #[pallet::constant]
@@ -392,64 +392,64 @@ pub mod pallet {
         OptionQuery,
     >;
 
-    /// A map of blocks to expired storage requests.
+    /// A map of ticks to expired storage requests.
     #[pallet::storage]
     pub type StorageRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<StorageRequestExpirationItem<T>, T::MaxExpiredItemsInBlock>,
+        TickNumber<T>,
+        BoundedVec<StorageRequestExpirationItem<T>, T::MaxExpiredItemsInTick>,
         ValueQuery,
     >;
 
-    /// A map of blocks to expired file deletion requests.
+    /// A map of ticks to expired file deletion requests.
     #[pallet::storage]
     pub type FileDeletionRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<FileDeletionRequestExpirationItem<T>, T::MaxExpiredItemsInBlock>,
+        TickNumber<T>,
+        BoundedVec<FileDeletionRequestExpirationItem<T>, T::MaxExpiredItemsInTick>,
         ValueQuery,
     >;
 
-    /// A map of blocks to expired move bucket requests.
+    /// A map of ticks to expired move bucket requests.
     #[pallet::storage]
     pub type MoveBucketRequestExpirations<T: Config> = StorageMap<
         _,
         Blake2_128Concat,
-        BlockNumberFor<T>,
-        BoundedVec<(ProviderIdFor<T>, BucketIdFor<T>), T::MaxExpiredItemsInBlock>,
+        TickNumber<T>,
+        BoundedVec<(ProviderIdFor<T>, BucketIdFor<T>), T::MaxExpiredItemsInTick>,
         ValueQuery,
     >;
 
-    /// A pointer to the earliest available block to insert a new storage request expiration.
+    /// A pointer to the earliest available tick to insert a new storage request expiration.
     ///
-    /// This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
+    /// This should always be greater or equal than current tick + [`Config::StorageRequestTtl`].
     #[pallet::storage]
-    pub type NextAvailableStorageRequestExpirationBlock<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextAvailableStorageRequestExpirationTick<T: Config> =
+        StorageValue<_, TickNumber<T>, ValueQuery>;
 
-    /// A pointer to the earliest available block to insert a new file deletion request expiration.
+    /// A pointer to the earliest available tick to insert a new file deletion request expiration.
     ///
-    /// This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
+    /// This should always be greater or equal than current tick + [`Config::PendingFileDeletionRequestTtl`].
     #[pallet::storage]
-    pub type NextAvailableFileDeletionRequestExpirationBlock<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextAvailableFileDeletionRequestExpirationTick<T: Config> =
+        StorageValue<_, TickNumber<T>, ValueQuery>;
 
-    /// A pointer to the earliest available block to insert a new move bucket request expiration.
+    /// A pointer to the earliest available tick to insert a new move bucket request expiration.
     ///
-    /// This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
+    /// This should always be greater or equal than current tick + [`Config::MoveBucketRequestTtl`].
     #[pallet::storage]
-    pub type NextAvailableMoveBucketRequestExpirationBlock<T: Config> =
-        StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextAvailableMoveBucketRequestExpirationTick<T: Config> =
+        StorageValue<_, TickNumber<T>, ValueQuery>;
 
-    /// A pointer to the starting block to clean up expired items.
+    /// A pointer to the starting tick to clean up expired items.
     ///
-    /// If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-    /// attempt to advance this block pointer as close to or up to the current block number. This
+    /// If this tick is behind the current tick number, the cleanup algorithm in `on_idle` will
+    /// attempt to advance this tick pointer as close to or up to the current tick number. This
     /// will execute provided that there is enough remaining weight to do so.
     #[pallet::storage]
-    pub type NextStartingBlockToCleanUp<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type NextStartingTickToCleanUp<T: Config> = StorageValue<_, TickNumber<T>, ValueQuery>;
 
     /// Pending file deletion requests.
     ///
@@ -547,7 +547,7 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             size: StorageData<T>,
             peer_ids: PeerIds<T>,
-            expires_at: BlockNumberFor<T>,
+            expires_at: TickNumber<T>,
         },
         /// Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
         ///
@@ -634,16 +634,18 @@ pub mod pallet {
         FileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a proof has been submitted for a pending file deletion request.
         ProofSubmittedForPendingFileDeletionRequest {
-            msp_id: ProviderIdFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
+            msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
@@ -748,13 +750,13 @@ pub mod pallet {
         UnexpectedNumberOfRemovedVolunteeredBsps,
         /// BSP cannot volunteer at this current tick.
         BspNotEligibleToVolunteer,
-        /// No slot available found in blocks to insert storage request expiration time.
+        /// No slot available found in ticks to insert storage request expiration time.
         StorageRequestExpiredNoSlotAvailable,
         /// Not authorized to delete the storage request.
         StorageRequestNotAuthorized,
         /// Error created in 2024. If you see this, you are well beyond the singularity and should
         /// probably stop using this pallet.
-        MaxBlockNumberReached,
+        MaxTickNumberReached,
         /// Failed to encode BSP id as slice.
         FailedToEncodeBsp,
         /// Failed to encode fingerprint as slice.
@@ -1331,6 +1333,7 @@ pub mod pallet {
             Self::deposit_event(Event::FileDeletionRequest {
                 user: who,
                 file_key,
+                file_size: size,
                 bucket_id,
                 msp_id,
                 proof_of_inclusion,
@@ -1361,10 +1364,11 @@ pub mod pallet {
             )?;
 
             Self::deposit_event(Event::ProofSubmittedForPendingFileDeletionRequest {
-                msp_id,
                 user,
                 file_key,
+                file_size,
                 bucket_id,
+                msp_id,
                 proof_of_inclusion,
             });
 
@@ -1378,9 +1382,14 @@ pub mod pallet {
             Self::do_on_poll(weight);
         }
 
-        fn on_idle(current_block: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
+        fn on_idle(_n: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let mut meter = WeightMeter::with_limit(remaining_weight);
-            Self::do_on_idle(current_block, &mut meter);
+            // If there's enough weight to at least read the current tick number, do it and proceed.
+            if meter.can_consume(T::DbWeight::get().reads(1)) {
+                let current_tick = <T::ProofDealer as ProofsDealerInterface>::get_current_tick();
+                meter.consume(T::DbWeight::get().reads(1));
+                Self::do_on_idle(current_tick, &mut meter);
+            }
 
             meter.consumed()
         }

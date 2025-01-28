@@ -1557,15 +1557,17 @@ declare const _default: {
       FileDeletionRequest: {
         user: string;
         fileKey: string;
+        fileSize: string;
         bucketId: string;
         mspId: string;
         proofOfInclusion: string;
       };
       ProofSubmittedForPendingFileDeletionRequest: {
-        mspId: string;
         user: string;
         fileKey: string;
+        fileSize: string;
         bucketId: string;
+        mspId: string;
         proofOfInclusion: string;
       };
       BspChallengeCycleInitialised: {
@@ -1668,9 +1670,15 @@ declare const _default: {
         provider: string;
         maybeProviderAccount: string;
       };
-      MutationsApplied: {
-        provider: string;
+      MutationsAppliedForProvider: {
+        providerId: string;
         mutations: string;
+        oldRoot: string;
+        newRoot: string;
+      };
+      MutationsApplied: {
+        mutations: string;
+        oldRoot: string;
         newRoot: string;
       };
       ChallengesTickerSet: {
