@@ -130,7 +130,7 @@ mod sign_up {
 
                     // Check the event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspRequestSignUpSuccess {
+                        Event::MspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount,
@@ -247,7 +247,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
@@ -344,7 +344,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
@@ -461,7 +461,7 @@ mod sign_up {
 
                     // Check that Alice's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspRequestSignUpSuccess {
+                        Event::MspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -471,7 +471,7 @@ mod sign_up {
 
                     // Check that Bob's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspRequestSignUpSuccess {
+                        Event::MspRequestSignUpSuccess {
                             who: bob,
                             multiaddresses,
                             capacity: storage_amount_bob,
@@ -551,9 +551,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel MSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: alice }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: alice }.into());
                 });
             }
         }
@@ -627,7 +625,7 @@ mod sign_up {
 
                     // Check the event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount,
@@ -725,7 +723,7 @@ mod sign_up {
 
                     // Check the event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount,
@@ -755,7 +753,7 @@ mod sign_up {
 
                     // Check that the confirm BSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::BspSignUpSuccess {
+                        Event::BspSignUpSuccess {
                             who: alice,
                             root: DefaultMerkleRoot::get(),
                             multiaddresses,
@@ -830,7 +828,7 @@ mod sign_up {
 
                     // Check the event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount,
@@ -860,7 +858,7 @@ mod sign_up {
 
                     // Check that the confirm BSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::BspSignUpSuccess {
+                        Event::BspSignUpSuccess {
                             who: alice,
                             root: DefaultMerkleRoot::get(),
                             multiaddresses,
@@ -966,7 +964,7 @@ mod sign_up {
 
                     // Check that Alice's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -976,7 +974,7 @@ mod sign_up {
 
                     // Check that Bob's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: bob,
                             multiaddresses,
                             capacity: storage_amount_bob,
@@ -1051,9 +1049,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel BSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: alice }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: alice }.into());
                 });
             }
         }
@@ -1160,7 +1156,7 @@ mod sign_up {
 
                     // Check that Alice's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspRequestSignUpSuccess {
+                        Event::MspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -1170,7 +1166,7 @@ mod sign_up {
 
                     // Check that Bob's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: bob,
                             multiaddresses,
                             capacity: storage_amount_bob,
@@ -1254,7 +1250,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -1347,7 +1343,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -1373,7 +1369,7 @@ mod sign_up {
 
                     // Check that the confirm BSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::BspSignUpSuccess {
+                        Event::BspSignUpSuccess {
                             who: bob,
                             multiaddresses,
                             root: DefaultMerkleRoot::get(),
@@ -1459,7 +1455,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -1484,9 +1480,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel BSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: bob }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: bob }.into());
                 });
             }
 
@@ -1542,7 +1536,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
@@ -1692,9 +1686,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel MSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: alice }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: alice }.into());
 
                     // Cancel the sign up of Bob as a Backup Storage Provider
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(bob)));
@@ -1712,9 +1704,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel BSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: bob }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: bob }.into());
                 });
             }
         }
@@ -2498,7 +2488,7 @@ mod sign_off {
 
                     // Check the MSP Sign Off event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspSignOffSuccess {
+                        Event::MspSignOffSuccess {
                             who: alice,
                             msp_id: alice_msp_id,
                         }
@@ -2577,7 +2567,7 @@ mod sign_off {
 
                     // Check the BSP Sign Off event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspSignOffSuccess {
+                        Event::BspSignOffSuccess {
                             who: alice,
                             bsp_id: alice_bsp_id,
                         }
@@ -2656,7 +2646,7 @@ mod sign_off {
 
                     // Check the BSP Sign Off event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspSignOffSuccess {
+                        Event::BspSignOffSuccess {
                             who: alice,
                             bsp_id: alice_bsp_id,
                         }
@@ -2933,7 +2923,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -3004,7 +2994,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -3071,7 +3061,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -3158,7 +3148,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -3241,7 +3231,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -3320,7 +3310,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -5243,7 +5233,7 @@ mod slash_and_top_up {
                     .iter()
                     .rev()
                     .find_map(|event| {
-                        if let RuntimeEvent::StorageProviders(Event::<Test>::Slashed {
+                        if let RuntimeEvent::StorageProviders(Event::Slashed {
                             provider_id,
                             amount,
                         }) = event.event
@@ -5274,7 +5264,7 @@ mod slash_and_top_up {
                         .iter()
                         .rev()
                         .find_map(|event| {
-                            if let RuntimeEvent::StorageProviders(Event::<Test>::TopUpFulfilled {
+                            if let RuntimeEvent::StorageProviders(Event::TopUpFulfilled {
                                 provider_id: _,
                                 amount,
                             }) = event.event
@@ -5323,7 +5313,7 @@ mod slash_and_top_up {
                     .unwrap();
 
                     System::assert_has_event(
-                        Event::<Test>::AwaitingTopUp {
+                        Event::AwaitingTopUp {
                             provider_id: self.provider_id,
                             top_up_metadata: top_up_metadata.clone(),
                         }
@@ -5418,7 +5408,7 @@ mod slash_and_top_up {
                     .iter()
                     .rev()
                     .find_map(|event| {
-                        if let RuntimeEvent::StorageProviders(Event::<Test>::TopUpFulfilled {
+                        if let RuntimeEvent::StorageProviders(Event::TopUpFulfilled {
                             provider_id: _,
                             amount,
                         }) = event.event
@@ -6107,7 +6097,7 @@ mod add_value_prop {
 
                 // Check event is emitted
                 System::assert_last_event(
-                    Event::<Test>::ValuePropAdded {
+                    Event::ValuePropAdded {
                         msp_id,
                         value_prop_id,
                         value_prop: value_prop.clone(),
@@ -6200,7 +6190,7 @@ mod make_value_prop_unavailable {
 
                 // Check event is emitted
                 System::assert_last_event(
-                    Event::<Test>::ValuePropUnavailable {
+                    Event::ValuePropUnavailable {
                         msp_id,
                         value_prop_id,
                     }
@@ -6487,7 +6477,7 @@ fn register_account_as_msp(
 
     // Check that the request sign up event was emitted
     System::assert_last_event(
-        Event::<Test>::MspRequestSignUpSuccess {
+        Event::MspRequestSignUpSuccess {
             who: account,
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
@@ -6510,7 +6500,7 @@ fn register_account_as_msp(
 
     // Check that the confirm MSP sign up event was emitted
     System::assert_last_event(
-        Event::<Test>::MspSignUpSuccess {
+        Event::MspSignUpSuccess {
             who: account,
             msp_id,
             multiaddresses: multiaddresses.clone(),
@@ -6578,7 +6568,7 @@ fn register_account_as_bsp(
 
     // Check that the request sign up event was emitted
     System::assert_last_event(
-        Event::<Test>::BspRequestSignUpSuccess {
+        Event::BspRequestSignUpSuccess {
             who: account,
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
@@ -6599,7 +6589,7 @@ fn register_account_as_bsp(
 
     // Check that the confirm BSP sign up event was emitted
     System::assert_last_event(
-        Event::<Test>::BspSignUpSuccess {
+        Event::BspSignUpSuccess {
             who: account,
             bsp_id,
             root: DefaultMerkleRoot::get(),
