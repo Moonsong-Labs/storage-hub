@@ -367,9 +367,9 @@ mod benchmarks {
             - One::one();
         PastBlocksWeight::<T>::insert(old_block, max_weight_for_class);
 
-        // Setting the `PastBlocksStatus` bounded vector to contain as the first element a block considered full, then
-        // exactly the minimum non full blocks, and then all full blocks, so that when adding the new non full block
-        // the chain goes from being considered spammed to not spammed.
+        // Setting the `PastBlocksStatus` bounded vector to contain, as the first element, a block considered full, followed
+        // by exactly the minimum required non-full blocks, and then all full blocks, so that when adding the new non-full block
+        // the chain transitions from being considered spammed to not spammed.
         let mut past_blocks_status: BoundedVec<bool, T::BlockFullnessPeriod> = Default::default();
         past_blocks_status
             .try_push(true)
