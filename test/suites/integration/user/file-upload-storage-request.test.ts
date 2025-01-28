@@ -30,7 +30,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
           {
-            LowSecurity: null
+            Basic: null
           }
         )
       ],
@@ -89,7 +89,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.DUMMY_MSP_ID,
           [],
           {
-            LowSecurity: null
+            Basic: null
           }
         )
       ],
@@ -136,7 +136,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
           {
-            LowSecurity: null
+            Basic: null
           }
         )
       ],
@@ -171,7 +171,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           INVALID_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
           {
-            LowSecurity: null
+            Basic: null
           }
         )
       ],
@@ -203,7 +203,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
           {
-            LowSecurity: null
+            Basic: null
           }
         )
       ],
@@ -241,7 +241,7 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
           {
-            LowSecurity: null
+            Basic: null
           }
         )
       ],

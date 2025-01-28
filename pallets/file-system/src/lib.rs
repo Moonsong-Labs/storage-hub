@@ -301,38 +301,48 @@ pub mod pallet {
         #[pallet::constant]
         type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
 
-        /// Low security replication target for a new storage request.
+        /// Basic security replication target for a new storage request.
         ///
         /// This should be high enough so that it gives users a ~1% chance of their file
-        /// being controlled by a single malicious entity.
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
         #[pallet::constant]
-        type LowSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
+        type BasicReplicationTarget: Get<ReplicationTargetType<Self>>;
 
-        /// Medium security replication target for a new storage request.
+        /// Standard security replication target for a new storage request.
         ///
         /// This should be high enough so that it gives users a ~0.1% chance of their file
-        /// being controlled by a single malicious entity.
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
         #[pallet::constant]
-        type MediumSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
+        type StandardReplicationTarget: Get<ReplicationTargetType<Self>>;
 
         /// High security replication target for a new storage request.
         ///
         /// This should be high enough so that it gives users a ~0.01% chance of their file
-        /// being controlled by a single malicious entity.
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
         #[pallet::constant]
         type HighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
 
         /// Super high security replication target for a new storage request.
         ///
         /// This should be high enough so that it gives users a ~0.001% chance of their file
-        /// being controlled by a single malicious entity.
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
         #[pallet::constant]
         type SuperHighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
 
         /// Ultra high security replication target for a new storage request.
         ///
         /// This should be high enough so that it gives users a ~0.0001% chance of their file
-        /// being controlled by a single malicious entity.
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
         #[pallet::constant]
         type UltraHighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
 
@@ -1379,8 +1389,8 @@ pub mod pallet {
         /// of crate::construct_runtime's expansion.
         /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
-            let low_security_replication_target = T::LowSecurityReplicationTarget::get();
-            let medium_security_replication_target = T::MediumSecurityReplicationTarget::get();
+            let low_security_replication_target = T::BasicReplicationTarget::get();
+            let medium_security_replication_target = T::StandardReplicationTarget::get();
             let high_security_replication_target = T::HighSecurityReplicationTarget::get();
             let super_high_security_replication_target =
                 T::SuperHighSecurityReplicationTarget::get();
@@ -1395,15 +1405,15 @@ pub mod pallet {
 
             assert!(
                 low_security_replication_target > T::ReplicationTargetType::zero(),
-                "Low security replication target cannot be zero."
+                "Basic security replication target cannot be zero."
             );
             assert!(
 				medium_security_replication_target >= low_security_replication_target,
-				"Medium security replication target cannot be smaller than low security replication target."
+				"Standard security replication target cannot be smaller than basic security replication target."
 			);
             assert!(
 				high_security_replication_target >= medium_security_replication_target,
-				"High security replication target cannot be smaller than medium security replication target."
+				"High security replication target cannot be smaller than standard security replication target."
 			);
             assert!(
 				super_high_security_replication_target >= high_security_replication_target,

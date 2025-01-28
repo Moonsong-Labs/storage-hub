@@ -28,7 +28,7 @@ export const sendNewStorageRequest = async (
   const issueOwner = owner ?? shUser;
 
   const replicationTarget = {
-    LowSecurity: null
+    Basic: null
   };
 
   const issueStorageRequestResult = await sealBlock(
@@ -116,14 +116,14 @@ export const createBucketAndSendNewStorageRequest = async (
     newBucketEventDataBlob.bucketId
   );
 
-  let replicationTargetToUse: { Custom: number } | { LowSecurity: null };
+  let replicationTargetToUse: { Custom: number } | { Basic: null };
   if (replicationTarget) {
     replicationTargetToUse = {
       Custom: replicationTarget
     };
   } else {
     replicationTargetToUse = {
-      LowSecurity: null
+      Basic: null
     };
   }
   const issueStorageRequestResult = await sealBlock(

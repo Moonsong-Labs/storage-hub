@@ -184,15 +184,15 @@ describeBspNet(
     });
 
     it("lower reputation can still volunteer and be accepted", async () => {
-      const lowSecurityReplicationTargetRuntimeParameter = {
+      const basicReplicationTargetRuntimeParameter = {
         RuntimeConfig: {
-          LowSecurityReplicationTarget: [null, 5]
+          BasicReplicationTarget: [null, 5]
         }
       };
       await userApi.block.seal({
         calls: [
           userApi.tx.sudo.sudo(
-            userApi.tx.parameters.setParameter(lowSecurityReplicationTargetRuntimeParameter)
+            userApi.tx.parameters.setParameter(basicReplicationTargetRuntimeParameter)
           )
         ]
       });
@@ -293,15 +293,15 @@ describeBspNet(
     });
 
     it("BSP two eventually volunteers after threshold curve is met", async () => {
-      const lowSecurityReplicationTargetRuntimeParameter = {
+      const basicReplicationTargetRuntimeParameter = {
         RuntimeConfig: {
-          LowSecurityReplicationTarget: [null, 2]
+          BasicReplicationTarget: [null, 2]
         }
       };
       await userApi.block.seal({
         calls: [
           userApi.tx.sudo.sudo(
-            userApi.tx.parameters.setParameter(lowSecurityReplicationTargetRuntimeParameter)
+            userApi.tx.parameters.setParameter(basicReplicationTargetRuntimeParameter)
           )
         ]
       });
@@ -484,15 +484,15 @@ describeBspNet(
         skip: "Test takes way to long to run. This test actually spams the chain with transactions, unskip it if you want to run it."
       },
       async () => {
-        const lowSecurityReplicationTargetRuntimeParameter = {
+        const basicReplicationTargetRuntimeParameter = {
           RuntimeConfig: {
-            LowSecurityReplicationTarget: [null, 2]
+            BasicReplicationTarget: [null, 2]
           }
         };
         await userApi.block.seal({
           calls: [
             userApi.tx.sudo.sudo(
-              userApi.tx.parameters.setParameter(lowSecurityReplicationTargetRuntimeParameter)
+              userApi.tx.parameters.setParameter(basicReplicationTargetRuntimeParameter)
             )
           ]
         });

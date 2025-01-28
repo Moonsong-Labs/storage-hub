@@ -72,23 +72,23 @@ pub mod dynamic_params {
             .saturating_mul(110)
             .saturating_div(100);
 
-        /// The amount of BSPs that a low security storage request should use as the replication target.
+        /// The amount of BSPs that a basic security storage request should use as the replication target.
         ///
         /// This must be the lowest amount of BSPs that guarantee that the probability that a malicious
         /// actor controlling 1/3 of the BSPs can hold the file hostage by controlling all its
         /// volunteered BSPs is ~1%.
         #[codec(index = 18)]
         #[allow(non_upper_case_globals)]
-        pub static LowSecurityReplicationTarget: ReplicationTargetType = 7;
+        pub static BasicReplicationTarget: ReplicationTargetType = 7;
 
-        /// The amount of BSPs that a medium security storage request should use as the replication target.
+        /// The amount of BSPs that a standard security storage request should use as the replication target.
         ///
         /// This must be the lowest amount of BSPs that guarantee that the probability that a malicious
         /// actor controlling 1/3 of the BSPs can hold the file hostage by controlling all its
         /// volunteered BSPs is ~0.1%.
         #[codec(index = 19)]
         #[allow(non_upper_case_globals)]
-        pub static MediumSecurityReplicationTarget: ReplicationTargetType = 12;
+        pub static StandardReplicationTarget: ReplicationTargetType = 12;
 
         /// The amount of BSPs that a high security storage request should use as the replication target.
         ///

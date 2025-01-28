@@ -106,15 +106,15 @@ impl<T: Config> StorageRequestMetadata<T> {
 /// both the time it takes for the storage request to be fulfilled and the price paid per byte
 /// during the file's lifetime in StorageHub.
 /// Each option has a different security level, which represents the resiliency that the data will
-/// have against a malicious actor controlling 1/3 of the BSPs of the network.
+/// have against a malicious actor controlling 1/3 of the total BSPs of the network.
 /// All the following percentages assume that all the BSPs of the network have the same reputation
 /// weight, which on average is a realistic scenario since both good and bad BSPs are expected to
 /// have low and high reputations.
 ///
 /// The options are:
-/// - LowSecurity: the data will be stored by enough BSPs so the probability that a malicious
+/// - Basic: the data will be stored by enough BSPs so the probability that a malicious
 /// actor can hold the file hostage by controlling all its BSPs is ~1%.
-/// - MediumSecurity: the data will be stored by enough BSPs so the probability that a malicious
+/// - Standard: the data will be stored by enough BSPs so the probability that a malicious
 /// actor can hold the file hostage by controlling all its BSPs is ~0.1%.
 /// - HighSecurity: the data will be stored by enough BSPs so the probability that a malicious
 /// actor can hold the file hostage by controlling all its BSPs is ~0.01%.
@@ -127,8 +127,8 @@ impl<T: Config> StorageRequestMetadata<T> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub enum ReplicationTarget<T: Config> {
-    LowSecurity,
-    MediumSecurity,
+    Basic,
+    Standard,
     HighSecurity,
     SuperHighSecurity,
     UltraHighSecurity,
@@ -138,8 +138,8 @@ pub enum ReplicationTarget<T: Config> {
 impl<T: Config> Debug for ReplicationTarget<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            ReplicationTarget::LowSecurity => write!(f, "ReplicationTarget::LowSecurity"),
-            ReplicationTarget::MediumSecurity => write!(f, "ReplicationTarget::MediumSecurity"),
+            ReplicationTarget::Basic => write!(f, "ReplicationTarget::Basic"),
+            ReplicationTarget::Standard => write!(f, "ReplicationTarget::Standard"),
             ReplicationTarget::HighSecurity => write!(f, "ReplicationTarget::HighSecurity"),
             ReplicationTarget::SuperHighSecurity => {
                 write!(f, "ReplicationTarget::SuperHighSecurity")

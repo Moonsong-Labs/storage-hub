@@ -81,7 +81,7 @@ describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, creat
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
           {
-            LowSecurity: null
+            Basic: null
           }
         )
       );

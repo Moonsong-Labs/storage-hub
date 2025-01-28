@@ -276,8 +276,8 @@ impl pallet_file_system::Config for Test {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
-    type LowSecurityReplicationTarget = ConstU32<2>;
-    type MediumSecurityReplicationTarget = ConstU32<3>;
+    type BasicReplicationTarget = ConstU32<2>;
+    type StandardReplicationTarget = ConstU32<3>;
     type HighSecurityReplicationTarget = ConstU32<4>;
     type SuperHighSecurityReplicationTarget = ConstU32<5>;
     type UltraHighSecurityReplicationTarget = ConstU32<6>;

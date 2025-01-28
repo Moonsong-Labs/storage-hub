@@ -65,8 +65,8 @@ async function createStorageRequest() {
       ShConsts.DUMMY_MSP_ID, // MSP ID, must match the one of the bucket
       [ShConsts.NODE_INFOS.user.expectedPeerId], // User peer IDs
       {
-        LowSecurity: null
-      } // Low security replication target
+        Basic: null
+      } // Basic security replication target
     ),
     shUser
   );

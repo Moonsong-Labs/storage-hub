@@ -890,10 +890,10 @@ impl pallet_file_system::Config for Runtime {
     type MinWaitForStopStoring =
         runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
-    type LowSecurityReplicationTarget =
-        runtime_params::dynamic_params::runtime_config::LowSecurityReplicationTarget;
-    type MediumSecurityReplicationTarget =
-        runtime_params::dynamic_params::runtime_config::MediumSecurityReplicationTarget;
+    type BasicReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::BasicReplicationTarget;
+    type StandardReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::StandardReplicationTarget;
     type HighSecurityReplicationTarget =
         runtime_params::dynamic_params::runtime_config::HighSecurityReplicationTarget;
     type SuperHighSecurityReplicationTarget =

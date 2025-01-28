@@ -212,7 +212,7 @@ where
     ///
     /// The eligibility initial value depends on the global BSP reputation weight and the storage
     /// request's replication target, and increases linearly over time to achieve its maximum value after
-    /// `TickRangeToMaximumThreshold` ticks, a constant defined in this pallet's configuration.
+    /// [`crate::Config::TickRangeToMaximumThreshold`] ticks, a constant defined in this pallet's configuration.
     /// Both these values get weighted with the BSP's reputation weight to give an advantage to BSPs with
     /// higher reputation weights, since both the initial weighted eligibility value and slope will be
     /// higher for them.
@@ -766,8 +766,8 @@ where
         };
 
         let replication_target = match replication_target {
-            ReplicationTarget::LowSecurity => T::LowSecurityReplicationTarget::get(),
-            ReplicationTarget::MediumSecurity => T::MediumSecurityReplicationTarget::get(),
+            ReplicationTarget::Basic => T::BasicReplicationTarget::get(),
+            ReplicationTarget::Standard => T::StandardReplicationTarget::get(),
             ReplicationTarget::HighSecurity => T::HighSecurityReplicationTarget::get(),
             ReplicationTarget::SuperHighSecurity => T::SuperHighSecurityReplicationTarget::get(),
             ReplicationTarget::UltraHighSecurity => T::UltraHighSecurityReplicationTarget::get(),

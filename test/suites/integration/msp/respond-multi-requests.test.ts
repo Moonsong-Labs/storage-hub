@@ -62,7 +62,7 @@ describeMspNet(
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
             {
-              LowSecurity: null
+              Basic: null
             }
           )
         );

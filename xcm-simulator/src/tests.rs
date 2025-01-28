@@ -1317,7 +1317,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: ReplicationTarget::MediumSecurity,
+                    replication_target: ReplicationTarget::Standard,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1698,7 +1698,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: ReplicationTarget::MediumSecurity,
+                    replication_target: ReplicationTarget::Standard,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub

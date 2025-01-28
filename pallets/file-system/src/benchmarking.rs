@@ -447,7 +447,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            ReplicationTarget::MediumSecurity,
+            ReplicationTarget::Standard,
         );
 
         Ok(())
@@ -657,7 +657,7 @@ mod benchmarks {
                     size,
                     msp: Some((msp_id, false)),
                     user_peer_ids: Default::default(),
-                    bsps_required: T::MediumSecurityReplicationTarget::get(),
+                    bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
                 };
@@ -731,8 +731,8 @@ mod benchmarks {
                     size,
                     msp: Some((msp_id, false)),
                     user_peer_ids: Default::default(),
-                    bsps_required: T::MediumSecurityReplicationTarget::get(),
-                    bsps_confirmed: T::MediumSecurityReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
+                    bsps_required: T::StandardReplicationTarget::get(),
+                    bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
@@ -838,7 +838,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            ReplicationTarget::MediumSecurity,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key
@@ -1040,8 +1040,8 @@ mod benchmarks {
 				size,
 				msp: Some((msp_id, true)), // MSP accepted means the logic to delete the storage request is executed
 				user_peer_ids: Default::default(),
-				bsps_required: T::MediumSecurityReplicationTarget::get(),
-				bsps_confirmed: T::MediumSecurityReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
+				bsps_required: T::StandardReplicationTarget::get(),
+				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
 				bsps_volunteered: ReplicationTargetType::<T>::zero(),
 			};
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
@@ -2373,7 +2373,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            ReplicationTarget::MediumSecurity,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key
@@ -2489,7 +2489,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            ReplicationTarget::MediumSecurity,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key
