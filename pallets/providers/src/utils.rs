@@ -1187,6 +1187,9 @@ where
             Self::deposit_event(Event::BspDeleted {
                 provider_id: *provider_id,
             });
+        } else {
+            // If the provider is not found, return an error
+            return Err(Error::<T>::NotRegistered.into());
         }
 
         Ok(())
