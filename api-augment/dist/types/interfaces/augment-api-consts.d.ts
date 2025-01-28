@@ -62,6 +62,15 @@ declare module "@polkadot/api-base/types/consts" {
     };
     fileSystem: {
       /**
+       * Basic security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~1% chance of their file
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
+       **/
+      basicReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * Penalty payed by a BSP when they forcefully stop storing a file.
        **/
       bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
@@ -69,16 +78,11 @@ declare module "@polkadot/api-base/types/consts" {
        * High security replication target for a new storage request.
        *
        * This should be high enough so that it gives users a ~0.01% chance of their file
-       * being controlled by a single malicious entity.
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
        **/
       highSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
-      /**
-       * Low security replication target for a new storage request.
-       *
-       * This should be high enough so that it gives users a ~1% chance of their file
-       * being controlled by a single malicious entity.
-       **/
-      lowSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
@@ -116,13 +120,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxUserPendingMoveBucketRequests: u32 & AugmentedConst<ApiType>;
       /**
-       * Medium security replication target for a new storage request.
-       *
-       * This should be high enough so that it gives users a ~0.1% chance of their file
-       * being controlled by a single malicious entity.
-       **/
-      mediumSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
-      /**
        * Number of ticks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
        **/
       minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
@@ -135,6 +132,15 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
+       * Standard security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.1% chance of their file
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
+       **/
+      standardReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * Deposit held from the User when creating a new storage request
        **/
       storageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;
@@ -146,7 +152,9 @@ declare module "@polkadot/api-base/types/consts" {
        * Super high security replication target for a new storage request.
        *
        * This should be high enough so that it gives users a ~0.001% chance of their file
-       * being controlled by a single malicious entity.
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
        **/
       superHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
@@ -162,7 +170,9 @@ declare module "@polkadot/api-base/types/consts" {
        * Ultra high security replication target for a new storage request.
        *
        * This should be high enough so that it gives users a ~0.0001% chance of their file
-       * being controlled by a single malicious entity.
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
        **/
       ultraHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**

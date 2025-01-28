@@ -2145,8 +2145,8 @@ export default {
       "MaximumTreasuryCut",
       "BspStopStoringFilePenalty",
       "ProviderTopUpTtl",
-      "LowSecurityReplicationTarget",
-      "MediumSecurityReplicationTarget",
+      "BasicReplicationTarget",
+      "StandardReplicationTarget",
       "HighSecurityReplicationTarget",
       "SuperHighSecurityReplicationTarget",
       "UltraHighSecurityReplicationTarget",
@@ -2233,15 +2233,13 @@ export default {
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl: "Null",
   /**
-   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::LowSecurityReplicationTarget
+   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::BasicReplicationTarget
    **/
-  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowSecurityReplicationTarget:
-    "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget: "Null",
   /**
-   * Lookup196: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MediumSecurityReplicationTarget
+   * Lookup196: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StandardReplicationTarget
    **/
-  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMediumSecurityReplicationTarget:
-    "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget: "Null",
   /**
    * Lookup197: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::HighSecurityReplicationTarget
    **/
@@ -2314,8 +2312,8 @@ export default {
       MaximumTreasuryCut: "Perbill",
       BspStopStoringFilePenalty: "u128",
       ProviderTopUpTtl: "u32",
-      LowSecurityReplicationTarget: "u32",
-      MediumSecurityReplicationTarget: "u32",
+      BasicReplicationTarget: "u32",
+      StandardReplicationTarget: "u32",
       HighSecurityReplicationTarget: "u32",
       SuperHighSecurityReplicationTarget: "u32",
       UltraHighSecurityReplicationTarget: "u32",
@@ -3655,8 +3653,8 @@ export default {
    **/
   PalletFileSystemReplicationTarget: {
     _enum: {
-      LowSecurity: "Null",
-      MediumSecurity: "Null",
+      Basic: "Null",
+      Standard: "Null",
       HighSecurity: "Null",
       SuperHighSecurity: "Null",
       UltraHighSecurity: "Null",
@@ -4163,10 +4161,10 @@ export default {
         "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty,Option<u128>)",
       ProviderTopUpTtl:
         "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl,Option<u32>)",
-      LowSecurityReplicationTarget:
-        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowSecurityReplicationTarget,Option<u32>)",
-      MediumSecurityReplicationTarget:
-        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMediumSecurityReplicationTarget,Option<u32>)",
+      BasicReplicationTarget:
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget,Option<u32>)",
+      StandardReplicationTarget:
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget,Option<u32>)",
       HighSecurityReplicationTarget:
         "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget,Option<u32>)",
       SuperHighSecurityReplicationTarget:

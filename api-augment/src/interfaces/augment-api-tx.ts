@@ -557,8 +557,8 @@ declare module "@polkadot/api-base/types/submittable" {
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[],
           replicationTarget:
             | PalletFileSystemReplicationTarget
-            | { LowSecurity: any }
-            | { MediumSecurity: any }
+            | { Basic: any }
+            | { Standard: any }
             | { HighSecurity: any }
             | { SuperHighSecurity: any }
             | { UltraHighSecurity: any }

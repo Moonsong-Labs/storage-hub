@@ -2801,8 +2801,8 @@ declare module "@polkadot/types/lookup" {
     readonly isMaximumTreasuryCut: boolean;
     readonly isBspStopStoringFilePenalty: boolean;
     readonly isProviderTopUpTtl: boolean;
-    readonly isLowSecurityReplicationTarget: boolean;
-    readonly isMediumSecurityReplicationTarget: boolean;
+    readonly isBasicReplicationTarget: boolean;
+    readonly isStandardReplicationTarget: boolean;
     readonly isHighSecurityReplicationTarget: boolean;
     readonly isSuperHighSecurityReplicationTarget: boolean;
     readonly isUltraHighSecurityReplicationTarget: boolean;
@@ -2831,8 +2831,8 @@ declare module "@polkadot/types/lookup" {
       | "MaximumTreasuryCut"
       | "BspStopStoringFilePenalty"
       | "ProviderTopUpTtl"
-      | "LowSecurityReplicationTarget"
-      | "MediumSecurityReplicationTarget"
+      | "BasicReplicationTarget"
+      | "StandardReplicationTarget"
       | "HighSecurityReplicationTarget"
       | "SuperHighSecurityReplicationTarget"
       | "UltraHighSecurityReplicationTarget"
@@ -2904,12 +2904,11 @@ declare module "@polkadot/types/lookup" {
   /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl (194) */
   type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl = Null;
 
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowSecurityReplicationTarget (195) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowSecurityReplicationTarget =
-    Null;
+  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget (195) */
+  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget = Null;
 
-  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMediumSecurityReplicationTarget (196) */
-  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMediumSecurityReplicationTarget =
+  /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget (196) */
+  type StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget =
     Null;
 
   /** @name StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget (197) */
@@ -2989,10 +2988,10 @@ declare module "@polkadot/types/lookup" {
     readonly asBspStopStoringFilePenalty: u128;
     readonly isProviderTopUpTtl: boolean;
     readonly asProviderTopUpTtl: u32;
-    readonly isLowSecurityReplicationTarget: boolean;
-    readonly asLowSecurityReplicationTarget: u32;
-    readonly isMediumSecurityReplicationTarget: boolean;
-    readonly asMediumSecurityReplicationTarget: u32;
+    readonly isBasicReplicationTarget: boolean;
+    readonly asBasicReplicationTarget: u32;
+    readonly isStandardReplicationTarget: boolean;
+    readonly asStandardReplicationTarget: u32;
     readonly isHighSecurityReplicationTarget: boolean;
     readonly asHighSecurityReplicationTarget: u32;
     readonly isSuperHighSecurityReplicationTarget: boolean;
@@ -3030,8 +3029,8 @@ declare module "@polkadot/types/lookup" {
       | "MaximumTreasuryCut"
       | "BspStopStoringFilePenalty"
       | "ProviderTopUpTtl"
-      | "LowSecurityReplicationTarget"
-      | "MediumSecurityReplicationTarget"
+      | "BasicReplicationTarget"
+      | "StandardReplicationTarget"
       | "HighSecurityReplicationTarget"
       | "SuperHighSecurityReplicationTarget"
       | "UltraHighSecurityReplicationTarget"
@@ -4601,16 +4600,16 @@ declare module "@polkadot/types/lookup" {
 
   /** @name PalletFileSystemReplicationTarget (349) */
   interface PalletFileSystemReplicationTarget extends Enum {
-    readonly isLowSecurity: boolean;
-    readonly isMediumSecurity: boolean;
+    readonly isBasic: boolean;
+    readonly isStandard: boolean;
     readonly isHighSecurity: boolean;
     readonly isSuperHighSecurity: boolean;
     readonly isUltraHighSecurity: boolean;
     readonly isCustom: boolean;
     readonly asCustom: u32;
     readonly type:
-      | "LowSecurity"
-      | "MediumSecurity"
+      | "Basic"
+      | "Standard"
       | "HighSecurity"
       | "SuperHighSecurity"
       | "UltraHighSecurity"
@@ -5265,17 +5264,17 @@ declare module "@polkadot/types/lookup" {
     readonly asProviderTopUpTtl: ITuple<
       [StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl, Option<u32>]
     >;
-    readonly isLowSecurityReplicationTarget: boolean;
-    readonly asLowSecurityReplicationTarget: ITuple<
+    readonly isBasicReplicationTarget: boolean;
+    readonly asBasicReplicationTarget: ITuple<
       [
-        StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowSecurityReplicationTarget,
+        StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget,
         Option<u32>
       ]
     >;
-    readonly isMediumSecurityReplicationTarget: boolean;
-    readonly asMediumSecurityReplicationTarget: ITuple<
+    readonly isStandardReplicationTarget: boolean;
+    readonly asStandardReplicationTarget: ITuple<
       [
-        StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMediumSecurityReplicationTarget,
+        StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget,
         Option<u32>
       ]
     >;
@@ -5358,8 +5357,8 @@ declare module "@polkadot/types/lookup" {
       | "MaximumTreasuryCut"
       | "BspStopStoringFilePenalty"
       | "ProviderTopUpTtl"
-      | "LowSecurityReplicationTarget"
-      | "MediumSecurityReplicationTarget"
+      | "BasicReplicationTarget"
+      | "StandardReplicationTarget"
       | "HighSecurityReplicationTarget"
       | "SuperHighSecurityReplicationTarget"
       | "UltraHighSecurityReplicationTarget"

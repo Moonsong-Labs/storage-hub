@@ -641,10 +641,10 @@ declare module "@polkadot/api-base/types/submittable" {
           replicationTarget:
             | PalletFileSystemReplicationTarget
             | {
-                LowSecurity: any;
+                Basic: any;
               }
             | {
-                MediumSecurity: any;
+                Standard: any;
               }
             | {
                 HighSecurity: any;

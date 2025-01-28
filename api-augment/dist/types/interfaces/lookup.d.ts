@@ -2181,13 +2181,13 @@ declare const _default: {
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl: string;
   /**
-   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::LowSecurityReplicationTarget
+   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::BasicReplicationTarget
    **/
-  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowSecurityReplicationTarget: string;
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget: string;
   /**
-   * Lookup196: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MediumSecurityReplicationTarget
+   * Lookup196: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StandardReplicationTarget
    **/
-  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMediumSecurityReplicationTarget: string;
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget: string;
   /**
    * Lookup197: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::HighSecurityReplicationTarget
    **/
@@ -2255,8 +2255,8 @@ declare const _default: {
       MaximumTreasuryCut: string;
       BspStopStoringFilePenalty: string;
       ProviderTopUpTtl: string;
-      LowSecurityReplicationTarget: string;
-      MediumSecurityReplicationTarget: string;
+      BasicReplicationTarget: string;
+      StandardReplicationTarget: string;
       HighSecurityReplicationTarget: string;
       SuperHighSecurityReplicationTarget: string;
       UltraHighSecurityReplicationTarget: string;
@@ -3563,8 +3563,8 @@ declare const _default: {
    **/
   PalletFileSystemReplicationTarget: {
     _enum: {
-      LowSecurity: string;
-      MediumSecurity: string;
+      Basic: string;
+      Standard: string;
       HighSecurity: string;
       SuperHighSecurity: string;
       UltraHighSecurity: string;
@@ -4035,8 +4035,8 @@ declare const _default: {
       MaximumTreasuryCut: string;
       BspStopStoringFilePenalty: string;
       ProviderTopUpTtl: string;
-      LowSecurityReplicationTarget: string;
-      MediumSecurityReplicationTarget: string;
+      BasicReplicationTarget: string;
+      StandardReplicationTarget: string;
       HighSecurityReplicationTarget: string;
       SuperHighSecurityReplicationTarget: string;
       UltraHighSecurityReplicationTarget: string;
