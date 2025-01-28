@@ -218,10 +218,12 @@ export class BspNetTestApi implements AsyncDisposable {
        * Checks that `expectedExts` extrinsics have been submitted to the tx pool.
        * Then seals a block and checks for the `BspConfirmedStoring` events.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
+       * @param sealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number, bspAccount?: Address) =>
-        Waits.waitForBspStored(this._api, expectedExts, bspAccount),
+      bspStored: (expectedExts?: number, bspAccount?: Address, sealBlock = true) =>
+        Waits.waitForBspStored(this._api, expectedExts, bspAccount, sealBlock),
 
       /**
        * A generic utility to wait for a transaction to be in the tx pool.
@@ -275,6 +277,14 @@ export class BspNetTestApi implements AsyncDisposable {
       blockImported: (blockHash: string) => Waits.waitForBlockImported(this._api, blockHash),
 
       // TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
+      /**
+       * Waits for a MSP to submit a proof for a pending file deletion request.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has submitted a proof for a pending file deletion request.
+       */
+      mspPendingFileDeletionRequestSubmitProof: (expectedExts?: number) =>
+        Waits.waitForMspPendingFileDeletionRequestSubmitProof(this._api, expectedExts),
+
       /**
        * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
@@ -416,7 +426,14 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves to a SealedBlock object.
        */
       seal: (options?: SealBlockOptions) =>
-        BspNetBlock.sealBlock(this._api, options?.calls, options?.signer, options?.finaliseBlock),
+        BspNetBlock.sealBlock(
+          this._api,
+          options?.calls,
+          options?.signer,
+          options?.nonce,
+          options?.parentHash,
+          options?.finaliseBlock
+        ),
       /**
        * Seal blocks until the next challenge period block.
        * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
@@ -478,24 +495,39 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param hashToFinalise - The hash of the block to finalise.
        * @returns A Promise that resolves when the chain reorganization is complete.
        */
-      finaliseBlock: (hasshToFinalise: string) =>
-        BspNetBlock.finaliseBlock(this._api, hasshToFinalise),
+      finaliseBlock: (hashToFinalise: string) =>
+        BspNetBlock.finaliseBlock(this._api, hashToFinalise),
+
       /**
-       * Causes a chain re-org by creating a finalised block on top of the last finalised block.
-       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * Performs a chain reorganisation by creating a finalised block on top of the parent block.
        *
-       * IMPORTANT! Finality is not a network-wide synced state. Each node will have its
-       * own finalised head, as far as it knows. So for this reorg to happen in all nodes,
-       * all nodes must be made aware of the new finalised head.
+       * This function is used to simulate network forks and test the system's ability to handle
+       * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+       * in face of potential consensus issues.
        *
-       * @returns A promise that resolves when the chain re-org is complete.
+       * @throws Will throw an error if the head block is already finalised.
+       * @returns A Promise that resolves when the chain reorganization is complete.
        */
       reOrgWithFinality: () => BspNetBlock.reOrgWithFinality(this._api),
       /**
-       * Causes a chain re-org by creating a longer forked chain.
-       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * Performs a chain reorganisation by creating a longer forked chain.
+       * If no parent starting block is provided, the chain will start the fork from the last
+       * finalised block.
+       *
+       * !!! WARNING !!!
+       *
+       * The number of blocks this function can create for the alternative fork is limited by the
+       * "unincluded segment capacity" parameter, set in the `ConsensusHook` config type of the
+       * `cumulus-pallet-parachain-system`. If you try to build more blocks than this limit to
+       * achieve the reorg, the node will panic when building the block.
+       *
+       * This function is used to simulate network forks and test the system's ability to handle
+       * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+       * in face of potential consensus issues.
        *
        * @param startingBlockHash - Optional. The hash of the block to start the fork from.
+       * @throws Will throw an error if the last finalised block is greater than the starting block
+       *         or if the starting block is the same or higher than the current block.
        * @returns A promise that resolves when the chain re-org is complete.
        */
       reOrgWithLongerChain: (startingBlockHash?: string) =>

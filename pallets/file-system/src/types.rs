@@ -14,8 +14,7 @@ use sp_runtime::{traits::CheckedAdd, DispatchError};
 use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
-    Config, Error, FileDeletionRequestExpirations, MoveBucketRequestExpirations,
-    NextAvailableFileDeletionRequestExpirationTick, NextAvailableMoveBucketRequestExpirationTick,
+    Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationTick,
     NextAvailableStorageRequestExpirationTick, StorageRequestExpirations,
 };
 
@@ -218,6 +217,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
     pub file_key: MerkleHash<T>,
     pub bucket_id: BucketIdFor<T>,
     pub file_size: StorageData<T>,
+    pub deposit_paid_for_creation: BalanceOf<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -232,7 +232,6 @@ pub struct PendingStopStoringRequest<T: Config> {
 #[scale_info(skip_type_params(T))]
 pub enum ExpirationItem<T: Config> {
     StorageRequest(MerkleHash<T>),
-    PendingFileDeletionRequests(PendingFileDeletionRequest<T>),
     MoveBucketRequest((ProviderIdFor<T>, BucketIdFor<T>)),
 }
 
@@ -240,9 +239,6 @@ impl<T: Config> ExpirationItem<T> {
     pub(crate) fn get_ttl(&self) -> TickNumber<T> {
         match self {
             ExpirationItem::StorageRequest(_) => T::StorageRequestTtl::get().into(),
-            ExpirationItem::PendingFileDeletionRequests(_) => {
-                T::PendingFileDeletionRequestTtl::get().into()
-            }
             ExpirationItem::MoveBucketRequest(_) => T::MoveBucketRequestTtl::get().into(),
         }
     }
@@ -255,9 +251,6 @@ impl<T: Config> ExpirationItem<T> {
         let next_available_tick = match self {
             ExpirationItem::StorageRequest(_) => {
                 NextAvailableStorageRequestExpirationTick::<T>::get()
-            }
-            ExpirationItem::PendingFileDeletionRequests(_) => {
-                NextAvailableFileDeletionRequestExpirationTick::<T>::get()
             }
             ExpirationItem::MoveBucketRequest(_) => {
                 NextAvailableMoveBucketRequestExpirationTick::<T>::get()
@@ -276,12 +269,6 @@ impl<T: Config> ExpirationItem<T> {
             ExpirationItem::StorageRequest(storage_request) => {
                 <StorageRequestExpirations<T>>::try_append(next_expiration_tick, *storage_request)
             }
-            ExpirationItem::PendingFileDeletionRequests(pending_file_deletion_requests) => {
-                <FileDeletionRequestExpirations<T>>::try_append(
-                    next_expiration_tick,
-                    pending_file_deletion_requests.clone(),
-                )
-            }
             ExpirationItem::MoveBucketRequest(msp_bucket_id) => {
                 <MoveBucketRequestExpirations<T>>::try_append(next_expiration_tick, *msp_bucket_id)
             }
@@ -298,9 +285,6 @@ impl<T: Config> ExpirationItem<T> {
         match self {
             ExpirationItem::StorageRequest(_) => {
                 NextAvailableStorageRequestExpirationTick::<T>::set(next_expiration_tick);
-            }
-            ExpirationItem::PendingFileDeletionRequests(_) => {
-                NextAvailableFileDeletionRequestExpirationTick::<T>::set(next_expiration_tick);
             }
             ExpirationItem::MoveBucketRequest(_) => {
                 NextAvailableMoveBucketRequestExpirationTick::<T>::set(next_expiration_tick);
@@ -378,9 +362,6 @@ pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
 
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;
-
-/// Alias for the `PendingFileDeletionRequestTtl` type used in the FileSystem pallet.
-pub type PendingFileDeletionRequestTtl<T> = <T as crate::Config>::PendingFileDeletionRequestTtl;
 
 /// Byte array representing the file path.
 pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;

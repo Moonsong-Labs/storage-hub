@@ -597,6 +597,7 @@ export class NetworkLauncher {
       // This will advance the block which also contains the BSP volunteer tx.
       // Hence why we can wait for the BSP to confirm storing.
       await api.wait.mspResponseInTxPool();
+      await api.wait.bspVolunteer();
       await api.block.seal();
       await api.wait.bspStored();
     }

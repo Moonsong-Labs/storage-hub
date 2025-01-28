@@ -78,6 +78,15 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       defaultReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
+       * The deposit paid by a user to create a new file deletion request.
+       *
+       * This deposit gets returned to the user when the MSP submits an inclusion proof of the file to
+       * confirm its deletion, but gets sent to the MSP if the MSP did not actually had the file and
+       * sends a non-inclusion proof instead. This is done to prevent users being able to spam MSPs
+       * with malicious file deletion requests.
+       **/
+      fileDeletionRequestDeposit: u128 & AugmentedConst<ApiType>;
+      /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
       maxBatchConfirmStorageRequests: u32 & AugmentedConst<ApiType>;
@@ -121,10 +130,6 @@ declare module "@polkadot/api-base/types/consts" {
        * Time-to-live for a move bucket request, after which the request is considered expired.
        **/
       moveBucketRequestTtl: u32 & AugmentedConst<ApiType>;
-      /**
-       * Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
-       **/
-      pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
        * Deposit held from the User when creating a new storage request
        **/

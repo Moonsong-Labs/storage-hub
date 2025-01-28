@@ -1571,15 +1571,17 @@ export default {
       FileDeletionRequest: {
         user: "AccountId32",
         fileKey: "H256",
+        fileSize: "u64",
         bucketId: "H256",
-        mspId: "Option<H256>",
+        mspId: "H256",
         proofOfInclusion: "bool"
       },
       ProofSubmittedForPendingFileDeletionRequest: {
-        mspId: "H256",
         user: "AccountId32",
         fileKey: "H256",
+        fileSize: "u64",
         bucketId: "H256",
+        mspId: "H256",
         proofOfInclusion: "bool"
       },
       BspChallengeCycleInitialised: {
@@ -1602,13 +1604,6 @@ export default {
         mspId: "H256",
         owner: "AccountId32",
         bucketId: "H256"
-      },
-      FailedToDecreaseBucketSize: {
-        user: "AccountId32",
-        bucketId: "H256",
-        fileKey: "H256",
-        fileSize: "u64",
-        error: "SpRuntimeDispatchError"
       },
       FailedToGetMspOfBucket: {
         bucketId: "H256",
@@ -1688,9 +1683,15 @@ export default {
         provider: "H256",
         maybeProviderAccount: "Option<AccountId32>"
       },
-      MutationsApplied: {
-        provider: "H256",
+      MutationsAppliedForProvider: {
+        providerId: "H256",
         mutations: "Vec<(H256,ShpTraitsTrieMutation)>",
+        oldRoot: "H256",
+        newRoot: "H256"
+      },
+      MutationsApplied: {
+        mutations: "Vec<(H256,ShpTraitsTrieMutation)>",
+        oldRoot: "H256",
         newRoot: "H256"
       },
       ChallengesTickerSet: {
@@ -2705,7 +2706,7 @@ export default {
    * Lookup281: pallet_file_system::pallet::HoldReason
    **/
   PalletFileSystemHoldReason: {
-    _enum: ["StorageRequestCreationHold"]
+    _enum: ["StorageRequestCreationHold", "FileDeletionRequestHold"]
   },
   /**
    * Lookup282: pallet_payment_streams::pallet::HoldReason
@@ -4499,16 +4500,17 @@ export default {
     confirmed: "bool"
   },
   /**
-   * Lookup456: pallet_file_system::types::PendingFileDeletionRequest<T>
+   * Lookup458: pallet_file_system::types::PendingFileDeletionRequest<T>
    **/
   PalletFileSystemPendingFileDeletionRequest: {
     user: "AccountId32",
     fileKey: "H256",
     bucketId: "H256",
-    fileSize: "u64"
+    fileSize: "u64",
+    depositPaidForCreation: "u128"
   },
   /**
-   * Lookup461: pallet_file_system::types::PendingStopStoringRequest<T>
+   * Lookup460: pallet_file_system::types::PendingStopStoringRequest<T>
    **/
   PalletFileSystemPendingStopStoringRequest: {
     tickWhenRequested: "u32",
@@ -4516,13 +4518,13 @@ export default {
     fileSize: "u64"
   },
   /**
-   * Lookup462: pallet_file_system::types::MoveBucketRequestMetadata<T>
+   * Lookup461: pallet_file_system::types::MoveBucketRequestMetadata<T>
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
     requester: "AccountId32"
   },
   /**
-   * Lookup463: pallet_file_system::pallet::Error<T>
+   * Lookup462: pallet_file_system::pallet::Error<T>
    **/
   PalletFileSystemError: {
     _enum: [
@@ -4596,6 +4598,7 @@ export default {
       "CannotHoldDeposit",
       "FailedToQueryEarliestFileVolunteerTick",
       "FailedToGetOwnerAccount",
+      "FailedToGetPaymentAccount",
       "NoFileKeysToConfirm",
       "RootNotUpdated",
       "NoPrivacyChange",
@@ -4604,14 +4607,14 @@ export default {
     ]
   },
   /**
-   * Lookup465: pallet_proofs_dealer::types::ProofSubmissionRecord<T>
+   * Lookup464: pallet_proofs_dealer::types::ProofSubmissionRecord<T>
    **/
   PalletProofsDealerProofSubmissionRecord: {
     lastTickProven: "u32",
     nextTickToSubmitProofFor: "u32"
   },
   /**
-   * Lookup472: pallet_proofs_dealer::pallet::Error<T>
+   * Lookup469: pallet_proofs_dealer::pallet::Error<T>
    **/
   PalletProofsDealerError: {
     _enum: [
@@ -4642,7 +4645,7 @@ export default {
     ]
   },
   /**
-   * Lookup475: pallet_payment_streams::types::FixedRatePaymentStream<T>
+   * Lookup472: pallet_payment_streams::types::FixedRatePaymentStream<T>
    **/
   PalletPaymentStreamsFixedRatePaymentStream: {
     rate: "u128",
@@ -4651,7 +4654,7 @@ export default {
     outOfFundsTick: "Option<u32>"
   },
   /**
-   * Lookup476: pallet_payment_streams::types::DynamicRatePaymentStream<T>
+   * Lookup473: pallet_payment_streams::types::DynamicRatePaymentStream<T>
    **/
   PalletPaymentStreamsDynamicRatePaymentStream: {
     amountProvided: "u64",
@@ -4660,14 +4663,14 @@ export default {
     outOfFundsTick: "Option<u32>"
   },
   /**
-   * Lookup477: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
+   * Lookup474: pallet_payment_streams::types::ProviderLastChargeableInfo<T>
    **/
   PalletPaymentStreamsProviderLastChargeableInfo: {
     lastChargeableTick: "u32",
     priceIndex: "u128"
   },
   /**
-   * Lookup478: pallet_payment_streams::pallet::Error<T>
+   * Lookup475: pallet_payment_streams::pallet::Error<T>
    **/
   PalletPaymentStreamsError: {
     _enum: [
@@ -4692,7 +4695,7 @@ export default {
     ]
   },
   /**
-   * Lookup479: pallet_bucket_nfts::pallet::Error<T>
+   * Lookup476: pallet_bucket_nfts::pallet::Error<T>
    **/
   PalletBucketNftsError: {
     _enum: [
@@ -4703,7 +4706,7 @@ export default {
     ]
   },
   /**
-   * Lookup480: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
+   * Lookup477: pallet_nfts::types::CollectionDetails<sp_core::crypto::AccountId32, DepositBalance>
    **/
   PalletNftsCollectionDetails: {
     owner: "AccountId32",
@@ -4714,13 +4717,13 @@ export default {
     attributes: "u32"
   },
   /**
-   * Lookup485: pallet_nfts::types::CollectionRole
+   * Lookup482: pallet_nfts::types::CollectionRole
    **/
   PalletNftsCollectionRole: {
     _enum: ["__Unused0", "Issuer", "Freezer", "__Unused3", "Admin"]
   },
   /**
-   * Lookup486: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
+   * Lookup483: pallet_nfts::types::ItemDetails<sp_core::crypto::AccountId32, pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>, bounded_collections::bounded_btree_map::BoundedBTreeMap<sp_core::crypto::AccountId32, Option<T>, S>>
    **/
   PalletNftsItemDetails: {
     owner: "AccountId32",
@@ -4728,42 +4731,42 @@ export default {
     deposit: "PalletNftsItemDeposit"
   },
   /**
-   * Lookup487: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup484: pallet_nfts::types::ItemDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsItemDeposit: {
     account: "AccountId32",
     amount: "u128"
   },
   /**
-   * Lookup492: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
+   * Lookup489: pallet_nfts::types::CollectionMetadata<Deposit, StringLimit>
    **/
   PalletNftsCollectionMetadata: {
     deposit: "u128",
     data: "Bytes"
   },
   /**
-   * Lookup493: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
+   * Lookup490: pallet_nfts::types::ItemMetadata<pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>, StringLimit>
    **/
   PalletNftsItemMetadata: {
     deposit: "PalletNftsItemMetadataDeposit",
     data: "Bytes"
   },
   /**
-   * Lookup494: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup491: pallet_nfts::types::ItemMetadataDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsItemMetadataDeposit: {
     account: "Option<AccountId32>",
     amount: "u128"
   },
   /**
-   * Lookup497: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
+   * Lookup494: pallet_nfts::types::AttributeDeposit<DepositBalance, sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeDeposit: {
     account: "Option<AccountId32>",
     amount: "u128"
   },
   /**
-   * Lookup501: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
+   * Lookup498: pallet_nfts::types::PendingSwap<CollectionId, ItemId, pallet_nfts::types::PriceWithDirection<Amount>, Deadline>
    **/
   PalletNftsPendingSwap: {
     desiredCollection: "u32",
@@ -4772,7 +4775,7 @@ export default {
     deadline: "u32"
   },
   /**
-   * Lookup503: pallet_nfts::types::PalletFeature
+   * Lookup500: pallet_nfts::types::PalletFeature
    **/
   PalletNftsPalletFeature: {
     _enum: [
@@ -4788,7 +4791,7 @@ export default {
     ]
   },
   /**
-   * Lookup504: pallet_nfts::pallet::Error<T, I>
+   * Lookup501: pallet_nfts::pallet::Error<T, I>
    **/
   PalletNftsError: {
     _enum: [
@@ -4840,51 +4843,51 @@ export default {
     ]
   },
   /**
-   * Lookup507: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
+   * Lookup504: frame_system::extensions::check_non_zero_sender::CheckNonZeroSender<T>
    **/
   FrameSystemExtensionsCheckNonZeroSender: "Null",
   /**
-   * Lookup508: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
+   * Lookup505: frame_system::extensions::check_spec_version::CheckSpecVersion<T>
    **/
   FrameSystemExtensionsCheckSpecVersion: "Null",
   /**
-   * Lookup509: frame_system::extensions::check_tx_version::CheckTxVersion<T>
+   * Lookup506: frame_system::extensions::check_tx_version::CheckTxVersion<T>
    **/
   FrameSystemExtensionsCheckTxVersion: "Null",
   /**
-   * Lookup510: frame_system::extensions::check_genesis::CheckGenesis<T>
+   * Lookup507: frame_system::extensions::check_genesis::CheckGenesis<T>
    **/
   FrameSystemExtensionsCheckGenesis: "Null",
   /**
-   * Lookup513: frame_system::extensions::check_nonce::CheckNonce<T>
+   * Lookup510: frame_system::extensions::check_nonce::CheckNonce<T>
    **/
   FrameSystemExtensionsCheckNonce: "Compact<u32>",
   /**
-   * Lookup514: frame_system::extensions::check_weight::CheckWeight<T>
+   * Lookup511: frame_system::extensions::check_weight::CheckWeight<T>
    **/
   FrameSystemExtensionsCheckWeight: "Null",
   /**
-   * Lookup515: pallet_transaction_payment::ChargeTransactionPayment<T>
+   * Lookup512: pallet_transaction_payment::ChargeTransactionPayment<T>
    **/
   PalletTransactionPaymentChargeTransactionPayment: "Compact<u128>",
   /**
-   * Lookup516: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
+   * Lookup513: cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim<T>
    **/
   CumulusPrimitivesStorageWeightReclaimStorageWeightReclaim: "Null",
   /**
-   * Lookup517: frame_metadata_hash_extension::CheckMetadataHash<T>
+   * Lookup514: frame_metadata_hash_extension::CheckMetadataHash<T>
    **/
   FrameMetadataHashExtensionCheckMetadataHash: {
     mode: "FrameMetadataHashExtensionMode"
   },
   /**
-   * Lookup518: frame_metadata_hash_extension::Mode
+   * Lookup515: frame_metadata_hash_extension::Mode
    **/
   FrameMetadataHashExtensionMode: {
     _enum: ["Disabled", "Enabled"]
   },
   /**
-   * Lookup519: storage_hub_runtime::Runtime
+   * Lookup516: storage_hub_runtime::Runtime
    **/
   StorageHubRuntimeRuntime: "Null"
 };

@@ -1630,8 +1630,8 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
 
         // Check that the event for mutations applied is emitted.
         System::assert_has_event(
-            Event::MutationsApplied {
-                provider: provider_id,
+            Event::MutationsAppliedForProvider {
+                provider_id,
                 mutations: custom_challenges
                     .iter()
                     .filter_map(|custom_challenge| {
@@ -1642,6 +1642,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                         }
                     })
                     .collect(),
+                old_root: root,
                 new_root: challenges.last().unwrap().clone(),
             }
             .into(),
