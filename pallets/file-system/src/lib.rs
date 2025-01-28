@@ -249,6 +249,15 @@ pub mod pallet {
         #[pallet::constant]
         type BspStopStoringFilePenalty: Get<BalanceOf<Self>>;
 
+        /// The deposit paid by a user to create a new file deletion request.
+        ///
+        /// This deposit gets returned to the user when the MSP submits an inclusion proof of the file to
+        /// confirm its deletion, but gets sent to the MSP if the MSP did not actually had the file and
+        /// sends a non-inclusion proof instead. This is done to prevent users being able to spam MSPs
+        /// with malicious file deletion requests.
+        #[pallet::constant]
+        type FileDeletionRequestDeposit: Get<BalanceOf<Self>>;
+
         /// Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
@@ -276,10 +285,6 @@ pub mod pallet {
         /// Time-to-live for a storage request.
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;
-
-        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
-        #[pallet::constant]
-        type PendingFileDeletionRequestTtl: Get<u32>;
 
         /// Time-to-live for a move bucket request, after which the request is considered expired.
         #[pallet::constant]
@@ -402,16 +407,6 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// A map of ticks to expired file deletion requests.
-    #[pallet::storage]
-    pub type FileDeletionRequestExpirations<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        TickNumber<T>,
-        BoundedVec<FileDeletionRequestExpirationItem<T>, T::MaxExpiredItemsInTick>,
-        ValueQuery,
-    >;
-
     /// A map of ticks to expired move bucket requests.
     #[pallet::storage]
     pub type MoveBucketRequestExpirations<T: Config> = StorageMap<
@@ -427,13 +422,6 @@ pub mod pallet {
     /// This should always be greater or equal than current tick + [`Config::StorageRequestTtl`].
     #[pallet::storage]
     pub type NextAvailableStorageRequestExpirationTick<T: Config> =
-        StorageValue<_, TickNumber<T>, ValueQuery>;
-
-    /// A pointer to the earliest available tick to insert a new file deletion request expiration.
-    ///
-    /// This should always be greater or equal than current tick + [`Config::PendingFileDeletionRequestTtl`].
-    #[pallet::storage]
-    pub type NextAvailableFileDeletionRequestExpirationTick<T: Config> =
         StorageValue<_, TickNumber<T>, ValueQuery>;
 
     /// A pointer to the earliest available tick to insert a new move bucket request expiration.
@@ -453,7 +441,7 @@ pub mod pallet {
 
     /// Pending file deletion requests.
     ///
-    /// A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
+    /// A mapping from a user Account ID to a list of pending file deletion requests (which have the file information).
     #[pallet::storage]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
@@ -462,6 +450,15 @@ pub mod pallet {
         BoundedVec<PendingFileDeletionRequest<T>, T::MaxUserPendingDeletionRequests>,
         ValueQuery,
     >;
+
+    /// Mapping from MSPs to the amount of pending file deletion requests they have.
+    ///
+    /// This is used to keep track of the amount of pending file deletion requests each MSP has, so that MSPs are removed
+    /// from the privileged providers list if they have at least one, and are added back if they have none.
+    /// This is to ensure that MSPs are correctly incentivised to submit the required proofs for file deletions.
+    #[pallet::storage]
+    pub type MspsAmountOfPendingFileDeletionRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, u32, ValueQuery>;
 
     /// Pending file stop storing requests.
     ///
@@ -675,14 +672,6 @@ pub mod pallet {
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
         },
-        /// Failed to decrease bucket size for expired file deletion request
-        FailedToDecreaseBucketSize {
-            user: T::AccountId,
-            bucket_id: BucketIdFor<T>,
-            file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
-            error: DispatchError,
-        },
         /// Failed to get the MSP owner of the bucket for an expired file deletion request
         /// This is different from the bucket not having a MSP, which is allowed and won't error
         FailedToGetMspOfBucket {
@@ -857,6 +846,8 @@ pub mod pallet {
         FailedToQueryEarliestFileVolunteerTick,
         /// Failed to get owner account of ID of provider
         FailedToGetOwnerAccount,
+        /// Failed to get the payment account of the provider.
+        FailedToGetPaymentAccount,
         /// No file keys to confirm storing
         NoFileKeysToConfirm,
         /// Root was not updated after applying delta
@@ -877,6 +868,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a user has to pay to create a new storage request
         StorageRequestCreationHold,
+        /// Deposit that a user has to pay to create a new file deletion request
+        FileDeletionRequestHold,
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,

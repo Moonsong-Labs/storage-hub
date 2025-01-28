@@ -243,6 +243,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToGetOwnerAccount: AugmentedError<ApiType>;
       /**
+       * Failed to get the payment account of the provider.
+       **/
+      FailedToGetPaymentAccount: AugmentedError<ApiType>;
+      /**
        * Failed to query earliest volunteer tick
        **/
       FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;

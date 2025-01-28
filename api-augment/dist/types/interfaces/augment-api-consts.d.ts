@@ -62,27 +62,22 @@ declare module "@polkadot/api-base/types/consts" {
     };
     fileSystem: {
       /**
-       * Basic security replication target for a new storage request.
-       *
-       * This should be high enough so that it gives users a ~1% chance of their file
-       * being controlled by a single malicious entity under certain network conditions.
-       *
-       * For more details, see [crate::types::ReplicationTarget].
-       **/
-      basicReplicationTarget: u32 & AugmentedConst<ApiType>;
-      /**
        * Penalty payed by a BSP when they forcefully stop storing a file.
        **/
       bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
       /**
-       * High security replication target for a new storage request.
-       *
-       * This should be high enough so that it gives users a ~0.01% chance of their file
-       * being controlled by a single malicious entity under certain network conditions.
-       *
-       * For more details, see [crate::types::ReplicationTarget].
+       * Default replication target
        **/
-      highSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
+      defaultReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
+       * The deposit paid by a user to create a new file deletion request.
+       *
+       * This deposit gets returned to the user when the MSP submits an inclusion proof of the file to
+       * confirm its deletion, but gets sent to the MSP if the MSP did not actually had the file and
+       * sends a non-inclusion proof instead. This is done to prevent users being able to spam MSPs
+       * with malicious file deletion requests.
+       **/
+      fileDeletionRequestDeposit: u128 & AugmentedConst<ApiType>;
       /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
@@ -128,19 +123,6 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       moveBucketRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
-       * Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
-       **/
-      pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
-      /**
-       * Standard security replication target for a new storage request.
-       *
-       * This should be high enough so that it gives users a ~0.1% chance of their file
-       * being controlled by a single malicious entity under certain network conditions.
-       *
-       * For more details, see [crate::types::ReplicationTarget].
-       **/
-      standardReplicationTarget: u32 & AugmentedConst<ApiType>;
-      /**
        * Deposit held from the User when creating a new storage request
        **/
       storageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;
@@ -148,15 +130,6 @@ declare module "@polkadot/api-base/types/consts" {
        * Time-to-live for a storage request.
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
-      /**
-       * Super high security replication target for a new storage request.
-       *
-       * This should be high enough so that it gives users a ~0.001% chance of their file
-       * being controlled by a single malicious entity under certain network conditions.
-       *
-       * For more details, see [crate::types::ReplicationTarget].
-       **/
-      superHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
        * to arrive at its maximum value.
@@ -166,15 +139,6 @@ declare module "@polkadot/api-base/types/consts" {
        * The treasury account of the runtime, where a fraction of each payment goes.
        **/
       treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
-      /**
-       * Ultra high security replication target for a new storage request.
-       *
-       * This should be high enough so that it gives users a ~0.0001% chance of their file
-       * being controlled by a single malicious entity under certain network conditions.
-       *
-       * For more details, see [crate::types::ReplicationTarget].
-       **/
-      ultraHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/

@@ -120,6 +120,12 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           .isFileFound
     });
 
+    // Wait for the BSP confirm extrinsic to be submitted to the TX pool
+    await userApi.wait.bspStoredInTxPool({
+      expectedExts: 1
+    });
+
+    // Seal the block with the confirm TX
     await userApi.block.seal();
     const {
       data: {

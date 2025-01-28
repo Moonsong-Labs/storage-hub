@@ -1166,19 +1166,14 @@ mod providers {
 
 mod users {
 
-    use crate::sh_sibling_account_account_id;
-    use crate::CHARLIE;
-    use crate::SH_PARA_ID;
-    use pallet_file_system::types::FileKeyWithProof;
-    use pallet_file_system::types::MaxFilePathSize;
-    use pallet_file_system::types::MaxNumberOfPeerIds;
-    use pallet_file_system::types::MaxPeerIdSize;
-    use pallet_file_system::types::PendingFileDeletionRequest;
-    use pallet_file_system::types::ReplicationTarget;
+    use crate::{sh_sibling_account_account_id, CHARLIE, SH_PARA_ID};
+    use pallet_file_system::types::{
+        FileKeyWithProof, MaxFilePathSize, MaxNumberOfPeerIds, MaxPeerIdSize,
+        PendingFileDeletionRequest, ReplicationTarget,
+    };
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
-    use storagehub::configs::BucketNameLimit;
-    use storagehub::configs::SpMinDeposit;
+    use storagehub::configs::{BucketNameLimit, SpMinDeposit};
 
     use super::*;
 
@@ -1434,6 +1429,7 @@ mod users {
                 .len(),
                 1
             );
+            let file_deletion_request_deposit = <storagehub::Runtime as pallet_file_system::Config>::FileDeletionRequestDeposit::get();
             let mut file_deletion_requests_vec: BoundedVec<
                 PendingFileDeletionRequest<storagehub::Runtime>,
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
@@ -1443,6 +1439,7 @@ mod users {
                 file_key: file_key.clone(),
                 file_size: size,
                 bucket_id: bucket_id.clone(),
+                deposit_paid_for_creation: file_deletion_request_deposit,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(
@@ -1837,6 +1834,8 @@ mod users {
                 .len(),
                 1
             );
+            let file_deletion_request_deposit = <storagehub::Runtime as pallet_file_system::Config>::FileDeletionRequestDeposit::get();
+
             let mut file_deletion_requests_vec: BoundedVec<
                 PendingFileDeletionRequest<storagehub::Runtime>,
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
@@ -1846,6 +1845,7 @@ mod users {
                 file_key: file_key.clone(),
                 file_size: size,
                 bucket_id: bucket_id.clone(),
+                deposit_paid_for_creation: file_deletion_request_deposit,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(
