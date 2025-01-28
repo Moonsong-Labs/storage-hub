@@ -45,13 +45,12 @@ mod benchmarks {
                 .1
                 .saturating_sub(sp_runtime::traits::One::one());
 
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(
-            Event::<T>::NewOneEpochAgoRandomnessAvailable {
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::NewOneEpochAgoRandomnessAvailable {
                 randomness_seed: epoch_randomness,
                 from_epoch: relay_epoch_index,
                 valid_until_block: latest_valid_block_for_randomness,
-            },
-        );
+            });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
     }
 

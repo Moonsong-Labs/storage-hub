@@ -447,7 +447,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::Standard,
         );
 
         Ok(())
@@ -464,6 +464,7 @@ mod benchmarks {
             },
         >,
     ) -> Result<(), BenchmarkError> {
+        let replication_target: u32 = n.into();
         let user: T::AccountId = account("Alice", 0, 0);
         let signed_origin = RawOrigin::Signed(user.clone());
         mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
@@ -510,14 +511,14 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            Some(n.into()),
+            ReplicationTarget::Custom(replication_target.into()),
         )?;
 
         let file_key = Pallet::<T>::compute_file_key(user, bucket_id, location, size, fingerprint);
 
         // The `revoke_storage_request` executes the `drain_prefix` function to remove all sub keys including the primary key
         // from `StorageRequestBsps`.
-        for i in 0..n {
+        for i in 0..replication_target {
             let bsp_user: T::AccountId = account("bsp", i as u32, i as u32);
             mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
             let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
@@ -656,7 +657,7 @@ mod benchmarks {
                     size,
                     msp: Some((msp_id, false)),
                     user_peer_ids: Default::default(),
-                    bsps_required: T::DefaultReplicationTarget::get(),
+                    bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
                 };
@@ -730,8 +731,8 @@ mod benchmarks {
                     size,
                     msp: Some((msp_id, false)),
                     user_peer_ids: Default::default(),
-                    bsps_required: T::DefaultReplicationTarget::get(),
-                    bsps_confirmed: T::DefaultReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
+                    bsps_required: T::StandardReplicationTarget::get(),
+                    bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
@@ -837,7 +838,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key
@@ -866,6 +867,11 @@ mod benchmarks {
                 }
                 QueryFileEarliestVolunteerTickError::StorageRequestNotFound => {
                     return Err(BenchmarkError::Stop("Storage request not found."));
+                }
+                QueryFileEarliestVolunteerTickError::FailedToComputeEligibilityCriteria => {
+                    return Err(BenchmarkError::Stop(
+                        "Failed to compute eligibility criteria for BSP.",
+                    ));
                 }
                 QueryFileEarliestVolunteerTickError::InternalError => {
                     return Err(BenchmarkError::Stop("Internal runtime API error."));
@@ -1034,8 +1040,8 @@ mod benchmarks {
 				size,
 				msp: Some((msp_id, true)), // MSP accepted means the logic to delete the storage request is executed
 				user_peer_ids: Default::default(),
-				bsps_required: T::DefaultReplicationTarget::get(),
-				bsps_confirmed: T::DefaultReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
+				bsps_required: T::StandardReplicationTarget::get(),
+				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
 				bsps_volunteered: ReplicationTargetType::<T>::zero(),
 			};
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
@@ -1069,6 +1075,11 @@ mod benchmarks {
                     }
                     QueryFileEarliestVolunteerTickError::StorageRequestNotFound => {
                         return Err(BenchmarkError::Stop("Storage request not found."));
+                    }
+                    QueryFileEarliestVolunteerTickError::FailedToComputeEligibilityCriteria => {
+                        return Err(BenchmarkError::Stop(
+                            "Failed to compute eligibility criteria for BSP.",
+                        ));
                     }
                     QueryFileEarliestVolunteerTickError::InternalError => {
                         return Err(BenchmarkError::Stop("Internal runtime API error."));
@@ -2369,7 +2380,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key
@@ -2485,7 +2496,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key

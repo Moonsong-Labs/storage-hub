@@ -277,8 +277,12 @@ impl pallet_file_system::Config for Test {
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
     type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
-    type DefaultReplicationTarget = ConstU32<2>;
-    type MaxReplicationTarget = ConstU32<6>;
+    type BasicReplicationTarget = ConstU32<2>;
+    type StandardReplicationTarget = ConstU32<3>;
+    type HighSecurityReplicationTarget = ConstU32<4>;
+    type SuperHighSecurityReplicationTarget = ConstU32<5>;
+    type UltraHighSecurityReplicationTarget = ConstU32<6>;
+    type MaxReplicationTarget = ConstU32<7>;
     type TickRangeToMaximumThreshold = ConstU64<30>;
 }
 
