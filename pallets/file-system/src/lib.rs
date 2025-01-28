@@ -248,6 +248,15 @@ pub mod pallet {
         #[pallet::constant]
         type BspStopStoringFilePenalty: Get<BalanceOf<Self>>;
 
+        /// The deposit paid by a user to create a new file deletion request.
+        ///
+        /// This deposit gets returned to the user when the MSP submits an inclusion proof of the file to
+        /// confirm its deletion, but gets sent to the MSP if the MSP did not actually had the file and
+        /// sends a non-inclusion proof instead. This is done to prevent users being able to spam MSPs
+        /// with malicious file deletion requests.
+        #[pallet::constant]
+        type FileDeletionRequestDeposit: Get<BalanceOf<Self>>;
+
         /// Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
@@ -793,6 +802,8 @@ pub mod pallet {
         FailedToQueryEarliestFileVolunteerTick,
         /// Failed to get owner account of ID of provider
         FailedToGetOwnerAccount,
+        /// Failed to get the payment account of the provider.
+        FailedToGetPaymentAccount,
         /// No file keys to confirm storing
         NoFileKeysToConfirm,
         /// Root was not updated after applying delta
@@ -813,6 +824,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a user has to pay to create a new storage request
         StorageRequestCreationHold,
+        /// Deposit that a user has to pay to create a new file deletion request
+        FileDeletionRequestHold,
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,

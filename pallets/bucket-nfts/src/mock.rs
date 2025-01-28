@@ -148,6 +148,7 @@ pub(crate) type ThresholdType = u32;
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 30;
     pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const FileDeletionRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
@@ -275,6 +276,7 @@ impl pallet_file_system::Config for Test {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
     type DefaultReplicationTarget = ConstU32<2>;
     type MaxReplicationTarget = ConstU32<6>;
     type TickRangeToMaximumThreshold = ConstU64<30>;

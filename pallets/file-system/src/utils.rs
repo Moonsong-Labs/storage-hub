@@ -5,7 +5,7 @@ use frame_support::{
     traits::{
         fungible::{InspectHold, Mutate, MutateHold},
         nonfungibles_v2::{Create, Destroy},
-        tokens::{Precision, Preservation},
+        tokens::{Fortitude, Precision, Preservation, Restriction},
         Get,
     },
 };
@@ -2046,17 +2046,32 @@ where
             None => {
                 let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&sender);
 
-                // Check if the file key is already in the pending deletion requests.
+                // Ensure the file key is not already in the pending deletion requests.
+                ensure!(
+                    !pending_file_deletion_requests
+                        .iter()
+                        .any(|req| req.file_key == file_key),
+                    Error::<T>::FileKeyAlreadyPendingDeletion
+                );
+
+                // Get the deposit amount that the user has to pay for this file deletion request.
+                let file_deletion_request_deposit = T::FileDeletionRequestDeposit::get();
+
+                // Hold the deposit from the user's balance.
+                T::Currency::hold(
+                    &HoldReason::FileDeletionRequestHold.into(),
+                    &sender,
+                    file_deletion_request_deposit,
+                )?;
+
+                // Create the pending file deletion request object to store in storage.
                 let pending_file_deletion_request = PendingFileDeletionRequest {
                     user: sender.clone(),
                     file_key,
                     bucket_id,
                     file_size: size,
+                    deposit_paid_for_creation: file_deletion_request_deposit,
                 };
-                ensure!(
-                    !pending_file_deletion_requests.contains(&pending_file_deletion_request),
-                    Error::<T>::FileKeyAlreadyPendingDeletion
-                );
 
                 // Add the file key to the pending deletion requests.
                 PendingFileDeletionRequests::<T>::try_append(
@@ -2153,25 +2168,22 @@ where
             Error::<T>::NotAMsp
         );
 
+        // Check that the MSP is storing the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
             Error::<T>::MspNotStoringBucket
         );
 
-        let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&user);
+        // Get the user's pending file deletion requests.
+        let mut pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&user);
 
-        // Check if the file key is in the pending deletion requests.
-        let pending_file_deletion_request_to_prove = PendingFileDeletionRequest {
-            user: user.clone(),
-            file_key,
-            bucket_id,
-            file_size,
-        };
-
-        ensure!(
-            pending_file_deletion_requests.contains(&pending_file_deletion_request_to_prove),
-            Error::<T>::FileKeyNotPendingDeletion
-        );
+        // Ensure the file key is in the pending deletion requests and remove it.
+        let pending_file_deletion_request_index = pending_file_deletion_requests
+            .iter()
+            .position(|req| req.file_key == file_key)
+            .ok_or(Error::<T>::FileKeyNotPendingDeletion)?;
+        let pending_file_deletion_request =
+            pending_file_deletion_requests.remove(pending_file_deletion_request_index);
 
         // Get the root of the bucket.
         let bucket_root =
@@ -2188,7 +2200,7 @@ where
 
         let file_key_included = proven_keys.contains(&file_key);
 
-        // If the file key was part of the forest, remove it from the forest and update the root of the bucket.
+        // If the file key was part of the forest, remove it from the forest, update the root of the bucket and return the deposit to the user.
         if file_key_included {
             // Compute new root after removing file key from forest partial trie.
             let new_root =
@@ -2216,19 +2228,41 @@ where
                 &file_key, true,
             )?;
 
+            // Return the file deletion request deposit to the user owner of the file.
+            T::Currency::release(
+                &HoldReason::FileDeletionRequestHold.into(),
+                &pending_file_deletion_request.user,
+                pending_file_deletion_request.deposit_paid_for_creation,
+                Precision::Exact,
+            )?;
+
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
                 issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
                 file_key,
             });
+        } else {
+            // If the file key was not a part of the forest, give the file deletion request deposit to the MSP for their troubles:
+
+            // Get the MSP payment account.
+            let msp_payment_account =
+                <T::Providers as shp_traits::ReadProvidersInterface>::get_payment_account(msp_id)
+                    .ok_or(Error::<T>::FailedToGetPaymentAccount)?;
+
+            // Transfer the deposit to the MSP.
+            T::Currency::transfer_on_hold(
+                &HoldReason::FileDeletionRequestHold.into(),
+                &pending_file_deletion_request.user,
+                &msp_payment_account,
+                pending_file_deletion_request.deposit_paid_for_creation,
+                Precision::Exact,
+                Restriction::Free,
+                Fortitude::Force,
+            )?;
         }
 
-        // Delete the pending deletion request.
-        <PendingFileDeletionRequests<T>>::mutate(&user, |requests| {
-            requests.retain(|pending_file_deletion_request| {
-                &pending_file_deletion_request.file_key != &file_key
-            });
-        });
+        // Insert the updated pending file deletion requests back to storage.
+        <PendingFileDeletionRequests<T>>::insert(&user, pending_file_deletion_requests);
 
         // Substract one from the amount of pending file deletion requests for the MSP.
         MspsAmountOfPendingFileDeletionRequests::<T>::mutate(&msp_id, |amount| {

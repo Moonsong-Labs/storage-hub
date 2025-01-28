@@ -217,6 +217,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
     pub file_key: MerkleHash<T>,
     pub bucket_id: BucketIdFor<T>,
     pub file_size: StorageData<T>,
+    pub deposit_paid_for_creation: BalanceOf<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]

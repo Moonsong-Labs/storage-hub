@@ -15,8 +15,9 @@ use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
     traits::{
-        fungible::{InspectHold, Mutate},
+        fungible::{Inspect, InspectHold, Mutate},
         nonfungibles_v2::Destroy,
+        tokens::{Fortitude, Preservation},
         Hooks, OriginTrait,
     },
     weights::Weight,
@@ -8352,6 +8353,7 @@ mod delete_file_and_pending_deletions_tests {
 				));
 
                 // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
@@ -8360,6 +8362,7 @@ mod delete_file_and_pending_deletions_tests {
 							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
@@ -8385,15 +8388,17 @@ mod delete_file_and_pending_deletions_tests {
 					Error::<Test>::MspNotStoringBucket
 				);
 
-                // Assert that the pending file deletion request was not removed from storage
+                // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![PendingFileDeletionRequest {
 							file_key,
-							user: owner_account_id,
+							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
@@ -8540,6 +8545,13 @@ mod delete_file_and_pending_deletions_tests {
                         .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),
                 );
 
+				// Assert that the deposit for a file deletion request was NOT held from the user's balance.
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
+				assert_ne!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					file_deletion_request_deposit
+				);
+
 				// Assert that the Bucket root was correctly updated
 				let bucket_info = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap();
 				let bucket_root = bucket_info.root;
@@ -8647,6 +8659,7 @@ mod delete_file_and_pending_deletions_tests {
 				));
 
                 // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
@@ -8655,14 +8668,26 @@ mod delete_file_and_pending_deletions_tests {
 							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
                 );
 
+				// Assert that the deposit for a file deletion request was held from the user's balance.
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
+				assert_eq!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					file_deletion_request_deposit
+				);
+
 				// Assert that the MSP was removed from the privileged providers list and that it has one pending file deletion request.
 				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
+
+				// Get the user's free balance and the payment stream deposit before the MSP submits the proof of inclusion.
+				let user_free_balance_before_proof = <<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&owner_account_id, Preservation::Preserve, Fortitude::Force);
+				let user_payment_stream_deposit_before_proof = <<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(), &owner_account_id);
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
@@ -8692,13 +8717,26 @@ mod delete_file_and_pending_deletions_tests {
 				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 				assert_eq!(new_msp_used_capacity, msp_used_capacity - size);
 
-				// Assert that the payment stream rate decrease
+				// Assert that the payment stream rate decreased
 				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
 				assert!(new_payment_stream_rate < initial_payment_stream_rate);
+
+				// Get the new deposit of the payment stream
+				let user_payment_stream_deposit_after_proof = <<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(), &owner_account_id);
 
 				// Assert that the MSP was added back to the privileged providers list since it no longer has any pending file deletion requests.
 				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 0);
 				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
+				// Assert that the deposit for the file deletion request was returned to the user and that the deposit for the payment stream was updated according to the new rate.
+				assert_eq!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					0
+				);
+				assert_eq!(
+					<<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&owner_account_id, Preservation::Preserve, Fortitude::Force),
+					user_free_balance_before_proof + file_deletion_request_deposit + (user_payment_stream_deposit_before_proof - user_payment_stream_deposit_after_proof)
+				);
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -8762,6 +8800,7 @@ mod delete_file_and_pending_deletions_tests {
 				));
 
                 // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
@@ -8770,14 +8809,26 @@ mod delete_file_and_pending_deletions_tests {
 							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
                 );
 
+				// Assert that the deposit for a file deletion request was held from the user's balance.
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
+				assert_eq!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					file_deletion_request_deposit
+				);
+
 				// Assert that the MSP was removed from the privileged providers list and that it has one pending file deletion request.
 				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
 				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
+
+				// Get the user's and MSP's free balance before the MSP submits the proof of non-inclusion.
+				let user_free_balance_before_proof = <<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&owner_account_id, Preservation::Preserve, Fortitude::Force);
+				let msp_free_balance_before_proof = <<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&msp, Preservation::Preserve, Fortitude::Force);
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![H256::zero().as_bytes().to_vec()],
@@ -8797,6 +8848,20 @@ mod delete_file_and_pending_deletions_tests {
 				// Assert that the MSP was added back to the privileged providers list since it no longer has any pending file deletion requests.
 				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 0);
 				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
+				// Assert that the deposit for the file deletion request was given to the MSP for their troubles.
+				assert_eq!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					0
+				);
+				assert_eq!(
+					<<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&owner_account_id, Preservation::Preserve, Fortitude::Force),
+					user_free_balance_before_proof
+				);
+				assert_eq!(
+					<<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&msp, Preservation::Preserve, Fortitude::Force),
+					msp_free_balance_before_proof + file_deletion_request_deposit
+				);
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -8930,6 +8995,7 @@ mod delete_file_and_pending_deletions_tests {
 				));
 
                 // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
@@ -8938,6 +9004,7 @@ mod delete_file_and_pending_deletions_tests {
 							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()

@@ -3202,7 +3202,8 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletFileSystemHoldReason (281) */
   interface PalletFileSystemHoldReason extends Enum {
     readonly isStorageRequestCreationHold: boolean;
-    readonly type: "StorageRequestCreationHold";
+    readonly isFileDeletionRequestHold: boolean;
+    readonly type: "StorageRequestCreationHold" | "FileDeletionRequestHold";
   }
   /** @name PalletPaymentStreamsHoldReason (282) */
   interface PalletPaymentStreamsHoldReason extends Enum {
@@ -5465,6 +5466,7 @@ declare module "@polkadot/types/lookup" {
     readonly fileKey: H256;
     readonly bucketId: H256;
     readonly fileSize: u64;
+    readonly depositPaidForCreation: u128;
   }
   /** @name PalletFileSystemPendingStopStoringRequest (460) */
   interface PalletFileSystemPendingStopStoringRequest extends Struct {
@@ -5548,6 +5550,7 @@ declare module "@polkadot/types/lookup" {
     readonly isCannotHoldDeposit: boolean;
     readonly isFailedToQueryEarliestFileVolunteerTick: boolean;
     readonly isFailedToGetOwnerAccount: boolean;
+    readonly isFailedToGetPaymentAccount: boolean;
     readonly isNoFileKeysToConfirm: boolean;
     readonly isRootNotUpdated: boolean;
     readonly isNoPrivacyChange: boolean;
@@ -5624,6 +5627,7 @@ declare module "@polkadot/types/lookup" {
       | "CannotHoldDeposit"
       | "FailedToQueryEarliestFileVolunteerTick"
       | "FailedToGetOwnerAccount"
+      | "FailedToGetPaymentAccount"
       | "NoFileKeysToConfirm"
       | "RootNotUpdated"
       | "NoPrivacyChange"

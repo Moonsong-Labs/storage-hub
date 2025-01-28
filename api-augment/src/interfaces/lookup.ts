@@ -2708,7 +2708,7 @@ export default {
    * Lookup281: pallet_file_system::pallet::HoldReason
    **/
   PalletFileSystemHoldReason: {
-    _enum: ["StorageRequestCreationHold"]
+    _enum: ["StorageRequestCreationHold", "FileDeletionRequestHold"]
   },
   /**
    * Lookup282: pallet_payment_streams::pallet::HoldReason
@@ -4508,7 +4508,8 @@ export default {
     user: "AccountId32",
     fileKey: "H256",
     bucketId: "H256",
-    fileSize: "u64"
+    fileSize: "u64",
+    depositPaidForCreation: "u128"
   },
   /**
    * Lookup460: pallet_file_system::types::PendingStopStoringRequest<T>
@@ -4599,6 +4600,7 @@ export default {
       "CannotHoldDeposit",
       "FailedToQueryEarliestFileVolunteerTick",
       "FailedToGetOwnerAccount",
+      "FailedToGetPaymentAccount",
       "NoFileKeysToConfirm",
       "RootNotUpdated",
       "NoPrivacyChange",

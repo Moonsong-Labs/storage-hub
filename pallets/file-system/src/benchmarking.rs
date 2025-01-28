@@ -1851,6 +1851,7 @@ mod benchmarks {
             T::MaxUserPendingDeletionRequests,
         > = BoundedVec::default();
 
+        let file_deletion_request_deposit = <T as crate::Config>::FileDeletionRequestDeposit::get();
         for i in 0..T::MaxUserPendingDeletionRequests::get() - 1 {
             filled_up_pending_file_deletion_requests
                 .try_push(PendingFileDeletionRequest {
@@ -1858,6 +1859,7 @@ mod benchmarks {
                     file_key: Default::default(),
                     bucket_id: Default::default(),
                     file_size: i.into(),
+					deposit_paid_for_creation: file_deletion_request_deposit,
                 })
                 .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
         }
@@ -2153,6 +2155,7 @@ mod benchmarks {
             T::MaxUserPendingDeletionRequests,
         > = BoundedVec::default();
 
+        let file_deletion_request_deposit = <T as crate::Config>::FileDeletionRequestDeposit::get();
         for i in 0..T::MaxUserPendingDeletionRequests::get() - 1 {
             filled_up_pending_file_deletion_requests
                 .try_push(PendingFileDeletionRequest {
@@ -2160,6 +2163,7 @@ mod benchmarks {
                     file_key: Default::default(),
                     bucket_id: Default::default(),
                     file_size: i.into(),
+					deposit_paid_for_creation: file_deletion_request_deposit,
                 })
                 .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
         }
