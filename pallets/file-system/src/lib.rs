@@ -89,6 +89,7 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             > + shp_traits::ReadStorageProvidersInterface<
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+				SpCount = ReplicationTargetType<Self>
             > + shp_traits::MutateStorageProvidersInterface<
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
@@ -241,6 +242,12 @@ pub mod pallet {
             CollectionId = CollectionIdFor<Self>,
         >;
 
+        /// Converter from the Weight type to the corresponding fee.
+        type WeightToFee: sp_weights::WeightToFee<Balance = BalanceOf<Self>>;
+
+        /// Converter from the ReplicationTarget type to the Balance type.
+        type ReplicationTargetToBalance: Convert<ReplicationTargetType<Self>, BalanceOf<Self>>;
+
         /// The treasury account of the runtime, where a fraction of each payment goes.
         #[pallet::constant]
         type TreasuryAccount: Get<Self::AccountId>;
@@ -302,9 +309,10 @@ pub mod pallet {
         #[pallet::constant]
         type MinWaitForStopStoring: Get<TickNumber<Self>>;
 
-        /// Deposit held from the User when creating a new storage request
+        /// Base deposit held from the User when creating a new storage request. The actual deposit held is this amount
+        /// plus the amount required to pay for all BSP's `bsp_volunteer` extrinsic.
         #[pallet::constant]
-        type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
+        type BaseStorageRequestCreationDeposit: Get<BalanceOf<Self>>;
 
         /// Basic security replication target for a new storage request.
         ///
@@ -696,6 +704,15 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             owner: T::AccountId,
             amount_to_return: BalanceOf<T>,
+            error: DispatchError,
+        },
+        /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+        /// the transfer of a part of that storage request's deposit to one of the volunteered BSPs failed.
+        FailedToTransferDepositFundsToBsp {
+            file_key: MerkleHash<T>,
+            owner: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
+            amount_to_transfer: BalanceOf<T>,
             error: DispatchError,
         },
     }
@@ -1391,8 +1408,8 @@ pub mod pallet {
         /// of crate::construct_runtime's expansion.
         /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
-            let low_security_replication_target = T::BasicReplicationTarget::get();
-            let medium_security_replication_target = T::StandardReplicationTarget::get();
+            let basic_replication_target = T::BasicReplicationTarget::get();
+            let standard_replication_target = T::StandardReplicationTarget::get();
             let high_security_replication_target = T::HighSecurityReplicationTarget::get();
             let super_high_security_replication_target =
                 T::SuperHighSecurityReplicationTarget::get();
@@ -1404,17 +1421,21 @@ pub mod pallet {
             let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();
             let checkpoint_challenge_period =
                 <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::get_checkpoint_challenge_period();
+            let base_storage_request_creation_deposit = T::BaseStorageRequestCreationDeposit::get();
+            let bsp_volunteer_fee = <T::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+                &T::WeightInfo::bsp_volunteer(),
+            );
 
             assert!(
-                low_security_replication_target > T::ReplicationTargetType::zero(),
+                basic_replication_target > T::ReplicationTargetType::zero(),
                 "Basic security replication target cannot be zero."
             );
             assert!(
-				medium_security_replication_target >= low_security_replication_target,
+				standard_replication_target >= basic_replication_target,
 				"Standard security replication target cannot be smaller than basic security replication target."
 			);
             assert!(
-				high_security_replication_target >= medium_security_replication_target,
+				high_security_replication_target >= standard_replication_target,
 				"High security replication target cannot be smaller than standard security replication target."
 			);
             assert!(
@@ -1436,6 +1457,9 @@ pub mod pallet {
             // so by ensuring the minimum wait for stop storing is greater than the checkpoint challenge period, we ensure that
             // the BSP cannot immediately stop storing a file it has lost when receiving a challenge for it.
             assert!(min_wait_for_stop_storing > checkpoint_challenge_period, "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be smaller than the checkpoint challenge period.");
+
+            // The base deposit for a storage request creation should be enough to cover the fees to volunteer for at least `basic_replication_target` BSPs.
+            assert!(base_storage_request_creation_deposit >= bsp_volunteer_fee.saturating_mul(T::ReplicationTargetToBalance::convert(basic_replication_target)), "Base storage request creation deposit should be enough to cover the fees to volunteer for at least `basic_replication_target` BSPs.");
         }
     }
 }

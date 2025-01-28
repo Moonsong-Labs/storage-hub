@@ -660,6 +660,7 @@ mod benchmarks {
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
+					deposit_paid: Default::default(),
                 };
                 let file_key = Pallet::<T>::compute_file_key(
                     user_account.clone(),
@@ -733,10 +734,25 @@ mod benchmarks {
                     user_peer_ids: Default::default(),
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
-                    bsps_volunteered: ReplicationTargetType::<T>::zero(),
+                    bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+					deposit_paid: Default::default(),
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_keys_to_accept[j], ());
+                // Add the volunteered BSPs to the StorageRequestBsps storage for this file key
+                for i in 0u64..T::MaxReplicationTarget::get().into() {
+                    let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
+                    mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                    let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
+                    StorageRequestBsps::<T>::insert(
+                        file_keys_to_accept[j],
+                        bsp_id,
+                        StorageRequestBspsMetadata::<T> {
+                            confirmed: false,
+                            _phantom: Default::default(),
+                        },
+                    );
+                }
 
                 // Create the FileKeyWithProof object
                 let file_key_with_proof = FileKeyWithProof {
@@ -1042,10 +1058,25 @@ mod benchmarks {
 				user_peer_ids: Default::default(),
 				bsps_required: T::StandardReplicationTarget::get(),
 				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
-				bsps_volunteered: ReplicationTargetType::<T>::zero(),
+				bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+				deposit_paid: Default::default(),
 			};
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
+            // Add the volunteered BSPs to the StorageRequestBsps storage for this file key
+            for i in 0u64..T::MaxReplicationTarget::get().into() {
+                let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
+                mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
+                StorageRequestBsps::<T>::insert(
+                    file_key,
+                    bsp_id,
+                    StorageRequestBspsMetadata::<T> {
+                        confirmed: false,
+                        _phantom: Default::default(),
+                    },
+                );
+            }
 
             // Create the FileKeyWithProof object
             let file_key_with_proof = FileKeyWithProof {

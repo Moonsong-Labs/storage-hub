@@ -799,9 +799,10 @@ type ThresholdType = u32;
 pub type ReplicationTargetType = u32;
 
 parameter_types! {
-    pub const StorageRequestCreationDeposit: Balance = 10;
-    pub const FileDeletionRequestCreationDeposit: Balance = 10;
-    pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
+    pub const BaseStorageRequestCreationDeposit: Balance = 1 * UNIT;
+    pub const FileDeletionRequestCreationDeposit: Balance = 1 * UNIT;
+    pub const FileSystemStorageRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
+    pub const FileSystemFileDeletionRequestHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::FileDeletionRequestHold);
 }
 
 impl pallet_file_system::Config for Runtime {
@@ -841,7 +842,9 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring =
         runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
-    type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type BaseStorageRequestCreationDeposit = BaseStorageRequestCreationDeposit;
+    type WeightToFee = WeightToFee;
+    type ReplicationTargetToBalance = ReplicationTargetToBalance;
     type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
     type BasicReplicationTarget =
         runtime_params::dynamic_params::runtime_config::BasicReplicationTarget;
@@ -931,6 +934,14 @@ impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
         }
 
         H256::from_slice(&bytes)
+    }
+}
+
+// Converter from the ReplicationTargetType type to the Balance type.
+pub struct ReplicationTargetToBalance;
+impl Convert<ReplicationTargetType, Balance> for ReplicationTargetToBalance {
+    fn convert(replication_target: ReplicationTargetType) -> Balance {
+        replication_target.into()
     }
 }
 /****** ****** ****** ******/

@@ -8,6 +8,7 @@ use crate::{
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
         ThresholdType, TickNumber, ValuePropId,
     },
+    weights::WeightInfo,
     Config, Error, Event, NextAvailableStorageRequestExpirationTick, PendingBucketsToMove,
     PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
     StorageRequests,
@@ -34,7 +35,7 @@ use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     bounded_vec,
-    traits::{BlakeTwo256, Get},
+    traits::{BlakeTwo256, Convert, Get},
     BoundedVec,
 };
 use sp_std::cmp::max;
@@ -2006,8 +2007,6 @@ mod request_storage {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let user = RuntimeOrigin::signed(owner_account_id.clone());
-                let storage_request_deposit =
-                    <Test as file_system::Config>::StorageRequestCreationDeposit::get();
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
@@ -2025,6 +2024,16 @@ mod request_storage {
                     msp_id,
                     value_prop_id,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
 
                 let owner_initial_balance =
                     <Test as file_system::Config>::Currency::free_balance(&owner_account_id);
@@ -2073,7 +2082,8 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_tick_storage_request
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -2179,6 +2189,15 @@ mod request_storage {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
                     user.clone(),
@@ -2214,7 +2233,8 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_tick_storage_request
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -2253,7 +2273,8 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_tick_storage_request
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -2346,6 +2367,15 @@ mod request_storage {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -2381,7 +2411,8 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_tick_storage_request
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -3787,6 +3818,7 @@ mod msp_respond_storage_request {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
+						deposit_paid: 0,
                     },
                 );
 
@@ -3856,6 +3888,7 @@ mod msp_respond_storage_request {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
+						deposit_paid: 0,
                     },
                 );
 
@@ -4089,6 +4122,7 @@ mod msp_respond_storage_request {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
+						deposit_paid: 0,
                     },
                 );
 
@@ -4162,6 +4196,7 @@ mod msp_respond_storage_request {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
+						deposit_paid: 0,
                     },
                 );
 
@@ -4662,6 +4697,137 @@ mod bsp_volunteer {
                         _phantom: Default::default()
                     }
                 );
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::AcceptedBspVolunteer {
+                        bsp_id,
+                        bucket_id,
+                        location,
+                        fingerprint,
+                        multiaddresses: create_sp_multiaddresses(),
+                        owner,
+                        size,
+                    }
+                    .into(),
+                );
+            });
+        }
+
+		#[test]
+        fn bsp_volunteer_is_correctly_paid_from_user_deposit() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = StorageData::<Test>::try_from(4).unwrap();
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageData<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    origin,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                    ReplicationTarget::Standard
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    4,
+                    fingerprint,
+                );
+
+                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
+				// Get the BSP's free balance before volunteering.
+				let bsp_initial_balance = <Test as Config>::Currency::free_balance(&bsp_account_id);
+
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+                // Assert that the RequestStorageBsps has the correct value
+                assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: false,
+                        _phantom: Default::default()
+                    }
+                );
+
+				// Calculate how much should the BSP have gotten from the user's deposit.
+       			let amount_paid_to_bsp = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		);
+
+				// Assert that the storage request's deposit paid was updated in storage.
+				assert_eq!(
+					file_system::StorageRequests::<Test>::get(file_key).unwrap().deposit_paid,
+					storage_request_deposit - amount_paid_to_bsp
+				);
+
+				// Assert that the user's balance on hold decreased by that amount.
+				assert_eq!(
+                    <Test as Config>::Currency::balance_on_hold(
+                        &RuntimeHoldReason::FileSystem(
+                            file_system::HoldReason::StorageRequestCreationHold
+                        ),
+                        &owner
+                    ),
+                    storage_request_deposit - amount_paid_to_bsp
+                );
+
+				// Assert that the BSP's free balance increased by that amount.
+                assert_eq!(
+                    <Test as Config>::Currency::free_balance(&bsp_account_id),
+                    bsp_initial_balance + amount_paid_to_bsp
+                );
+
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -5412,6 +5578,15 @@ mod bsp_confirm {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -5486,6 +5661,10 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+								),
                     })
                 );
 
@@ -5740,6 +5919,15 @@ mod bsp_confirm {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -5814,6 +6002,10 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -5958,6 +6150,10 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6276,6 +6472,15 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6357,6 +6562,10 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6421,6 +6630,15 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6502,6 +6720,10 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6569,6 +6791,15 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6650,6 +6881,10 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6732,6 +6967,15 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6771,6 +7015,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -6813,6 +7062,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -6858,6 +7108,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -6929,6 +7180,15 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -6968,6 +7228,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7010,6 +7275,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7061,6 +7327,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7113,6 +7380,15 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7152,6 +7428,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7194,6 +7475,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7256,6 +7538,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7346,6 +7629,15 @@ mod bsp_stop_storing {
 				let current_tick_plus_storage_request_ttl = current_tick + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
                 let next_expiration_tick_storage_request = max(NextAvailableStorageRequestExpirationTick::<Test>::get(), current_tick_plus_storage_request_ttl);
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7392,6 +7684,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7450,6 +7747,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7495,6 +7793,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7579,6 +7878,15 @@ mod bsp_stop_storing {
 				let current_tick_plus_storage_request_ttl = current_tick + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
 				let next_expiration_tick_storage_request = max(NextAvailableStorageRequestExpirationTick::<Test>::get(), current_tick_plus_storage_request_ttl);
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch first storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7651,6 +7959,11 @@ mod bsp_stop_storing {
                 // Dispatch BSP volunteers.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), first_file_key,));
 				assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), second_file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch first BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7732,6 +8045,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 				assert_eq!(
@@ -7749,6 +8063,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7786,6 +8101,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7881,6 +8197,15 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -7920,6 +8245,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+				
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7978,6 +8308,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -8024,6 +8355,15 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -8084,6 +8424,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit,
                     })
                 );
 
@@ -8145,6 +8486,15 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
                     bsp_signed.clone(),
@@ -8176,6 +8526,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit,
                     })
                 );
 
@@ -9645,6 +9996,15 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9685,6 +10045,11 @@ mod stop_storing_for_insolvent_user {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
+
                 // Get the current tick number.
                 let tick_when_confirming = ProofsDealer::get_current_tick();
 
@@ -9719,6 +10084,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -9864,6 +10230,15 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+				let number_of_bsps_balance_typed =
+					<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+				let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				)
+				.saturating_mul(number_of_bsps_balance_typed)
+				.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -9901,6 +10276,11 @@ mod stop_storing_for_insolvent_user {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -9960,6 +10340,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -10054,6 +10435,15 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -10094,6 +10484,11 @@ mod stop_storing_for_insolvent_user {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
+
                 // Get the current tick number.
                 let tick_when_confirming = ProofsDealer::get_current_tick();
 
@@ -10128,6 +10523,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -10315,6 +10711,15 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -10355,6 +10760,11 @@ mod stop_storing_for_insolvent_user {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
+
                 // Get the current tick number.
                 let tick_when_confirming = ProofsDealer::get_current_tick();
 
@@ -10389,6 +10799,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -10551,6 +10962,15 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        		let number_of_bsps_balance_typed =
+            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		)
+        		.saturating_mul(number_of_bsps_balance_typed)
+        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
@@ -10591,6 +11011,11 @@ mod stop_storing_for_insolvent_user {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
+
                 // Get the current tick number.
                 let tick_when_confirming = ProofsDealer::get_current_tick();
 
@@ -10625,6 +11050,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 

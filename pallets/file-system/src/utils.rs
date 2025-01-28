@@ -45,6 +45,7 @@ use crate::{
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
+    weights::WeightInfo,
     BucketsWithStorageRequests, Error, Event, HoldReason, MspsAmountOfPendingFileDeletionRequests,
     Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
     PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
@@ -728,8 +729,17 @@ where
             Error::<T>::BucketIsBeingMoved
         );
 
-        // Check if we can hold the storage request creation deposit from the user
-        let deposit = T::StorageRequestCreationDeposit::get();
+        // Check if we can hold the storage request creation deposit from the user.
+        // The storage request creation deposit should be enough to cover the weight of the `bsp_volunteer`
+        // extrinsic for ALL BSPs of the network.
+        let number_of_bsps = <T::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        let number_of_bsps_balance_typed =
+            <T as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+        let deposit = <T::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+            &T::WeightInfo::bsp_volunteer(),
+        )
+        .saturating_mul(number_of_bsps_balance_typed)
+        .saturating_add(T::BaseStorageRequestCreationDeposit::get());
         ensure!(
             T::Currency::can_hold(
                 &HoldReason::StorageRequestCreationHold.into(),
@@ -818,6 +828,7 @@ where
             bsps_confirmed: zero,
             bsps_volunteered: zero,
             expires_at: expiration_tick,
+            deposit_paid: deposit,
         };
 
         // Hold the deposit from the user
@@ -1100,7 +1111,7 @@ where
                 T::Currency::release(
                     &HoldReason::StorageRequestCreationHold.into(),
                     &storage_request_metadata.owner,
-                    T::StorageRequestCreationDeposit::get(),
+                    storage_request_metadata.deposit_paid,
                     Precision::BestEffort,
                 )?;
 
@@ -1262,6 +1273,32 @@ where
                 return Err(ArithmeticError::Overflow.into());
             }
         }
+
+        // Get the payment account of the BSP.
+        let bsp_payment_account =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_payment_account(bsp_id)
+                .ok_or(Error::<T>::FailedToGetPaymentAccount)?;
+
+        // Calculate how much the BSP should be reimbursed for this extrinsic from the user's deposit.
+        let amount_to_pay = <T::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+            &T::WeightInfo::bsp_volunteer(),
+        );
+
+        // Transfer the funds to the BSP.
+        let amount_transferred = T::Currency::transfer_on_hold(
+            &HoldReason::StorageRequestCreationHold.into(),
+            &storage_request_metadata.owner,
+            &bsp_payment_account,
+            amount_to_pay,
+            Precision::BestEffort,
+            Restriction::Free,
+            Fortitude::Force,
+        )?;
+
+        // If the transfer was successful, substract the amount from the deposit paid by the user.
+        storage_request_metadata.deposit_paid = storage_request_metadata
+            .deposit_paid
+            .saturating_sub(amount_transferred);
 
         // Update storage request metadata.
         <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
@@ -1487,7 +1524,7 @@ where
                 T::Currency::release(
                     &HoldReason::StorageRequestCreationHold.into(),
                     &storage_request_metadata.owner,
-                    T::StorageRequestCreationDeposit::get(),
+                    storage_request_metadata.deposit_paid,
                     Precision::BestEffort,
                 )?;
 
@@ -1671,7 +1708,7 @@ where
         T::Currency::release(
             &HoldReason::StorageRequestCreationHold.into(),
             &storage_request_metadata.owner,
-            T::StorageRequestCreationDeposit::get(),
+            storage_request_metadata.deposit_paid,
             Precision::BestEffort,
         )?;
 
@@ -2659,12 +2696,10 @@ mod hooks {
                         // as fulfilled with whatever amount of BSPs got to volunteer and confirm the file. For that:
                         // Return the storage request creation deposit to the user, emitting an error event if it fails
                         // but continuing execution.
-                        let storage_request_creation_deposit =
-                            T::StorageRequestCreationDeposit::get();
                         let _ = T::Currency::release(
                             &HoldReason::StorageRequestCreationHold.into(),
                             &storage_request_metadata.owner,
-                            storage_request_creation_deposit,
+                            storage_request_metadata.deposit_paid,
                             Precision::BestEffort,
                         )
                         .map_err(|e| {
@@ -2672,7 +2707,7 @@ mod hooks {
                                 Event::FailedToReleaseStorageRequestCreationDeposit {
                                     file_key,
                                     owner: storage_request_metadata.owner.clone(),
-                                    amount_to_return: storage_request_creation_deposit,
+                                    amount_to_return: storage_request_metadata.deposit_paid,
                                     error: e,
                                 },
                             );
@@ -2722,12 +2757,10 @@ mod hooks {
 
                         // Return the storage request creation deposit to the user, emitting an error event if it fails
                         // but continuing execution.
-                        let storage_request_creation_deposit =
-                            T::StorageRequestCreationDeposit::get();
                         let _ = T::Currency::release(
                             &HoldReason::StorageRequestCreationHold.into(),
                             &storage_request_metadata.owner,
-                            storage_request_creation_deposit,
+                            storage_request_metadata.deposit_paid,
                             Precision::BestEffort,
                         )
                         .map_err(|e| {
@@ -2735,7 +2768,7 @@ mod hooks {
                                 Event::FailedToReleaseStorageRequestCreationDeposit {
                                     file_key,
                                     owner: storage_request_metadata.owner.clone(),
-                                    amount_to_return: storage_request_creation_deposit,
+                                    amount_to_return: storage_request_metadata.deposit_paid,
                                     error: e,
                                 },
                             );

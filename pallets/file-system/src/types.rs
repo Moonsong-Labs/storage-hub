@@ -77,6 +77,12 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.
     pub bsps_volunteered: ReplicationTargetType<T>,
+
+    /// Deposit paid by the user to open this storage request.
+    ///
+    /// This is used to pay for the cost of the BSPs volunteering for the storage request in case it either expires
+    /// or gets revoked by the user. If the storage request is fulfilled, the deposit will be refunded to the user.
+    pub deposit_paid: BalanceOf<T>,
 }
 
 impl<T: Config> StorageRequestMetadata<T> {
@@ -383,6 +389,22 @@ impl<T: Config> Debug for EitherAccountIdOrMspId<T> {
             EitherAccountIdOrMspId::MspId(provider_id) => {
                 write!(f, "MspId({:?})", provider_id)
             }
+        }
+    }
+}
+
+impl<T: Config> EitherAccountIdOrMspId<T> {
+    pub fn is_account_id(&self) -> bool {
+        match self {
+            EitherAccountIdOrMspId::AccountId(_) => true,
+            EitherAccountIdOrMspId::MspId(_) => false,
+        }
+    }
+
+    pub fn is_msp_id(&self) -> bool {
+        match self {
+            EitherAccountIdOrMspId::AccountId(_) => false,
+            EitherAccountIdOrMspId::MspId(_) => true,
         }
     }
 }
