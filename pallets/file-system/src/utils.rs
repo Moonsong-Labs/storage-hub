@@ -1,4 +1,5 @@
 use codec::Encode;
+use core::cmp::max;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
@@ -39,9 +40,10 @@ use crate::{
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
         FileLocation, Fingerprint, ForestProof, MerkleHash, MoveBucketRequestMetadata,
         MultiAddresses, PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest,
-        ProviderIdFor, RejectedStorageRequest, ReplicationTargetType, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber, ValuePropId,
+        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
+        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     BucketsWithStorageRequests, Error, Event, HoldReason, MspsAmountOfPendingFileDeletionRequests,
     Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
@@ -124,57 +126,187 @@ where
     where
         T: frame_system::Config,
     {
-        // Get the tick number at which the storage request was created.
-        let (storage_request_tick, fingerprint) = match <StorageRequests<T>>::get(&file_key) {
-            Some(storage_request) => (storage_request.requested_at, storage_request.fingerprint),
-            None => {
-                return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
-            }
-        };
+        // Get the tick number at which the storage request was created, the associated file fingerprint and
+        // the amount of BSPs required to confirm storing the file for the storage request
+        // to be considered fulfilled (replication target).
+        let (storage_request_tick, fingerprint, replication_target) =
+            match <StorageRequests<T>>::get(&file_key) {
+                Some(storage_request) => (
+                    storage_request.requested_at,
+                    storage_request.fingerprint,
+                    storage_request.bsps_required,
+                ),
+                None => {
+                    return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
+                }
+            };
 
-        // Get the threshold needed for the BSP to be able to volunteer for the storage request.
-        let bsp_threshold = Self::get_threshold_for_bsp_request(&bsp_id, &fingerprint);
+        // Get the threshold for the BSP to be able to volunteer for the storage request.
+        // The current eligibility value of this storage request for this BSP has to be greater than
+        // this for the BSP to be able to volunteer.
+        let bsp_volunteering_threshold =
+            Self::get_volunteer_threshold_of_bsp(&bsp_id, &fingerprint);
 
-        // Compute the tick number at which the BSP should send the volunteer request.
-        Self::compute_volunteer_tick_number(bsp_id, bsp_threshold, storage_request_tick)
-            .map_err(|_| QueryFileEarliestVolunteerTickError::ThresholdArithmeticError)
+        // Get the current eligibility value of this storage request and the slope with which it
+        // increments every tick (this is weighted considering the BSP reputation so it depends on the BSP).
+        let (bsp_current_eligibility_value, bsp_eligibility_slope) =
+            Self::compute_request_eligibility_criteria(
+                &bsp_id,
+                storage_request_tick,
+                replication_target,
+            )
+            .map_err(|_| QueryFileEarliestVolunteerTickError::FailedToComputeEligibilityCriteria)?;
+
+        // Calculate the difference between the BSP's threshold and the current eligibility value.
+        let eligibility_diff =
+            match bsp_volunteering_threshold.checked_sub(&bsp_current_eligibility_value) {
+                Some(diff) => diff,
+                None => {
+                    // The BSP's threshold is less than the eligibility current value, which means the BSP is already eligible to volunteer.
+                    let current_tick =
+                        <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                    return Ok(current_tick);
+                }
+            };
+
+        // If the BSP can't volunteer yet, calculate the number of ticks it has to wait for before it can.
+        let min_ticks_to_wait_to_volunteer =
+            match eligibility_diff.checked_div(&bsp_eligibility_slope) {
+                Some(ticks) => max(ticks, T::ThresholdType::one()),
+                None => {
+                    return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
+                }
+            };
+
+        // Compute the earliest tick number at which the BSP can send the volunteer request.
+        let earliest_volunteer_tick = storage_request_tick.saturating_add(
+            T::ThresholdTypeToTickNumber::convert(min_ticks_to_wait_to_volunteer),
+        );
+
+        Ok(earliest_volunteer_tick)
     }
 
-    fn compute_volunteer_tick_number(
-        bsp_id: ProviderIdFor<T>,
-        bsp_threshold: T::ThresholdType,
-        storage_request_tick: TickNumber<T>,
-    ) -> Result<TickNumber<T>, DispatchError>
-    where
-        T: frame_system::Config,
-    {
-        // Compute the threshold to succeed and the slope of the bsp.
-        let (to_succeed, slope) =
-            Self::compute_threshold_to_succeed(&bsp_id, storage_request_tick)?;
+    /// Compute the eligibility value threshold for a BSP to be able to volunteer for a storage request
+    /// for a file which has the specified fingerprint.
+    ///
+    /// The threshold is computed by concatenating the encoded BSP ID and file's fingerprint,
+    /// then hashing the result to get the volunteering hash. The volunteering hash is then
+    /// converted to the threshold type.
+    pub fn get_volunteer_threshold_of_bsp(
+        bsp_id: &ProviderIdFor<T>,
+        fingerprint: &Fingerprint<T>,
+    ) -> T::ThresholdType {
+        // Concatenate the encoded BSP ID and file's fingerprint and hash them to get the volunteering hash.
+        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
+        let volunteering_hash =
+            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
 
-        let threshold_diff = match bsp_threshold.checked_sub(&to_succeed) {
-            Some(diff) => diff,
-            None => {
-                // The BSP's threshold is less than the current threshold.
-                let current_tick =
-                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
-                return Ok(current_tick);
-            }
-        };
+        // Return the threshold needed for the BSP to be able to volunteer for the storage request.
+        T::HashToThresholdType::convert(volunteering_hash)
+    }
 
-        // Calculate the number of ticks required to be below the threshold.
-        let ticks_to_wait = match threshold_diff.checked_div(&slope) {
-            Some(ticks) => ticks,
-            None => {
-                return Err(Error::<T>::ThresholdArithmeticError.into());
-            }
-        };
+    /// Compute the eligibility value of a storage request issued at `requested_at` with `bsps_required` as
+    /// its replication target, for a specific BSP identified by `bsp_id`, and the slope with which the
+    /// eligibility value increases every tick.
+    ///
+    /// The eligibility initial value depends on the global BSP reputation weight and the storage
+    /// request's replication target, and increases linearly over time to achieve its maximum value after
+    /// [`crate::Config::TickRangeToMaximumThreshold`] ticks, a constant defined in this pallet's configuration.
+    /// Both these values get weighted with the BSP's reputation weight to give an advantage to BSPs with
+    /// higher reputation weights, since both the initial weighted eligibility value and slope will be
+    /// higher for them.
+    ///
+    /// A BSP is eligible to volunteer for a storage request when the returned eligibility value
+    /// is greater than that BSP's volunteer threshold value.
+    ///
+    /// The formalized formulas are documented in the [README](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/README.md#volunteering-succeeding-threshold-checks).
+    pub fn compute_request_eligibility_criteria(
+        bsp_id: &ProviderIdFor<T>,
+        requested_at: TickNumber<T>,
+        replication_target: ReplicationTargetType<T>,
+    ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
+        // Get the maximum eligibility value, which would allow all BSP's to volunteer for the storage request.
+        let max_eligibility_value = T::ThresholdType::max_value();
 
-        // Compute the tick number at which the BSP should send the volunteer request.
-        let volunteer_tick_number = storage_request_tick
-            .saturating_add(T::ThresholdTypeToTickNumber::convert(ticks_to_wait));
+        // Get the global reputation weight of all BSPs.
+        let global_reputation_weight =
+            T::ThresholdType::from(T::Providers::get_global_bsps_reputation_weight());
 
-        Ok(volunteer_tick_number)
+        // If the global reputation weight is zero, there are no BSPs in the network, so no storage requests can be fulfilled.
+        if global_reputation_weight == T::ThresholdType::zero() {
+            return Err(Error::<T>::NoGlobalReputationWeightSet.into());
+        }
+
+        // Calculate the starting eligibility value for all BSPs, regardless of their reputation weight.
+        // This is set to maximize the probability that exactly `replication_target` BSPs with the starting
+        // reputation weight will be able to volunteer in the initial tick, which minimizes the probability
+        // that a malicious user controlling a large number of BSPs will be able to control all the
+        // BSPs that volunteer in the initial tick.
+        //
+        // The calculation is designed to achieve the following:
+        //
+        // 1. Initially, the global reputation weight will be low since there won't be many BSPs in the network,
+        // so the starting eligibility value will be high, allowing more BSPs to volunteer in the initial tick
+        // thus decreasing the time it takes for a storage request to be fulfilled even in the early days of the network.
+        //
+        // 2. As the global reputation weight of all BSPs increases (i.e., more BSPs join the network or the ones
+        // already participating gain reputation), the starting eligibility value for all BSPs will decrease, allowing
+        // less BSPs to volunteer in the initial tick and prioritizing higher reputation BSPs.
+        //
+        // 3. Multiplying the starting eligibility value by the replication target ensures that the number of BSPs with
+        // the starting reputation weight that can volunteer in the initial tick is probabilistically equal to the
+        // replication target chosen by the user, thus decreasing the time it takes for a storage request to be fulfilled
+        // (in comparison to not multiplying by the replication target) while still preserving the security of the network
+        // against malicious users controlling a large number of BSPs (in comparison to having a really high
+        // starting eligibility value).
+        let global_eligibility_starting_value = max_eligibility_value
+            .checked_div(&global_reputation_weight)
+            .unwrap_or(T::ThresholdType::one())
+            .saturating_mul(replication_target.into());
+
+        // Calculate the rate of increase per tick of the global eligibility value.
+        // This is such that, after `TickRangeToMaximumThreshold` ticks, the global eligibility value will be
+        // equal to `max_eligibility_value`, thus allowing all BSPs to volunteer.
+        // The base slope for the storage request should be at the very least 1, so that all BSPs can volunteer eventually.
+        let base_slope = max_eligibility_value
+            .saturating_sub(global_eligibility_starting_value)
+            .checked_div(&T::ThresholdTypeToTickNumber::convert_back(
+                T::TickRangeToMaximumThreshold::get(),
+            ))
+            .unwrap_or(T::ThresholdType::one());
+        let base_slope = max(base_slope, T::ThresholdType::one());
+
+        // Get the BSP's reputation weight.
+        let bsp_reputation_weight =
+            T::ThresholdType::from(T::Providers::get_bsp_reputation_weight(&bsp_id)?);
+
+        // If the BSP's reputation weight is zero, the BSP is not allowed to volunteer for any storage request.
+        if bsp_reputation_weight == T::ThresholdType::zero() {
+            return Err(Error::<T>::NoBspReputationWeightSet.into());
+        }
+
+        // The eligibility starting value for this BSP is the global one weighted by the BSP's reputation weight.
+        let bsp_eligibility_starting_value =
+            global_eligibility_starting_value.saturating_mul(bsp_reputation_weight);
+
+        // The rate of increase for this BSP is the global one weighted by the BSP's reputation weight.
+        let bsp_eligibility_slope = base_slope
+            .checked_mul(&bsp_reputation_weight)
+            .unwrap_or(max_eligibility_value);
+
+        // Get the current tick.
+        let current_tick_number =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+
+        // Get the amount of elapsed ticks since the storage request was issued and convert the number to the threshold type.
+        let elapsed_ticks = current_tick_number.saturating_sub(requested_at);
+        let elapsed_ticks = T::ThresholdTypeToTickNumber::convert_back(elapsed_ticks);
+
+        // Finally, calculate the current eligibility value for this BSP.
+        let current_eligibility_value_for_bsp = bsp_eligibility_starting_value
+            .saturating_add(bsp_eligibility_slope.saturating_mul(elapsed_ticks));
+
+        Ok((current_eligibility_value_for_bsp, bsp_eligibility_slope))
     }
 
     pub fn query_bsp_confirm_chunks_to_prove_for_file(
@@ -577,7 +709,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         msp_id: Option<ProviderIdFor<T>>,
-        replication_target: Option<ReplicationTargetType<T>>,
+        replication_target: ReplicationTarget<T>,
         user_peer_ids: Option<PeerIds<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
         // Check that the file size is greater than zero.
@@ -632,7 +764,14 @@ where
             None
         };
 
-        let replication_target = replication_target.unwrap_or(T::DefaultReplicationTarget::get());
+        let replication_target = match replication_target {
+            ReplicationTarget::Basic => T::BasicReplicationTarget::get(),
+            ReplicationTarget::Standard => T::StandardReplicationTarget::get(),
+            ReplicationTarget::HighSecurity => T::HighSecurityReplicationTarget::get(),
+            ReplicationTarget::SuperHighSecurity => T::SuperHighSecurityReplicationTarget::get(),
+            ReplicationTarget::UltraHighSecurity => T::UltraHighSecurityReplicationTarget::get(),
+            ReplicationTarget::Custom(replication_target) => replication_target,
+        };
 
         if replication_target.is_zero() {
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
@@ -1688,7 +1827,7 @@ where
                     fingerprint,
                     size,
                     None,
-                    Some(ReplicationTargetType::<T>::one()),
+                    ReplicationTarget::Custom(ReplicationTargetType::<T>::one()),
                     None,
                 )?;
 
@@ -2327,104 +2466,6 @@ where
             fingerprint: fingerprint.as_ref().into(),
         }
         .file_key::<FileKeyHasher<T>>()
-    }
-
-    pub fn get_threshold_for_bsp_request(
-        bsp_id: &ProviderIdFor<T>,
-        fingerprint: &Fingerprint<T>,
-    ) -> T::ThresholdType {
-        // Concatenate the BSP ID and the fingerprint and hash them to get the volunteering hash.
-        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
-        let volunteering_hash =
-            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
-
-        // Return the threshold needed for the BSP to be able to volunteer for the storage request.
-        T::HashToThresholdType::convert(volunteering_hash)
-    }
-
-    /// Compute the threshold for a BSP to succeed.
-    ///
-    /// Succeeding this threshold is required for the BSP to be eligible to volunteer for a storage request.
-    /// The threshold is computed based on the global reputation weight and the BSP's reputation weight, giving
-    /// an advantage to BSPs with higher reputation weights.
-    ///
-    /// The formalized formulas are documented in the [README](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/README.md#volunteering-succeeding-threshold-checks).
-    pub fn compute_threshold_to_succeed(
-        bsp_id: &ProviderIdFor<T>,
-        requested_at: TickNumber<T>,
-    ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
-        let maximum_threshold = T::ThresholdType::max_value();
-
-        let global_weight =
-            T::ThresholdType::from(T::Providers::get_global_bsps_reputation_weight());
-
-        if global_weight == T::ThresholdType::zero() {
-            return Err(Error::<T>::NoGlobalReputationWeightSet.into());
-        }
-
-        // Global threshold starting point from which all BSPs begin their threshold slope. All BSPs start at this point
-        // with the starting reputation weight.
-        //
-        // The calculation is designed to achieve the following:
-        //
-        // 1. In a regular scenario, `maximum_threshold` would be very large, and you'd start bringing it down with
-        //    `global_weight`, also a large number. That way, when you multiply it by the replication target,
-        //    you should still be within the numerical domain.
-        //
-        // 2. If `global_weight` is low still (in the early days of the network), when multiplying with
-        //    replication target, you'll get at most `u32::MAX` and then the threshold would be
-        //    u32::MAX / 2 (still pretty high).
-        //
-        // 3. If maximum_threshold is very low (like sometimes set in tests), the division would saturate to 1,
-        //    and then the threshold would be replication target / 2 (still very low).
-        let threshold_global_starting_point = maximum_threshold
-            .checked_div(&global_weight)
-            .unwrap_or(T::ThresholdType::one())
-            .checked_mul(&T::MaxReplicationTarget::get().into()).unwrap_or({
-                log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
-                maximum_threshold
-            })
-            .checked_div(&T::ThresholdType::from(2u32))
-            .unwrap_or(T::ThresholdType::one());
-
-        // Get the BSP's reputation weight.
-        let bsp_weight = T::ThresholdType::from(T::Providers::get_bsp_reputation_weight(&bsp_id)?);
-
-        // Actual BSP's threshold starting point, taking into account their reputation weight.
-        let threshold_weighted_starting_point =
-            bsp_weight.saturating_mul(threshold_global_starting_point);
-
-        // Rate of increase from the weighted threshold starting point up to the maximum threshold within a tick range.
-        let base_slope = maximum_threshold
-            .saturating_sub(threshold_global_starting_point)
-            .checked_div(&T::ThresholdTypeToTickNumber::convert_back(
-                T::TickRangeToMaximumThreshold::get(),
-            ))
-            .unwrap_or(T::ThresholdType::one());
-
-        let threshold_slope = base_slope
-            .checked_mul(&bsp_weight)
-            .unwrap_or(maximum_threshold);
-
-        // Since checked_div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
-        let threshold_slope = if threshold_slope.is_zero() {
-            T::ThresholdType::one()
-        } else {
-            threshold_slope
-        };
-
-        let current_tick_number =
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
-
-        // Get number of ticks since the storage request was issued.
-        let ticks_since_requested = current_tick_number.saturating_sub(requested_at);
-        let ticks_since_requested =
-            T::ThresholdTypeToTickNumber::convert_back(ticks_since_requested);
-
-        let to_succeed = threshold_weighted_starting_point
-            .saturating_add(threshold_slope.saturating_mul(ticks_since_requested));
-
-        Ok((to_succeed, threshold_slope))
     }
 }
 

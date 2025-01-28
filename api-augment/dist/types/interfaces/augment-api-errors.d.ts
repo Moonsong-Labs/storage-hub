@@ -332,6 +332,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
       /**
+       * No BSP reputation weight set.
+       **/
+      NoBspReputationWeightSet: AugmentedError<ApiType>;
+      /**
        * No file keys to confirm storing
        **/
       NoFileKeysToConfirm: AugmentedError<ApiType>;

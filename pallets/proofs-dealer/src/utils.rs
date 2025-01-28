@@ -39,7 +39,7 @@ use crate::{
     },
     weights::WeightInfo,
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
-    LastDeletedTick, NotFullBlocksCount, Pallet, PastBlocksWeight, PriorityChallengesQueue,
+    LastDeletedTick, Pallet, PastBlocksStatus, PastBlocksWeight, PriorityChallengesQueue,
     ProviderToProofSubmissionRecord, SlashableProviders, TickToChallengesSeed,
     TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
     ValidProofSubmittersLastTicks,
@@ -599,7 +599,7 @@ where
 
     /// Check if the network is presumably under a spam attack.
     ///
-    /// The function looks at the weight used in the past `BlockFullnessPeriod` blocks, comparing it
+    /// The function looks at the weight used in the past block, comparing it
     /// with the maximum allowed weight (`max_weight_for_class`) for the dispatch class of `submit_proof` extrinsics.
     /// The idea is to track blocks that have not been filled to capacity within a
     /// specific period (`BlockFullnessPeriod`) and determine if there is enough "headroom"
@@ -614,9 +614,13 @@ where
 
         let current_block = frame_system::Pallet::<T>::block_number();
 
-        // Get the number of blocks that have been considered _not_ full in the past `BlockFullnessPeriod`.
-        let not_full_blocks_count = NotFullBlocksCount::<T>::get();
-        let mut new_not_full_blocks_count = not_full_blocks_count;
+        // Get the past `BlockFullnessPeriod` blocks and whether they were considered full or not.
+        let mut past_blocks_status = PastBlocksStatus::<T>::get();
+
+        // Remove the oldest block from the list of past blocks statuses if the list is full.
+        if past_blocks_status.len() == T::BlockFullnessPeriod::get() as usize {
+            past_blocks_status.remove(0);
+        }
 
         // This would only be `None` if the block number is 0, so this should be safe.
         if let Some(prev_block) = current_block.checked_sub(&1u32.into()) {
@@ -634,54 +638,35 @@ where
                     && weight_left_in_prev_block.proof_size()
                         >= T::BlockFullnessHeadroom::get().proof_size()
                 {
-                    // Increment the counter of blocks that are not full.
-                    new_not_full_blocks_count =
-                        new_not_full_blocks_count.saturating_add(1u32.into());
+                    // Push the status of the previous block as NOT full to the list of past blocks statuses.
+                    past_blocks_status
+                        .try_push(false)
+                        .expect("If the bounded vector was full, the oldest block was removed so there should be space. qed");
+                } else {
+                    // Push the status of the previous block as full to the list of past blocks statuses.
+                    past_blocks_status
+                        .try_push(true)
+                        .expect("If the bounded vector was full, the oldest block was removed so there should be space. qed");
                 }
             }
-        }
-
-        // This would be `None` during the first `BlockFullnessPeriod` + 1 blocks.
-        if let Some(oldest_block_fullness_number) =
-            current_block.checked_sub(&T::BlockFullnessPeriod::get().saturating_add(1u32.into()))
-        {
-            // Get the weight usage in the oldest registered block.
-            if let Some(weight_used_in_oldest_block) =
-                PastBlocksWeight::<T>::get(oldest_block_fullness_number)
-            {
-                // Check how much weight was left in the oldest block, compared to the maximum weight.
-                // This is computed both for proof size and ref time.
-                let weight_left_in_oldest_block =
-                    max_weight_for_class.saturating_sub(weight_used_in_oldest_block);
-
-                // If the weight left in the oldest block is greater or equal than the headroom, for both proof size or ref time,
-                // we consider the oldest block to be NOT full. If that is the case, we have to remove it from the
-                // count as it is now out of the `BlockFullnessPeriod` of blocks taken into account.
-                if weight_left_in_oldest_block.ref_time()
-                    >= T::BlockFullnessHeadroom::get().ref_time()
-                    && weight_left_in_oldest_block.proof_size()
-                        >= T::BlockFullnessHeadroom::get().proof_size()
-                {
-                    // Decrement the counter of blocks that are not full.
-                    new_not_full_blocks_count =
-                        new_not_full_blocks_count.saturating_sub(1u32.into());
-                }
-            }
-        }
-
-        // If there was a change in the number of blocks that were not full, we need to update the storage.
-        if new_not_full_blocks_count != not_full_blocks_count {
-            NotFullBlocksCount::<T>::set(new_not_full_blocks_count);
         }
 
         // At this point, we have an updated count of blocks that were not full in the past `BlockFullnessPeriod`.
-        if ChallengesTicker::<T>::get() > T::BlockFullnessPeriod::get() {
-            // Running this check only makes sense after `ChallengesTicker` has advanced past `BlockFullnessPeriod`.
+        // Running this check only makes sense after `ChallengesTicker` has advanced past `BlockFullnessPeriod`.
+        if ChallengesTicker::<T>::get() > T::BlockFullnessPeriod::get().into() {
             // To consider the network NOT to be under spam, we need more than `min_non_full_blocks` blocks to be not full.
             let min_non_full_blocks = Self::calculate_min_non_full_blocks_to_spam();
 
+            // Get the number of blocks that were not full in the past `BlockFullnessPeriod`.
+            // Since the bound on the number of blocks in the vector is a u32, we can safely cast it to a `BlockNumberFor<T>`.
+            let not_full_blocks_count: BlockNumberFor<T> = (past_blocks_status
+                .iter()
+                .filter(|&&is_full| !is_full)
+                .count() as u32)
+                .into();
+
             // If `not_full_blocks_count` is greater than `min_non_full_blocks`, we consider the network NOT to be under spam.
-            if new_not_full_blocks_count > min_non_full_blocks {
+            if not_full_blocks_count > min_non_full_blocks {
                 // The network is NOT considered to be under a spam attack, so we resume the `ChallengesTicker`.
                 ChallengesTickerPaused::<T>::set(None);
             } else {
@@ -689,6 +674,9 @@ where
                 ChallengesTickerPaused::<T>::set(Some(()));
             }
         }
+
+        // Update the PastBlocksStatus storage.
+        PastBlocksStatus::<T>::set(past_blocks_status);
 
         // Consume weight.
         weight.consume(T::WeightInfo::check_spamming_condition());
@@ -954,7 +942,7 @@ where
     /// returns.
     pub(crate) fn calculate_min_non_full_blocks_to_spam() -> BlockNumberFor<T> {
         let min_non_full_blocks_ratio = T::MinNotFullBlocksRatio::get();
-        min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get())
+        min_non_full_blocks_ratio.mul_floor(T::BlockFullnessPeriod::get().into())
     }
 
     /// Remove all the proof submitters for a given tick and update the `LastDeletedTick` storage element

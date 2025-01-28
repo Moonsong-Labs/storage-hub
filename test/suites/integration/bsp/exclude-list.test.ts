@@ -44,7 +44,9 @@ describeBspNet(
             FileMetadata.file_size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            1
+            {
+              Custom: 1
+            }
           )
         ],
         signer: shUser

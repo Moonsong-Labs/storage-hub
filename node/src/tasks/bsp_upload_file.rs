@@ -674,6 +674,11 @@ where
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 
+        // Calculate the tick in which the BSP should send the extrinsic. It's one less that the tick
+        // in which the BSP can volunteer for the file because that way it the extrinsic will get included
+        // in the tick where the BSP can actually volunteer for the file.
+        let tick_to_wait_to_submit_volunteer = earliest_volunteer_tick.saturating_sub(1);
+
         info!(
             target: LOG_TARGET,
             "Waiting for tick {:?} to volunteer for file {:?}",
@@ -685,7 +690,7 @@ where
         // TODO: based on the limit above, also add a timeout for the task.
         self.storage_hub_handler
             .blockchain
-            .wait_for_tick(earliest_volunteer_tick)
+            .wait_for_tick(tick_to_wait_to_submit_volunteer)
             .await?;
 
         // TODO: Have this dynamically called at every tick in `wait_for_tick` to exit early without waiting until `earliest_volunteer_tick` in the event the storage request
@@ -747,7 +752,7 @@ where
         let result = self
             .storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
+            .send_extrinsic(call.clone(), Tip::from(0))
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler
@@ -765,7 +770,37 @@ where
                 e
             );
 
-            self.unvolunteer_file(file_key.into()).await;
+            // If the initial call errored out, it could mean the chain was spammed so the tick did not advance.
+            // Wait until the actual earliest volunteer tick to occur and retry volunteering.
+            self.storage_hub_handler
+                .blockchain
+                .wait_for_tick(earliest_volunteer_tick)
+                .await?;
+
+            // Send extrinsic and wait for it to be included in the block.
+            let result = self
+                .storage_hub_handler
+                .blockchain
+                .send_extrinsic(call, Tip::from(0))
+                .await?
+                .with_timeout(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .extrinsic_retry_timeout,
+                ))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await;
+
+            if let Err(e) = result {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to volunteer for file {:?} after retry in volunteer tick: {:?}",
+                    file_key,
+                    e
+                );
+
+                self.unvolunteer_file(file_key.into()).await;
+            }
         }
 
         Ok(())

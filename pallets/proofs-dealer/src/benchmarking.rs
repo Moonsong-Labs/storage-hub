@@ -40,6 +40,7 @@ mod benchmarks {
     use shp_traits::{
         PaymentStreamsInterface, ProofsDealerInterface, ReadChallengeableProvidersInterface,
     };
+    use sp_core::U256;
     use sp_runtime::{
         traits::{Hash, One, Zero},
         BoundedBTreeSet, BoundedVec,
@@ -59,7 +60,7 @@ mod benchmarks {
             ProvidersPalletFor,
         },
         Call, ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Config, Event,
-        LastCheckpointTick, LastDeletedTick, NotFullBlocksCount, Pallet, PastBlocksWeight,
+        LastCheckpointTick, LastDeletedTick, Pallet, PastBlocksStatus, PastBlocksWeight,
         ProviderToProofSubmissionRecord, SlashableProviders, TickToChallengesSeed,
         TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
         ValidProofSubmittersLastTicks,
@@ -84,7 +85,7 @@ mod benchmarks {
         Pallet::challenge(RawOrigin::Signed(caller.clone()), file_key);
 
         // Verify the challenge event was emitted.
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::<T>::NewChallenge {
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::NewChallenge {
             who: caller,
             key_challenged: file_key,
         });
@@ -343,7 +344,7 @@ mod benchmarks {
     fn check_spamming_condition() -> Result<(), BenchmarkError> {
         // Set the block number to be the first block after going beyond `T::BlockFullnessPeriod` blocks.
         let block_fullness_period = T::BlockFullnessPeriod::get();
-        frame_system::Pallet::<T>::set_block_number(block_fullness_period + One::one());
+        frame_system::Pallet::<T>::set_block_number((block_fullness_period + 1).into());
 
         // Set tick number to be the same as the block number.
         ChallengesTicker::<T>::set(frame_system::Pallet::<T>::block_number());
@@ -361,14 +362,33 @@ mod benchmarks {
         PastBlocksWeight::<T>::insert(prev_block, prev_block_weight);
 
         // Set the weight of a block `BlockFullnessPeriod + 1` blocks before, to one such that it is considered full.
-        let old_block =
-            frame_system::Pallet::<T>::block_number() - T::BlockFullnessPeriod::get() - One::one();
+        let old_block = frame_system::Pallet::<T>::block_number()
+            - T::BlockFullnessPeriod::get().into()
+            - One::one();
         PastBlocksWeight::<T>::insert(old_block, max_weight_for_class);
 
-        // Setting `NotFullBlocksCount` to be just exactly the minimum, so that with this increment the
-        // chain is considered to be not spammed.
-        let min_not_full_blocks_to_spam = Pallet::<T>::calculate_min_non_full_blocks_to_spam();
-        NotFullBlocksCount::<T>::set(min_not_full_blocks_to_spam);
+        // Setting the `PastBlocksStatus` bounded vector to contain, as the first element, a block considered full, followed
+        // by exactly the minimum required non-full blocks, and then all full blocks, so that when adding the new non-full block
+        // the chain transitions from being considered spammed to not spammed.
+        let mut past_blocks_status: BoundedVec<bool, T::BlockFullnessPeriod> = Default::default();
+        past_blocks_status
+            .try_push(true)
+            .expect("Failed to push the initial block to past blocks status, it should fit.");
+        let min_not_full_blocks_to_spam_block_type: U256 =
+            Pallet::<T>::calculate_min_non_full_blocks_to_spam().into();
+        let min_not_full_blocks_to_spam: u32 =
+            min_not_full_blocks_to_spam_block_type.try_into().unwrap();
+        for _ in 0..min_not_full_blocks_to_spam {
+            past_blocks_status.try_push(false).expect(
+                "Failed to push non full blocks to past blocks status when the size is known.",
+            );
+        }
+        for _ in min_not_full_blocks_to_spam.saturating_add(1)..T::BlockFullnessPeriod::get() {
+            past_blocks_status
+                .try_push(true)
+                .expect("Failed to push full blocks to past blocks status when the size is known.");
+        }
+        PastBlocksStatus::<T>::set(past_blocks_status);
 
         // Set the chain to be considered spammed.
         ChallengesTickerPaused::<T>::set(Some(()));
@@ -380,10 +400,14 @@ mod benchmarks {
         }
 
         // Check that blocks considered NOT full is incremented by 1.
-        let not_full_blocks_count = NotFullBlocksCount::<T>::get();
+        let past_blocks_status = PastBlocksStatus::<T>::get();
+        let not_full_blocks_count = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count() as u32;
         assert_eq!(
             not_full_blocks_count,
-            min_not_full_blocks_to_spam + One::one()
+            min_not_full_blocks_to_spam.saturating_add(1)
         );
 
         // Check that chain is considered to be not spammed.
@@ -477,7 +501,7 @@ mod benchmarks {
     fn on_finalize() -> Result<(), BenchmarkError> {
         // Set current block to be one block beyond `BlockFullnessPeriod`, so that the removal of old
         // blocks' weight is executed.
-        let current_block = T::BlockFullnessPeriod::get() + One::one();
+        let current_block: BlockNumberFor<T> = (T::BlockFullnessPeriod::get() + 1).into();
         frame_system::Pallet::<T>::set_block_number(current_block);
 
         // Set the weight used in block `current_block` - (`BlockFullnessPeriod` + 1).
@@ -486,7 +510,8 @@ mod benchmarks {
             .get(DispatchClass::Normal)
             .max_total
             .unwrap_or(weights.max_block);
-        let block_to_remove_weight = current_block - T::BlockFullnessPeriod::get() - One::one();
+        let block_to_remove_weight =
+            current_block - T::BlockFullnessPeriod::get().into() - One::one();
         PastBlocksWeight::<T>::insert(block_to_remove_weight, max_weight_for_class);
 
         // Set the current block's weight.
