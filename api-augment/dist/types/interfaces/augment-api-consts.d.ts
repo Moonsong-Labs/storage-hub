@@ -62,6 +62,11 @@ declare module "@polkadot/api-base/types/consts" {
     };
     fileSystem: {
       /**
+       * Base deposit held from the User when creating a new storage request. The actual deposit held is this amount
+       * plus the amount required to pay for all BSP's `bsp_volunteer` extrinsic.
+       **/
+      baseStorageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;
+      /**
        * Basic security replication target for a new storage request.
        *
        * This should be high enough so that it gives users a ~1% chance of their file
@@ -145,10 +150,6 @@ declare module "@polkadot/api-base/types/consts" {
        * For more details, see [crate::types::ReplicationTarget].
        **/
       standardReplicationTarget: u32 & AugmentedConst<ApiType>;
-      /**
-       * Deposit held from the User when creating a new storage request
-       **/
-      storageRequestCreationDeposit: u128 & AugmentedConst<ApiType>;
       /**
        * Time-to-live for a storage request.
        **/

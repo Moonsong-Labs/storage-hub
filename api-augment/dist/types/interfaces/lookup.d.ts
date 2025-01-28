@@ -1611,6 +1611,13 @@ declare const _default: {
         amountToReturn: string;
         error: string;
       };
+      FailedToTransferDepositFundsToBsp: {
+        fileKey: string;
+        owner: string;
+        bspId: string;
+        amountToTransfer: string;
+        error: string;
+      };
     };
   };
   /**
@@ -4294,6 +4301,7 @@ declare const _default: {
     bspsRequired: string;
     bspsConfirmed: string;
     bspsVolunteered: string;
+    depositPaid: string;
   };
   /**
    * Lookup458: pallet_file_system::types::StorageRequestBspsMetadata<T>

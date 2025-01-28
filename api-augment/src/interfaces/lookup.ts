@@ -1626,6 +1626,13 @@ export default {
         owner: "AccountId32",
         amountToReturn: "u128",
         error: "SpRuntimeDispatchError"
+      },
+      FailedToTransferDepositFundsToBsp: {
+        fileKey: "H256",
+        owner: "AccountId32",
+        bspId: "H256",
+        amountToTransfer: "u128",
+        error: "SpRuntimeDispatchError"
       }
     }
   },
@@ -4541,7 +4548,8 @@ export default {
     userPeerIds: "Vec<Bytes>",
     bspsRequired: "u32",
     bspsConfirmed: "u32",
-    bspsVolunteered: "u32"
+    bspsVolunteered: "u32",
+    depositPaid: "u128"
   },
   /**
    * Lookup458: pallet_file_system::types::StorageRequestBspsMetadata<T>

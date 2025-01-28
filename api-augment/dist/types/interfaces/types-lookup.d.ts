@@ -2057,6 +2057,14 @@ declare module "@polkadot/types/lookup" {
       readonly amountToReturn: u128;
       readonly error: SpRuntimeDispatchError;
     } & Struct;
+    readonly isFailedToTransferDepositFundsToBsp: boolean;
+    readonly asFailedToTransferDepositFundsToBsp: {
+      readonly fileKey: H256;
+      readonly owner: AccountId32;
+      readonly bspId: H256;
+      readonly amountToTransfer: u128;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -2086,7 +2094,8 @@ declare module "@polkadot/types/lookup" {
       | "FailedToGetMspOfBucket"
       | "FailedToDecreaseMspUsedCapacity"
       | "UsedCapacityShouldBeZero"
-      | "FailedToReleaseStorageRequestCreationDeposit";
+      | "FailedToReleaseStorageRequestCreationDeposit"
+      | "FailedToTransferDepositFundsToBsp";
   }
   /** @name PalletFileSystemRejectedStorageRequestReason (139) */
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
@@ -5535,6 +5544,7 @@ declare module "@polkadot/types/lookup" {
     readonly bspsRequired: u32;
     readonly bspsConfirmed: u32;
     readonly bspsVolunteered: u32;
+    readonly depositPaid: u128;
   }
   /** @name PalletFileSystemStorageRequestBspsMetadata (458) */
   interface PalletFileSystemStorageRequestBspsMetadata extends Struct {
