@@ -32,7 +32,7 @@ mod benchmarks {
         assert_ok,
         traits::{
             fungible::{Mutate, MutateHold},
-            Get, OnPoll,
+            Get, OnFinalize, OnPoll,
         },
         weights::WeightMeter,
         BoundedVec,
@@ -2659,23 +2659,25 @@ mod benchmarks {
     }
 
     fn run_to_block<T: crate::Config + pallet_proofs_dealer::Config>(n: BlockNumberFor<T>) {
+        let mut current_block = frame_system::Pallet::<T>::block_number();
+
+        if n == current_block {
+            return;
+        }
+
         assert!(
             n > frame_system::Pallet::<T>::block_number(),
             "Cannot go back in time"
         );
 
-        while frame_system::Pallet::<T>::block_number() < n {
-            frame_system::Pallet::<T>::set_block_number(
-                frame_system::Pallet::<T>::block_number() + One::one(),
-            );
-            pallet_proofs_dealer::Pallet::<T>::on_poll(
-                frame_system::Pallet::<T>::block_number(),
-                &mut WeightMeter::new(),
-            );
-            Pallet::<T>::on_poll(
-                frame_system::Pallet::<T>::block_number(),
-                &mut WeightMeter::new(),
-            );
+        while current_block < n {
+            pallet_proofs_dealer::Pallet::<T>::on_finalize(current_block);
+
+            frame_system::Pallet::<T>::set_block_number(current_block + One::one());
+            current_block = frame_system::Pallet::<T>::block_number();
+
+            pallet_proofs_dealer::Pallet::<T>::on_poll(current_block, &mut WeightMeter::new());
+            Pallet::<T>::on_poll(current_block, &mut WeightMeter::new());
         }
     }
 
