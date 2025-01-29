@@ -9,10 +9,10 @@ import {
   ShConsts,
   describeMspNet,
   shUser,
-  sleep,
   type EnrichedBspApi,
   mspTwoKey,
-  createSqlClient
+  createSqlClient,
+  waitFor
 } from "../../../util";
 import { onboardMsp } from "../../../util/bspNet/docker";
 import Docker from "dockerode";
@@ -144,7 +144,14 @@ describeMspNet(
 
       // Allow time for the MSP to receive and store the files from the user
       // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(3000);
+      await waitFor({
+        lambda: async () => {
+          const forestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+          return forestRoot !== null;
+        },
+        iterations: 20, // 2 seconds total
+        delay: 100
+      });
 
       // Check if the MSP received the files.
       for (const e of matchedEvents) {
@@ -177,7 +184,14 @@ describeMspNet(
 
       // Give time for the MSP to update the local forest root.
       // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(1000);
+      await waitFor({
+        lambda: async () => {
+          const forestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+          return forestRoot !== null;
+        },
+        iterations: 20, // 2 seconds total
+        delay: 100
+      });
 
       // Check that the local forest root is updated, and matches th on-chain root.
       const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
@@ -221,7 +235,14 @@ describeMspNet(
 
       // Give time for the MSP to update the local forest root.
       // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(1000);
+      await waitFor({
+        lambda: async () => {
+          const forestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+          return forestRoot !== null;
+        },
+        iterations: 20, // 2 seconds total
+        delay: 100
+      });
 
       // Check that the local forest root is updated, and matches th on-chain root.
       const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
@@ -266,7 +287,14 @@ describeMspNet(
 
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
       for (let i = 0; i < 5; i++) {
-        await sleep(500);
+        await waitFor({
+          lambda: async () => {
+            const forestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+            return forestRoot !== null;
+          },
+          iterations: 20, // 2 seconds total
+          delay: 100
+        });
         const block = await userApi.block.seal();
 
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
