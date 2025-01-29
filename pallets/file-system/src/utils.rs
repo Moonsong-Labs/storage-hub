@@ -2411,7 +2411,7 @@ where
                     false
                 }
             })
-            .map(|(file_key, storage)| (file_key, storage))
+            .map(|(file_key, metadata)| (file_key, metadata))
             .collect()
     }
 }
