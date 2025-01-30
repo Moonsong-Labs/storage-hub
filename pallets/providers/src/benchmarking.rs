@@ -30,9 +30,13 @@ mod benchmarks {
             tokens::Fortitude,
             Get,
         },
+        weights::WeightMeter,
         BoundedVec,
     };
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
+    use shp_traits::{
+        CommitRevealRandomnessInterface, ProofsDealerInterface, StorageHubTickGetter,
+    };
     use sp_runtime::traits::{Bounded, Hash, Zero};
     use sp_std::vec;
 
@@ -1956,6 +1960,297 @@ mod benchmarks {
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
         _(RawOrigin::Signed(user_account.clone()));
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn process_expired_provider_top_up_bsp() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        let initial_capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the BSP
+        Pallet::<T>::request_bsp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            initial_capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
+
+        // Verify that the event of the BSP requesting to sign up was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: initial_capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the BSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
+
+        // Verify that the BSP is now in the providers' storage
+        let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id);
+        assert!(bsp.is_some());
+
+        // Initialise the BSP's cycles so they have to be stopped
+        <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::initialise_challenge_cycle(
+            &bsp_id,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to initialise challenge cycle."))?;
+        <<T as crate::Config>::CrRandomness as CommitRevealRandomnessInterface>::initialise_randomness_cycle(
+			&bsp_id
+		)
+		.map_err(|_| BenchmarkError::Stop("Failed to initialise randomness cycke"))?;
+
+        // Get the current tick of Storage Hub
+        let current_tick =
+            <<T as crate::Config>::StorageHubTickGetter as StorageHubTickGetter>::get_current_tick(
+            );
+
+        // Add the BSP to the AwaitingTopUpFromProviders storage with the current tick as the end of the grace period
+        AwaitingTopUpFromProviders::<T>::insert(
+            StorageProviderId::BackupStorageProvider(bsp_id),
+            TopUpMetadata {
+                started_at: Zero::zero(),
+                end_block_grace_period: current_tick,
+            },
+        );
+
+        // Get the current deposit of the BSP to be a storage provider
+        let provider_stake_before_call = <T as pallet::Config>::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        );
+        assert!(provider_stake_before_call > Zero::zero());
+
+        // Get the balance of the treasury before the call
+        let treasury_account = <T as pallet::Config>::Treasury::get();
+        let treasury_balance_before_call =
+            <T as pallet::Config>::NativeBalance::balance(&treasury_account);
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[block]
+        {
+            Pallet::<T>::process_expired_provider_top_up(
+                StorageProviderId::BackupStorageProvider(bsp_id),
+                &mut WeightMeter::new(),
+            );
+        }
+
+        /*********** Post-benchmark checks: ***********/
+
+        // Verify that the event of the BSP being marked as insolvent was emitted
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::ProviderInsolvent {
+            provider_id: bsp_id,
+        });
+        frame_system::Pallet::<T>::assert_has_event(expected_event.into());
+
+        // Verify that the BSP no longer has a deposit to be a storage provider
+        let provider_stake_after_call = <T as pallet::Config>::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        );
+        assert_eq!(provider_stake_after_call, Zero::zero());
+
+        // Verify that the treasury account received the deposit of the BSP
+        let treasury_balance_after_call =
+            <T as pallet::Config>::NativeBalance::balance(&treasury_account);
+        assert_eq!(
+            treasury_balance_after_call,
+            treasury_balance_before_call + provider_stake_before_call
+        );
+
+        // Verify that the BSP was added to the InsolventProviders storage
+        assert!(InsolventProviders::<T>::contains_key(
+            &StorageProviderId::BackupStorageProvider(bsp_id)
+        ));
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn process_expired_provider_top_up_msp() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the MSP to register
+        let capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let value_prop_price_per_unit_of_data_per_block = BalanceOf::<T>::max_value();
+        let commitment: BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize> = vec![
+                1;
+                <T as crate::Config>::MaxCommitmentSize::get()
+                    .try_into()
+                    .unwrap()
+            ]
+        .try_into()
+        .unwrap();
+        let value_prop_max_data_limit = StorageDataUnit::<T>::max_value();
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the MSP
+        Pallet::<T>::request_msp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            capacity.into(),
+            multiaddresses.clone(),
+            value_prop_price_per_unit_of_data_per_block.into(),
+            commitment.clone(),
+            value_prop_max_data_limit.into(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request MSP sign up."))?;
+
+        // Verify that the event of the MSP requesting to sign up was emitted
+        let msp_request_sign_up_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(msp_request_sign_up_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the MSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm MSP sign up."))?;
+
+        // Verify that the MSP is now in the providers' storage
+        let msp_id = AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap();
+        let msp = MainStorageProviders::<T>::get(&msp_id);
+        assert!(msp.is_some());
+
+        // Get the current tick of Storage Hub
+        let current_tick =
+            <<T as crate::Config>::StorageHubTickGetter as StorageHubTickGetter>::get_current_tick(
+            );
+
+        // Add the MSP to the AwaitingTopUpFromProviders storage with the current tick as the end of the grace period
+        AwaitingTopUpFromProviders::<T>::insert(
+            StorageProviderId::MainStorageProvider(msp_id),
+            TopUpMetadata {
+                started_at: Zero::zero(),
+                end_block_grace_period: current_tick,
+            },
+        );
+
+        // Get the current deposit of the MSP to be a storage provider
+        let provider_stake_before_call = <T as pallet::Config>::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        );
+        assert!(provider_stake_before_call > Zero::zero());
+
+        // Get the balance of the treasury before the call
+        let treasury_account = <T as pallet::Config>::Treasury::get();
+        let treasury_balance_before_call =
+            <T as pallet::Config>::NativeBalance::balance(&treasury_account);
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[block]
+        {
+            Pallet::<T>::process_expired_provider_top_up(
+                StorageProviderId::MainStorageProvider(msp_id),
+                &mut WeightMeter::new(),
+            );
+        }
+
+        /*********** Post-benchmark checks: ***********/
+
+        // Verify that the event of the BSP being marked as insolvent was emitted
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::ProviderInsolvent {
+            provider_id: msp_id,
+        });
+        frame_system::Pallet::<T>::assert_has_event(expected_event.into());
+
+        // Verify that the MSP no longer has a deposit to be a storage provider
+        let provider_stake_after_call = <T as pallet::Config>::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        );
+        assert_eq!(provider_stake_after_call, Zero::zero());
+
+        // Verify that the treasury account received the deposit of the MSP
+        let treasury_balance_after_call =
+            <T as pallet::Config>::NativeBalance::balance(&treasury_account);
+        assert_eq!(
+            treasury_balance_after_call,
+            treasury_balance_before_call + provider_stake_before_call
+        );
+
+        // Verify that the MSP was added to the InsolventProviders storage
+        assert!(InsolventProviders::<T>::contains_key(
+            &StorageProviderId::MainStorageProvider(msp_id)
+        ));
 
         Ok(())
     }
