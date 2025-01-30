@@ -626,6 +626,16 @@ pub mod pallet {
             error: DispatchError,
         },
 
+        /// Event emitted when there was an inconsistency error and the provider was found in ProviderTopUpExpirations
+        /// for a tick that wasn't actually when its top up expired, and when trying to insert it with the actual
+        /// expiration tick in ProviderTopUpExpirations the append failed.
+        ///
+        /// The result of this is that
+        FailedToInsertProviderTopUpExpiration {
+            provider_id: ProviderIdFor<T>,
+            expiration_tick: StorageHubTickNumber<T>,
+        },
+
         /// Event emitted when a provider has been marked as insolvent.
         ///
         /// This happens when the provider hasn't topped up their deposit within the grace period after being slashed

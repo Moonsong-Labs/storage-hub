@@ -25,7 +25,7 @@ pub struct TopUpMetadata<T: Config> {
     /// The Storage Hub tick number at which the provider will be marked as insolvent.
     ///
     /// It is the tick number at which the provider will be marked as insolvent after processing it from the [`ProviderTopUpExpirations`](crate::ProviderTopUpExpirations) storage.
-    pub end_block_grace_period: StorageHubTickNumber<T>,
+    pub end_tick_grace_period: StorageHubTickNumber<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
