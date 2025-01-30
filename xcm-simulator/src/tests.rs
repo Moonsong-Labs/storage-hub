@@ -1166,17 +1166,14 @@ mod providers {
 
 mod users {
 
-    use crate::sh_sibling_account_account_id;
-    use crate::CHARLIE;
-    use crate::SH_PARA_ID;
-    use pallet_file_system::types::MaxFilePathSize;
-    use pallet_file_system::types::MaxNumberOfPeerIds;
-    use pallet_file_system::types::MaxPeerIdSize;
-    use pallet_file_system::types::PendingFileDeletionRequest;
+    use crate::{sh_sibling_account_account_id, CHARLIE, SH_PARA_ID};
+    use pallet_file_system::types::{
+        FileKeyWithProof, MaxFilePathSize, MaxNumberOfPeerIds, MaxPeerIdSize,
+        PendingFileDeletionRequest, ReplicationTarget,
+    };
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
-    use storagehub::configs::BucketNameLimit;
-    use storagehub::configs::SpMinDeposit;
+    use storagehub::configs::{BucketNameLimit, SpMinDeposit};
 
     use super::*;
 
@@ -1315,7 +1312,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: None,
+                    replication_target: ReplicationTarget::Standard,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1348,9 +1345,18 @@ mod users {
                     .is_some()
             );
 
-            // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            // In the config we set to reach the maximum threshold after 1 block
-            sh_run_to_block(storagehub::System::block_number() + 1);
+            // Calculate in how many ticks Bob can volunteer for the file
+            let current_tick = storagehub::ProofsDealer::get_current_tick();
+            let tick_when_bob_can_volunteer =
+                storagehub::FileSystem::query_earliest_file_volunteer_tick(bob_bsp_id, file_key)
+                    .unwrap();
+            if tick_when_bob_can_volunteer > current_tick {
+                let ticks_to_advance = tick_when_bob_can_volunteer - current_tick + 1;
+                let current_block = storagehub::System::block_number();
+
+                // Advance enough blocks to make sure Bob can volunteer according to the threshold
+                sh_run_to_block(current_block + ticks_to_advance);
+            }
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(
@@ -1360,16 +1366,16 @@ mod users {
 
             // And confirm storing the file
             let mut vec_of_key_proofs: BoundedVec<
-                (
-                    pallet_file_system::types::MerkleHash<storagehub::Runtime>,
-                    <storagehub::ProofsDealer as shp_traits::ProofsDealerInterface>::KeyProof,
-                ),
+                FileKeyWithProof<storagehub::Runtime>,
                 MaxBatchConfirmStorageRequests,
             > = BoundedVec::new();
             let simulated_proof: CompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
             };
-            vec_of_key_proofs.force_push((file_key.clone(), simulated_proof.clone()));
+            vec_of_key_proofs.force_push(FileKeyWithProof {
+                file_key: file_key.clone(),
+                proof: simulated_proof.clone(),
+            });
             assert_ok!(storagehub::FileSystem::bsp_confirm_storing(
                 storagehub::RuntimeOrigin::signed(BOB),
                 simulated_proof.clone(),
@@ -1423,6 +1429,7 @@ mod users {
                 .len(),
                 1
             );
+            let file_deletion_request_deposit = <storagehub::Runtime as pallet_file_system::Config>::FileDeletionRequestDeposit::get();
             let mut file_deletion_requests_vec: BoundedVec<
                 PendingFileDeletionRequest<storagehub::Runtime>,
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
@@ -1432,6 +1439,7 @@ mod users {
                 file_key: file_key.clone(),
                 file_size: size,
                 bucket_id: bucket_id.clone(),
+                deposit_paid_for_creation: file_deletion_request_deposit,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(
@@ -1687,7 +1695,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: None,
+                    replication_target: ReplicationTarget::Standard,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1731,9 +1739,18 @@ mod users {
                     .is_some()
             );
 
-            // Advance enough blocks to make sure Bob can volunteer according to the threshold
-            // In the config we set to reach the maximum threshold after 1 block
-            sh_run_to_block(storagehub::System::block_number() + 1);
+            // Calculate in how many ticks Bob can volunteer for the file
+            let current_tick = storagehub::ProofsDealer::get_current_tick();
+            let tick_when_bob_can_volunteer =
+                storagehub::FileSystem::query_earliest_file_volunteer_tick(bob_bsp_id, file_key)
+                    .unwrap();
+            if tick_when_bob_can_volunteer > current_tick {
+                let ticks_to_advance = tick_when_bob_can_volunteer - current_tick + 1;
+                let current_block = storagehub::System::block_number();
+
+                // Advance enough blocks to make sure Bob can volunteer according to the threshold
+                sh_run_to_block(current_block + ticks_to_advance);
+            }
 
             // Volunteer Bob
             assert_ok!(storagehub::FileSystem::bsp_volunteer(
@@ -1743,16 +1760,16 @@ mod users {
 
             // And confirm storing the file
             let mut vec_of_key_proofs: BoundedVec<
-                (
-                    pallet_file_system::types::MerkleHash<storagehub::Runtime>,
-                    <storagehub::ProofsDealer as shp_traits::ProofsDealerInterface>::KeyProof,
-                ),
+                FileKeyWithProof<storagehub::Runtime>,
                 MaxBatchConfirmStorageRequests,
             > = BoundedVec::new();
             let simulated_proof: CompactProof = CompactProof {
                 encoded_nodes: vec![[1u8; 32].to_vec()],
             };
-            vec_of_key_proofs.force_push((file_key.clone(), simulated_proof.clone()));
+            vec_of_key_proofs.force_push(FileKeyWithProof {
+                file_key: file_key.clone(),
+                proof: simulated_proof.clone(),
+            });
             assert_ok!(storagehub::FileSystem::bsp_confirm_storing(
                 storagehub::RuntimeOrigin::signed(BOB),
                 simulated_proof.clone(),
@@ -1817,6 +1834,8 @@ mod users {
                 .len(),
                 1
             );
+            let file_deletion_request_deposit = <storagehub::Runtime as pallet_file_system::Config>::FileDeletionRequestDeposit::get();
+
             let mut file_deletion_requests_vec: BoundedVec<
                 PendingFileDeletionRequest<storagehub::Runtime>,
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
@@ -1826,6 +1845,7 @@ mod users {
                 file_key: file_key.clone(),
                 file_size: size,
                 bucket_id: bucket_id.clone(),
+                deposit_paid_for_creation: file_deletion_request_deposit,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(

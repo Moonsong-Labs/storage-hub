@@ -7,14 +7,17 @@
 
 use std::sync::Arc;
 
+use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
+use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 use shc_common::types::{
-    BlockNumber, CustomChallenge, ForestLeaf, ProofsDealerProviderId, RandomnessOutput,
+    BackupStorageProviderId, BlockNumber, ChunkId, CustomChallenge, ForestLeaf,
+    MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
@@ -56,13 +59,20 @@ where
     C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
     C::Api: BlockBuilder<Block>,
     C::Api: ProofsDealerRuntimeApi<
-        Block,
-        ProofsDealerProviderId,
-        BlockNumber,
-        ForestLeaf,
-        RandomnessOutput,
-        CustomChallenge,
-    >,
+            Block,
+            ProofsDealerProviderId,
+            BlockNumber,
+            ForestLeaf,
+            RandomnessOutput,
+            CustomChallenge,
+        > + FileSystemRuntimeApi<
+            Block,
+            BackupStorageProviderId,
+            MainStorageProviderId,
+            H256,
+            BlockNumber,
+            ChunkId,
+        >,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
     FSH: ForestStorageHandler + Send + Sync + 'static,
@@ -92,6 +102,9 @@ where
             ManualSeal::new(command_sink).into_rpc(),
         )?;
     };
+
+    // Deny unsafe RPCs.
+    io.extensions_mut().insert(DenyUnsafe::Yes);
 
     Ok(io)
 }

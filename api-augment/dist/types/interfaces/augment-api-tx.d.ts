@@ -13,6 +13,8 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
+  PalletFileSystemFileKeyWithProof,
+  PalletFileSystemReplicationTarget,
   PalletFileSystemStorageRequestMspBucketResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
@@ -26,7 +28,6 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
-  ShpFileKeyVerifierFileKeyProof,
   SpRuntimeMultiSignature,
   SpTrieStorageProofCompactProof,
   SpWeightsWeightV2Weight,
@@ -524,21 +525,18 @@ declare module "@polkadot/api-base/types/submittable" {
             | string
             | Uint8Array,
           fileKeysAndProofs:
-            | Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>
-            | [
-                H256 | string | Uint8Array,
-                (
-                  | ShpFileKeyVerifierFileKeyProof
-                  | {
-                      fileMetadata?: any;
-                      proof?: any;
-                    }
-                  | string
-                  | Uint8Array
-                )
-              ][]
+            | Vec<PalletFileSystemFileKeyWithProof>
+            | (
+                | PalletFileSystemFileKeyWithProof
+                | {
+                    fileKey?: any;
+                    proof?: any;
+                  }
+                | string
+                | Uint8Array
+              )[]
         ) => SubmittableExtrinsic<ApiType>,
-        [SpTrieStorageProofCompactProof, Vec<ITuple<[H256, ShpFileKeyVerifierFileKeyProof]>>]
+        [SpTrieStorageProofCompactProof, Vec<PalletFileSystemFileKeyWithProof>]
       >;
       /**
        * Executed by a BSP to request to stop storing a file.
@@ -640,9 +638,30 @@ declare module "@polkadot/api-base/types/submittable" {
           size: u64 | AnyNumber | Uint8Array,
           mspId: H256 | string | Uint8Array,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber
+          replicationTarget:
+            | PalletFileSystemReplicationTarget
+            | {
+                Basic: any;
+              }
+            | {
+                Standard: any;
+              }
+            | {
+                HighSecurity: any;
+              }
+            | {
+                SuperHighSecurity: any;
+              }
+            | {
+                UltraHighSecurity: any;
+              }
+            | {
+                Custom: any;
+              }
+            | string
+            | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u64, H256, Vec<Bytes>, Option<u32>]
+        [H256, Bytes, H256, u64, H256, Vec<Bytes>, PalletFileSystemReplicationTarget]
       >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (
@@ -717,13 +736,6 @@ declare module "@polkadot/api-base/types/submittable" {
       revokeStorageRequest: AugmentedSubmittable<
         (fileKey: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
-      >;
-      setGlobalParameters: AugmentedSubmittable<
-        (
-          newMaxReplicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber,
-          tickRangeToMaximumThreshold: Option<u32> | null | Uint8Array | u32 | AnyNumber
-        ) => SubmittableExtrinsic<ApiType>,
-        [Option<u32>, Option<u32>]
       >;
       /**
        * Executed by a SP to stop storing a file from an insolvent user.
@@ -3512,6 +3524,9 @@ declare module "@polkadot/api-base/types/submittable" {
        * to automate the process.
        *
        * Emits `MspDeleted` or `BspDeleted` event when successful.
+       *
+       * This operation is free if successful to encourage the community to delete insolvent providers,
+       * debloating the state.
        **/
       deleteProvider: AugmentedSubmittable<
         (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
@@ -3712,18 +3727,27 @@ declare module "@polkadot/api-base/types/submittable" {
        * A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
        * In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
        *
-       * This is a free operation.
+       * This is a free operation to incentivise the community to slash misbehaving providers.
        **/
       slash: AugmentedSubmittable<
         (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
       /**
+       * BSP operation to stop all of your automatic cycles.
+       *
+       * This includes:
+       *
+       * - Commit reveal randomness cycle
+       * - Proof challenge cycle
+       *
+       * If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
+       **/
+      stopAllCycles: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      /**
        * Dispatchable extrinsic to top-up the deposit of a Storage Provider.
        *
        * The dispatch origin for this call must be signed.
-       *
-       * This is a free transaction if the user successfully tops up their deposit.
        **/
       topUpDeposit: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**

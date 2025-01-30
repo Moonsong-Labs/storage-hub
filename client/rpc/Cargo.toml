@@ -26,8 +26,10 @@ sp-core = { workspace = true }
 sp-runtime = { workspace = true }
 sp-trie = { workspace = true }
 sp-keystore = { workspace = true }
+sc-rpc-api = { workspace = true }
 
 # Local
+pallet-file-system-runtime-api = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }

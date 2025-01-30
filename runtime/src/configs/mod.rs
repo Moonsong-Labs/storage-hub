@@ -493,6 +493,7 @@ impl pallet_storage_providers::Config for Runtime {
         { shp_constants::FILE_SIZE_TO_CHALLENGES },
     >;
     type NativeBalance = Balances;
+    type CrRandomness = MockCrRandomness;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
@@ -795,10 +796,11 @@ impl Get<u32> for MaxSlashableProvidersPerTick {
 
 /****** File System pallet ******/
 type ThresholdType = u32;
+pub type ReplicationTargetType = u32;
 
 parameter_types! {
-    pub const MinWaitForStopStoring: BlockNumber = 10;
     pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const FileDeletionRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
@@ -814,7 +816,7 @@ impl pallet_file_system::Config for Runtime {
     type UpdateStoragePrice = MostlyStablePriceIndexUpdater<Runtime>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
-    type ReplicationTargetType = u32;
+    type ReplicationTargetType = ReplicationTargetType;
     type ThresholdType = ThresholdType;
     type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
@@ -832,16 +834,29 @@ impl pallet_file_system::Config for Runtime {
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = ConstU32<5>;
     type MaxDataServerMultiAddresses = ConstU32<10>;
-    type MaxExpiredItemsInBlock = ConstU32<100>;
-    type StorageRequestTtl = ConstU32<40>;
-    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
+    type MaxExpiredItemsInTick = ConstU32<100>;
+    type StorageRequestTtl = runtime_params::dynamic_params::runtime_config::StorageRequestTtl;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
-    type MinWaitForStopStoring = MinWaitForStopStoring;
+    type MinWaitForStopStoring =
+        runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
-    type DefaultReplicationTarget =
-        runtime_params::dynamic_params::runtime_config::DefaultReplicationTarget;
+    type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
+    type BasicReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::BasicReplicationTarget;
+    type StandardReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::StandardReplicationTarget;
+    type HighSecurityReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::HighSecurityReplicationTarget;
+    type SuperHighSecurityReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::SuperHighSecurityReplicationTarget;
+    type UltraHighSecurityReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget;
+    type MaxReplicationTarget =
+        runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
+    type TickRangeToMaximumThreshold =
+        runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
 }
 
 impl MostlyStablePriceIndexUpdaterConfig for Runtime {

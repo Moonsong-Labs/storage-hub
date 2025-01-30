@@ -1,25 +1,29 @@
-use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, sync::Arc};
+use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, str::FromStr, sync::Arc};
 
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
     types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
+    Extensions,
 };
 use log::{debug, error, info};
+use sc_rpc_api::check_if_safe;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
+use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ChunkId, CustomChallenge, FileMetadata, ForestLeaf, HashT, KeyProof,
-        KeyProofs, ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
-        StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE, FILE_CHUNK_SIZE,
+        BackupStorageProviderId, BlockNumber, ChunkId, CustomChallenge, FileMetadata, ForestLeaf,
+        HashT, KeyProof, KeyProofs, MainStorageProviderId, ProofsDealerProviderId, Proven,
+        RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
+        FILE_CHUNK_SIZE,
     },
 };
-use shc_file_manager::traits::{FileDataTrie, FileStorage, FileStorageError};
+use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -99,7 +103,6 @@ pub enum GetFileFromFileStorageResult {
 /// Used by the `rpc` macro from `jsonrpsee`
 /// to generate the trait that is actually going to be implemented.
 #[rpc(server, namespace = "storagehubclient")]
-#[async_trait]
 pub trait StorageHubClientApi {
     #[method(name = "loadFileInStorage")]
     async fn load_file_in_storage(
@@ -160,23 +163,42 @@ pub trait StorageHubClientApi {
         checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>>;
 
-    #[method(name = "insertBcsvKeys")]
+    // Note: this RPC method returns a Vec<u8> because the KeyVerifier Proof type is not serializable.
+    // so we SCALE-encode it. The user of this RPC will have to decode it.
+    #[method(name = "generateFileKeyProofBspConfirm")]
+    async fn generate_file_key_proof_bsp_confirm(
+        &self,
+        bsp_id: BackupStorageProviderId,
+        file_key: H256,
+    ) -> RpcResult<Vec<u8>>;
+
+    // Note: this RPC method returns a Vec<u8> because the KeyVerifier Proof type is not serializable.
+    // so we SCALE-encode it. The user of this RPC will have to decode it.
+    #[method(name = "generateFileKeyProofMspAccept")]
+    async fn generate_file_key_proof_msp_accept(
+        &self,
+        msp_id: MainStorageProviderId,
+        file_key: H256,
+    ) -> RpcResult<Vec<u8>>;
+
+    #[method(name = "insertBcsvKeys", with_extensions)]
     async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String>;
 
-    #[method(name = "removeBcsvKeys")]
+    #[method(name = "removeBcsvKeys", with_extensions)]
     async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()>;
 
     // Note: This RPC method allow BSP administrator to add a file to the exclude list (and later
     // buckets, users or file fingerprint). This method is required to call before deleting a file to
     // avoid re-uploading a file that has just been deleted.
-    #[method(name = "addToExcludeList")]
-    async fn add_to_exclude_list(&self, file_key: H256) -> RpcResult<()>;
+    #[method(name = "addToExcludeList", with_extensions)]
+    async fn add_to_exclude_list(&self, file_key: H256, exclude_type: String) -> RpcResult<()>;
 
     // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
     // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
     // list ban users, bucket or even file fingerprint.
-    #[method(name = "removeFromExcludeList")]
-    async fn remove_from_exclude_list(&self, file_key: H256) -> RpcResult<()>;
+    #[method(name = "removeFromExcludeList", with_extensions)]
+    async fn remove_from_exclude_list(&self, file_key: H256, exclude_type: String)
+        -> RpcResult<()>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -217,13 +239,20 @@ where
     Block: BlockT,
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
-        Block,
-        ProofsDealerProviderId,
-        BlockNumber,
-        ForestLeaf,
-        RandomnessOutput,
-        CustomChallenge,
-    >,
+            Block,
+            ProofsDealerProviderId,
+            BlockNumber,
+            ForestLeaf,
+            RandomnessOutput,
+            CustomChallenge,
+        > + FileSystemRuntimeApi<
+            Block,
+            BackupStorageProviderId,
+            MainStorageProviderId,
+            H256,
+            BlockNumber,
+            ChunkId,
+        >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
 {
@@ -596,8 +625,9 @@ where
                     self.client.clone(),
                     self.file_storage.clone(),
                     *file_key,
-                    seed,
                     provider_id,
+                    Some(seed),
+                    None,
                     None,
                 )
                 .await?;
@@ -615,11 +645,71 @@ where
         Ok(proof.encode())
     }
 
+    async fn generate_file_key_proof_bsp_confirm(
+        &self,
+        bsp_id: BackupStorageProviderId,
+        file_key: H256,
+    ) -> RpcResult<Vec<u8>> {
+        // Getting Runtime APIs
+        let api = self.client.runtime_api();
+        let at_hash = self.client.info().best_hash;
+
+        // Generate chunk IDs to prove to confirm the file
+        let chunks_to_prove: Vec<ChunkId> = api
+            .query_bsp_confirm_chunks_to_prove_for_file(at_hash, bsp_id.into(), file_key)
+            .unwrap()
+            .unwrap();
+
+        let key_proof = generate_key_proof(
+            self.client.clone(),
+            self.file_storage.clone(),
+            file_key,
+            bsp_id,
+            None,
+            None,
+            Some(chunks_to_prove),
+        )
+        .await?;
+
+        Ok(key_proof.proof.encode())
+    }
+
+    async fn generate_file_key_proof_msp_accept(
+        &self,
+        msp_id: MainStorageProviderId,
+        file_key: H256,
+    ) -> RpcResult<Vec<u8>> {
+        // Getting Runtime APIs
+        let api = self.client.runtime_api();
+        let at_hash = self.client.info().best_hash;
+
+        // Generate chunk IDs to prove to accept the file
+        let chunks_to_prove: Vec<ChunkId> = api
+            .query_msp_confirm_chunks_to_prove_for_file(at_hash, msp_id.into(), file_key)
+            .unwrap()
+            .unwrap();
+
+        let key_proof = generate_key_proof(
+            self.client.clone(),
+            self.file_storage.clone(),
+            file_key,
+            msp_id,
+            None,
+            None,
+            Some(chunks_to_prove),
+        )
+        .await?;
+
+        Ok(key_proof.proof.encode())
+    }
+
     // If a seed is provided, we manually generate and persist it into the file system.
     // In the case a seed is not provided, we delegate generation and insertion to `sr25519_generate_new`, which
     // internally uses the block number as a seed.
     // See https://paritytech.github.io/polkadot-sdk/master/sc_keystore/struct.LocalKeystore.html#method.sr25519_generate_new
-    async fn insert_bcsv_keys(&self, seed: Option<String>) -> RpcResult<String> {
+    async fn insert_bcsv_keys(&self, ext: &Extensions, seed: Option<String>) -> RpcResult<String> {
+        check_if_safe(ext)?;
+
         let seed = seed.as_deref();
 
         let new_pub_key = match seed {
@@ -642,7 +732,9 @@ where
     }
 
     // Deletes all files with keys of type BCSV from the Keystore.
-    async fn remove_bcsv_keys(&self, keystore_path: String) -> RpcResult<()> {
+    async fn remove_bcsv_keys(&self, ext: &Extensions, keystore_path: String) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
         let pub_keys = self.keystore.keys(BCSV_KEY_TYPE).map_err(into_rpc_error)?;
         let key_path = PathBuf::from(keystore_path);
 
@@ -661,10 +753,19 @@ where
         Ok(())
     }
 
-    async fn add_to_exclude_list(&self, file_key: H256) -> RpcResult<()> {
+    async fn add_to_exclude_list(
+        &self,
+        ext: &Extensions,
+        file_key: H256,
+        exclude_type: String,
+    ) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
+        let et = ExcludeType::from_str(&exclude_type).map_err(into_rpc_error)?;
+
         let mut write_file_storage = self.file_storage.write().await;
         write_file_storage
-            .add_file_to_exclude_list(file_key)
+            .add_to_exclude_list(file_key, et)
             .map_err(into_rpc_error)?;
 
         drop(write_file_storage);
@@ -672,10 +773,19 @@ where
         Ok(())
     }
 
-    async fn remove_from_exclude_list(&self, file_key: H256) -> RpcResult<()> {
+    async fn remove_from_exclude_list(
+        &self,
+        ext: &Extensions,
+        file_key: H256,
+        exclude_type: String,
+    ) -> RpcResult<()> {
+        check_if_safe(ext)?;
+
+        let et = ExcludeType::from_str(&exclude_type).map_err(into_rpc_error)?;
+
         let mut write_file_storage = self.file_storage.write().await;
         write_file_storage
-            .remove_file_from_exclude_list(&file_key)
+            .remove_from_exclude_list(&file_key, et)
             .map_err(into_rpc_error)?;
 
         drop(write_file_storage);
@@ -706,9 +816,10 @@ async fn generate_key_proof<FL, C, Block>(
     client: Arc<C>,
     file_storage: Arc<RwLock<FL>>,
     file_key: H256,
-    seed: RandomnessOutput,
     provider_id: ProofsDealerProviderId,
+    seed: Option<RandomnessOutput>,
     at: Option<Block::Hash>,
+    chunks_to_prove: Option<Vec<ChunkId>>,
 ) -> RpcResult<KeyProof>
 where
     Block: BlockT,
@@ -739,17 +850,28 @@ where
     // Calculate the number of challenges for this file.
     let challenge_count = metadata.chunks_to_check();
 
-    // Generate the challenges for this file.
-    let file_key_challenges = api
-        .get_challenges_from_seed(at_hash, &seed, &provider_id, challenge_count)
-        .map_err(|e| into_rpc_error(format!("Failed to generate challenges from seed: {:?}", e)))?;
+    // Get the chunks to prove.
+    let chunks_to_prove = match chunks_to_prove {
+        Some(chunks) => chunks,
+        None => {
+            // Generate the challenges for this file.
+            let seed = seed.ok_or_else(|| {
+                into_rpc_error("Seed is required to generate challenges if chunk IDs are missing")
+            })?;
+            let file_key_challenges = api
+                .get_challenges_from_seed(at_hash, &seed, &provider_id, challenge_count)
+                .map_err(|e| {
+                    into_rpc_error(format!("Failed to generate challenges from seed: {:?}", e))
+                })?;
 
-    // Convert the challenges to chunk IDs.
-    let chunks_count = metadata.chunks_count();
-    let chunks_to_prove = file_key_challenges
-        .iter()
-        .map(|challenge| ChunkId::from_challenge(challenge.as_ref(), chunks_count))
-        .collect::<Vec<_>>();
+            // Convert the challenges to chunk IDs.
+            let chunks_count = metadata.chunks_count();
+            file_key_challenges
+                .iter()
+                .map(|challenge| ChunkId::from_challenge(challenge.as_ref(), chunks_count))
+                .collect::<Vec<_>>()
+        }
+    };
 
     // Construct file key proofs for the challenges.
     let read_file_storage = file_storage.read().await;

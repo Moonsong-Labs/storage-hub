@@ -4,7 +4,7 @@ import {
   addBspContainer,
   describeBspNet,
   DOCKER_IMAGE,
-  sleep,
+  waitFor,
   type EnrichedBspApi
 } from "../../../util";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/bspNet/consts.ts";
@@ -66,8 +66,9 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createUserApi, createApi, i
     });
 
     await it("is peer of other nodes", async () => {
-      // Give some time to nodes to connect between each other
-      await sleep(500);
+      await waitFor({
+        lambda: async () => (await userApi.rpc.system.peers()).length > 0
+      });
       const peers = (await userApi.rpc.system.peers()).map(({ peerId }) => peerId.toString());
       strictEqual(peers.includes(peerId), true, `PeerId ${peerId} not found in ${peers}`);
     });

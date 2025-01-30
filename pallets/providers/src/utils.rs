@@ -309,10 +309,11 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
-        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id)?;
+        // Add the MSP as a privileged provider.
+        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id);
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::MspSignUpSuccess {
+        Self::deposit_event(Event::MspSignUpSuccess {
             who: who.clone(),
             msp_id,
             multiaddresses: sign_up_request.msp_info.multiaddresses.clone(),
@@ -375,7 +376,7 @@ where
         });
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::BspSignUpSuccess {
+        Self::deposit_event(Event::BspSignUpSuccess {
             who: who.clone(),
             bsp_id,
             root: bsp_info.root,
@@ -429,7 +430,7 @@ where
             }
         })?;
 
-        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id)?;
+        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
 
         Ok(msp_id)
     }
@@ -462,6 +463,9 @@ where
                 >= bsp.sign_up_block + T::BspSignUpLockPeriod::get(),
             Error::<T>::SignOffPeriodNotPassed
         );
+
+        // Stop all cycles before deleting the BSP since this function will check if the BSP has default root
+        Self::do_stop_all_cycles(who)?;
 
         // Update the BSPs storage, removing the signer as an BSP
         AccountIdToBackupStorageProviderId::<T>::remove(who);
@@ -875,7 +879,7 @@ where
         let mut final_capacity = new_decreased_capacity;
 
         // Slash amount could be 0, but this is still emitted as a signal for the provider and users to be aware
-        Self::deposit_event(Event::<T>::Slashed {
+        Self::deposit_event(Event::Slashed {
             provider_id: *provider_id,
             amount: actual_slashed,
         });
@@ -919,7 +923,7 @@ where
             // they will not be slashed
             AwaitingTopUpFromProviders::<T>::remove(&typed_provider_id);
 
-            Self::deposit_event(Event::<T>::TopUpFulfilled {
+            Self::deposit_event(Event::TopUpFulfilled {
                 provider_id: *provider_id,
                 amount: held_deposit_difference,
             });
@@ -943,7 +947,7 @@ where
             );
 
             // Signal to the provider that they need to top up their held deposit to match the current used capacity
-            Self::deposit_event(Event::<T>::AwaitingTopUp {
+            Self::deposit_event(Event::AwaitingTopUp {
                 provider_id: *provider_id,
                 top_up_metadata,
             });
@@ -1049,7 +1053,7 @@ where
         AwaitingTopUpFromProviders::<T>::remove(typed_provider_id);
 
         // Signal that the slashed amount has been topped up
-        Self::deposit_event(Event::<T>::TopUpFulfilled {
+        Self::deposit_event(Event::TopUpFulfilled {
             provider_id,
             amount: held_deposit_difference,
         });
@@ -1137,7 +1141,7 @@ where
             MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id);
             MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id);
 
-            Self::deposit_event(Event::<T>::MspDeleted {
+            Self::deposit_event(Event::MspDeleted {
                 provider_id: *provider_id,
             });
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
@@ -1180,10 +1184,35 @@ where
                 *n = n.saturating_sub(bsp.reputation_weight);
             });
 
-            Self::deposit_event(Event::<T>::BspDeleted {
+            Self::deposit_event(Event::BspDeleted {
                 provider_id: *provider_id,
             });
+        } else {
+            // If the provider is not found, return an error
+            return Err(Error::<T>::NotRegistered.into());
         }
+
+        Ok(())
+    }
+
+    pub(crate) fn do_stop_all_cycles(account_id: &T::AccountId) -> DispatchResult {
+        let provider_id = AccountIdToBackupStorageProviderId::<T>::get(account_id)
+            .ok_or(Error::<T>::BspOnlyOperation)?;
+
+        if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+            ensure!(
+                provider.root == T::DefaultMerkleRoot::get(),
+                Error::<T>::CannotStopCycleWithNonDefaultRoot
+            );
+        } else {
+            return Err(Error::<T>::BspOnlyOperation.into());
+        }
+
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&provider_id)?;
+
+        <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::stop_randomness_cycle(
+            &provider_id,
+        )?;
 
         Ok(())
     }
@@ -1788,7 +1817,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            Self::deposit_event(Event::<T>::BucketRootChanged {
+            Self::deposit_event(Event::BucketRootChanged {
                 bucket_id,
                 old_root: bucket.root,
                 new_root,

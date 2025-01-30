@@ -6,13 +6,13 @@ use crate::{
         SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
         ValuePropositionWithId,
     },
-    AwaitingTopUpFromProviders, Error, Event, InsolventProviders, MainStorageProviders,
-    ProviderTopUpExpirations,
+    AwaitingTopUpFromProviders, BackupStorageProviders, Error, Event, InsolventProviders,
+    MainStorageProviders, ProviderTopUpExpirations,
 };
 
 use core::u32;
 use frame_support::traits::fungible::MutateHold;
-use frame_support::{assert_noop, assert_ok, dispatch::Pays, BoundedVec};
+use frame_support::{assert_noop, assert_ok, BoundedVec};
 use frame_support::{
     pallet_prelude::Weight,
     traits::{
@@ -130,7 +130,7 @@ mod sign_up {
 
                     // Check the event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspRequestSignUpSuccess {
+                        Event::MspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount,
@@ -247,7 +247,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
@@ -344,7 +344,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses,
                             capacity: storage_amount,
@@ -461,7 +461,7 @@ mod sign_up {
 
                     // Check that Alice's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspRequestSignUpSuccess {
+                        Event::MspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -471,7 +471,7 @@ mod sign_up {
 
                     // Check that Bob's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspRequestSignUpSuccess {
+                        Event::MspRequestSignUpSuccess {
                             who: bob,
                             multiaddresses,
                             capacity: storage_amount_bob,
@@ -551,9 +551,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel MSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: alice }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: alice }.into());
                 });
             }
         }
@@ -627,7 +625,7 @@ mod sign_up {
 
                     // Check the event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount,
@@ -725,7 +723,7 @@ mod sign_up {
 
                     // Check the event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount,
@@ -755,7 +753,7 @@ mod sign_up {
 
                     // Check that the confirm BSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::BspSignUpSuccess {
+                        Event::BspSignUpSuccess {
                             who: alice,
                             root: DefaultMerkleRoot::get(),
                             multiaddresses,
@@ -830,7 +828,7 @@ mod sign_up {
 
                     // Check the event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount,
@@ -860,7 +858,7 @@ mod sign_up {
 
                     // Check that the confirm BSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::BspSignUpSuccess {
+                        Event::BspSignUpSuccess {
                             who: alice,
                             root: DefaultMerkleRoot::get(),
                             multiaddresses,
@@ -966,7 +964,7 @@ mod sign_up {
 
                     // Check that Alice's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -976,7 +974,7 @@ mod sign_up {
 
                     // Check that Bob's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: bob,
                             multiaddresses,
                             capacity: storage_amount_bob,
@@ -1051,9 +1049,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel BSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: alice }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: alice }.into());
                 });
             }
         }
@@ -1160,7 +1156,7 @@ mod sign_up {
 
                     // Check that Alice's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspRequestSignUpSuccess {
+                        Event::MspRequestSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -1170,7 +1166,7 @@ mod sign_up {
 
                     // Check that Bob's event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspRequestSignUpSuccess {
+                        Event::BspRequestSignUpSuccess {
                             who: bob,
                             multiaddresses,
                             capacity: storage_amount_bob,
@@ -1254,7 +1250,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -1347,7 +1343,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -1373,7 +1369,7 @@ mod sign_up {
 
                     // Check that the confirm BSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::BspSignUpSuccess {
+                        Event::BspSignUpSuccess {
                             who: bob,
                             multiaddresses,
                             root: DefaultMerkleRoot::get(),
@@ -1459,7 +1455,7 @@ mod sign_up {
 
                     // Check that the confirm MSP sign up event was emitted
                     System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
+                        Event::MspSignUpSuccess {
                             who: alice,
                             multiaddresses: multiaddresses.clone(),
                             capacity: storage_amount_alice,
@@ -1484,76 +1480,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel BSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: bob }.into(),
-                    );
-                });
-            }
-
-            #[test]
-            fn confirm_sign_up_is_free_if_successful() {
-                ExtBuilder::build().execute_with(|| {
-                    // Initialize variables:
-                    let mut multiaddresses: BoundedVec<
-                        MultiAddress<Test>,
-                        MaxMultiAddressAmount<Test>,
-                    > = BoundedVec::new();
-                    multiaddresses.force_push(
-                        "/ip4/127.0.0.1/udp/1234"
-                            .as_bytes()
-                            .to_vec()
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
-                    let storage_amount: StorageDataUnit<Test> = 100;
-
-                    // Get the Account Id of Alice
-                    let alice: AccountId = accounts::ALICE.0;
-
-                    // Request sign up of Alice as a Main Storage Provider
-                    assert_ok!(StorageProviders::request_msp_sign_up(
-                        RuntimeOrigin::signed(alice),
-                        storage_amount,
-                        multiaddresses.clone(),
-                        value_prop.price_per_giga_unit_of_data_per_block,
-                        value_prop.commitment.clone(),
-                        value_prop.bucket_data_limit,
-                        alice
-                    ));
-
-                    // Advance enough blocks for randomness to be valid
-                    run_to_block(
-                        frame_system::Pallet::<Test>::block_number()
-                            + BLOCKS_BEFORE_RANDOMNESS_VALID,
-                    );
-
-                    // Confirm the sign up of the account as a Main Storage Provider
-                    let confirm_result = StorageProviders::confirm_sign_up(
-                        RuntimeOrigin::signed(alice),
-                        Some(alice),
-                    );
-                    assert_eq!(confirm_result, Ok(Pays::No.into()));
-
-                    // Check that Alice is now a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider_id(alice);
-                    assert!(alice_sp_id.is_some());
-                    assert!(StorageProviders::is_provider(alice_sp_id.unwrap()));
-
-                    // Check that the confirm MSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::MspSignUpSuccess {
-                            who: alice,
-                            multiaddresses,
-                            capacity: storage_amount,
-                            value_prop: ValuePropositionWithId {
-                                id: value_prop.derive_id(),
-                                value_prop,
-                            },
-                            msp_id: alice_sp_id.unwrap(),
-                        }
-                        .into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: bob }.into());
                 });
             }
 
@@ -1692,9 +1619,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel MSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: alice }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: alice }.into());
 
                     // Cancel the sign up of Bob as a Backup Storage Provider
                     assert_ok!(StorageProviders::cancel_sign_up(RuntimeOrigin::signed(bob)));
@@ -1712,9 +1637,7 @@ mod sign_up {
                         .is_err_and(|err| { matches!(err, Error::<Test>::SignUpNotRequested) }));
 
                     // Check that the cancel BSP sign up event was emitted
-                    System::assert_last_event(
-                        Event::<Test>::SignUpRequestCanceled { who: bob }.into(),
-                    );
+                    System::assert_last_event(Event::SignUpRequestCanceled { who: bob }.into());
                 });
             }
         }
@@ -2049,60 +1972,6 @@ mod sign_up {
         /// This module holds the failure cases for functions that test both Main Storage Providers and Backup Storage Providers
         mod msp_and_bsp {
             use super::*;
-
-            #[test]
-            fn confirm_sign_up_is_not_free_if_it_fails() {
-                ExtBuilder::build().execute_with(|| {
-                    // Initialize variables:
-                    let mut multiaddresses: BoundedVec<
-                        MultiAddress<Test>,
-                        MaxMultiAddressAmount<Test>,
-                    > = BoundedVec::new();
-                    multiaddresses.force_push(
-                        "/ip4/127.0.0.1/udp/1234"
-                            .as_bytes()
-                            .to_vec()
-                            .try_into()
-                            .unwrap(),
-                    );
-                    let value_prop = ValueProposition::<Test>::new(1, bounded_vec![], 10);
-                    let storage_amount: StorageDataUnit<Test> = 100;
-
-                    // Get the Account Id of Alice
-                    let alice: AccountId = accounts::ALICE.0;
-
-                    // Request sign up of Alice as a Main Storage Provider
-                    assert_ok!(StorageProviders::request_msp_sign_up(
-                        RuntimeOrigin::signed(alice),
-                        storage_amount,
-                        multiaddresses.clone(),
-                        value_prop.price_per_giga_unit_of_data_per_block,
-                        value_prop.commitment.clone(),
-                        value_prop.bucket_data_limit,
-                        alice
-                    ));
-
-                    // Advance blocks but not enough for randomness to be valid
-                    run_to_block(
-                        frame_system::Pallet::<Test>::block_number()
-                            + BLOCKS_BEFORE_RANDOMNESS_VALID
-                            - 1,
-                    );
-
-                    // Try to confirm the sign up of the account as a Main Storage Provider
-                    let confirm_result = StorageProviders::confirm_sign_up(
-                        RuntimeOrigin::signed(alice),
-                        Some(alice),
-                    );
-                    assert!(
-                        confirm_result.is_err_and(|result| result.post_info.pays_fee == Pays::Yes)
-                    );
-
-                    // Check that Alice is still not a Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider_id(alice);
-                    assert!(alice_sp_id.is_none());
-                });
-            }
 
             #[test]
             fn confirm_sign_up_fails_if_request_does_not_exist() {
@@ -2498,7 +2367,7 @@ mod sign_off {
 
                     // Check the MSP Sign Off event was emitted
                     System::assert_has_event(
-                        Event::<Test>::MspSignOffSuccess {
+                        Event::MspSignOffSuccess {
                             who: alice,
                             msp_id: alice_msp_id,
                         }
@@ -2567,9 +2436,96 @@ mod sign_off {
                     // Check that the counter of registered BSPs has decreased
                     assert_eq!(StorageProviders::get_bsp_count(), 0);
 
+                    // Verify that the proof challenge cycle has been stopped
+                    assert!(
+                        pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                            &alice_bsp_id
+                        )
+                        .is_none()
+                    );
+
                     // Check the BSP Sign Off event was emitted
                     System::assert_has_event(
-                        Event::<Test>::BspSignOffSuccess {
+                        Event::BspSignOffSuccess {
+                            who: alice,
+                            bsp_id: alice_bsp_id,
+                        }
+                        .into(),
+                    );
+                });
+            }
+
+            #[test]
+            fn bsp_sign_off_stop_cycles_before_works() {
+                ExtBuilder::build().execute_with(|| {
+                    // Register Alice as BSP:
+                    let alice: AccountId = accounts::ALICE.0;
+                    let storage_amount: StorageDataUnit<Test> = 100;
+                    let (deposit_amount, _alice_bsp) =
+                        register_account_as_bsp(alice, storage_amount);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(
+                        NativeBalance::free_balance(&alice),
+                        accounts::ALICE.1 - deposit_amount
+                    );
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        deposit_amount
+                    );
+
+                    // Check the capacity of all the BSPs
+                    assert_eq!(StorageProviders::get_total_bsp_capacity(), storage_amount);
+
+                    // Check the counter of registered BSPs
+                    assert_eq!(StorageProviders::get_bsp_count(), 1);
+
+                    // Get the BSP ID of Alice
+                    let alice_bsp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                    // Advance enough blocks for the BSP to sign off
+                    let bsp_sign_up_lock_period: u64 =
+                        <Test as crate::Config>::BspSignUpLockPeriod::get();
+                    run_to_block(
+                        frame_system::Pallet::<Test>::block_number() + bsp_sign_up_lock_period,
+                    );
+
+                    // Stop all cycles before signing off Alice with the account origin
+                    assert_ok!(StorageProviders::stop_all_cycles(RuntimeOrigin::signed(
+                        alice
+                    )));
+
+                    // Sign off Alice as a Backup Storage Provider
+                    assert_ok!(StorageProviders::bsp_sign_off(RuntimeOrigin::signed(alice)));
+
+                    // Check the new capacity of all BSPs
+                    assert_eq!(StorageProviders::get_total_bsp_capacity(), 0);
+
+                    // Check the new free and held balance of Alice
+                    assert_eq!(NativeBalance::free_balance(&alice), accounts::ALICE.1);
+                    assert_eq!(
+                        NativeBalance::balance_on_hold(&StorageProvidersHoldReason::get(), &alice),
+                        0
+                    );
+
+                    // Check that Alice is not a Backup Storage Provider anymore
+                    let alice_sp_id = StorageProviders::get_provider_id(alice);
+                    assert!(alice_sp_id.is_none());
+
+                    // Check that the counter of registered BSPs has decreased
+                    assert_eq!(StorageProviders::get_bsp_count(), 0);
+
+                    // Verify that the proof challenge cycle has been stopped
+                    assert!(
+                        pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                            &alice_bsp_id
+                        )
+                        .is_none()
+                    );
+
+                    // Check the BSP Sign Off event was emitted
+                    System::assert_has_event(
+                        Event::BspSignOffSuccess {
                             who: alice,
                             bsp_id: alice_bsp_id,
                         }
@@ -2846,7 +2802,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -2917,7 +2873,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -2984,7 +2940,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::MainStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -3071,7 +3027,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -3154,7 +3110,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -3233,7 +3189,7 @@ mod change_capacity {
 
                     // Check that the capacity changed event was emitted
                     System::assert_has_event(
-                        Event::<Test>::CapacityChanged {
+                        Event::CapacityChanged {
                             who: alice,
                             provider_id: StorageProviderId::BackupStorageProvider(alice_sp_id),
                             old_capacity: old_storage_amount,
@@ -5156,7 +5112,7 @@ mod slash_and_top_up {
                     .iter()
                     .rev()
                     .find_map(|event| {
-                        if let RuntimeEvent::StorageProviders(Event::<Test>::Slashed {
+                        if let RuntimeEvent::StorageProviders(Event::Slashed {
                             provider_id,
                             amount,
                         }) = event.event
@@ -5187,7 +5143,7 @@ mod slash_and_top_up {
                         .iter()
                         .rev()
                         .find_map(|event| {
-                            if let RuntimeEvent::StorageProviders(Event::<Test>::TopUpFulfilled {
+                            if let RuntimeEvent::StorageProviders(Event::TopUpFulfilled {
                                 provider_id: _,
                                 amount,
                             }) = event.event
@@ -5236,7 +5192,7 @@ mod slash_and_top_up {
                     .unwrap();
 
                     System::assert_has_event(
-                        Event::<Test>::AwaitingTopUp {
+                        Event::AwaitingTopUp {
                             provider_id: self.provider_id,
                             top_up_metadata: top_up_metadata.clone(),
                         }
@@ -5331,7 +5287,7 @@ mod slash_and_top_up {
                     .iter()
                     .rev()
                     .find_map(|event| {
-                        if let RuntimeEvent::StorageProviders(Event::<Test>::TopUpFulfilled {
+                        if let RuntimeEvent::StorageProviders(Event::TopUpFulfilled {
                             provider_id: _,
                             amount,
                         }) = event.event
@@ -6020,7 +5976,7 @@ mod add_value_prop {
 
                 // Check event is emitted
                 System::assert_last_event(
-                    Event::<Test>::ValuePropAdded {
+                    Event::ValuePropAdded {
                         msp_id,
                         value_prop_id,
                         value_prop: value_prop.clone(),
@@ -6113,7 +6069,7 @@ mod make_value_prop_unavailable {
 
                 // Check event is emitted
                 System::assert_last_event(
-                    Event::<Test>::ValuePropUnavailable {
+                    Event::ValuePropUnavailable {
                         msp_id,
                         value_prop_id,
                     }
@@ -6276,6 +6232,78 @@ mod delete_provider {
     }
 }
 
+mod stop_all_cycles {
+    use super::*;
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn stop_all_cycles_fails_for_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                assert_noop!(
+                    StorageProviders::stop_all_cycles(RuntimeOrigin::signed(alice)),
+                    Error::<Test>::BspOnlyOperation
+                );
+            });
+        }
+
+        #[test]
+        fn stop_all_cycles_requires_default_root() {
+            ExtBuilder::build().execute_with(|| {
+                // register BSP
+                let bob: AccountId = accounts::BOB.0;
+                let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
+
+                let bsp_id = StorageProviders::get_provider_id(bob).unwrap();
+
+                // Simulate non-default root for BSP before stopping all cycles
+                BackupStorageProviders::<Test>::mutate(bsp_id, |bsp| {
+                    let bsp = bsp.as_mut().unwrap();
+                    bsp.root = H256::from_slice(&[1; 32]);
+                });
+
+                assert_noop!(
+                    StorageProviders::stop_all_cycles(RuntimeOrigin::signed(bob),),
+                    Error::<Test>::CannotStopCycleWithNonDefaultRoot
+                );
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn stop_all_cycles_works() {
+            ExtBuilder::build().execute_with(|| {
+                // register BSP
+                let bob: AccountId = accounts::BOB.0;
+                let (_bob_deposit, _bob_bsp) = register_account_as_bsp(bob, 100);
+
+                let provider_id = StorageProviders::get_provider_id(bob).unwrap();
+
+                assert_ok!(StorageProviders::stop_all_cycles(RuntimeOrigin::signed(
+                    bob
+                ),));
+
+                // Verify that the proof challenge cycle has been stopped
+                assert!(
+                    pallet_proofs_dealer::ProviderToProofSubmissionRecord::<Test>::get(
+                        &provider_id
+                    )
+                    .is_none()
+                );
+            });
+        }
+    }
+}
+
 // Helper functions for testing:
 
 /// Helper function that registers an account as a Main Storage Provider, with storage_amount StorageDataUnit units
@@ -6328,7 +6356,7 @@ fn register_account_as_msp(
 
     // Check that the request sign up event was emitted
     System::assert_last_event(
-        Event::<Test>::MspRequestSignUpSuccess {
+        Event::MspRequestSignUpSuccess {
             who: account,
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
@@ -6351,7 +6379,7 @@ fn register_account_as_msp(
 
     // Check that the confirm MSP sign up event was emitted
     System::assert_last_event(
-        Event::<Test>::MspSignUpSuccess {
+        Event::MspSignUpSuccess {
             who: account,
             msp_id,
             multiaddresses: multiaddresses.clone(),
@@ -6419,7 +6447,7 @@ fn register_account_as_bsp(
 
     // Check that the request sign up event was emitted
     System::assert_last_event(
-        Event::<Test>::BspRequestSignUpSuccess {
+        Event::BspRequestSignUpSuccess {
             who: account,
             multiaddresses: multiaddresses.clone(),
             capacity: storage_amount,
@@ -6440,7 +6468,7 @@ fn register_account_as_bsp(
 
     // Check that the confirm BSP sign up event was emitted
     System::assert_last_event(
-        Event::<Test>::BspSignUpSuccess {
+        Event::BspSignUpSuccess {
             who: account,
             bsp_id,
             root: DefaultMerkleRoot::get(),

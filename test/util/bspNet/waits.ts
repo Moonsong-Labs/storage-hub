@@ -123,6 +123,8 @@ export const waitForBspVolunteerWithoutSealing = async (
  *
  * @param api - The ApiPromise instance to interact with the blockchain.
  * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
+ * @param shouldSealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
  * @returns A Promise that resolves when a BSP has confirmed storing a file.
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
@@ -130,7 +132,8 @@ export const waitForBspVolunteerWithoutSealing = async (
 export const waitForBspStored = async (
   api: ApiPromise,
   checkQuantity?: number,
-  bspAccount?: Address
+  bspAccount?: Address,
+  shouldSealBlock = true
 ) => {
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
@@ -173,13 +176,16 @@ export const waitForBspStored = async (
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspConfirmStoring`
         );
       }
-      const { events } = await sealBlock(api);
-      assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
+
+      if (shouldSealBlock) {
+        const { events } = await sealBlock(api);
+        assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
+      }
       break;
-    } catch {
+    } catch (error) {
       assert(
         i !== iterations,
-        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
+        `Failed to confirm BSP storage after ${(i * delay) / 1000}s. Last error: ${error}`
       );
     }
   }
@@ -198,17 +204,20 @@ export const waitForBspStored = async (
  *
  * @throws Will throw an error if the expected extrinsic is not found.
  */
-export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForBspStoredWithoutSealing = async (
+  api: ApiPromise,
+  options?: { checkQuantity?: number; timeout?: number }
+) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "bspConfirmStoring",
-    checkQuantity,
-    timeout: 10000
+    checkQuantity: options?.checkQuantity,
+    timeout: options?.timeout ?? 10_000
   });
 };
 
 /**
- * Waits for a BSP to complete storing a file in its file storage.
+ * Waits for a Provider to complete storing a file in its file storage.
  *
  * This function performs the following steps:
  * 1. Waits for a longer period to allow for local file transfer.
@@ -216,13 +225,13 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
  *
  * @param api - The ApiPromise instance to interact with the RPC.
  * @param fileKey - The file key to check for in the file storage.
- * @returns A Promise that resolves when a BSP has correctly stored a file in its file storage.
+ * @returns A Promise that resolves when the Provider has correctly stored a file in its file storage.
  *
  * @throws Will throw an error if the file is not complete in the file storage after a timeout.
  */
 export const waitForFileStorageComplete = async (api: ApiPromise, fileKey: H256 | string) => {
-  // To allow time for local file transfer to complete (10s)
-  const iterations = 10;
+  // To allow time for local file transfer to complete (20s)
+  const iterations = 20;
   const delay = 1000;
   for (let i = 0; i < iterations + 1; i++) {
     try {
@@ -233,7 +242,7 @@ export const waitForFileStorageComplete = async (api: ApiPromise, fileKey: H256 
     } catch {
       assert(
         i !== iterations,
-        `Failed to detect BSP file in file storage after ${(i * delay) / 1000}s`
+        `Failed to detect file in Provider's file storage after ${(i * delay) / 1000}s`
       );
     }
   }
@@ -356,6 +365,31 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "mspRespondStorageRequestsMultipleBuckets",
+    checkQuantity,
+    timeout: 10000
+  });
+};
+
+/**
+ * Waits for a MSP to submit a proof for a pending file deletion request.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a short period to allow the node to react.
+ * 2. Checks for the presence of a 'pendingFileDeletionRequestSubmitProof' extrinsic in the transaction pool.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @returns A Promise that resolves when a MSP has submitted a proof for a pending file deletion request.
+ *
+ * @throws Will throw an error if the expected extrinsic is not found.
+ */
+export const waitForMspPendingFileDeletionRequestSubmitProof = async (
+  api: ApiPromise,
+  checkQuantity?: number
+) => {
+  await waitForTxInPool(api, {
+    module: "fileSystem",
+    method: "pendingFileDeletionRequestSubmitProof",
     checkQuantity,
     timeout: 10000
   });

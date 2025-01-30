@@ -23,8 +23,27 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
 
   it("multiple BSPs volunteer to multiple requests", async () => {
     // Replicate to 3 BSPs, 1 block to maxthreshold (i.e. instant acceptance)
+    const maxReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        MaxReplicationTarget: [null, 3]
+      }
+    };
+    const tickRangeToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 1]
+      }
+    };
     await api.block.seal({
-      calls: [api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(3, 1))]
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
+      ]
+    });
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(
+          api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+        )
+      ]
     });
 
     await api.docker.onboardBsp({
@@ -70,7 +89,9 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
           fileMetadata.file_size,
           ShConsts.DUMMY_MSP_ID,
           [ShConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
         .signAsync(signer);
 

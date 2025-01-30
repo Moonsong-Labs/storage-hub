@@ -145,6 +145,11 @@ where
             event.data
         );
 
+        if event.data.forest_challenges.is_empty() && event.data.checkpoint_challenges.is_empty() {
+            warn!(target: LOG_TARGET, "No challenges to respond to. Skipping proof submission.");
+            return Ok(());
+        }
+
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
         // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
@@ -332,38 +337,6 @@ where
             })?;
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
-
-        // TODO: Don't do this in this task any more.
-        // Apply mutations, if any.
-        let mut mutations_applied = false;
-        for custom_challenge in &event.data.checkpoint_challenges {
-            let file_key = &custom_challenge.key;
-            if proven_keys.contains(file_key) {
-                // If the file key is proven, it means that this provider had an exact match for a checkpoint challenge.
-                trace!(target: LOG_TARGET, "Checkpoint challenge proven with exact match for file key: {:?}", file_key);
-
-                if custom_challenge.should_remove_key {
-                    // If the mutation (which is a remove mutation) is Some and the file key was proven exactly,
-                    // then the mutation needs to be applied (i.e. the file key is removed from the Forest).
-                    trace!(target: LOG_TARGET, "Removing file key: {:?}", file_key);
-
-                    // At this point, we only remove the file and its metadata from the Forest of this BSP.
-                    // This is because if in a future block built on top of this one, the BSP needs to provide
-                    // a proof, it will be against the Forest root with this change applied.
-                    // We will remove the file from the File Storage only after finality is reached.
-                    // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                    self.remove_file_from_forest(file_key).await?;
-                    mutations_applied = true;
-                }
-            }
-        }
-
-        if mutations_applied {
-            trace!(target: LOG_TARGET, "Mutations applied successfully");
-
-            // Check that the new Forest root matches the one on-chain.
-            self.check_provider_root(event.data.provider_id).await?;
-        }
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -606,30 +579,6 @@ where
         })
     }
 
-    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
-        // Remove the file key from the Forest.
-        // Check that the new Forest root matches the one on-chain.
-        {
-            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-            let fs = self
-                .storage_hub_handler
-                .forest_storage_handler
-                .get(&current_forest_key)
-                .await
-                .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
-
-            fs.write().await.delete_file_key(file_key).map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
-                anyhow!(
-                    "Failed to remove file key from Forest storage: {:?}",
-                    e
-                )
-            })?;
-        };
-
-        Ok(())
-    }
-
     async fn remove_file_from_file_storage(&self, file_key: &H256) -> anyhow::Result<()> {
         // Remove the file from the File Storage.
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
@@ -642,46 +591,6 @@ where
         })?;
         // Release the file storage write lock.
         drop(write_file_storage);
-
-        Ok(())
-    }
-
-    async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
-        // Get root for this provider according to the runtime.
-        let onchain_root = self
-            .storage_hub_handler
-            .blockchain
-            .query_provider_forest_root(provider_id)
-            .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to query provider root from runtime after successfully submitting proof. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
-                anyhow!(
-                    "Failed to query provider root from runtime after successfully submitting proof: {:?}",
-                    e
-                )
-            })?;
-
-        trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
-
-        // Check that the new Forest root matches the one on-chain.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-        let fs = self
-            .storage_hub_handler
-            .forest_storage_handler
-            .get(&current_forest_key)
-            .await
-            .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
-
-        let root = { fs.read().await.root() };
-
-        trace!(target: LOG_TARGET, "Provider root according to Forest Storage: {:?}", root);
-
-        if root != onchain_root {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Applying mutations yielded different root than the one on-chain. This means that there is a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team.");
-            return Err(anyhow!(
-                "Applying mutations yielded different root than the one on-chain."
-            ));
-        }
 
         Ok(())
     }

@@ -817,6 +817,12 @@ pub trait ProofsDealerInterface {
     /// The Proofs Dealer pallet uses ticks to keep track of time, for things like sending out
     /// challenges and making sure that Providers respond to them in time.
     fn get_current_tick() -> Self::TickNumber;
+
+    /// Get the checkpoint challenge period.
+    ///
+    /// The Proofs Dealer pallet uses the checkpoint challenge period to determine the time period
+    /// between checkpoint challenges.
+    fn get_checkpoint_challenge_period() -> Self::TickNumber;
 }
 
 /// A trait to verify proofs based on commitments and challenges.
@@ -1045,11 +1051,11 @@ pub trait PaymentStreamsInterface {
     /// Check if a provider has any active payment streams.
     fn has_active_payment_stream(provider_id: &Self::ProviderId) -> bool;
 
-    /// Add a privileged provider to the PrivilegedProvider storage.
-    fn add_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+    /// Add a privileged provider to the PrivilegedProviders storage, allowing it to charge every tick.
+    fn add_privileged_provider(provider_id: &Self::ProviderId);
 
-    /// Remove a privileged provider to the PrivilegedProvider storage.
-    fn remove_privileged_provider(provider_id: &Self::ProviderId) -> DispatchResult;
+    /// Remove a privileged provider to the PrivilegedProviders storage.
+    fn remove_privileged_provider(provider_id: &Self::ProviderId);
 
     /// Get current tick.
     fn current_tick() -> Self::TickNumber;

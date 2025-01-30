@@ -315,23 +315,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * A map of blocks to expired file deletion requests.
-       **/
-      fileDeletionRequestExpirations: AugmentedQuery<
-        ApiType,
-        (
-          arg: u32 | AnyNumber | Uint8Array
-        ) => Observable<Vec<PalletFileSystemPendingFileDeletionRequest>>,
-        [u32]
-      > &
-        QueryableStorageEntry<ApiType, [u32]>;
-      /**
-       * Maximum number replication target allowed to be set for a storage request to be fulfilled.
-       **/
-      maxReplicationTarget: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
-      /**
-       * A map of blocks to expired move bucket requests.
+       * A map of ticks to expired move bucket requests.
        **/
       moveBucketRequestExpirations: AugmentedQuery<
         ApiType,
@@ -340,46 +324,48 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
-       * A pointer to the earliest available block to insert a new file deletion request expiration.
+       * Mapping from MSPs to the amount of pending file deletion requests they have.
        *
-       * This should always be greater or equal than current block + [`Config::PendingFileDeletionRequestTtl`].
+       * This is used to keep track of the amount of pending file deletion requests each MSP has, so that MSPs are removed
+       * from the privileged providers list if they have at least one, and are added back if they have none.
+       * This is to ensure that MSPs are correctly incentivised to submit the required proofs for file deletions.
        **/
-      nextAvailableFileDeletionRequestExpirationBlock: AugmentedQuery<
+      mspsAmountOfPendingFileDeletionRequests: AugmentedQuery<
+        ApiType,
+        (arg: H256 | string | Uint8Array) => Observable<u32>,
+        [H256]
+      > &
+        QueryableStorageEntry<ApiType, [H256]>;
+      /**
+       * A pointer to the earliest available tick to insert a new move bucket request expiration.
+       *
+       * This should always be greater or equal than current tick + [`Config::MoveBucketRequestTtl`].
+       **/
+      nextAvailableMoveBucketRequestExpirationTick: AugmentedQuery<
         ApiType,
         () => Observable<u32>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the earliest available block to insert a new move bucket request expiration.
+       * A pointer to the earliest available tick to insert a new storage request expiration.
        *
-       * This should always be greater or equal than current block + [`Config::MoveBucketRequestTtl`].
+       * This should always be greater or equal than current tick + [`Config::StorageRequestTtl`].
        **/
-      nextAvailableMoveBucketRequestExpirationBlock: AugmentedQuery<
+      nextAvailableStorageRequestExpirationTick: AugmentedQuery<
         ApiType,
         () => Observable<u32>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * A pointer to the earliest available block to insert a new storage request expiration.
+       * A pointer to the starting tick to clean up expired items.
        *
-       * This should always be greater or equal than current block + [`Config::StorageRequestTtl`].
-       **/
-      nextAvailableStorageRequestExpirationBlock: AugmentedQuery<
-        ApiType,
-        () => Observable<u32>,
-        []
-      > &
-        QueryableStorageEntry<ApiType, []>;
-      /**
-       * A pointer to the starting block to clean up expired items.
-       *
-       * If this block is behind the current block number, the cleanup algorithm in `on_idle` will
-       * attempt to advance this block pointer as close to or up to the current block number. This
+       * If this tick is behind the current tick number, the cleanup algorithm in `on_idle` will
+       * attempt to advance this tick pointer as close to or up to the current tick number. This
        * will execute provided that there is enough remaining weight to do so.
        **/
-      nextStartingBlockToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      nextStartingTickToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * Bookkeeping of buckets that are pending to be moved to a new MSP.
@@ -393,7 +379,7 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending file deletion requests.
        *
-       * A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
+       * A mapping from a user Account ID to a list of pending file deletion requests (which have the file information).
        **/
       pendingFileDeletionRequests: AugmentedQuery<
         ApiType,
@@ -454,7 +440,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * A map of blocks to expired storage requests.
+       * A map of ticks to expired storage requests.
        **/
       storageRequestExpirations: AugmentedQuery<
         ApiType,
@@ -470,11 +456,6 @@ declare module "@polkadot/api-base/types/storage" {
         [H256]
       > &
         QueryableStorageEntry<ApiType, [H256]>;
-      /**
-       * Number of ticks until all BSPs would reach the [`Config::MaximumThreshold`] to ensure that all BSPs are able to volunteer.
-       **/
-      tickRangeToMaximumThreshold: AugmentedQuery<ApiType, () => Observable<u32>, []> &
-        QueryableStorageEntry<ApiType, []>;
       /**
        * Generic query
        **/
@@ -1324,11 +1305,13 @@ declare module "@polkadot/api-base/types/storage" {
       lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
+       * The vector holding whether the last [`Config::BlockFullnessPeriod`] blocks were full or not.
        *
-       * This is used to check if the network is presumably under a spam attack.
+       * Each element in the vector represents a block, and is `true` if the block was full, and `false` otherwise.
+       * Note: Ideally we would use a `BitVec` to reduce storage, but since there's no bounded `BitVec` implementation
+       * we use a BoundedVec<bool> instead. This uses 7 more bits of storage per element.
        **/
-      notFullBlocksCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      pastBlocksStatus: AugmentedQuery<ApiType, () => Observable<Vec<bool>>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A mapping from block number to the weight used in that block.

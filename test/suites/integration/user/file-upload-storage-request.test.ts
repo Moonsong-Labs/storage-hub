@@ -1,5 +1,5 @@
 import { strictEqual } from "node:assert";
-import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, shUser, type EnrichedBspApi } from "../../../util";
 
 describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
@@ -29,7 +29,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
       ],
       signer: shUser
@@ -86,14 +88,13 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/half-chunk-file"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [],
-          null
+          {
+            Basic: null
+          }
         )
       ],
       signer: shUser
     });
-
-    // wait for the bsp to volunteer
-    await sleep(500);
 
     const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
@@ -131,7 +132,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/empty-file"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
       ],
       signer: shUser
@@ -164,7 +167,9 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].size,
           INVALID_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
       ],
       signer: shUser
@@ -194,14 +199,13 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
       ],
       signer: shUser
     });
-
-    // wait for the bsp to volunteer
-    await sleep(500);
 
     const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
@@ -230,13 +234,13 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
           userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
       ],
       signer: shUser
     });
-
-    await sleep(500);
 
     strictEqual(issueStorageRequestResultTwice.extSuccess, false);
   });

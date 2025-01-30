@@ -8,7 +8,7 @@ use crate::{schema::multiaddress, DbConnection};
 #[derive(Debug, Queryable, Insertable, Selectable)]
 #[diesel(table_name = multiaddress)]
 pub struct MultiAddress {
-    pub id: i32,
+    pub id: i64,
     pub address: Vec<u8>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
