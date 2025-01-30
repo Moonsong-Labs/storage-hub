@@ -244,7 +244,6 @@ impl pallet_storage_providers::Config for Test {
     type PaymentStreams = PaymentStreams;
     type ProofDealer = ProofsDealer;
     type SpCount = u32;
-    type BucketCount = u32;
     type MerklePatriciaRoot = H256;
     type MerkleTrieHashing = BlakeTwo256;
     type ProviderId = H256;

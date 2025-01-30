@@ -4403,9 +4403,6 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isCancelSignUp: boolean;
     readonly isMspSignOff: boolean;
-    readonly asMspSignOff: {
-      readonly mspId: H256;
-    } & Struct;
     readonly isBspSignOff: boolean;
     readonly isChangeCapacity: boolean;
     readonly asChangeCapacity: {
@@ -5687,8 +5684,6 @@ declare module "@polkadot/types/lookup" {
     readonly capacity: u64;
     readonly capacityUsed: u64;
     readonly multiaddresses: Vec<Bytes>;
-    readonly amountOfBuckets: u32;
-    readonly amountOfValueProps: u32;
     readonly lastCapacityChange: u32;
     readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
@@ -5733,7 +5728,6 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketNotFound: boolean;
     readonly isBucketAlreadyExists: boolean;
     readonly isBucketNotEmpty: boolean;
-    readonly isBucketsMovedAmountMismatch: boolean;
     readonly isAppendBucketToMspFailed: boolean;
     readonly isProviderNotSlashable: boolean;
     readonly isTopUpNotRequired: boolean;
@@ -5745,7 +5739,6 @@ declare module "@polkadot/types/lookup" {
     readonly isValuePropositionNotFound: boolean;
     readonly isValuePropositionAlreadyExists: boolean;
     readonly isValuePropositionNotAvailable: boolean;
-    readonly isValuePropositionsDeletedAmountMismatch: boolean;
     readonly isFixedRatePaymentStreamNotFound: boolean;
     readonly isMspAlreadyAssignedToBucket: boolean;
     readonly isBucketSizeExceedsLimit: boolean;
@@ -5755,7 +5748,6 @@ declare module "@polkadot/types/lookup" {
     readonly isDeleteProviderConditionsNotMet: boolean;
     readonly isCannotStopCycleWithNonDefaultRoot: boolean;
     readonly isBspOnlyOperation: boolean;
-    readonly isMspOnlyOperation: boolean;
     readonly isInvalidEncodedFileMetadata: boolean;
     readonly isInvalidEncodedAccountId: boolean;
     readonly isPaymentStreamNotFound: boolean;
@@ -5785,7 +5777,6 @@ declare module "@polkadot/types/lookup" {
       | "BucketNotFound"
       | "BucketAlreadyExists"
       | "BucketNotEmpty"
-      | "BucketsMovedAmountMismatch"
       | "AppendBucketToMspFailed"
       | "ProviderNotSlashable"
       | "TopUpNotRequired"
@@ -5797,7 +5788,6 @@ declare module "@polkadot/types/lookup" {
       | "ValuePropositionNotFound"
       | "ValuePropositionAlreadyExists"
       | "ValuePropositionNotAvailable"
-      | "ValuePropositionsDeletedAmountMismatch"
       | "FixedRatePaymentStreamNotFound"
       | "MspAlreadyAssignedToBucket"
       | "BucketSizeExceedsLimit"
@@ -5807,7 +5797,6 @@ declare module "@polkadot/types/lookup" {
       | "DeleteProviderConditionsNotMet"
       | "CannotStopCycleWithNonDefaultRoot"
       | "BspOnlyOperation"
-      | "MspOnlyOperation"
       | "InvalidEncodedFileMetadata"
       | "InvalidEncodedAccountId"
       | "PaymentStreamNotFound";

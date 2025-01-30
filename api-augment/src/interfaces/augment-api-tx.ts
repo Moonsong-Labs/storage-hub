@@ -3057,10 +3057,7 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * Emits `MspSignOffSuccess` event when successful.
        **/
-      mspSignOff: AugmentedSubmittable<
-        (mspId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
-        [H256]
-      >;
+      mspSignOff: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**
        * Dispatchable extrinsic that allows BSPs and MSPs to remove an existing multiaddress from their account.
        *
