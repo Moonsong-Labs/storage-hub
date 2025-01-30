@@ -1380,11 +1380,9 @@ where
                 Error::<T>::InsufficientAvailableCapacity
             );
 
-            // Check if a payment stream between the user and provider already exists.
-            // If it does not, create it. If it does, update it.
-            //
-            // We ignore all errors from the payment stream operations (create/update) and add the file key to the skipped_file_keys set.
-            // This operation must be the first one to be executed before we being updating storage elements as to avoid any potential case
+            // All errors from the payment stream operations (create/update) are ignored, and the file key is added to the `skipped_file_keys` set instead of erroring out.
+            // This is done to avoid a malicious user, owner of one of the files from the batch of confirmations, being able to prevent the BSP from confirming any files by making itself insolvent so payment stream operations fail.
+            // This operation must be executed first, before updating any storage elements, to prevent potential cases
             // where a storage element is updated but should not be.
             match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
 				Some(previous_amount_provided) => {
