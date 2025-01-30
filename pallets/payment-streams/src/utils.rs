@@ -203,7 +203,7 @@ where
             let charged_at_tick = Self::get_current_tick();
 
             // We emit a payment charged event only if the user had to pay before the payment stream could be updated
-            Self::deposit_event(Event::<T>::PaymentStreamCharged {
+            Self::deposit_event(Event::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
@@ -262,7 +262,7 @@ where
                 let charged_at_tick = Self::get_current_tick();
 
                 // We emit a payment charged event only if the user had to pay before being able to delete the payment stream
-                Self::deposit_event(Event::<T>::PaymentStreamCharged {
+                Self::deposit_event(Event::PaymentStreamCharged {
                     user_account: user_account.clone(),
                     provider_id: *provider_id,
                     amount: amount_charged,
@@ -465,7 +465,7 @@ where
             let charged_at_tick = Self::get_current_tick();
 
             // We emit a payment charged event only if the user had to pay before the payment stream could be updated
-            Self::deposit_event(Event::<T>::PaymentStreamCharged {
+            Self::deposit_event(Event::PaymentStreamCharged {
                 user_account: user_account.clone(),
                 provider_id: *provider_id,
                 amount: amount_charged,
@@ -530,7 +530,7 @@ where
                 let charged_at_tick = Self::get_current_tick();
 
                 // We emit a payment charged event only if the user had to pay before being able to delete the payment stream
-                Self::deposit_event(Event::<T>::PaymentStreamCharged {
+                Self::deposit_event(Event::PaymentStreamCharged {
                     user_account: user_account.clone(),
                     provider_id: *provider_id,
                     amount: amount_charged,
@@ -948,7 +948,7 @@ where
                 Self::do_charge_payment_streams(provider_id, user_account)?;
 
             if amount_charged > Zero::zero() {
-                Self::deposit_event(Event::<T>::PaymentStreamCharged {
+                Self::deposit_event(Event::PaymentStreamCharged {
                     user_account: user_account.clone(),
                     provider_id: *provider_id,
                     amount: amount_charged,
@@ -1213,7 +1213,7 @@ where
         // If it's not greater (which should never happen) nor equal, it has to be exactly one less than the tick to process. If it's not,
         // there's an inconsistency in the tick processing and we emit an event to signal it.
         else if last_processed_tick != tick_to_process.saturating_sub(One::one()) {
-            Self::deposit_event(Event::<T>::InconsistentTickProcessing {
+            Self::deposit_event(Event::InconsistentTickProcessing {
                 last_processed_tick,
                 tick_to_process,
             });
@@ -1241,7 +1241,7 @@ where
                     provider_info.last_chargeable_tick = n;
                     provider_info.price_index = accumulated_price_index;
                 });
-                Self::deposit_event(Event::<T>::LastChargeableInfoUpdated {
+                Self::deposit_event(Event::LastChargeableInfoUpdated {
                     provider_id: *provider_id,
                     last_chargeable_tick: n,
                     last_chargeable_price_index: accumulated_price_index,
@@ -1466,12 +1466,12 @@ where
         // pay it for the user using the payment streams' deposits.
         if !UsersWithoutFunds::<T>::contains_key(user_account) {
             UsersWithoutFunds::<T>::insert(user_account, frame_system::Pallet::<T>::block_number());
-            Self::deposit_event(Event::<T>::UserWithoutFunds {
+            Self::deposit_event(Event::UserWithoutFunds {
                 who: user_account.clone(),
             });
         }
         if user_payment_streams_count == 0 {
-            Self::deposit_event(Event::<T>::UserPaidAllDebts {
+            Self::deposit_event(Event::UserPaidAllDebts {
                 who: user_account.clone(),
             });
         }
@@ -1498,7 +1498,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Self::do_create_fixed_rate_payment_stream(provider_id, user_account, rate)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::FixedRatePaymentStreamCreated {
+        Self::deposit_event(Event::FixedRatePaymentStreamCreated {
             user_account: user_account.clone(),
             provider_id: *provider_id,
             rate,
@@ -1517,7 +1517,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Self::do_update_fixed_rate_payment_stream(provider_id, user_account, new_rate)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::FixedRatePaymentStreamUpdated {
+        Self::deposit_event(Event::FixedRatePaymentStreamUpdated {
             user_account: user_account.clone(),
             provider_id: *provider_id,
             new_rate,
@@ -1535,7 +1535,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Self::do_delete_fixed_rate_payment_stream(provider_id, user_account)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::FixedRatePaymentStreamDeleted {
+        Self::deposit_event(Event::FixedRatePaymentStreamDeleted {
             user_account: user_account.clone(),
             provider_id: *provider_id,
         });
@@ -1575,7 +1575,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Self::do_create_dynamic_rate_payment_stream(provider_id, user_account, *amount_provided)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::DynamicRatePaymentStreamCreated {
+        Self::deposit_event(Event::DynamicRatePaymentStreamCreated {
             user_account: user_account.clone(),
             provider_id: *provider_id,
             amount_provided: *amount_provided,
@@ -1598,7 +1598,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         )?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::DynamicRatePaymentStreamUpdated {
+        Self::deposit_event(Event::DynamicRatePaymentStreamUpdated {
             user_account: user_account.clone(),
             provider_id: *provider_id,
             new_amount_provided: *new_amount_provided,
@@ -1616,7 +1616,7 @@ impl<T: pallet::Config> PaymentStreamsInterface for pallet::Pallet<T> {
         Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account)?;
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::DynamicRatePaymentStreamDeleted {
+        Self::deposit_event(Event::DynamicRatePaymentStreamDeleted {
             user_account: user_account.clone(),
             provider_id: *provider_id,
         });

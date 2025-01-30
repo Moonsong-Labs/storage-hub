@@ -67,7 +67,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          1
+          {
+            Custom: 1
+          }
         )
       ],
       signer: shUser
@@ -118,6 +120,12 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           .isFileFound
     });
 
+    // Wait for the BSP confirm extrinsic to be submitted to the TX pool
+    await userApi.wait.bspStoredInTxPool({
+      expectedExts: 1
+    });
+
+    // Seal the block with the confirm TX
     await userApi.block.seal();
     const {
       data: {
@@ -165,7 +173,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          1
+          {
+            Custom: 1
+          }
         )
       ],
       signer: shUser
@@ -235,7 +245,9 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
       );
     }

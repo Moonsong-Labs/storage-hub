@@ -500,7 +500,7 @@ impl pallet_proofs_dealer::Config for Test {
     type StakeToChallengePeriod = StakeToChallengePeriod;
     type MinChallengePeriod = ConstU64<4>;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
-    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU32<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
@@ -581,7 +581,9 @@ pub(crate) type ThresholdType = u32;
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 30;
     pub const StorageRequestCreationDeposit: Balance = 10;
-    pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
+    pub const FileDeletionRequestCreationDeposit: Balance = 10;
+    pub const FileSystemStorageRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
+    pub const FileSystemFileDeletionRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::FileDeletionRequestHold);
 }
 
 impl crate::Config for Test {
@@ -613,14 +615,18 @@ impl crate::Config for Test {
     type MaxDataServerMultiAddresses = ConstU32<5>;
     type MaxExpiredItemsInTick = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
-    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
-    type DefaultReplicationTarget = ConstU32<2>;
-    type MaxReplicationTarget = ConstU32<6>;
+    type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
+    type BasicReplicationTarget = ConstU32<2>;
+    type StandardReplicationTarget = ConstU32<3>;
+    type HighSecurityReplicationTarget = ConstU32<4>;
+    type SuperHighSecurityReplicationTarget = ConstU32<5>;
+    type UltraHighSecurityReplicationTarget = ConstU32<6>;
+    type MaxReplicationTarget = ConstU32<7>;
     type TickRangeToMaximumThreshold = ConstU64<30>;
 }
 

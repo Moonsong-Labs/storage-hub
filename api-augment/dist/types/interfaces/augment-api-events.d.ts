@@ -581,26 +581,6 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Failed to decrease bucket size for expired file deletion request
-       **/
-      FailedToDecreaseBucketSize: AugmentedEvent<
-        ApiType,
-        [
-          user: AccountId32,
-          bucketId: H256,
-          fileKey: H256,
-          fileSize: u64,
-          error: SpRuntimeDispatchError
-        ],
-        {
-          user: AccountId32;
-          bucketId: H256;
-          fileKey: H256;
-          fileSize: u64;
-          error: SpRuntimeDispatchError;
-        }
-      >;
-      /**
        * Failed to decrease MSP's used capacity for expired file deletion request
        **/
       FailedToDecreaseMspUsedCapacity: AugmentedEvent<

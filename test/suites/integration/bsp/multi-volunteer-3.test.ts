@@ -89,7 +89,9 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 3", ({ before, it, createUse
           fileMetadata.file_size,
           ShConsts.DUMMY_MSP_ID,
           [ShConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
         .signAsync(signer);
 
