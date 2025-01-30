@@ -9,9 +9,9 @@ import {
   ShConsts,
   describeMspNet,
   shUser,
-  sleep,
   type EnrichedBspApi,
-  createSqlClient
+  createSqlClient,
+  waitFor
 } from "../../../util";
 import Docker from "dockerode";
 
@@ -141,30 +141,31 @@ describeMspNet(
       }
 
       // Allow time for the MSP to receive and store the files from the user
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(3000);
+      await waitFor({
+        lambda: async () => {
+          for (const e of matchedEvents) {
+            const newStorageRequestDataBlob =
+              userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
 
-      // Check if the MSP received the files.
-      for (const e of matchedEvents) {
-        const newStorageRequestDataBlob =
-          userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
+            if (!newStorageRequestDataBlob) {
+              throw new Error("Event doesn't match NewStorageRequest type");
+            }
 
-        if (!newStorageRequestDataBlob) {
-          throw new Error("Event doesn't match NewStorageRequest type");
-        }
+            const result = await msp1Api.rpc.storagehubclient.isFileInFileStorage(
+              newStorageRequestDataBlob.fileKey
+            );
 
-        const result = await msp1Api.rpc.storagehubclient.isFileInFileStorage(
-          newStorageRequestDataBlob.fileKey
-        );
+            if (!result.isFileFound) {
+              return false;
+            }
 
-        if (!result.isFileFound) {
-          throw new Error(
-            `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
-          );
-        }
-
-        allBucketFiles.push(newStorageRequestDataBlob.fileKey.toString());
-      }
+            allBucketFiles.push(newStorageRequestDataBlob.fileKey.toString());
+          }
+          return true;
+        },
+        iterations: 30,
+        delay: 1000
+      });
 
       // Seal block containing the MSP's first response.
       // MSPs batch responses to achieve higher throughput in periods of high demand. But they
@@ -173,25 +174,27 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      // Give time for the MSP to update the local forest root.
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(1000);
-
-      // Check that the local forest root is updated, and matches th on-chain root.
-      const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-
-      const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
-        "providers",
-        "BucketRootChanged"
-      );
-      const bucketRootChangedDataBlob =
-        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
-        bucketRootChangedEvent.data;
-      if (!bucketRootChangedDataBlob) {
-        throw new Error("Expected BucketRootChanged event but received event of different type");
-      }
-
-      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
+      // Wait for the MSP to update the local forest root and match the on-chain root.
+      await waitFor({
+        lambda: async () => {
+          const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+          const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
+            "providers",
+            "BucketRootChanged"
+          );
+          const bucketRootChangedDataBlob =
+            userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
+            bucketRootChangedEvent.data;
+          if (!bucketRootChangedDataBlob) {
+            throw new Error(
+              "Expected BucketRootChanged event but received event of different type"
+            );
+          }
+          return bucketRootChangedDataBlob.newRoot.toString() === localBucketRoot.toString();
+        },
+        iterations: 10,
+        delay: 1000
+      });
 
       // The MSP should have accepted exactly one file.
       // Register how many were accepted in the last block sealed.
@@ -217,25 +220,25 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      // Give time for the MSP to update the local forest root.
-      // TODO: Ideally, this should be turned into a polling helper function.
-      await sleep(1000);
-
-      // Check that the local forest root is updated, and matches th on-chain root.
-      const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-
-      const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
-        "providers",
-        "BucketRootChanged"
-      );
-      const bucketRootChangedDataBlob2 =
-        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
-        bucketRootChangedEvent2.data;
-      if (!bucketRootChangedDataBlob2) {
-        throw new Error("Expected BucketRootChanged event but received event of different type");
-      }
-
-      strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), localBucketRoot2.toString());
+      // Wait for the MSP to update the local forest root
+      await waitFor({
+        lambda: async () => {
+          const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+          const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
+            "providers",
+            "BucketRootChanged"
+          );
+          const bucketRootChangedDataBlob2 =
+            userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
+            bucketRootChangedEvent2.data;
+          if (!bucketRootChangedDataBlob2) {
+            return false;
+          }
+          return bucketRootChangedDataBlob2.newRoot.toString() === localBucketRoot2.toString();
+        },
+        iterations: 10,
+        delay: 1000
+      });
 
       // The MSP should have accepted at least one file.
       // Register how many were accepted in the last block sealed.
@@ -264,10 +267,15 @@ describeMspNet(
 
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
       for (let i = 0; i < 5; i++) {
-        await sleep(500);
-        const block = await userApi.block.seal();
-
-        await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
+        await waitFor({
+          lambda: async () => {
+            const block = await userApi.block.seal();
+            await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
+            return true;
+          },
+          iterations: 1,
+          delay: 500
+        });
       }
     });
 

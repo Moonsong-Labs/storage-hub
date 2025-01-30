@@ -357,14 +357,21 @@ where
                     .await?,
             )
             .await?;
+
+        // Shuffle BSP peer IDs to distribute load randomly across BSPs and avoid
+        // overwhelming a single BSP with sequential requests
         bsp_peer_ids.shuffle(&mut rand::thread_rng());
 
+        // TODO: Consider optimizing BSP selection strategy - current approach uses round-robin,
+        // but we could potentially stick with a responsive BSP until it fails
         let mut bsp_peer_ids_iter = bsp_peer_ids.iter().cycle();
 
         for chunk in 0..chunks_count {
             let mut downloaded = false;
             for _ in 0..DOWNLOAD_REQUEST_RETRY_COUNT {
-                let peer_id = bsp_peer_ids_iter.next().unwrap();
+                let peer_id = bsp_peer_ids_iter
+                    .next()
+                    .expect("Iterator will never be empty due to .cycle()");
 
                 let download_request = match self
                     .storage_hub_handler
@@ -459,6 +466,11 @@ where
                     chunk,
                     DOWNLOAD_REQUEST_RETRY_COUNT
                 );
+                // TODO: Improve handling of failed chunk downloads:
+                // - Consider implementing a retry mechanism with backoff
+                // - Track failed chunks for later retry attempts
+                // - Potentially notify the user about partial downloads
+                // - Add metrics/monitoring for failed downloads
             }
         }
 
