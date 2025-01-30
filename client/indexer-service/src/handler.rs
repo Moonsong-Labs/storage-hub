@@ -305,7 +305,15 @@ impl IndexerService {
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
-            pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}
+            pallet_file_system::Event::SpStopStoringInsolventUser {
+                sp_id,
+                file_key,
+                owner,
+                location,
+                new_root,
+            } => {
+                File::delete(conn, file_key).await?;
+            }
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
             pallet_file_system::Event::FileDeletionRequest { .. } => {}
             pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => {}
