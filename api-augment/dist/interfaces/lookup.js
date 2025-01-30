@@ -3490,7 +3490,9 @@ export default {
         providerAccount: "Option<AccountId32>"
       },
       cancel_sign_up: "Null",
-      msp_sign_off: "Null",
+      msp_sign_off: {
+        mspId: "H256"
+      },
       bsp_sign_off: "Null",
       change_capacity: {
         newCapacity: "u64"
@@ -4446,6 +4448,8 @@ export default {
     capacity: "u64",
     capacityUsed: "u64",
     multiaddresses: "Vec<Bytes>",
+    amountOfBuckets: "u32",
+    amountOfValueProps: "u32",
     lastCapacityChange: "u32",
     ownerAccount: "AccountId32",
     paymentAccount: "AccountId32",
@@ -4496,6 +4500,7 @@ export default {
       "BucketNotFound",
       "BucketAlreadyExists",
       "BucketNotEmpty",
+      "BucketsMovedAmountMismatch",
       "AppendBucketToMspFailed",
       "ProviderNotSlashable",
       "TopUpNotRequired",
@@ -4507,6 +4512,7 @@ export default {
       "ValuePropositionNotFound",
       "ValuePropositionAlreadyExists",
       "ValuePropositionNotAvailable",
+      "ValuePropositionsDeletedAmountMismatch",
       "FixedRatePaymentStreamNotFound",
       "MspAlreadyAssignedToBucket",
       "BucketSizeExceedsLimit",
@@ -4516,6 +4522,7 @@ export default {
       "DeleteProviderConditionsNotMet",
       "CannotStopCycleWithNonDefaultRoot",
       "BspOnlyOperation",
+      "MspOnlyOperation",
       "InvalidEncodedFileMetadata",
       "InvalidEncodedAccountId",
       "PaymentStreamNotFound"
