@@ -306,11 +306,11 @@ impl IndexerService {
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::SpStopStoringInsolventUser {
-                sp_id,
+                sp_id: _,
                 file_key,
-                owner,
-                location,
-                new_root,
+                owner: _,
+                location: _,
+                new_root: _,
             } => {
                 File::delete(conn, file_key).await?;
             }
