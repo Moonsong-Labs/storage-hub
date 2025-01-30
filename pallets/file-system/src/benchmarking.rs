@@ -2729,6 +2729,8 @@ mod benchmarks {
             owner_account: msp.clone(),
             payment_account: msp.clone(),
             sign_up_block: frame_system::Pallet::<T>::block_number(),
+            amount_of_value_props: 1u32,
+            amount_of_buckets: T::BucketCount::zero(),
         };
 
         pallet_storage_providers::MainStorageProviders::<T>::insert(msp_hash, msp_info);
