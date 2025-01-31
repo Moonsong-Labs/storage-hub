@@ -213,7 +213,7 @@ describeMspNet(
         lambda: async () => {
           // Get the local forest root from MSP
           const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-          
+
           // Get the on-chain root from the latest BucketRootChanged event
           const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
             "providers",
@@ -262,7 +262,7 @@ describeMspNet(
         lambda: async () => {
           // Get the local forest root from MSP
           const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-          
+
           // Get the on-chain root from the latest BucketRootChanged event
           const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
             "providers",
