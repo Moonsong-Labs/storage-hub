@@ -1382,6 +1382,10 @@ declare const _default: {
       ProviderInsolvent: {
         providerId: string;
       };
+      BucketsOfInsolventMsp: {
+        mspId: string;
+        buckets: string;
+      };
       BucketRootChanged: {
         bucketId: string;
         oldRoot: string;
@@ -1445,7 +1449,7 @@ declare const _default: {
     endBlockGracePeriod: string;
   };
   /**
-   * Lookup133: pallet_file_system::pallet::Event<T>
+   * Lookup134: pallet_file_system::pallet::Event<T>
    **/
   PalletFileSystemEvent: {
     _enum: {

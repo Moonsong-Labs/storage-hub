@@ -1872,6 +1872,11 @@ declare module "@polkadot/types/lookup" {
     readonly asProviderInsolvent: {
       readonly providerId: H256;
     } & Struct;
+    readonly isBucketsOfInsolventMsp: boolean;
+    readonly asBucketsOfInsolventMsp: {
+      readonly mspId: H256;
+      readonly buckets: Vec<H256>;
+    } & Struct;
     readonly isBucketRootChanged: boolean;
     readonly asBucketRootChanged: {
       readonly bucketId: H256;
@@ -1920,6 +1925,7 @@ declare module "@polkadot/types/lookup" {
       | "AwaitingTopUp"
       | "TopUpFulfilled"
       | "ProviderInsolvent"
+      | "BucketsOfInsolventMsp"
       | "BucketRootChanged"
       | "MultiAddressAdded"
       | "MultiAddressRemoved"
@@ -1958,7 +1964,7 @@ declare module "@polkadot/types/lookup" {
     readonly endBlockGracePeriod: u32;
   }
 
-  /** @name PalletFileSystemEvent (133) */
+  /** @name PalletFileSystemEvent (134) */
   interface PalletFileSystemEvent extends Enum {
     readonly isNewBucket: boolean;
     readonly asNewBucket: {

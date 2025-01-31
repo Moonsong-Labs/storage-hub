@@ -1396,6 +1396,10 @@ export default {
       ProviderInsolvent: {
         providerId: "H256"
       },
+      BucketsOfInsolventMsp: {
+        mspId: "H256",
+        buckets: "Vec<H256>"
+      },
       BucketRootChanged: {
         bucketId: "H256",
         oldRoot: "H256",
@@ -1459,7 +1463,7 @@ export default {
     endBlockGracePeriod: "u32"
   },
   /**
-   * Lookup133: pallet_file_system::pallet::Event<T>
+   * Lookup134: pallet_file_system::pallet::Event<T>
    **/
   PalletFileSystemEvent: {
     _enum: {
