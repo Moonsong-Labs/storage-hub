@@ -619,6 +619,13 @@ pub mod pallet {
         /// and they have a capacity deficit (i.e. their capacity based on their stake is below their used capacity by the files it stores).
         ProviderInsolvent { provider_id: ProviderIdFor<T> },
 
+        /// Event emitted when the provider that has been marked as insolvent was a MSP. It notifies the users of that MSP
+        /// the buckets that it was holding, so they can take appropriate measures.
+        BucketsOfInsolventMsp {
+            msp_id: ProviderIdFor<T>,
+            buckets: Vec<BucketId<T>>,
+        },
+
         /// Event emitted when a bucket's root has been changed.
         BucketRootChanged {
             bucket_id: BucketId<T>,

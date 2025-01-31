@@ -1159,17 +1159,7 @@ where
             // Delete the MSP's data
             MainStorageProviders::<T>::remove(&provider_id);
             AccountIdToMainStorageProviderId::<T>::remove(msp.owner_account);
-            // TODO: The buckets of this MSP should be moved to another one somehow, we can't leave the user without its data because
-            // the MSP misbehaved and was deleted.
-            let moved_buckets: BucketCount<T> =
-                MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id)
-                    .fold(T::BucketCount::zero(), |acc, _| {
-                        acc.saturating_add(One::one())
-                    });
-            ensure!(
-                msp.amount_of_buckets == moved_buckets,
-                Error::<T>::BucketsMovedAmountMismatch
-            );
+            let mut amount_of_buckets: BucketCount<T> = T::BucketCount::zero();
             let value_props_deleted =
                 MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id)
                     .fold(0, |acc, _| acc.saturating_add(One::one()));
@@ -1177,6 +1167,23 @@ where
                 value_props_deleted == msp.amount_of_value_props,
                 Error::<T>::ValuePropositionsDeletedAmountMismatch
             );
+            // For the buckets, not only check that the amount deleted matches but also emit an event so users owners of
+            // these buckets can take the appropriate measures to secure them in another MSP.
+            let bucket_ids: Vec<BucketId<T>> =
+                MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id)
+                    .map(|(bucket_id, _)| {
+                        amount_of_buckets = amount_of_buckets.saturating_add(T::BucketCount::one());
+                        bucket_id
+                    })
+                    .collect();
+            ensure!(
+                msp.amount_of_buckets == amount_of_buckets,
+                Error::<T>::BucketsMovedAmountMismatch
+            );
+            Self::deposit_event(Event::BucketsOfInsolventMsp {
+                msp_id: *provider_id,
+                buckets: bucket_ids,
+            });
 
             // Decrease the amount of MSPs in the system
             MspCount::<T>::mutate(|n| {
