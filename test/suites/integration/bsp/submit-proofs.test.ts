@@ -214,8 +214,16 @@ describeBspNet(
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const cooldown =
-        currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+      const minWaitForStopStoring = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: {
+            MinWaitForStopStoring: null
+          }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
+      const cooldown = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(cooldown);
       await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
 
@@ -280,9 +288,19 @@ describeBspNet(
       oneBspfileMetadata = fileMetadata;
     });
 
-    it("Only one BSP confirms it", async () => {
+    it("Only one BSP confirms it and the MSP accepts it", async () => {
+      // Wait for the MSP acceptance of the file to be in the TX pool
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        checkTxPool: true,
+        timeout: 5000
+      });
+
+      // Then wait for the BSP volunteer to be in the TX pool and seal the block
       await userApi.wait.bspVolunteer(1);
 
+      // Finally, wait for the BSP to confirm storing the file and seal the block
       const address = userApi.createType("Address", NODE_INFOS.bsp.AddressId);
       await userApi.wait.bspStored(1, address);
     });
@@ -314,18 +332,6 @@ describeBspNet(
       const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
-        checkTxPool: true
-      });
-
-      await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "mspRespondStorageRequestsMultipleBuckets",
-        checkTxPool: true
-      });
-
-      await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "mspRespondStorageRequestsMultipleBuckets",
         checkTxPool: true
       });
 
