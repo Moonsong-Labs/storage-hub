@@ -582,6 +582,17 @@ impl IndexerService {
             pallet_storage_providers::Event::BspDeleted { provider_id } => {
                 Bsp::delete(conn, provider_id.to_string()).await?;
             }
+            pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
+                ..
+            } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+            pallet_storage_providers::Event::FailedToSlashInsolventProvider { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+            pallet_storage_providers::Event::FailedToStopAllCyclesForInsolventBsp { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())
