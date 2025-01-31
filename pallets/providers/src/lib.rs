@@ -49,7 +49,10 @@ pub mod pallet {
         FileMetadataInterface, NumericalParam, PaymentStreamsInterface, ProofSubmittersInterface,
         ReadUserSolvencyInterface, StorageHubTickGetter,
     };
-    use sp_runtime::traits::{Bounded, CheckedDiv, ConvertBack, Hash};
+    use sp_runtime::{
+        traits::{Bounded, CheckedDiv, ConvertBack, Hash},
+        Vec,
+    };
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
