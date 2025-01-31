@@ -2340,6 +2340,21 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event emitted when there was an inconsistency error and the provider was found in ProviderTopUpExpirations
+       * for a tick that wasn't actually when its top up expired, and when trying to insert it with the actual
+       * expiration tick in ProviderTopUpExpirations the append failed.
+       *
+       * The result of this is that
+       **/
+      FailedToInsertProviderTopUpExpiration: AugmentedEvent<
+        ApiType,
+        [providerId: H256, expirationTick: u32],
+        {
+          providerId: H256;
+          expirationTick: u32;
+        }
+      >;
+      /**
        * Event emitted when there's an error slashing the now insolvent provider.
        **/
       FailedToSlashInsolventProvider: AugmentedEvent<

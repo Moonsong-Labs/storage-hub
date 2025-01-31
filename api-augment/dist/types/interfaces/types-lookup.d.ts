@@ -1800,6 +1800,11 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
       readonly error: SpRuntimeDispatchError;
     } & Struct;
+    readonly isFailedToInsertProviderTopUpExpiration: boolean;
+    readonly asFailedToInsertProviderTopUpExpiration: {
+      readonly providerId: H256;
+      readonly expirationTick: u32;
+    } & Struct;
     readonly isProviderInsolvent: boolean;
     readonly asProviderInsolvent: {
       readonly providerId: H256;
@@ -1854,6 +1859,7 @@ declare module "@polkadot/types/lookup" {
       | "FailedToGetOwnerAccountOfInsolventProvider"
       | "FailedToSlashInsolventProvider"
       | "FailedToStopAllCyclesForInsolventBsp"
+      | "FailedToInsertProviderTopUpExpiration"
       | "ProviderInsolvent"
       | "BucketRootChanged"
       | "MultiAddressAdded"
@@ -1886,7 +1892,7 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletStorageProvidersTopUpMetadata (132) */
   interface PalletStorageProvidersTopUpMetadata extends Struct {
     readonly startedAt: u32;
-    readonly endBlockGracePeriod: u32;
+    readonly endTickGracePeriod: u32;
   }
   /** @name PalletFileSystemEvent (133) */
   interface PalletFileSystemEvent extends Enum {
