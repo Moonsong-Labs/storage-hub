@@ -5097,6 +5097,9 @@ mod slash_and_top_up {
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
                 let pre_state_provider =
                     MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+                let pre_state_top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                );
 
                 // Slash the provider
                 assert_ok!(StorageProviders::slash(
@@ -5128,7 +5131,11 @@ mod slash_and_top_up {
                 assert_eq!(last_slashed_event.1, expected_slash_amount);
 
                 let grace_period = ProviderTopUpTtl::<Test>::get();
-                let end_tick_grace_period = ShTickGetter::<Test>::get_current_tick() + grace_period;
+                let end_tick_grace_period = if pre_state_top_up_metadata.is_some() {
+                    pre_state_top_up_metadata.unwrap().end_tick_grace_period
+                } else {
+                    ShTickGetter::<Test>::get_current_tick() + grace_period
+                };
 
                 // Verify post state based on the test setup
                 if self.automatic_top_up {
@@ -5470,10 +5477,13 @@ mod slash_and_top_up {
                 assert!(maybe_alice_initial_top_up_metadata.is_some());
                 let alice_initial_top_up_metadata = maybe_alice_initial_top_up_metadata.unwrap();
 
-                // Advance a few ticks and check that the tick incremented accordingly.
-                run_to_block(frame_system::Pallet::<Test>::block_number() + 10);
+                // Advance a few ticks (but less than the ProviderTopUpTtl) and check that the tick incremented accordingly.
+                let provider_top_up_ttl = <Test as crate::Config>::ProviderTopUpTtl::get();
+                run_to_block(
+                    frame_system::Pallet::<Test>::block_number() + provider_top_up_ttl - 1,
+                );
                 let current_tick = ShTickGetter::<Test>::get_current_tick();
-                assert_eq!(current_tick, initial_tick + 10);
+                assert_eq!(current_tick, initial_tick + provider_top_up_ttl - 1);
 
                 // Slash Alice again
                 alice_test_setup.slash_and_verify();
