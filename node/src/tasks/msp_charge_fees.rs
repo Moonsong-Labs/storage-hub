@@ -114,7 +114,7 @@ where
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Tip::from(0))
+                .send_extrinsic(call, Tip::from(0), None)
                 .await;
 
             match charging_result {

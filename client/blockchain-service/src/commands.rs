@@ -27,6 +27,8 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
+use crate::transaction::WatchTransactionError;
+
 use super::{
     handler::BlockchainService,
     transaction::SubmittedTransaction,
@@ -44,6 +46,7 @@ pub enum BlockchainServiceCommand {
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
         tip: Tip,
+        nonce: Option<u32>,
         callback: tokio::sync::oneshot::Sender<Result<SubmittedTransaction>>,
     },
     GetExtrinsicFromBlock {
@@ -211,6 +214,7 @@ pub trait BlockchainServiceInterface {
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
         tip: Tip,
+        nonce: Option<u32>,
     ) -> Result<SubmittedTransaction>;
 
     /// Get an extrinsic from a block.
@@ -407,12 +411,14 @@ where
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
         tip: Tip,
+        nonce: Option<u32>,
     ) -> Result<SubmittedTransaction> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::SendExtrinsic {
             call: call.into(),
             tip,
+            nonce,
             callback,
         };
         self.send(message).await;
@@ -818,17 +824,19 @@ where
     ) -> Result<Option<StorageHubEventsVec>> {
         let call = call.into();
 
-        for retry_count in 0..=retry_strategy.max_retries {
-            let tip = retry_strategy.compute_tip(retry_count);
+        // Execute the extrinsic without any tip or specific nonce the first time around.
+        let mut tip = retry_strategy.compute_tip(0);
+        let mut nonce = None;
 
+        for retry_count in 0..=retry_strategy.max_retries {
             debug!(target: LOG_TARGET, "Submitting transaction {:?} with tip {}", call, tip);
 
             let mut transaction = self
-                .send_extrinsic(call.clone(), Tip::from(tip as u128))
+                .send_extrinsic(call.clone(), Tip::from(tip as u128), nonce)
                 .await?
                 .with_timeout(retry_strategy.timeout);
 
-            let result: Result<Option<StorageHubEventsVec>> = if with_events {
+            let result: Result<Option<StorageHubEventsVec>, _> = if with_events {
                 transaction
                     .watch_for_success_with_events(&self)
                     .await
@@ -852,6 +860,19 @@ where
                     }
 
                     warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", transaction.hash(), retry_count + 1);
+
+                    // TODO: Add pending transaction pool implementation to be able to resumbit transactions with nonces lower than the current one to avoid this transaction from being stuck.
+                    if let WatchTransactionError::Timeout = err {
+                        // Increase the tip to incentivize the collators to include the transaction in a block with priority
+                        tip = retry_strategy.compute_tip(retry_count + 1);
+                        // Reuse the same nonce since the transaction was not included in a block.
+                        nonce = Some(transaction.nonce());
+
+                        // Log warning if this is not the last retry.
+                        if retry_count < retry_strategy.max_retries {
+                            warn!(target: LOG_TARGET, "Retrying with increased tip {} and nonce {}", tip, transaction.nonce());
+                        }
+                    }
                 }
             }
         }
