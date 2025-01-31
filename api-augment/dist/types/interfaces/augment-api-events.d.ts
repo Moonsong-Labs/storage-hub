@@ -2235,7 +2235,7 @@ declare module "@polkadot/api-base/types/events" {
     providers: {
       /**
        * Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
-       * signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
+       * signalling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
        **/
       AwaitingTopUp: AugmentedEvent<
         ApiType,
@@ -2327,6 +2327,39 @@ declare module "@polkadot/api-base/types/events" {
           oldCapacity: u64;
           newCapacity: u64;
           nextBlockWhenChangeAllowed: u32;
+        }
+      >;
+      /**
+       * Event emitted when the account ID of a provider that has just been marked as insolvent can't be found in storage.
+       **/
+      FailedToGetOwnerAccountOfInsolventProvider: AugmentedEvent<
+        ApiType,
+        [providerId: H256],
+        {
+          providerId: H256;
+        }
+      >;
+      /**
+       * Event emitted when there's an error slashing the now insolvent provider.
+       **/
+      FailedToSlashInsolventProvider: AugmentedEvent<
+        ApiType,
+        [providerId: H256, amountToSlash: u128, error: SpRuntimeDispatchError],
+        {
+          providerId: H256;
+          amountToSlash: u128;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
+       * Event emitted when there's an error stopping all cycles for an insolvent Backup Storage Provider.
+       **/
+      FailedToStopAllCyclesForInsolventBsp: AugmentedEvent<
+        ApiType,
+        [providerId: H256, error: SpRuntimeDispatchError],
+        {
+          providerId: H256;
+          error: SpRuntimeDispatchError;
         }
       >;
       /**

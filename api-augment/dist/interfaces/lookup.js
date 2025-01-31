@@ -1393,6 +1393,18 @@ export default {
         providerId: "H256",
         amount: "u128"
       },
+      FailedToGetOwnerAccountOfInsolventProvider: {
+        providerId: "H256"
+      },
+      FailedToSlashInsolventProvider: {
+        providerId: "H256",
+        amountToSlash: "u128",
+        error: "SpRuntimeDispatchError"
+      },
+      FailedToStopAllCyclesForInsolventBsp: {
+        providerId: "H256",
+        error: "SpRuntimeDispatchError"
+      },
       ProviderInsolvent: {
         providerId: "H256"
       },
