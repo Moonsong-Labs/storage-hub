@@ -2,16 +2,16 @@ use crate::{
     self as file_system,
     mock::*,
     types::{
-        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileKeyWithProof, FileLocation,
-        MoveBucketRequestMetadata, PeerIds, PendingFileDeletionRequest, ProviderIdFor,
-        ReplicationTarget, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
-        ThresholdType, TickNumber, ValuePropId,
+        BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileKeyWithProof,
+        FileLocation, MoveBucketRequestMetadata, PeerIds, PendingFileDeletionRequest,
+        ProviderIdFor, ReplicationTarget, StorageData, StorageRequestBspsMetadata,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
-    Config, Error, Event, NextAvailableStorageRequestExpirationTick, PendingBucketsToMove,
-    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
-    StorageRequests,
+    Config, Error, Event, MspsAmountOfPendingFileDeletionRequests,
+    NextAvailableStorageRequestExpirationTick, PendingBucketsToMove, PendingMoveBucketRequests,
+    PendingStopStoringRequests, StorageRequestExpirations, StorageRequests,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -45,7 +45,6 @@ mod create_bucket_tests {
     use super::*;
 
     mod failure {
-        use crate::types::ValuePropId;
 
         use super::*;
 
@@ -136,7 +135,7 @@ mod create_bucket_tests {
                 let owner_initial_balance = <Test as Config>::Currency::free_balance(&owner);
                 let bucket_creation_deposit =
                     <Test as pallet_storage_providers::Config>::BucketDeposit::get();
-                let nft_collection_deposit: crate::types::BalanceOf<Test> =
+                let nft_collection_deposit: BalanceOf<Test> =
                     <Test as pallet_nfts::Config>::CollectionDeposit::get();
                 let origin = RuntimeOrigin::signed(owner.clone());
                 let msp = Keyring::Charlie.to_account_id();
@@ -1821,9 +1820,9 @@ mod request_storage {
                     <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 let base_stream_deposit: u128 =
                     <Test as pallet_payment_streams::Config>::BaseDeposit::get();
-                let balance_to_mint: crate::types::BalanceOf<Test> =
+                let balance_to_mint: BalanceOf<Test> =
                     <<Test as pallet_storage_providers::Config>::BucketDeposit as Get<
-                        crate::types::BalanceOf<Test>,
+                        BalanceOf<Test>,
                     >>::get()
                     .saturating_add(new_stream_deposit as u128)
                     .saturating_add(base_stream_deposit)
@@ -2026,14 +2025,7 @@ mod request_storage {
                 );
 
 				// Calculate the deposit that the user is going to have to pay to issue this storage request.
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 let owner_initial_balance =
                     <Test as file_system::Config>::Currency::free_balance(&owner_account_id);
@@ -2189,14 +2181,8 @@ mod request_storage {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2367,14 +2353,8 @@ mod request_storage {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4738,14 +4718,7 @@ mod bsp_volunteer {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
 				// Calculate the deposit that the user is going to have to pay to issue this storage request.
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4941,7 +4914,6 @@ mod bsp_volunteer {
 mod bsp_confirm {
     use super::*;
     mod failure {
-        use crate::types::FileKeyWithProof;
 
         use super::*;
         use pallet_storage_providers::types::ReputationWeightType;
@@ -5578,14 +5550,8 @@ mod bsp_confirm {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5919,14 +5885,8 @@ mod bsp_confirm {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6472,14 +6432,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6630,14 +6584,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6791,14 +6739,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6967,14 +6909,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7180,14 +7116,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7380,14 +7310,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7629,14 +7553,8 @@ mod bsp_stop_storing {
 				let current_tick_plus_storage_request_ttl = current_tick + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
                 let next_expiration_tick_storage_request = max(NextAvailableStorageRequestExpirationTick::<Test>::get(), current_tick_plus_storage_request_ttl);
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7878,14 +7796,8 @@ mod bsp_stop_storing {
 				let current_tick_plus_storage_request_ttl = current_tick + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
 				let next_expiration_tick_storage_request = max(NextAvailableStorageRequestExpirationTick::<Test>::get(), current_tick_plus_storage_request_ttl);
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch first storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -8197,14 +8109,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -8356,14 +8262,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -8486,14 +8386,8 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
@@ -8805,9 +8699,9 @@ mod delete_file_and_pending_deletions_tests {
     }
 
     mod success {
-        use crate::MspsAmountOfPendingFileDeletionRequests;
 
         use super::*;
+
         #[test]
         fn delete_file_with_proof_of_inclusion_success() {
             new_test_ext().execute_with(|| {
@@ -9996,14 +9890,8 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+       			let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10230,14 +10118,8 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-				let number_of_bsps_balance_typed =
-					<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-				let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-				)
-				.saturating_mul(number_of_bsps_balance_typed)
-				.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10435,14 +10317,8 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10711,14 +10587,8 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10962,14 +10832,8 @@ mod stop_storing_for_insolvent_user {
                     current_tick_plus_storage_request_ttl,
                 );
 
-				let number_of_bsps = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
-        		let number_of_bsps_balance_typed =
-            		<Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
-       			let storage_request_deposit = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
-			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-        		)
-        		.saturating_mul(number_of_bsps_balance_typed)
-        		.saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -11371,4 +11235,19 @@ fn create_bucket(
     );
 
     bucket_id
+}
+
+fn calculate_storage_request_deposit() -> BalanceOf<Test> {
+    let number_of_bsps =
+        <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+    let number_of_bsps_balance_typed =
+        <Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+    let storage_request_deposit =
+        <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+            &<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        )
+        .saturating_mul(number_of_bsps_balance_typed)
+        .saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
+    storage_request_deposit
 }
