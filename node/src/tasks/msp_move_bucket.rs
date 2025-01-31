@@ -1,13 +1,13 @@
+use anyhow::anyhow;
 use codec::Decode;
-use rand::seq::SliceRandom;
-use sp_core::H256;
-use std::time::Duration;
-
 use pallet_file_system::types::BucketMoveRequestResponse;
+use rand::seq::SliceRandom;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface, events::MoveBucketRequestedForNewMsp, types::Tip,
+    commands::BlockchainServiceInterface,
+    events::MoveBucketRequestedForNewMsp,
+    types::{RetryStrategy, Tip},
 };
 use shc_common::types::{
     BucketId, FileKeyProof, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -16,7 +16,9 @@ use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::ChunkId;
+use sp_core::H256;
 use std::cmp::max;
+use std::time::Duration;
 use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{
@@ -244,6 +246,20 @@ where
         }
     }
 
+    /// Rejects a bucket move request and performs cleanup of any partially created resources.
+    ///
+    /// # Arguments
+    /// * `bucket_id` - The ID of the bucket whose move request is being rejected
+    ///
+    /// # Cleanup Steps
+    /// 1. Deletes any files that were inserted into file storage during validation
+    /// 2. Removes the forest storage if it was created for this bucket
+    /// 3. Sends an extrinsic to reject the move request on-chain
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - Failed to send or confirm the rejection extrinsic
+    /// Note: Cleanup errors are logged but don't prevent the rejection from being sent
     async fn reject_bucket_move(&mut self, bucket_id: BucketId) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -283,15 +299,25 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
-            .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .extrinsic_retry_timeout,
-            ))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(3)
+                    .with_max_tip(10.0)
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    )),
+                false,
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to submit move bucket rejection after 3 retries: {:?}",
+                    e
+                )
+            })?;
 
         Ok(())
     }
@@ -318,15 +344,25 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
-            .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .extrinsic_retry_timeout,
-            ))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(3)
+                    .with_max_tip(10.0)
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    )),
+                false,
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to submit move bucket acceptance after 3 retries: {:?}",
+                    e
+                )
+            })?;
 
         Ok(())
     }
