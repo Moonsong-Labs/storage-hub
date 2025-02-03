@@ -2406,7 +2406,7 @@ where
         StorageRequests::<T>::iter()
             .filter(|(_, metadata)| {
                 if let Some(msp) = metadata.msp {
-                    msp.0 == msp_id
+                    msp.0 == msp_id && !msp.1
                 } else {
                     false
                 }
