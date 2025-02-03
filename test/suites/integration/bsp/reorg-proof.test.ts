@@ -353,7 +353,15 @@ describeBspNet(
       // Wait the required time for the BSP to be able to confirm the deletion.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const minWaitForStopStoring = userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+      const minWaitForStopStoring = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: {
+            MinWaitForStopStoring: null
+          }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
       const blockToAdvanceTo = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(blockToAdvanceTo, {
         watchForBspProofs: [userApi.shConsts.DUMMY_BSP_ID]
