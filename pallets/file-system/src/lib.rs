@@ -123,7 +123,7 @@ pub mod pallet {
             ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
         >
-        + shp_traits::MutatePricePerGigaUnitPerTickInterface<PricePerGigaUnitPerTick = BalanceOf<Self>>;
+        + shp_traits::PricePerGigaUnitPerTickInterface<PricePerGigaUnitPerTick = BalanceOf<Self>>;
 
         /// The trait to initialise a Provider's randomness commit-reveal cycle.
         type CrRandomness: shp_traits::CommitRevealRandomnessInterface<
@@ -248,6 +248,12 @@ pub mod pallet {
         /// Converter from the ReplicationTarget type to the Balance type.
         type ReplicationTargetToBalance: Convert<ReplicationTargetType<Self>, BalanceOf<Self>>;
 
+        /// Converter from the TickNumber type to the Balance type.
+        type TickNumberToBalance: Convert<TickNumber<Self>, BalanceOf<Self>>;
+
+        /// Converter from the StorageDataUnit type to the Balance type.
+        type StorageDataUnitToBalance: Convert<StorageDataUnit<Self>, BalanceOf<Self>>;
+
         /// The treasury account of the runtime, where a fraction of each payment goes.
         #[pallet::constant]
         type TreasuryAccount: Get<Self::AccountId>;
@@ -362,6 +368,21 @@ pub mod pallet {
         /// Maximum replication target that a user can select for a new storage request.
         #[pallet::constant]
         type MaxReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// The amount of ticks that the user has to pay upfront when issuing a storage request.
+        ///
+        /// This is to compensate the system load that the process of file retrieval will have on the network.
+        /// If this did not exist, a malicious user could spam the network with huge files, making BSPs change
+        /// their capacity and download a lot of data while the user might not even have the balance to
+        /// store and pay those BSPs in the long term.
+        ///
+        /// It initially exists as a deterrent, since these funds will be transferred to the treasury and not to the BSPs
+        /// of the network. Governance can then decide what to do with these funds.
+        ///
+        /// The amount that the user is going to have to pay is calculated as follows:
+        /// `Replication Target Chosen * PricePerGigaUnitPerTick * File Size in Gigabytes * UpfrontTicksToPay`
+        #[pallet::constant]
+        type UpfrontTicksToPay: Get<TickNumber<Self>>;
 
         /// The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
         /// to arrive at its maximum value.
@@ -550,7 +571,7 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             peer_ids: PeerIds<T>,
             expires_at: TickNumber<T>,
         },
@@ -572,7 +593,7 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
             owner: T::AccountId,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
         },
         /// Notifies that a BSP confirmed storing a file(s).
         BspConfirmedStoring {
@@ -639,7 +660,7 @@ pub mod pallet {
         FileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
+            file_size: StorageDataUnit<T>,
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
@@ -648,7 +669,7 @@ pub mod pallet {
         ProofSubmittedForPendingFileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
+            file_size: StorageDataUnit<T>,
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
@@ -691,12 +712,12 @@ pub mod pallet {
             user: T::AccountId,
             msp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
+            file_size: StorageDataUnit<T>,
             error: DispatchError,
         },
         /// Event to notify of incoherencies in used capacity.
         UsedCapacityShouldBeZero {
-            actual_used_capacity: StorageData<T>,
+            actual_used_capacity: StorageDataUnit<T>,
         },
         /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
         /// the return of that storage request's deposit to the user failed.
@@ -1043,7 +1064,7 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
             replication_target: ReplicationTarget<T>,
@@ -1210,7 +1231,7 @@ pub mod pallet {
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             can_serve: bool,
             inclusion_forest_proof: ForestProof<T>,
         ) -> DispatchResult {
@@ -1283,7 +1304,7 @@ pub mod pallet {
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             inclusion_forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -1324,7 +1345,7 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             file_key: MerkleHash<T>,
             location: FileLocation<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             fingerprint: Fingerprint<T>,
             maybe_inclusion_forest_proof: Option<ForestProof<T>>,
         ) -> DispatchResult {
@@ -1358,7 +1379,7 @@ pub mod pallet {
             origin: OriginFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
+            file_size: StorageDataUnit<T>,
             bucket_id: BucketIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {

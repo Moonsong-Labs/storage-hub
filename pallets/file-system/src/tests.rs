@@ -4,7 +4,7 @@ use crate::{
     types::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileKeyWithProof,
         FileLocation, MoveBucketRequestMetadata, PeerIds, PendingFileDeletionRequest,
-        ProviderIdFor, ReplicationTarget, StorageData, StorageRequestBspsMetadata,
+        ProviderIdFor, ReplicationTarget, StorageDataUnit, StorageRequestBspsMetadata,
         StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
     },
@@ -29,7 +29,8 @@ use pallet_proofs_dealer::{PriorityChallengesQueue, ProviderToProofSubmissionRec
 use pallet_storage_providers::types::{Bucket, StorageProviderId, ValueProposition};
 use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
-    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    PricePerGigaUnitPerTickInterface, ReadBucketsInterface, ReadProvidersInterface,
+    ReadStorageProvidersInterface,
 };
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
@@ -2013,6 +2014,7 @@ mod request_storage {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+				let replication_target = ReplicationTarget::Standard;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -2026,6 +2028,11 @@ mod request_storage {
 
 				// Calculate the deposit that the user is going to have to pay to issue this storage request.
 				let storage_request_deposit = calculate_storage_request_deposit();
+
+				// Calculate the upfront amount that the user is going to have to pay to the treasury to issue this storage request and
+				// get the treasury's balance before issuing the request.
+				let upfront_amount_to_pay = calculate_upfront_amount_to_pay(replication_target.clone(), size);
+				let treasury_balance_before = <Test as file_system::Config>::Currency::free_balance(&<Test as crate::Config>::TreasuryAccount::get());
 
                 let owner_initial_balance =
                     <Test as file_system::Config>::Currency::free_balance(&owner_account_id);
@@ -2048,7 +2055,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    ReplicationTarget::Standard
+                    replication_target
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2079,20 +2086,28 @@ mod request_storage {
                     })
                 );
 
-                // Check that the deposit was held from the owner's balance
-                assert_eq!(
-                    <Test as Config>::Currency::balance_on_hold(
-                        &RuntimeHoldReason::FileSystem(
-                            file_system::HoldReason::StorageRequestCreationHold
-                        ),
-                        &owner_account_id
-                    ),
-                    storage_request_deposit
-                );
-                assert_eq!(
-                    <Test as Config>::Currency::free_balance(&owner_account_id),
-                    owner_initial_balance - storage_request_deposit
-                );
+				// Check that the owner paid upfront to cover the retrieval costs and the corresponding
+				// deposit was held from the owner's balance.
+				assert_eq!(
+					<Test as Config>::Currency::balance_on_hold(
+						&RuntimeHoldReason::FileSystem(
+							file_system::HoldReason::StorageRequestCreationHold
+						),
+						&owner_account_id
+					),
+					storage_request_deposit
+				);
+				assert_eq!(
+					<Test as Config>::Currency::free_balance(&owner_account_id),
+					owner_initial_balance - storage_request_deposit - upfront_amount_to_pay
+				);
+
+				// Check that the treasury received the correct amount of funds.
+				assert_eq!(
+					<Test as file_system::Config>::Currency::free_balance(&<Test as crate::Config>::TreasuryAccount::get()),
+					treasury_balance_before + upfront_amount_to_pay
+				);
+
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -2759,7 +2774,7 @@ mod revoke_storage_request {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -2840,7 +2855,7 @@ mod revoke_storage_request {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -3470,7 +3485,7 @@ mod msp_respond_storage_request {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -4299,7 +4314,7 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -4369,7 +4384,7 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -4429,7 +4444,7 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -4485,7 +4500,7 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -4554,7 +4569,7 @@ mod bsp_volunteer {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -4614,11 +4629,11 @@ mod bsp_volunteer {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = StorageData::<Test>::try_from(4).unwrap();
+                let size = StorageDataUnit::<Test>::try_from(4).unwrap();
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -4703,11 +4718,11 @@ mod bsp_volunteer {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = StorageData::<Test>::try_from(4).unwrap();
+                let size = StorageDataUnit::<Test>::try_from(4).unwrap();
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -4832,7 +4847,7 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -5028,7 +5043,7 @@ mod bsp_confirm {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -5094,7 +5109,7 @@ mod bsp_confirm {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -5232,7 +5247,7 @@ mod bsp_confirm {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let size = 4;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
@@ -5340,7 +5355,7 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_ids =
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 // Setup MSP and bucket
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
@@ -5434,7 +5449,7 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -5530,7 +5545,7 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -5719,7 +5734,7 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_ids =
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 // Setup MSP and bucket
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
@@ -5865,7 +5880,7 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -6169,7 +6184,7 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 // Sign up the MSP that will be used in the test and create a bucket under it for the file.
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
@@ -6412,7 +6427,7 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -6564,7 +6579,7 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -6719,7 +6734,7 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -6889,7 +6904,7 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -7096,7 +7111,7 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -7290,7 +7305,7 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -7538,7 +7553,7 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -7781,7 +7796,7 @@ mod bsp_stop_storing {
 				let second_file_fingerprint = H256::random();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -8089,7 +8104,7 @@ mod bsp_stop_storing {
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
                 let fingerprint = H256::zero();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -8242,7 +8257,7 @@ mod bsp_stop_storing {
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
                 let fingerprint = H256::zero();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -8389,6 +8404,10 @@ mod bsp_stop_storing {
 				// Calculate the deposit that the user is going to have to pay to issue this storage request.
 				let storage_request_deposit = calculate_storage_request_deposit();
 
+				// Get the free balance of the owner and the treasury before the storage request is issued
+				let owner_free_balance_before = <Test as Config>::Currency::free_balance(&owner_account_id);
+				let treasury_free_balance_before = <Test as Config>::Currency::free_balance(&<Test as Config>::TreasuryAccount::get());
+
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
                     bsp_signed.clone(),
@@ -8403,6 +8422,12 @@ mod bsp_stop_storing {
                         encoded_nodes: vec![file_key.as_ref().to_vec()],
                     },
                 ));
+
+				// Assert that the treasury's free balance has only increased by the BSP stop storing file penalty and the owner's
+				// free balance has only diminished by the storage request creation deposit, since a storage request generated by
+				// a BSP stop storing request does not make the user pay anything upfront.
+				assert_eq!(<Test as Config>::Currency::free_balance(&owner_account_id), owner_free_balance_before - storage_request_deposit);
+				assert_eq!(<Test as Config>::Currency::free_balance(&<Test as Config>::TreasuryAccount::get()), treasury_free_balance_before + <<Test as crate::Config>::BspStopStoringFilePenalty as Get<BalanceOf<Test>>>::get());
 
                 // Assert that the storage request was created with one bsps_required
                 assert_eq!(
@@ -9458,7 +9483,7 @@ mod compute_threshold {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -9517,7 +9542,7 @@ mod compute_threshold {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -9653,7 +9678,7 @@ mod compute_threshold {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -9694,7 +9719,7 @@ mod compute_threshold {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
                 let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
@@ -9716,7 +9741,7 @@ mod compute_threshold {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
                 let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
@@ -9754,14 +9779,14 @@ mod compute_threshold {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
                 let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
                 // Create another BSP with higher weight
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
                 let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
@@ -9810,13 +9835,13 @@ mod compute_threshold {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
                 let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
                 // Create another BSP
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
                 let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
 
@@ -9870,7 +9895,7 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -10098,7 +10123,7 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 50;
+                let storage_amount: StorageDataUnit<Test> = 50;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -10297,7 +10322,7 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -10567,7 +10592,7 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -10812,7 +10837,7 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -11128,7 +11153,7 @@ mod msp_stop_storing_bucket {
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
-    storage_amount: StorageData<Test>,
+    storage_amount: StorageDataUnit<Test>,
 ) -> DispatchResultWithPostInfo {
     let multiaddresses = create_sp_multiaddresses();
 
@@ -11250,4 +11275,28 @@ fn calculate_storage_request_deposit() -> BalanceOf<Test> {
         .saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
 
     storage_request_deposit
+}
+
+fn calculate_upfront_amount_to_pay(
+    replication_target: ReplicationTarget<Test>,
+    size: StorageDataUnit<Test>,
+) -> BalanceOf<Test> {
+    let replication_target = match replication_target {
+        ReplicationTarget::Basic => <Test as crate::Config>::BasicReplicationTarget::get(),
+        ReplicationTarget::Standard => <Test as crate::Config>::StandardReplicationTarget::get(),
+        ReplicationTarget::HighSecurity => {
+            <Test as crate::Config>::HighSecurityReplicationTarget::get()
+        }
+        ReplicationTarget::SuperHighSecurity => {
+            <Test as crate::Config>::SuperHighSecurityReplicationTarget::get()
+        }
+        ReplicationTarget::UltraHighSecurity => {
+            <Test as crate::Config>::UltraHighSecurityReplicationTarget::get()
+        }
+        ReplicationTarget::Custom(replication_target) => replication_target,
+    };
+    <<Test as crate::Config>::PaymentStreams as PricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick()
+				.saturating_mul(<Test as crate::Config>::TickNumberToBalance::convert(<Test as crate::Config>::UpfrontTicksToPay::get()))
+				.saturating_mul(<Test as crate::Config>::ReplicationTargetToBalance::convert(replication_target))
+				.saturating_mul(<Test as crate::Config>::StorageDataUnitToBalance::convert(size))
 }

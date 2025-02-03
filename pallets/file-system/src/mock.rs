@@ -583,6 +583,7 @@ pub(crate) type ReplicationTargetType = u32;
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 30;
     pub const BaseStorageRequestCreationDeposit: Balance = 10;
+    pub const UpfrontTicksToPay: TickNumber = 10;
     pub const FileDeletionRequestCreationDeposit: Balance = 10;
     pub const FileSystemStorageRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
     pub const FileSystemFileDeletionRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::FileDeletionRequestHold);
@@ -622,8 +623,11 @@ impl crate::Config for Test {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type BaseStorageRequestCreationDeposit = BaseStorageRequestCreationDeposit;
+    type UpfrontTicksToPay = UpfrontTicksToPay;
     type WeightToFee = FixedFee<5, Balance>;
     type ReplicationTargetToBalance = ReplicationTargetToBalance;
+    type TickNumberToBalance = TickNumberToBalance;
+    type StorageDataUnitToBalance = StorageDataUnitToBalance;
     type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
     type BasicReplicationTarget = ConstU32<2>;
     type StandardReplicationTarget = ConstU32<3>;
@@ -653,6 +657,23 @@ pub struct ReplicationTargetToBalance;
 impl Convert<ReplicationTargetType, Balance> for ReplicationTargetToBalance {
     fn convert(replication_target: ReplicationTargetType) -> Balance {
         replication_target.into()
+    }
+}
+
+// Converter from the TickNumber type to the Balance type for math.
+pub type TickNumber = BlockNumber;
+pub struct TickNumberToBalance;
+impl Convert<TickNumber, Balance> for TickNumberToBalance {
+    fn convert(tick_number: TickNumber) -> Balance {
+        tick_number.into()
+    }
+}
+
+// Converter from the StorageDataUnit type to the Balance type for math.
+pub struct StorageDataUnitToBalance;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.into()
     }
 }
 

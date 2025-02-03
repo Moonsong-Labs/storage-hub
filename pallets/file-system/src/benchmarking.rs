@@ -416,7 +416,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -481,7 +481,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -645,7 +645,7 @@ mod benchmarks {
                 let fingerprint = <<T as frame_system::Config>::Hashing as Hasher>::hash(
                     b"benchmark_fingerprint",
                 );
-                let size: StorageData<T> = 100;
+                let size: StorageDataUnit<T> = 100;
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
@@ -838,7 +838,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -2323,7 +2323,7 @@ mod benchmarks {
         // Set the total used capacity of the network to be the same as the total capacity of the network,
         // since this makes the price updater use the second order Taylor series approximation, which
         // is the most computationally expensive.
-        let total_capacity: StorageData<T> = 1024 * 1024 * 1024;
+        let total_capacity: StorageDataUnit<T> = 1024 * 1024 * 1024;
         pallet_storage_providers::UsedBspsCapacity::<T>::put(total_capacity);
         pallet_storage_providers::TotalBspsCapacity::<T>::put(total_capacity);
 
@@ -2395,7 +2395,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -2511,7 +2511,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -2718,8 +2718,8 @@ mod benchmarks {
             T::Hashing::hash_of(&msp)
         };
 
-        let capacity: StorageData<T> = 1024 * 1024 * 1024;
-        let capacity_used: StorageData<T> = 0;
+        let capacity: StorageDataUnit<T> = 1024 * 1024 * 1024;
+        let capacity_used: StorageDataUnit<T> = 0;
 
         let msp_info = pallet_storage_providers::types::MainStorageProvider {
             capacity,
@@ -2746,7 +2746,7 @@ mod benchmarks {
         .try_into()
         .unwrap();
 
-        let bucket_data_limit: StorageData<T> = capacity;
+        let bucket_data_limit: StorageDataUnit<T> = capacity;
         // Use One::one() or a conversion that matches the expected balance type:
         let value_prop = ValueProposition::<T>::new(One::one(), commitment, bucket_data_limit);
         let value_prop_id = value_prop.derive_id();

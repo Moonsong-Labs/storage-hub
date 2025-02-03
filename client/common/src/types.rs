@@ -33,7 +33,7 @@ pub type FileMetadata =
 pub type FileKey = shp_file_metadata::FileKey<H_LENGTH>;
 pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
 pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
-pub type StorageData = pallet_file_system::types::StorageData<Runtime>;
+pub type StorageData = pallet_file_system::types::StorageDataUnit<Runtime>;
 pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
 pub type StorageRequestMspBucketResponse =
     pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;

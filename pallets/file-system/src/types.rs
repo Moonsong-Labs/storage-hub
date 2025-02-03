@@ -49,7 +49,7 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// SPs will use this to determine if they have enough space to store the data.
     /// This is also used to verify that the data sent by the user matches the size specified here.
-    pub size: StorageData<T>,
+    pub size: StorageDataUnit<T>,
 
     /// MSP who is requested to store the data, and if it has already confirmed that it is storing it.
     ///
@@ -281,7 +281,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
     pub user: T::AccountId,
     pub file_key: MerkleHash<T>,
     pub bucket_id: BucketIdFor<T>,
-    pub file_size: StorageData<T>,
+    pub file_size: StorageDataUnit<T>,
     pub deposit_paid_for_creation: BalanceOf<T>,
 }
 
@@ -290,7 +290,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
 pub struct PendingStopStoringRequest<T: Config> {
     pub tick_when_requested: TickNumber<T>,
     pub file_owner: T::AccountId,
-    pub file_size: StorageData<T>,
+    pub file_size: StorageDataUnit<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -434,8 +434,8 @@ pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;
 /// Alias for the `Fingerprint` type used in the FileSystem pallet.
 pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 
-/// Alias for the `StorageData` type used in the MutateProvidersInterface.
-pub type StorageData<T> =
+/// Alias for the `StorageDataUnit` type used in the MutateProvidersInterface.
+pub type StorageDataUnit<T> =
     <<T as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::StorageDataUnit;
 
 /// Alias for the `ReplicationTargetType` type used in the FileSystem pallet.

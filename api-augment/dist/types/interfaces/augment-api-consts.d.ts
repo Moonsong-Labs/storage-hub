@@ -182,6 +182,21 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       ultraHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
+       * The amount of ticks that the user has to pay upfront when issuing a storage request.
+       *
+       * This is to compensate the system load that the process of file retrieval will have on the network.
+       * If this did not exist, a malicious user could spam the network with huge files, making BSPs change
+       * their capacity and download a lot of data while the user might not even have the balance to
+       * store and pay those BSPs in the long term.
+       *
+       * It initially exists as a deterrent, since these funds will be transferred to the treasury and not to the BSPs
+       * of the network. Governance can then decide what to do with these funds.
+       *
+       * The amount that the user is going to have to pay is calculated as follows:
+       * `Replication Target Chosen * PricePerGigaUnitPerTick * File Size in Gigabytes * UpfrontTicksToPay`
+       **/
+      upfrontTicksToPay: u32 & AugmentedConst<ApiType>;
+      /**
        * Generic const
        **/
       [key: string]: Codec;

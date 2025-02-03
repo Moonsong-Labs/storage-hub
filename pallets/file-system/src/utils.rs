@@ -29,8 +29,9 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_file_metadata::ChunkId;
 use shp_traits::{
     CommitRevealRandomnessInterface, MutateBucketsInterface, MutateStorageProvidersInterface,
-    PaymentStreamsInterface, ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
-    ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
+    PaymentStreamsInterface, PricePerGigaUnitPerTickInterface, ProofsDealerInterface,
+    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
 use crate::{
@@ -41,7 +42,7 @@ use crate::{
         FileLocation, Fingerprint, ForestProof, MerkleHash, MoveBucketRequestMetadata,
         MultiAddresses, PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest,
         ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
-        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
@@ -708,7 +709,7 @@ where
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         msp_id: Option<ProviderIdFor<T>>,
         replication_target: ReplicationTarget<T>,
         user_peer_ids: Option<PeerIds<T>>,
@@ -749,31 +750,7 @@ where
             Error::<T>::CannotHoldDeposit
         );
 
-        // If a specific MSP ID is provided, check that it is a valid MSP and that it has enough available capacity to store the file.
-        let msp = if let Some(ref msp_id) = msp_id {
-            // Check that the received Provider ID corresponds to a valid MSP.
-            ensure!(
-                <T::Providers as ReadStorageProvidersInterface>::is_msp(msp_id),
-                Error::<T>::NotAMsp
-            );
-
-            // Check if the MSP is insolvent
-            ensure!(
-                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
-                Error::<T>::OperationNotAllowedForInsolventProvider
-            );
-
-            // Check that the MSP received is the one storing the bucket.
-            ensure!(
-                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(msp_id, &bucket_id),
-                Error::<T>::MspNotStoringBucket
-            );
-
-            Some((*msp_id, false))
-        } else {
-            None
-        };
-
+        // Get the chosen replication target.
         let replication_target = match replication_target {
             ReplicationTarget::Basic => T::BasicReplicationTarget::get(),
             ReplicationTarget::Standard => T::StandardReplicationTarget::get(),
@@ -783,16 +760,17 @@ where
             ReplicationTarget::Custom(replication_target) => replication_target,
         };
 
-        if replication_target.is_zero() {
-            return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
-        }
+        // Ensure that the chosen replication target is not zero.
+        ensure!(
+            !replication_target.is_zero(),
+            Error::<T>::ReplicationTargetCannotBeZero
+        );
 
-        if replication_target > T::MaxReplicationTarget::get() {
-            return Err(Error::<T>::ReplicationTargetExceedsMaximum)?;
-        }
-
-        let current_tick =
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+        // Ensure that the chosen replication target is not greater than the maximum allowed replication target.
+        ensure!(
+            replication_target <= T::MaxReplicationTarget::get(),
+            Error::<T>::ReplicationTargetExceedsMaximum
+        );
 
         // Compute the file key used throughout this file's lifespan.
         let file_key = Self::compute_file_key(
@@ -809,9 +787,53 @@ where
             Error::<T>::StorageRequestAlreadyRegistered
         );
 
+        // If a MSP ID is provided, this storage request came from a user.
+        let msp = if let Some(ref msp_id) = msp_id {
+            // Check that the received Provider ID corresponds to a valid MSP.
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::is_msp(msp_id),
+                Error::<T>::NotAMsp
+            );
+
+            // Check if the selected MSP is insolvent.
+            ensure!(
+                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
+            // Check that the selected MSP is the one storing the selected bucket.
+            ensure!(
+                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(msp_id, &bucket_id),
+                Error::<T>::MspNotStoringBucket
+            );
+
+            // Since this request came from a user, it has to pay an amount upfront to cover the effects that
+            // file retrieval will have on the network's availability.
+            // This amount is paid to the treasury. Governance can then decide what to do with the accumulated
+            // funds (such as splitting them among the BSPs).
+            let amount_to_pay_upfront = <T::PaymentStreams as PricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick()
+				.saturating_mul(T::TickNumberToBalance::convert(T::UpfrontTicksToPay::get()))
+				.saturating_mul(T::ReplicationTargetToBalance::convert(replication_target))
+				.saturating_mul(T::StorageDataUnitToBalance::convert(size));
+            T::Currency::transfer(
+                &sender,
+                &T::TreasuryAccount::get(),
+                amount_to_pay_upfront,
+                Preservation::Preserve,
+            )?;
+
+            Some((*msp_id, false))
+        } else {
+            None
+        };
+
         // Enqueue an expiration item for the storage request to clean it up if it expires without being fulfilled or cancelled.
         let expiration_item = ExpirationItem::StorageRequest(file_key);
         let expiration_tick = Self::enqueue_expiration_item(expiration_item)?;
+
+        // Get the current tick.
+        let current_tick =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
         // Create the storage request's metadata.
         let zero = ReplicationTargetType::<T>::zero();
@@ -831,19 +853,18 @@ where
             deposit_paid: deposit,
         };
 
-        // Hold the deposit from the user
+        // Hold the required deposit from the user.
         T::Currency::hold(
             &HoldReason::StorageRequestCreationHold.into(),
             &sender,
             deposit,
         )?;
 
-        // Register storage request.
+        // Register the storage request and add it to the bucket's storage requests.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
-
         <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
-        // BSPs listen to this event and volunteer to store the file
+        // Emit the `NewStorageRequest` event.
         Self::deposit_event(Event::NewStorageRequest {
             who: sender,
             file_key,
@@ -1775,7 +1796,7 @@ where
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         can_serve: bool,
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
@@ -2036,7 +2057,7 @@ where
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         // Get the SP ID
@@ -2205,7 +2226,7 @@ where
         file_key: MerkleHash<T>,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
         // Compute the file key hash.
@@ -2350,7 +2371,7 @@ where
         sender: T::AccountId,
         user: T::AccountId,
         file_key: MerkleHash<T>,
-        file_size: StorageData<T>,
+        file_size: StorageDataUnit<T>,
         bucket_id: BucketIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
@@ -2508,7 +2529,7 @@ where
         owner: T::AccountId,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         fingerprint: Fingerprint<T>,
     ) -> MerkleHash<T> {
         shp_file_metadata::FileMetadata::<
@@ -2546,7 +2567,7 @@ mod hooks {
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
             let current_data_price_per_giga_unit =
-                <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
+                <T::PaymentStreams as shp_traits::PricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
 
             let new_data_price_per_giga_unit =
                 <T::UpdateStoragePrice as shp_traits::UpdateStoragePrice>::update_storage_price(
@@ -2556,7 +2577,7 @@ mod hooks {
                 );
 
             if new_data_price_per_giga_unit != current_data_price_per_giga_unit {
-                <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::set_price_per_giga_unit_per_tick(
+                <T::PaymentStreams as shp_traits::PricePerGigaUnitPerTickInterface>::set_price_per_giga_unit_per_tick(
                     new_data_price_per_giga_unit,
                 );
             }

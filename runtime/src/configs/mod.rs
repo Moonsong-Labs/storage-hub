@@ -843,8 +843,11 @@ impl pallet_file_system::Config for Runtime {
     type MinWaitForStopStoring =
         runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
     type BaseStorageRequestCreationDeposit = BaseStorageRequestCreationDeposit;
+    type UpfrontTicksToPay = runtime_params::dynamic_params::runtime_config::UpfrontTicksToPay;
     type WeightToFee = WeightToFee;
     type ReplicationTargetToBalance = ReplicationTargetToBalance;
+    type TickNumberToBalance = TickNumberToBalance;
+    type StorageDataUnitToBalance = StorageDataUnitToBalance;
     type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
     type BasicReplicationTarget =
         runtime_params::dynamic_params::runtime_config::BasicReplicationTarget;
@@ -942,6 +945,23 @@ pub struct ReplicationTargetToBalance;
 impl Convert<ReplicationTargetType, Balance> for ReplicationTargetToBalance {
     fn convert(replication_target: ReplicationTargetType) -> Balance {
         replication_target.into()
+    }
+}
+
+// Converter from the TickNumber type to the Balance type.
+pub type TickNumber = BlockNumber;
+pub struct TickNumberToBalance;
+impl Convert<TickNumber, Balance> for TickNumberToBalance {
+    fn convert(tick_number: TickNumber) -> Balance {
+        tick_number.into()
+    }
+}
+
+// Converter from the StorageDataUnit type to the Balance type.
+pub struct StorageDataUnitToBalance;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
+    fn convert(storage_data_unit: StorageDataUnit) -> Balance {
+        storage_data_unit.into()
     }
 }
 /****** ****** ****** ******/
