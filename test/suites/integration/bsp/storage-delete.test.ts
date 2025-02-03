@@ -109,8 +109,16 @@ describeBspNet(
       // Wait for the right moment to confirm stop storing
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const cooldown =
-        currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+      const minWaitForStopStoring = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: {
+            MinWaitForStopStoring: null
+          }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
+      const cooldown = currentBlockNumber + minWaitForStopStoring;
 
       // New storage request does not get fulfilled and therefore gets cleaned up and we enqueue a checkpoint challenge remove mutation
       // Which then the bsp responds to and has the file key get removed from the forest
