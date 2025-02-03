@@ -26,6 +26,7 @@ use pallet_file_system_runtime_api::{
     QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
+use shp_constants::GIGAUNIT;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
     CommitRevealRandomnessInterface, MutateBucketsInterface, MutateStorageProvidersInterface,
@@ -814,7 +815,9 @@ where
             let amount_to_pay_upfront = <T::PaymentStreams as PricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick()
 				.saturating_mul(T::TickNumberToBalance::convert(T::UpfrontTicksToPay::get()))
 				.saturating_mul(T::ReplicationTargetToBalance::convert(replication_target))
-				.saturating_mul(T::StorageDataUnitToBalance::convert(size));
+				.saturating_mul(T::StorageDataUnitToBalance::convert(size))
+				.checked_div(&GIGAUNIT.into())
+				.unwrap_or_default();
             T::Currency::transfer(
                 &sender,
                 &T::TreasuryAccount::get(),
