@@ -8,12 +8,16 @@ use shc_blockchain_service::{
 use shc_common::types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout};
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
+use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
 use sp_runtime::AccountId32;
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "user-sends-file-task";
+
+/// Size of each batch in bytes (2 MiB)
+const BATCH_SIZE_BYTES: usize = 2 * 1024 * 1024;
 
 /// [`UserSendsFileTask`]: Handles the events related to users sending a file to be stored by BSPs
 /// volunteering for that file.
@@ -200,69 +204,115 @@ where
         for peer_id in peer_ids {
             debug!(target: LOG_TARGET, "Attempting to send chunks of file key {:?} to peer {:?}", file_key, peer_id);
 
+            let mut current_batch = Vec::new();
+            let mut current_batch_size = 0;
+
             for chunk_id in 0..chunk_count {
-                debug!(target: LOG_TARGET, "Trying to send chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_key, peer_id);
-                let proof = match self
-                    .storage_hub_handler
-                    .file_storage
-                    .read()
-                    .await
-                    .generate_proof(&file_key, &vec![ChunkId::new(chunk_id)])
-                {
-                    Ok(proof) => proof,
-                    Err(e) => {
-                        return Err(anyhow::anyhow!(
-                            "Failed to generate proof for chunk id {:?} of file {:?}\n Error: {:?}",
-                            chunk_id,
-                            file_key,
-                            e
-                        ));
-                    }
+                // Calculate the size of the current chunk
+                let chunk_size = if chunk_id == chunk_count - 1 {
+                    file_metadata.file_size % FILE_CHUNK_SIZE as u64
+                } else {
+                    FILE_CHUNK_SIZE as u64
                 };
 
-                let mut retry_attempts = 0;
-                loop {
-                    let upload_response = self
+                // Add chunk to current batch
+                current_batch.push(ChunkId::new(chunk_id));
+                current_batch_size += chunk_size as usize;
+
+                // If we've reached BATCH_SIZE_BYTES or this is the last chunk, send the batch
+                if current_batch_size >= BATCH_SIZE_BYTES || chunk_id == chunk_count - 1 {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Sending batch of {} chunks (total size: {} bytes) for file {:?} to peer {:?}",
+                        current_batch.len(),
+                        current_batch_size,
+                        file_key,
+                        peer_id
+                    );
+
+                    // Generate proof for the entire batch
+                    let proof = match self
                         .storage_hub_handler
-                        .file_transfer
-                        .upload_request(peer_id, file_key.as_ref().into(), proof.clone(), None)
-                        .await;
-
-                    match upload_response {
-                        Ok(r) => {
-                            debug!(target: LOG_TARGET, "Successfully uploaded chunk id {:?} of file {:?} to peer {:?}", chunk_id, file_metadata.fingerprint, peer_id);
-
-                            // If the provider signals they have the entire file, we can stop
-                            if r.file_complete {
-                                info!(target: LOG_TARGET, "Stopping file upload process. Peer {:?} has the entire file {:?}", peer_id, file_metadata.fingerprint);
-                                return Ok(());
-                            }
-
-                            break;
-                        }
-                        // Retry if the request was refused by the peer (MSP). This could happen if the user was too fast
-                        // before the MSP registered the NewStorageRequest event and was ready to receive the file.
-                        Err(RequestError::RequestFailure(RequestFailure::Refused))
-                            if retry_attempts < 3 =>
-                        {
-                            warn!(target: LOG_TARGET, "Chunk id {:?} upload rejected by peer {:?}, retrying... (attempt {})", chunk_id, peer_id, retry_attempts + 1);
-                            retry_attempts += 1;
-
-                            // Wait for a short time before retrying.
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                        }
-                        Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
-                            // TODO: Handle MSP not receiving file after multiple retries.
-                        }
+                        .file_storage
+                        .read()
+                        .await
+                        .generate_proof(&file_key, &current_batch)
+                    {
+                        Ok(proof) => proof,
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to upload chunk_id {:?} to peer {:?}\n Error: {:?}", chunk_id, peer_id, e);
-                            // In case of an error, we break the inner loop
-                            // and try to connect to the next peer id.
-                            break;
+                            return Err(anyhow::anyhow!(
+                                "Failed to generate proof for batch of file {:?}\n Error: {:?}",
+                                file_key,
+                                e
+                            ));
+                        }
+                    };
+
+                    let mut retry_attempts = 0;
+                    loop {
+                        let upload_response = self
+                            .storage_hub_handler
+                            .file_transfer
+                            .upload_request(peer_id, file_key.as_ref().into(), proof.clone(), None)
+                            .await;
+
+                        match upload_response {
+                            Ok(r) => {
+                                debug!(
+                                    target: LOG_TARGET,
+                                    "Successfully uploaded batch for file {:?} to peer {:?}",
+                                    file_metadata.fingerprint,
+                                    peer_id
+                                );
+
+                                // If the provider signals they have the entire file, we can stop
+                                if r.file_complete {
+                                    info!(
+                                        target: LOG_TARGET,
+                                        "Stopping file upload process. Peer {:?} has the entire file {:?}",
+                                        peer_id,
+                                        file_metadata.fingerprint
+                                    );
+                                    return Ok(());
+                                }
+
+                                break;
+                            }
+                            Err(RequestError::RequestFailure(RequestFailure::Refused))
+                                if retry_attempts < 3 =>
+                            {
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "Batch upload rejected by peer {:?}, retrying... (attempt {})",
+                                    peer_id,
+                                    retry_attempts + 1
+                                );
+                                retry_attempts += 1;
+
+                                // Wait for a short time before retrying
+                                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            }
+                            Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
+                                // TODO: Handle MSP not receiving file after multiple retries.
+                            }
+                            Err(e) => {
+                                error!(
+                                    target: LOG_TARGET,
+                                    "Failed to upload batch to peer {:?}\n Error: {:?}",
+                                    peer_id,
+                                    e
+                                );
+                                break;
+                            }
                         }
                     }
+
+                    // Clear the batch for next iteration
+                    current_batch.clear();
+                    current_batch_size = 0;
                 }
             }
+
             info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
             return Ok(());
         }

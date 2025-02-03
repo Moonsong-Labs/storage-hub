@@ -17,6 +17,9 @@ use sp_trie::CompactProof;
 use storage_hub_runtime::{apis::RuntimeApi, opaque::Block, Runtime};
 use trie_db::TrieLayout;
 
+/// Size of each batch in bytes (2 MiB)
+pub const BATCH_SIZE_BYTES: usize = 2 * 1024 * 1024;
+
 /// The hash type of trie node keys
 pub type HashT<T> = <T as TrieLayout>::Hash;
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

@@ -19,7 +19,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     userApi = await createUserApi();
   });
 
-  it("Unregistered accounts fail when changing capacities", async () => {
+  it.only("Unregistered accounts fail when changing capacities", async () => {
     const totalCapacityBefore = await userApi.query.providers.totalBspsCapacity();
     const bspCapacityBefore = await userApi.query.providers.backupStorageProviders(
       userApi.shConsts.DUMMY_BSP_ID
@@ -52,7 +52,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     assert.ok(totalCapacityAfter.eq(totalCapacityBefore));
   });
 
-  it("Change capacity ext called before volunteering for file size greater than available capacity", async () => {
+  it.only("Change capacity ext called before volunteering for file size greater than available capacity", async () => {
     // 1 block to maxthreshold (i.e. instant acceptance)
     const tickToMaximumThresholdRuntimeParameter = {
       RuntimeConfig: {
@@ -128,12 +128,16 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     await userApi.assert.eventPresent("fileSystem", "AcceptedBspVolunteer");
   });
 
-  it("Total capacity updated when single BSP capacity updated", async () => {
+  it.only("Total capacity updated when single BSP capacity updated", async () => {
     const newCapacity =
       BigInt(Math.floor(Math.random() * 1000 * 1024 * 1024)) + userApi.shConsts.CAPACITY_512;
 
+    console.log("TEST 1");
+
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
+
+    console.log("TEST 2");
 
     await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
     await userApi.block.seal({
@@ -141,35 +145,53 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       signer: bspKey
     });
 
+    console.log("TEST 3");
+
     const totalCapacityAfter = await userApi.query.providers.totalBspsCapacity();
     const bspCapacityAfter = await userApi.query.providers.backupStorageProviders(
       userApi.shConsts.DUMMY_BSP_ID
     );
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), newCapacity);
     assert.strictEqual(totalCapacityAfter.toBigInt(), newCapacity);
+
+    console.log("TEST 4");
   });
 
-  it("Test BSP storage size can not be decreased below used", async () => {
+  it.only("Test BSP storage size can not be decreased below used", async () => {
     const source = "res/adolphus.jpg";
     const location = "test/adolphus.jpg";
     const bucketName = "nothingmuch-2";
     await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
 
+    console.log("TEST 5");
+
     await userApi.wait.bspVolunteer();
     await userApi.wait.bspStored();
+
+    console.log("TEST 6");
 
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
 
+    console.log("TEST 7");
+
     await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
+
+    console.log("TEST 8");
+
     const { events, extSuccess } = await userApi.block.seal({
       calls: [userApi.tx.providers.changeCapacity(2n)],
       signer: bspKey
     });
     assert.strictEqual(extSuccess, false);
+
+    console.log("TEST 9");
+
     const {
       data: { dispatchError: eventInfo }
     } = userApi.assert.fetchEvent(userApi.events.system.ExtrinsicFailed, events);
+
+    console.log("TEST 10");
 
     const providersPallet = userApi.runtimeMetadata.asLatest.pallets.find(
       (pallet) => pallet.name.toString() === "Providers"
@@ -178,6 +200,8 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       userApi.errors.providers.NewCapacityLessThanUsedStorage.meta.index.toNumber();
     assert.strictEqual(eventInfo.asModule.index.toNumber(), providersPallet?.index.toNumber());
     assert.strictEqual(eventInfo.asModule.error[0], newCapacityLessThanUsedStorageErrorIndex);
+
+    console.log("TEST 11");
   });
 
   it("Test BSP storage size increased twice in the same increasing period (check for race condition)", async () => {
