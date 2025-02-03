@@ -306,8 +306,19 @@ describeMspNet(
     });
 
     it("User moves bucket to second MSP", async () => {
+      // Get the value propositions of the second MSP to use, and use the first one (can be any).
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID_2
+      );
+      const valuePropId = valueProps[0].id;
       const requestMoveBucketResult = await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2)],
+        calls: [
+          userApi.tx.fileSystem.requestMoveBucket(
+            bucketId,
+            msp2Api.shConsts.DUMMY_MSP_ID_2,
+            valuePropId
+          )
+        ],
         signer: shUser
       });
 
