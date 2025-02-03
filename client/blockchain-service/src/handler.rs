@@ -1199,11 +1199,15 @@ where
                 // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
                 // TODO: Catch up to Forest root writes in the Bucket's Forests.
 
+                info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
+
                 let storage_requests: Vec<(H256, StorageRequestMetadata)> = self
                     .client
                     .runtime_api()
                     .storage_requests_by_msp(block_hash, msp_id)
                     .unwrap();
+
+                dbg!(&storage_requests);
 
                 for (file_key, sr) in storage_requests {
                     self.emit(NewStorageRequest {
