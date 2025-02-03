@@ -5684,7 +5684,7 @@ declare module "@polkadot/types/lookup" {
     readonly capacity: u64;
     readonly capacityUsed: u64;
     readonly multiaddresses: Vec<Bytes>;
-    readonly amountOfBuckets: u32;
+    readonly amountOfBuckets: u128;
     readonly amountOfValueProps: u32;
     readonly lastCapacityChange: u32;
     readonly ownerAccount: AccountId32;

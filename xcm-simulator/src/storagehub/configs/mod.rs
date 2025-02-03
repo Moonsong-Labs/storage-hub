@@ -535,7 +535,7 @@ impl pallet_storage_providers::Config for Runtime {
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
-    type BucketCount = u32;
+    type BucketCount = u128;
     type MerklePatriciaRoot = Hash;
     type MerkleTrieHashing = Hashing;
     type ProviderId = Hash;

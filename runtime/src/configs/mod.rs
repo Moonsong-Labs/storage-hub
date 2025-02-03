@@ -498,7 +498,7 @@ impl pallet_storage_providers::Config for Runtime {
     type StorageDataUnit = StorageDataUnit;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type SpCount = u32;
-    type BucketCount = u32;
+    type BucketCount = u128;
     type MerklePatriciaRoot = Hash;
     type MerkleTrieHashing = Hashing;
     type ProviderId = Hash;

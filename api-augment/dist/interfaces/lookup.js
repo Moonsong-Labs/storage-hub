@@ -4452,7 +4452,7 @@ export default {
     capacity: "u64",
     capacityUsed: "u64",
     multiaddresses: "Vec<Bytes>",
-    amountOfBuckets: "u32",
+    amountOfBuckets: "u128",
     amountOfValueProps: "u32",
     lastCapacityChange: "u32",
     ownerAccount: "AccountId32",
