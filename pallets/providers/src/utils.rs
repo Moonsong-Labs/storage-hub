@@ -1093,6 +1093,7 @@ where
         Ok((msp_id, value_prop))
     }
 
+    // TODO: Maybe this should error out if this value proposition is the only one remaining for the MSP?
     pub(crate) fn do_make_value_prop_unavailable(
         who: &T::AccountId,
         value_prop_id: ValuePropIdFor<T>,
@@ -1326,16 +1327,9 @@ where
 
             let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-            ensure!(
-                bucket.value_prop_id.is_some(),
-                Error::<T>::BucketHasNoValueProposition
-            );
-
-            let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                &msp_id,
-                &bucket.value_prop_id.unwrap(),
-            )
-            .ok_or(Error::<T>::ValuePropositionNotFound)?;
+            let value_prop =
+                MainStorageProviderIdsToValuePropositions::<T>::get(&msp_id, &bucket.value_prop_id)
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
             let zero_sized_bucket_rate = T::ZeroSizeBucketFixedRate::get();
 
@@ -1596,6 +1590,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
+    type ValuePropId = ValuePropIdFor<T>;
 
     fn bucket_exists(bucket_id: &Self::BucketId) -> bool {
         Buckets::<T>::contains_key(bucket_id)
@@ -1663,11 +1658,11 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         Ok(bucket.size)
     }
 
-    fn get_msp_bucket(
+    fn get_bucket_value_prop_id(
         bucket_id: &Self::BucketId,
-    ) -> Result<Option<Self::ProviderId>, DispatchError> {
+    ) -> Result<Self::ValuePropId, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-        Ok(bucket.msp_id)
+        Ok(bucket.value_prop_id)
     }
 }
 
@@ -1682,12 +1677,12 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ValuePropId = ValuePropIdFor<T>;
 
     fn add_bucket(
-        provider_id: Self::ProviderId,
+        msp_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
-        value_prop_id: Option<Self::ValuePropId>,
+        value_prop_id: Self::ValuePropId,
     ) -> DispatchResult {
         // Check if bucket already exists
         ensure!(
@@ -1703,20 +1698,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         // Check if the MSP exists
         ensure!(
-            MainStorageProviders::<T>::contains_key(&provider_id),
+            MainStorageProviders::<T>::contains_key(&msp_id),
             Error::<T>::NotRegistered
         );
 
-        if let Some(value_prop_id) = value_prop_id {
-            let value_prop =
-                MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
-                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+        let value_prop =
+            MainStorageProviderIdsToValuePropositions::<T>::get(&msp_id, &value_prop_id)
+                .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-            ensure!(
-                value_prop.available,
-                Error::<T>::ValuePropositionNotAvailable
-            );
-        }
+        ensure!(
+            value_prop.available,
+            Error::<T>::ValuePropositionNotAvailable
+        );
 
         let deposit = T::BucketDeposit::get();
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
@@ -1730,7 +1723,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
-            msp_id: Some(provider_id),
+            msp_id: Some(msp_id),
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
             user_id: user_id.clone(),
@@ -1740,10 +1733,10 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         Buckets::<T>::insert(&bucket_id, &bucket);
 
-        MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
+        MainStorageProviderIdsToBuckets::<T>::insert(msp_id, bucket_id, ());
 
         Self::apply_delta_fixed_rate_payment_stream(
-            &provider_id,
+            &msp_id,
             &bucket_id,
             &user_id,
             RateDeltaParam::NewBucket,
@@ -1754,36 +1747,57 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
     fn assign_msp_to_bucket(
         bucket_id: &Self::BucketId,
-        new_msp: &Self::ProviderId,
+        new_msp_id: &Self::ProviderId,
+        new_value_prop_id: &Self::ValuePropId,
     ) -> DispatchResult {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            if let Some(msp_id) = bucket.msp_id {
-                if msp_id == *new_msp {
-                    return Err(Error::<T>::MspAlreadyAssignedToBucket.into());
-                }
+            // If the bucket is currently being stored by a MSP...
+            if let Some(previous_msp_id) = bucket.msp_id {
+                // Ensure the new MSP is different from the previous one.
+                ensure!(
+                    previous_msp_id != *new_msp_id,
+                    Error::<T>::MspAlreadyAssignedToBucket
+                );
 
+                // Update the payment stream between the user and the previous MSP to reflect the removal of the bucket.
                 Self::apply_delta_fixed_rate_payment_stream(
-                    &msp_id,
+                    &previous_msp_id,
                     bucket_id,
                     &bucket.user_id,
                     RateDeltaParam::RemoveBucket,
                 )?;
 
-                MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+                // Remove the bucket from the previous MSP's list of buckets.
+                MainStorageProviderIdsToBuckets::<T>::remove(previous_msp_id, bucket_id);
             }
 
-            bucket.msp_id = Some(*new_msp);
+            // Ensure the value proposition selected is from the selected MSP and currently available.
+            let value_prop =
+                MainStorageProviderIdsToValuePropositions::<T>::get(new_msp_id, new_value_prop_id)
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+            ensure!(
+                value_prop.available,
+                Error::<T>::ValuePropositionNotAvailable
+            );
 
+            // Update the MSP that's currently storing the bucket to the new one.
+            bucket.msp_id = Some(*new_msp_id);
+
+            // Update the bucket's value proposition to the new one.
+            bucket.value_prop_id = *new_value_prop_id;
+
+            // Update the payment stream between the user and the new MSP to reflect the addition of the bucket.
             Self::apply_delta_fixed_rate_payment_stream(
-                new_msp,
+                new_msp_id,
                 bucket_id,
                 &bucket.user_id,
                 RateDeltaParam::NewBucket,
             )?;
 
-            MainStorageProviderIdsToBuckets::<T>::insert(*new_msp, bucket_id, ());
+            // Add the bucket to the new MSP's list of buckets.
+            MainStorageProviderIdsToBuckets::<T>::insert(*new_msp_id, bucket_id, ());
 
             Ok::<_, DispatchError>(())
         })
@@ -1793,13 +1807,16 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            // MSP should exist within the context of this execution.
+            // Get the MSP ID of the MSP that's currently storing the bucket. A bucket cannot be unassigned
+            // from an MSP if it's not currently being stored by an MSP.
             let msp_id = bucket
                 .msp_id
                 .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
 
+            // Update the bucket's MSP to None, signaling that it is not currently being stored by any MSP.
             bucket.msp_id = None;
 
+            // Update the payment stream between the user and the MSP to reflect the removal of the bucket.
             Self::apply_delta_fixed_rate_payment_stream(
                 &msp_id,
                 bucket_id,
@@ -1807,6 +1824,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                 RateDeltaParam::RemoveBucket,
             )?;
 
+            // Remove the bucket from the MSP's list of buckets.
             MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
 
             Ok::<_, DispatchError>(())
@@ -1817,28 +1835,39 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
+            // Ensure the bucket is currently stored by a MSP. A bucket cannot change its
+            // root if it's not currently being stored by an MSP.
+            ensure!(
+                bucket.msp_id.is_some(),
+                Error::<T>::BucketMustHaveMspForOperation
+            );
+
+            // Emit an event to signal the change of the bucket's root.
             Self::deposit_event(Event::BucketRootChanged {
                 bucket_id,
                 old_root: bucket.root,
                 new_root,
             });
 
+            // Update the bucket's root to the new one.
             bucket.root = new_root;
 
             Ok(())
         })
     }
 
-    fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
+    fn delete_bucket(bucket_id: Self::BucketId) -> DispatchResult {
         let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        // Check if the bucket is empty
+        // Check if the bucket is empty i.e. its current root is the default root.
         ensure!(
             bucket.root == T::DefaultMerkleRoot::get(),
             Error::<T>::BucketNotEmpty
         );
 
+        // If the bucket is currently stored by a MSP...
         if let Some(msp_id) = bucket.msp_id {
+            // Update the payment stream between the user and the MSP to reflect the removal of the bucket.
             Self::apply_delta_fixed_rate_payment_stream(
                 &msp_id,
                 &bucket_id,
@@ -1846,12 +1875,14 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                 RateDeltaParam::RemoveBucket,
             )?;
 
+            // Remove the bucket from the MSP's list of buckets.
             MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
-        };
+        }
 
+        // Remove the bucket's metadata from storage.
         Buckets::<T>::remove(&bucket_id);
 
-        // Release the bucket deposit hold
+        // Release the bucket deposit hold to the user.
         T::NativeBalance::release(
             &HoldReason::BucketDeposit.into(),
             &bucket.user_id,
@@ -1892,16 +1923,20 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
+            // Get the MSP ID of the MSP that's currently storing the bucket. A bucket cannot increase in size
+            // if it's not currently being stored by an MSP.
+            let msp_id = bucket
+                .msp_id
+                .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
+
             // First, try to update the fixed rate payment stream with the new rate, since
             // this function uses the current bucket size to calculate it
-            if let Some(msp_id) = bucket.msp_id {
-                Self::apply_delta_fixed_rate_payment_stream(
-                    &msp_id,
-                    bucket_id,
-                    &bucket.user_id,
-                    RateDeltaParam::Increase(delta),
-                )?;
-            }
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::Increase(delta),
+            )?;
 
             // Then, if that was successful, update the bucket size
             bucket.size = bucket.size.saturating_add(delta);
@@ -1917,16 +1952,20 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
+            // Get the MSP ID of the MSP that's currently storing the bucket. A bucket cannot decrease in size
+            // if it's not currently being stored by an MSP.
+            let msp_id = bucket
+                .msp_id
+                .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
+
             // First, try to update the fixed rate payment stream with the new rate, since
             // this function uses the current bucket size to calculate it
-            if let Some(msp_id) = bucket.msp_id {
-                Self::apply_delta_fixed_rate_payment_stream(
-                    &msp_id,
-                    bucket_id,
-                    &bucket.user_id,
-                    RateDeltaParam::Decrease(delta),
-                )?;
-            }
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::Decrease(delta),
+            )?;
 
             // Then, if that was successful, update the bucket size
             bucket.size = bucket.size.saturating_sub(delta);
@@ -1944,6 +1983,7 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
     type MultiAddress = MultiAddress<T>;
     type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
     type ReputationWeight = T::ReputationWeightType;
+    type ValuePropId = ValuePropIdFor<T>;
 
     fn is_bsp(who: &Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
@@ -2009,6 +2049,28 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
             Ok(BoundedVec::from(bsp.multiaddresses))
         } else {
             Err(Error::<T>::NotRegistered.into())
+        }
+    }
+
+    fn is_value_prop_of_msp(who: &Self::ProviderId, value_prop_id: &Self::ValuePropId) -> bool {
+        if let Some(_) = MainStorageProviders::<T>::get(who) {
+            MainStorageProviderIdsToValuePropositions::<T>::contains_key(&who, value_prop_id)
+        } else {
+            false
+        }
+    }
+
+    fn is_value_prop_available(who: &Self::ProviderId, value_prop_id: &Self::ValuePropId) -> bool {
+        if let Some(_) = MainStorageProviders::<T>::get(who) {
+            if let Some(value_prop) =
+                MainStorageProviderIdsToValuePropositions::<T>::get(&who, value_prop_id)
+            {
+                value_prop.available
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 }
@@ -2096,7 +2158,6 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             Some(msp.owner_account)
         } else if let Some(bucket) = Buckets::<T>::get(&who) {
             let msp_id = bucket.msp_id?;
-
             if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
                 Some(msp.owner_account)
             } else {

@@ -361,7 +361,7 @@ pub mod pallet {
     /// This storage is updated in:
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
     /// - [change_root_bucket](shp_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
-    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
+    /// - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket), which removes the entry of the corresponding bucket.
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
@@ -371,7 +371,7 @@ pub mod pallet {
     ///
     /// This storage is updated in:
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
-    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+    /// - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket)
     #[pallet::storage]
     pub type MainStorageProviderIdsToBuckets<T: Config> = StorageDoubleMap<
         _,

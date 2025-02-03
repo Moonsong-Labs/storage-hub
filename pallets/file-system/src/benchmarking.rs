@@ -70,13 +70,7 @@ mod benchmarks {
         let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp, None);
 
         #[extrinsic_call]
-        _(
-            signed_origin.clone(),
-            msp_id,
-            name,
-            true,
-            Some(value_prop_id),
-        );
+        _(signed_origin.clone(), msp_id, name, true, value_prop_id);
 
         Ok(())
     }
@@ -107,7 +101,8 @@ mod benchmarks {
         // Register another MSP with a value proposition
         let new_msp_account: T::AccountId = account("MSP", 0, 1);
         mint_into_account::<T>(new_msp_account.clone(), 1_000_000_000_000_000)?;
-        let (new_msp_id, _) = add_msp_to_provider_storage::<T>(&new_msp_account, None);
+        let (new_msp_id, new_value_prop_id) =
+            add_msp_to_provider_storage::<T>(&new_msp_account, None);
 
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
@@ -115,12 +110,12 @@ mod benchmarks {
             initial_msp_id,
             name,
             true,
-            Some(initial_value_prop_id),
+            initial_value_prop_id,
         )?;
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
-        _(signed_origin, bucket_id, new_msp_id);
+        _(signed_origin, bucket_id, new_msp_id, new_value_prop_id);
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the PendingMoveBucketRequests storage has the created request
@@ -138,6 +133,7 @@ mod benchmarks {
                 who: user,
                 bucket_id,
                 new_msp_id,
+                new_value_prop_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
@@ -170,7 +166,8 @@ mod benchmarks {
         // Register another MSP with a value proposition
         let new_msp_account: T::AccountId = account("MSP", 0, 1);
         mint_into_account::<T>(new_msp_account.clone(), 1_000_000_000_000_000)?;
-        let (new_msp_id, _) = add_msp_to_provider_storage::<T>(&new_msp_account, None);
+        let (new_msp_id, new_value_prop_id) =
+            add_msp_to_provider_storage::<T>(&new_msp_account, None);
 
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
@@ -178,11 +175,16 @@ mod benchmarks {
             initial_msp_id,
             name,
             true,
-            Some(initial_value_prop_id),
+            initial_value_prop_id,
         )?;
 
         // Request the move of the bucket to the new MSP
-        Pallet::<T>::request_move_bucket(signed_origin.clone().into(), bucket_id, new_msp_id)?;
+        Pallet::<T>::request_move_bucket(
+            signed_origin.clone().into(),
+            bucket_id,
+            new_msp_id,
+            new_value_prop_id,
+        )?;
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
@@ -205,6 +207,7 @@ mod benchmarks {
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketAccepted {
             bucket_id,
             msp_id: new_msp_id,
+            value_prop_id: new_value_prop_id,
         });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
@@ -239,7 +242,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // The worst-case scenario is when the bucket has an associated collection but it doesn't exist in storage,
@@ -305,7 +308,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // The worst-case scenario is when the bucket has an associated collection but it doesn't exist in storage,
@@ -370,7 +373,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Get the collection ID of the bucket
@@ -435,7 +438,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         #[extrinsic_call]
@@ -500,7 +503,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         Pallet::<T>::issue_storage_request(
@@ -570,7 +573,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         #[extrinsic_call]
@@ -618,7 +621,7 @@ mod benchmarks {
                 bucket_id,
                 false,
                 None,
-                Some(value_prop_id),
+                value_prop_id,
             )?;
 
             // Update the bucket's size and root to match the generated proofs
@@ -813,7 +816,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Issue the storage request from the user
@@ -954,7 +957,7 @@ mod benchmarks {
             bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Update the bucket's size and root to match the generated proofs
@@ -1191,7 +1194,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Get the file key for the BSP to request stop storing
@@ -1335,7 +1338,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Get the file key for the BSP to request stop storing
@@ -1515,7 +1518,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Get the file key for the BSP to request stop storing
@@ -1638,7 +1641,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Increase the used capacity of the MSP to match the file size
@@ -1812,7 +1815,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Increase the used capacity of the MSP to match the file size
@@ -1949,7 +1952,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Increase the used capacity of the MSP to match the file size
@@ -2116,7 +2119,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Increase the used capacity of the MSP to match the file size
@@ -2355,7 +2358,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Issue the storage request from the user
@@ -2471,7 +2474,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Issue the storage request from the user
@@ -2584,7 +2587,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Add the bucket to the PendingBucketsToMove storage and to the PendingMoveBucketRequests storage
@@ -2594,6 +2597,7 @@ mod benchmarks {
             &bucket_id,
             MoveBucketRequestMetadata {
                 requester: user.clone(),
+                new_value_prop_id: value_prop_id,
             },
         );
 

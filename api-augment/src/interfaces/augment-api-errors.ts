@@ -472,6 +472,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       UserNotInsolvent: AugmentedError<ApiType>;
       /**
+       * The selected value proposition is not available in the MSP.
+       **/
+      ValuePropositionNotAvailable: AugmentedError<ApiType>;
+      /**
        * Generic error
        **/
       [key: string]: AugmentedError<ApiType>;

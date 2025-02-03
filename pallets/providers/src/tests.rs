@@ -6,20 +6,20 @@ use crate::{
         SignUpRequestSpParams, StorageDataUnit, StorageProviderId, ValueProposition,
         ValuePropositionWithId,
     },
-    AwaitingTopUpFromProviders, BackupStorageProviders, Error, Event, InsolventProviders,
+    AwaitingTopUpFromProviders, BackupStorageProviders, Buckets, Error, Event, InsolventProviders,
     MainStorageProviders, ProviderTopUpExpirations,
 };
 
 use core::u32;
-use frame_support::traits::fungible::MutateHold;
-use frame_support::{assert_noop, assert_ok, BoundedVec};
 use frame_support::{
+    assert_noop, assert_ok,
     pallet_prelude::Weight,
     traits::{
-        fungible::{Inspect, InspectHold, Mutate},
+        fungible::{Inspect, InspectHold, Mutate, MutateHold},
         tokens::{Fortitude, Precision},
         Get, OnFinalize, OnIdle, OnInitialize,
     },
+    BoundedVec,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use shp_constants::GIGAUNIT;
@@ -3822,7 +3822,7 @@ mod add_bucket {
                     bucket_id,
                     false,
                     None,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Try to add the bucket for Alice with the same bucket id
@@ -3833,7 +3833,7 @@ mod add_bucket {
                         bucket_id,
                         false,
                         None,
-                        Some(value_prop_id)
+                        value_prop_id
                     ),
                     Error::<Test>::BucketAlreadyExists
                 );
@@ -3858,7 +3858,7 @@ mod add_bucket {
                         bucket_id,
                         false,
                         None,
-                        Some(HashId::<Test>::default())
+                        HashId::<Test>::default()
                     ),
                     Error::<Test>::NotRegistered
                 );
@@ -3895,7 +3895,7 @@ mod add_bucket {
                     bucket_id,
                     false,
                     None,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check payment stream was added
@@ -3944,7 +3944,7 @@ mod add_bucket {
                         private: false,
                         read_access_group_id: None,
                         size: 0,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                     }
                 );
 
@@ -3978,7 +3978,7 @@ mod add_bucket {
                         bucket_id,
                         false,
                         None,
-                        Some(value_prop_id)
+                        value_prop_id
                     ));
 
                     let expected_hold_amount =
@@ -4004,6 +4004,141 @@ mod add_bucket {
                         .collect::<Vec<_>>();
 
                 assert_eq!(buckets.len(), num_buckets);
+            });
+        }
+    }
+}
+
+mod change_root_bucket {
+
+    use super::*;
+
+    mod failure {
+
+        use super::*;
+
+        #[test]
+        fn bucket_not_found() {
+            ExtBuilder::build().execute_with(|| {
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Try to change the root of a bucket that does not exist
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::change_root_bucket(
+                        bucket_id,
+                        DefaultMerkleRoot::get()
+                    ),
+                    Error::<Test>::BucketNotFound
+                );
+            });
+        }
+
+        #[test]
+        fn bucket_not_currently_stored_by_a_msp() {
+            ExtBuilder::build().execute_with(|| {
+                // Register Alice as a MSP and get her MSP ID.
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Set up bucket's variables to create it.
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Create a bucket under Alice.
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    value_prop_id
+                ));
+
+                // Remove Alice as the MSP storing the bucket.
+                Buckets::<Test>::mutate(&bucket_id, |bucket| {
+                    bucket.as_mut().unwrap().msp_id = None;
+                });
+
+                // Try to change the root of a bucket that is not currently stored by any MSP
+                assert_noop!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::change_root_bucket(
+                        bucket_id,
+                        DefaultMerkleRoot::get()
+                    ),
+                    Error::<Test>::BucketMustHaveMspForOperation
+                );
+            });
+        }
+    }
+
+    mod success {
+
+        use super::*;
+
+        #[test]
+        fn change_root_bucket_works() {
+            ExtBuilder::build().execute_with(|| {
+                // Register Alice as a MSP and get her MSP ID.
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Set up bucket's variables to create it.
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Create a bucket under Alice.
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    value_prop_id
+                ));
+
+                // Get the bucket's root before changing it.
+                let old_bucket_root = Buckets::<Test>::get(&bucket_id).unwrap().root;
+
+                // Change the root of the bucket.
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::change_root_bucket(
+                        bucket_id,
+                        HashId::<Test>::random()
+                    )
+                );
+
+                // Check that the root of the bucket changed.
+                let new_bucket_root = Buckets::<Test>::get(&bucket_id).unwrap().root;
+                assert_ne!(old_bucket_root, new_bucket_root);
+
+                // Check that the corresponding event was emitted.
+                System::assert_last_event(
+                    Event::BucketRootChanged {
+                        bucket_id,
+                        old_root: old_bucket_root,
+                        new_root: new_bucket_root,
+                    }
+                    .into(),
+                );
             });
         }
     }
@@ -4070,7 +4205,7 @@ mod unassign_msp_from_bucket {
                     bucket_id,
                     false,
                     None,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 assert!(
@@ -4110,7 +4245,7 @@ mod assign_msp_to_bucket {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, _value_prop_id) =
+                let (_deposit_amount, _alice_msp, value_prop_id) =
                     register_account_as_msp(alice, storage_amount, None, None);
 
                 let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
@@ -4125,7 +4260,9 @@ mod assign_msp_to_bucket {
                 // Try to change a bucket that does not exist
                 assert_noop!(
                     <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
-                        &bucket_id, &msp_id,
+                        &bucket_id,
+                        &msp_id,
+                        &value_prop_id
                     ),
                     Error::<Test>::BucketNotFound
                 );
@@ -4158,29 +4295,27 @@ mod assign_msp_to_bucket {
                     bucket_id,
                     false,
                     None,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 assert_noop!(
                     <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
-                        &bucket_id, &msp_id,
+                        &bucket_id,
+                        &msp_id,
+                        &value_prop_id
                     ),
                     Error::<Test>::MspAlreadyAssignedToBucket
                 );
             });
         }
-    }
-
-    mod success {
-        use super::*;
 
         #[test]
-        fn assign_msp_to_bucket() {
+        fn new_value_prop_id_does_not_exist_under_new_msp() {
             ExtBuilder::build().execute_with(|| {
                 // Register Alice as MSP
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, value_prop_id) =
+                let (_deposit_amount, _alice_msp, alice_value_prop_id) =
                     register_account_as_msp(alice, storage_amount, None, None);
 
                 let alice_msp_id =
@@ -4195,7 +4330,7 @@ mod assign_msp_to_bucket {
                 let charlie_msp_id =
                     crate::AccountIdToMainStorageProviderId::<Test>::get(&charlie).unwrap();
 
-                // Create bucket
+                // Set up the parameters to create a new bucket.
                 let bucket_owner = accounts::BOB.0;
                 let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
@@ -4203,17 +4338,130 @@ mod assign_msp_to_bucket {
                     bucket_name,
                 );
 
-                // Add bucket
+                // Create a new bucket under Alice.
                 assert_ok!(StorageProviders::add_bucket(
                     alice_msp_id,
                     bucket_owner,
                     bucket_id,
                     false,
                     None,
-                    Some(value_prop_id)
+                    alice_value_prop_id
                 ));
 
-                // check payment stream exists for alice
+                // Create a new value proposition that does not exist under Charlie.
+                let new_value_prop_id = HashId::<Test>::random();
+
+                // Check that the change of MSP errors out since the new value proposition does not exist under Charlie.
+                let assign_result =
+                    <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
+                        &bucket_id,
+                        &charlie_msp_id,
+                        &new_value_prop_id,
+                    );
+                assert!(assign_result == Err(Error::<Test>::ValuePropositionNotFound.into()));
+            });
+        }
+
+        #[test]
+        fn new_value_prop_not_available() {
+            ExtBuilder::build().execute_with(|| {
+                // Register Alice as MSP
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, alice_value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let alice_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Register Charlie as MSP
+                let charlie: AccountId = accounts::CHARLIE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _charlie_msp, charlie_value_prop_id) =
+                    register_account_as_msp(charlie, storage_amount, None, None);
+
+                let charlie_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&charlie).unwrap();
+
+                // Set up the parameters to create a new bucket.
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Create a new bucket under Alice.
+                assert_ok!(StorageProviders::add_bucket(
+                    alice_msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    alice_value_prop_id
+                ));
+
+                // Make Charlie's value proposition unavailable.
+                assert_ok!(crate::Pallet::<Test>::do_make_value_prop_unavailable(
+                    &charlie,
+                    charlie_value_prop_id
+                ));
+
+                // Check that the change of MSP errors out since the new value proposition is unavailable.
+                let assign_result =
+                    <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
+                        &bucket_id,
+                        &charlie_msp_id,
+                        &charlie_value_prop_id,
+                    );
+                assert!(assign_result == Err(Error::<Test>::ValuePropositionNotAvailable.into()));
+            });
+        }
+    }
+
+    mod success {
+        use super::*;
+
+        #[test]
+        fn assign_msp_to_bucket() {
+            ExtBuilder::build().execute_with(|| {
+                // Register Alice as MSP
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, alice_value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let alice_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                // Register Charlie as MSP
+                let charlie: AccountId = accounts::CHARLIE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _charlie_msp, charlie_value_prop_id) =
+                    register_account_as_msp(charlie, storage_amount, None, None);
+
+                let charlie_msp_id =
+                    crate::AccountIdToMainStorageProviderId::<Test>::get(&charlie).unwrap();
+
+                // Set up the parameters to create a new bucket.
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Create a new bucket under Alice.
+                assert_ok!(StorageProviders::add_bucket(
+                    alice_msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    alice_value_prop_id
+                ));
+
+                // Check that the payment stream between the bucket owner and Alice has been created.
                 assert!(
                     <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
                         &alice_msp_id,
@@ -4221,47 +4469,52 @@ mod assign_msp_to_bucket {
                     )
                 );
 
-                // Change MSP of bucket
+                // Change the MSP that's storing the bucket from Alice to Charlie.
                 assert_ok!(
                     <crate::Pallet<Test> as MutateBucketsInterface>::assign_msp_to_bucket(
                         &bucket_id,
                         &charlie_msp_id,
+						&charlie_value_prop_id
                     )
                 );
 
-                // Check that the bucket was removed from alice
+                // Check that the bucket was removed from Alice.
                 assert!(crate::MainStorageProviderIdsToBuckets::<Test>::get(
                     &alice_msp_id,
                     bucket_id
                 )
                 .is_none());
 
-                // Check that the bucket was added to the default MSP
+                // Check that the bucket was added to Charlie.
                 assert!(crate::MainStorageProviderIdsToBuckets::<Test>::get(
                     &charlie_msp_id,
                     bucket_id
                 )
                 .is_some());
 
-                // Check that the bucket was updated
+                // Check that the bucket's metadata was updated with the new MSP ID and value proposition ID.
                 let bucket = crate::Buckets::<Test>::get(&bucket_id).unwrap();
                 assert_eq!(
                     bucket.msp_id,
                     Some(charlie_msp_id)
                 );
+				assert_eq!(
+					bucket.value_prop_id,
+					charlie_value_prop_id
+				);
 
-                // check payment stream exists for charlie
+				// Check that the payment stream between the bucket owner and Alice has been deleted.
+				assert!(
+					!<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
+						&alice_msp_id,
+						&bucket_owner
+					)
+				);
+
+                // Check that the payment stream between the bucket owner and Charlie has been created.
                 assert!(
                     <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
                         &charlie_msp_id,
-                        &bucket_owner
-                    )
-                );
-
-                // check payment stream does not exist for alice
-                assert!(
-                    !<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::fixed_rate_payment_stream_exists(
-                        &alice_msp_id,
                         &bucket_owner
                     )
                 );
@@ -4270,14 +4523,14 @@ mod assign_msp_to_bucket {
     }
 }
 
-mod remove_root_bucket {
+mod delete_bucket {
     use super::*;
 
     mod failure {
         use super::*;
 
         #[test]
-        fn remove_root_bucket_when_bucket_does_not_exist() {
+        fn delete_bucket_when_bucket_does_not_exist() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
@@ -4293,7 +4546,7 @@ mod remove_root_bucket {
 
                 // Try to remove a bucket that does not exist
                 assert_noop!(
-                    StorageProviders::remove_root_bucket(bucket_id),
+                    StorageProviders::delete_bucket(bucket_id),
                     Error::<Test>::BucketNotFound
                 );
             });
@@ -4304,7 +4557,7 @@ mod remove_root_bucket {
         use super::*;
 
         #[test]
-        fn remove_root_bucket() {
+        fn delete_bucket() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
@@ -4327,7 +4580,7 @@ mod remove_root_bucket {
                     bucket_id,
                     false,
                     None,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check that the bucket was added to the MSP
@@ -4337,7 +4590,7 @@ mod remove_root_bucket {
                 );
 
                 // Remove the bucket
-                assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
+                assert_ok!(StorageProviders::delete_bucket(bucket_id));
 
                 // Check that the bucket deposit is returned to the bucket owner
                 assert_eq!(NativeBalance::free_balance(&bucket_owner), accounts::BOB.1);
@@ -4368,7 +4621,7 @@ mod remove_root_bucket {
         }
 
         #[test]
-        fn remove_root_buckets_multiple() {
+        fn delete_buckets_multiple() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
@@ -4394,7 +4647,7 @@ mod remove_root_bucket {
                         bucket_id,
                         false,
                         None,
-                        Some(value_prop_id)
+                        value_prop_id
                     ));
 
                     let expected_hold_amount =
@@ -4419,7 +4672,7 @@ mod remove_root_bucket {
                         &bucket_owner,
                         bucket_name,
                     );
-                    assert_ok!(StorageProviders::remove_root_bucket(bucket_id));
+                    assert_ok!(StorageProviders::delete_bucket(bucket_id));
                     if i < num_buckets - 1 {
                         // Check that the payment streams still exists if we haven't removed the last bucket
                         assert!(
@@ -4498,6 +4751,52 @@ mod increase_bucket_size {
                 );
             });
         }
+
+        #[test]
+        fn increase_bucket_size_without_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    value_prop_id
+                ));
+
+                // Remove the MSP from the bucket
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    )
+                );
+
+                // Try to increase the size of a bucket that does not have an MSP
+                let increase_bucket_size_result =
+                    <crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
+                        &bucket_id, 100,
+                    );
+                assert!(
+                    increase_bucket_size_result
+                        == Err(Error::<Test>::BucketMustHaveMspForOperation.into())
+                );
+            });
+        }
     }
 
     mod success {
@@ -4534,7 +4833,7 @@ mod increase_bucket_size {
                         bucket_id,
                         false,
                         None,
-                        Some(value_prop_id)
+                        value_prop_id
                     ));
 
                     let expected_hold_amount =
@@ -4584,49 +4883,6 @@ mod increase_bucket_size {
                 }
             });
         }
-
-        #[test]
-        fn increase_bucket_size_without_msp() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount, None, None);
-
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                let bucket_owner = accounts::BOB.0;
-                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &bucket_owner,
-                    bucket_name,
-                );
-
-                // Add a bucket for Alice
-                assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
-                    bucket_owner,
-                    bucket_id,
-                    false,
-                    None,
-                    Some(value_prop_id)
-                ));
-
-                // Remove the MSP from the bucket
-                assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
-                        &bucket_id
-                    )
-                );
-
-                // Try to increase the size of a bucket that does not have an MSP
-                assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::increase_bucket_size(
-                        &bucket_id, 100
-                    )
-                );
-            });
-        }
     }
 }
 
@@ -4660,6 +4916,52 @@ mod decrease_bucket_size {
                 );
             });
         }
+
+        #[test]
+        fn decrease_bucket_size_without_msp() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, value_prop_id) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
+
+                let bucket_owner = accounts::BOB.0;
+                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
+                    &bucket_owner,
+                    bucket_name,
+                );
+
+                // Add a bucket for Alice
+                assert_ok!(StorageProviders::add_bucket(
+                    msp_id,
+                    bucket_owner,
+                    bucket_id,
+                    false,
+                    None,
+                    value_prop_id
+                ));
+
+                // Remove the MSP from the bucket
+                assert_ok!(
+                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
+                        &bucket_id
+                    )
+                );
+
+                // Try to decrease the size of a bucket that does not have an MSP
+                let decrease_bucket_size_result =
+                    <crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(
+                        &bucket_id, 100,
+                    );
+                assert!(
+                    decrease_bucket_size_result
+                        == Err(Error::<Test>::BucketMustHaveMspForOperation.into())
+                );
+            });
+        }
     }
 
     mod success {
@@ -4668,7 +4970,7 @@ mod decrease_bucket_size {
         use super::*;
 
         #[test]
-        fn increase_bucket_size_works() {
+        fn decrease_bucket_size_works() {
             ExtBuilder::build().execute_with(|| {
                 let alice: AccountId = accounts::ALICE.0;
                 let storage_amount: StorageDataUnit<Test> = 100;
@@ -4696,7 +4998,7 @@ mod decrease_bucket_size {
                         bucket_id,
                         false,
                         None,
-                        Some(value_prop_id)
+                        value_prop_id
                     ));
 
                     let expected_hold_amount =
@@ -4774,48 +5076,6 @@ mod decrease_bucket_size {
 
                     assert_eq!(actual_rate, expected_rate);
                 }
-            });
-        }
-
-        #[test]
-        fn decrease_bucket_size_without_msp() {
-            ExtBuilder::build().execute_with(|| {
-                let alice: AccountId = accounts::ALICE.0;
-                let storage_amount: StorageDataUnit<Test> = 100;
-                let (_deposit_amount, _alice_msp, value_prop_id) =
-                    register_account_as_msp(alice, storage_amount, None, None);
-
-                let msp_id = crate::AccountIdToMainStorageProviderId::<Test>::get(&alice).unwrap();
-
-                let bucket_owner = accounts::BOB.0;
-                let bucket_name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = <StorageProviders as ReadBucketsInterface>::derive_bucket_id(
-                    &bucket_owner,
-                    bucket_name,
-                );
-
-                // Add a bucket for Alice
-                assert_ok!(StorageProviders::add_bucket(
-                    msp_id,
-                    bucket_owner,
-                    bucket_id,
-                    false,
-                    None,
-                    Some(value_prop_id)
-                ));
-
-                // Remove the MSP from the bucket
-                assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::unassign_msp_from_bucket(
-                        &bucket_id
-                    )
-                );
-
-                assert_ok!(
-                    <crate::Pallet<Test> as MutateBucketsInterface>::decrease_bucket_size(
-                        &bucket_id, 100
-                    ),
-                );
             });
         }
     }
@@ -6133,7 +6393,7 @@ mod make_value_prop_unavailable {
                         bucket_id,
                         false,
                         None,
-                        Some(value_prop_id)
+                        value_prop_id
                     ),
                     Error::<Test>::ValuePropositionNotAvailable
                 );
@@ -6189,7 +6449,7 @@ mod delete_provider {
                     bucket_id,
                     false,
                     None,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 InsolventProviders::<Test>::insert(

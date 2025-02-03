@@ -399,12 +399,21 @@ where
         msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
-        value_prop_id: Option<ValuePropId<T>>,
+        value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // Check if the MSP is indeed an MSP.
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
+        );
+
+        // Check that the selected value proposition is currently available under the MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_value_prop_available(
+                &msp_id,
+                &value_prop_id
+            ),
+            Error::<T>::ValuePropositionNotAvailable
         );
 
         // Check if MSP is insolvent
@@ -443,6 +452,7 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         new_msp_id: ProviderIdFor<T>,
+        new_value_prop_id: ValuePropId<T>,
     ) -> Result<(), DispatchError> {
         // Check if the sender is the owner of the bucket.
         ensure!(
@@ -454,6 +464,15 @@ where
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&new_msp_id),
             Error::<T>::NotAMsp
+        );
+
+        // Check if the new value proposition exists under the new MSP and is currently available.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_value_prop_available(
+                &new_msp_id,
+                &new_value_prop_id
+            ),
+            Error::<T>::ValuePropositionNotAvailable
         );
 
         // Check if the newly selected MSP is not insolvent
@@ -471,9 +490,11 @@ where
             Error::<T>::MspAlreadyStoringBucket
         );
 
-        if <PendingBucketsToMove<T>>::contains_key(&bucket_id) {
-            return Err(Error::<T>::BucketIsBeingMoved.into());
-        }
+        // Check that the bucket is not being moved.
+        ensure!(
+            !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            Error::<T>::BucketIsBeingMoved
+        );
 
         // Check if there are any open storage requests for the bucket.
         // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
@@ -490,6 +511,7 @@ where
             bucket_id,
             MoveBucketRequestMetadata {
                 requester: sender.clone(),
+                new_value_prop_id,
             },
         );
         <PendingBucketsToMove<T>>::insert(&bucket_id, ());
@@ -504,7 +526,7 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         response: BucketMoveRequestResponse,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
+    ) -> Result<(ProviderIdFor<T>, ValuePropId<T>), DispatchError> {
         let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
             .ok_or(Error::<T>::NotAMsp)?;
 
@@ -520,29 +542,31 @@ where
             Error::<T>::NotAMsp
         );
 
-        // Check if the move bucket request exists for the MSP and bucket.
-        let move_bucket_requester = <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id);
-        ensure!(
-            move_bucket_requester.is_some(),
+        // Check if the move bucket request exists for the MSP and bucket, removing it from storage if it does.
+        let move_bucket_request_metadata = expect_or_err!(
+            <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id),
+            "Move bucket request should exist",
             Error::<T>::MoveBucketRequestNotFound
         );
 
+        // If the new MSP accepted storing the bucket...
         if response == BucketMoveRequestResponse::Accepted {
+            // Get the current size of the bucket.
             let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
 
+            // Get the previous MSP that was storing the bucket, if any.
             let previous_msp_id =
-                <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
+                <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
-            // Update the previous MSP's capacity used.
+            // If another MSP was previously storing the bucket, update its used capacity to reflect the removal of the bucket.
             if let Some(msp_id) = previous_msp_id {
-                // Decrease the used capacity of the previous MSP.
                 <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
                     &msp_id,
                     bucket_size,
                 )?;
             }
 
-            // Check if MSP has enough available capacity to store the bucket.
+            // Check if the new MSP has enough available capacity to store the bucket.
             ensure!(
                 <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
                     >= bucket_size,
@@ -550,7 +574,11 @@ where
             );
 
             // Change the MSP that stores the bucket.
-            <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(&bucket_id, &msp_id)?;
+            <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(
+                &bucket_id,
+                &msp_id,
+                &move_bucket_request_metadata.new_value_prop_id,
+            )?;
 
             // Increase the used capacity of the new MSP.
             <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
@@ -559,9 +587,10 @@ where
             )?;
         }
 
+        // Remove the bucket from the pending buckets to move.
         <PendingBucketsToMove<T>>::remove(&bucket_id);
 
-        Ok(msp_id)
+        Ok((msp_id, move_bucket_request_metadata.new_value_prop_id))
     }
 
     /// Update the privacy of a bucket.
@@ -681,7 +710,7 @@ where
             <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
 
         // Delete the bucket.
-        <T::Providers as MutateBucketsInterface>::remove_root_bucket(bucket_id)?;
+        <T::Providers as MutateBucketsInterface>::delete_bucket(bucket_id)?;
 
         // Delete the collection associated with the bucket if it existed.
         if let Some(collection_id) = maybe_collection_id.clone() {
