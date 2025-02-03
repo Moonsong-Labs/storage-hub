@@ -2615,7 +2615,7 @@ mod hooks {
                     }
                 }
 
-                // If the expired storage requests were not fully processed, re-insert them into storage.
+                // If the expired provider top ups were not fully processed, re-insert them into storage to process them at a later time.
                 if !expired_provider_top_ups.is_empty() {
                     ProviderTopUpExpirations::<T>::insert(
                         &tick_to_process,
