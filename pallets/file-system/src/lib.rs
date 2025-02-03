@@ -1321,6 +1321,7 @@ pub mod pallet {
                 fingerprint,
                 size,
                 maybe_inclusion_forest_proof,
+                true,
             )?;
 
             Self::deposit_event(Event::FileDeletionRequest {

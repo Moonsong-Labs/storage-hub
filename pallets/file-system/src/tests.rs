@@ -2724,6 +2724,77 @@ mod revoke_storage_request {
                 assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
 
                 System::assert_last_event(Event::StorageRequestRevoked { file_key }.into());
+
+                // Ensure a file deletion request was not created
+                assert!(
+                    !file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id).iter().any(|r| r.file_key == file_key)
+                )
+            });
+        }
+
+        #[test]
+        fn revoke_request_storage_with_confirmed_msp_success() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    Default::default(),
+                    ReplicationTarget::Standard
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    4,
+                    fingerprint,
+                );
+
+                // Set storage request MSP to confirmed
+                StorageRequests::<Test>::mutate(file_key, |metadata| {
+                    metadata.as_mut().unwrap().msp = Some((msp_id, true));
+                });
+
+                let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+                let storage_request_ttl: TickNumber<Test> = storage_request_ttl.into();
+                let expiration_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick() + storage_request_ttl;
+
+                // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
+                assert_eq!(
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_tick),
+                    vec![file_key]
+                );
+
+                assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
+
+                System::assert_last_event(Event::StorageRequestRevoked { file_key }.into());
+                
+                // Ensure a file deletion request was created
+                assert!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id).iter().any(|r| r.file_key == file_key)
+                )
             });
         }
 
@@ -8364,6 +8435,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -8400,6 +8472,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -8670,6 +8743,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -8811,6 +8885,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -9006,6 +9081,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
