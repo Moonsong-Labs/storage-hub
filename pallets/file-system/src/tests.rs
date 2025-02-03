@@ -11299,4 +11299,6 @@ fn calculate_upfront_amount_to_pay(
 				.saturating_mul(<Test as crate::Config>::TickNumberToBalance::convert(<Test as crate::Config>::UpfrontTicksToPay::get()))
 				.saturating_mul(<Test as crate::Config>::ReplicationTargetToBalance::convert(replication_target))
 				.saturating_mul(<Test as crate::Config>::StorageDataUnitToBalance::convert(size))
+				.checked_div(shp_constants::GIGAUNIT.into())
+				.unwrap_or_default()
 }
