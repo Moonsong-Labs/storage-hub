@@ -2309,6 +2309,18 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event emitted when the provider that has been marked as insolvent was a MSP. It notifies the users of that MSP
+       * the buckets that it was holding, so they can take appropriate measures.
+       **/
+      BucketsOfInsolventMsp: AugmentedEvent<
+        ApiType,
+        [mspId: H256, buckets: Vec<H256>],
+        {
+          mspId: H256;
+          buckets: Vec<H256>;
+        }
+      >;
+      /**
        * Event emitted when a SP has changed its capacity successfully. Provides information about
        * that SP's account id, its old total data that could store, and the new total data.
        **/

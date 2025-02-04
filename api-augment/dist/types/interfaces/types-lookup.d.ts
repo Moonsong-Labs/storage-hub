@@ -1804,6 +1804,11 @@ declare module "@polkadot/types/lookup" {
     readonly asProviderInsolvent: {
       readonly providerId: H256;
     } & Struct;
+    readonly isBucketsOfInsolventMsp: boolean;
+    readonly asBucketsOfInsolventMsp: {
+      readonly mspId: H256;
+      readonly buckets: Vec<H256>;
+    } & Struct;
     readonly isBucketRootChanged: boolean;
     readonly asBucketRootChanged: {
       readonly bucketId: H256;
@@ -1855,6 +1860,7 @@ declare module "@polkadot/types/lookup" {
       | "FailedToSlashInsolventProvider"
       | "FailedToStopAllCyclesForInsolventBsp"
       | "ProviderInsolvent"
+      | "BucketsOfInsolventMsp"
       | "BucketRootChanged"
       | "MultiAddressAdded"
       | "MultiAddressRemoved"
@@ -1888,7 +1894,7 @@ declare module "@polkadot/types/lookup" {
     readonly startedAt: u32;
     readonly endBlockGracePeriod: u32;
   }
-  /** @name PalletFileSystemEvent (133) */
+  /** @name PalletFileSystemEvent (134) */
   interface PalletFileSystemEvent extends Enum {
     readonly isNewBucket: boolean;
     readonly asNewBucket: {
@@ -4194,6 +4200,9 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isCancelSignUp: boolean;
     readonly isMspSignOff: boolean;
+    readonly asMspSignOff: {
+      readonly mspId: H256;
+    } & Struct;
     readonly isBspSignOff: boolean;
     readonly isChangeCapacity: boolean;
     readonly asChangeCapacity: {
@@ -5424,6 +5433,8 @@ declare module "@polkadot/types/lookup" {
     readonly capacity: u64;
     readonly capacityUsed: u64;
     readonly multiaddresses: Vec<Bytes>;
+    readonly amountOfBuckets: u128;
+    readonly amountOfValueProps: u32;
     readonly lastCapacityChange: u32;
     readonly ownerAccount: AccountId32;
     readonly paymentAccount: AccountId32;
@@ -5466,6 +5477,7 @@ declare module "@polkadot/types/lookup" {
     readonly isBucketNotFound: boolean;
     readonly isBucketAlreadyExists: boolean;
     readonly isBucketNotEmpty: boolean;
+    readonly isBucketsMovedAmountMismatch: boolean;
     readonly isAppendBucketToMspFailed: boolean;
     readonly isProviderNotSlashable: boolean;
     readonly isTopUpNotRequired: boolean;
@@ -5477,6 +5489,7 @@ declare module "@polkadot/types/lookup" {
     readonly isValuePropositionNotFound: boolean;
     readonly isValuePropositionAlreadyExists: boolean;
     readonly isValuePropositionNotAvailable: boolean;
+    readonly isValuePropositionsDeletedAmountMismatch: boolean;
     readonly isFixedRatePaymentStreamNotFound: boolean;
     readonly isMspAlreadyAssignedToBucket: boolean;
     readonly isBucketSizeExceedsLimit: boolean;
@@ -5486,6 +5499,7 @@ declare module "@polkadot/types/lookup" {
     readonly isDeleteProviderConditionsNotMet: boolean;
     readonly isCannotStopCycleWithNonDefaultRoot: boolean;
     readonly isBspOnlyOperation: boolean;
+    readonly isMspOnlyOperation: boolean;
     readonly isInvalidEncodedFileMetadata: boolean;
     readonly isInvalidEncodedAccountId: boolean;
     readonly isPaymentStreamNotFound: boolean;
@@ -5515,6 +5529,7 @@ declare module "@polkadot/types/lookup" {
       | "BucketNotFound"
       | "BucketAlreadyExists"
       | "BucketNotEmpty"
+      | "BucketsMovedAmountMismatch"
       | "AppendBucketToMspFailed"
       | "ProviderNotSlashable"
       | "TopUpNotRequired"
@@ -5526,6 +5541,7 @@ declare module "@polkadot/types/lookup" {
       | "ValuePropositionNotFound"
       | "ValuePropositionAlreadyExists"
       | "ValuePropositionNotAvailable"
+      | "ValuePropositionsDeletedAmountMismatch"
       | "FixedRatePaymentStreamNotFound"
       | "MspAlreadyAssignedToBucket"
       | "BucketSizeExceedsLimit"
@@ -5535,6 +5551,7 @@ declare module "@polkadot/types/lookup" {
       | "DeleteProviderConditionsNotMet"
       | "CannotStopCycleWithNonDefaultRoot"
       | "BspOnlyOperation"
+      | "MspOnlyOperation"
       | "InvalidEncodedFileMetadata"
       | "InvalidEncodedAccountId"
       | "PaymentStreamNotFound";
