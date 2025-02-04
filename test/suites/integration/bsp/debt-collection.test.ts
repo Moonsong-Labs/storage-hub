@@ -256,8 +256,10 @@ describeBspNet(
         null,
         null,
         null,
-        3 // There are 3 running BSPs to fulfil the storage request
+        7 // Make the replication target considerably bigger than 3 so statistically all BSPs can volunteer in the initial block
       );
+
+      // Wait for the BSPs to volunteer, store and confirm storing the file.
       await userApi.wait.bspVolunteer(3);
       await bspApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
       await bspTwoApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
@@ -271,7 +273,7 @@ describeBspNet(
         null,
         null,
         null,
-        3 // There are 3 running BSPs to fulfil the storage request
+        7 // Make the replication target considerably bigger than 3 so statistically all BSPs can volunteer in the initial block
       );
       await userApi.wait.bspVolunteer(3);
       await bspApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);

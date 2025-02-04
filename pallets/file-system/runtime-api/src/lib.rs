@@ -20,6 +20,7 @@ pub enum QueryFileEarliestVolunteerTickError {
     FailedToEncodeBsp,
     ThresholdArithmeticError,
     StorageRequestNotFound,
+    FailedToComputeEligibilityCriteria,
     InternalError,
 }
 

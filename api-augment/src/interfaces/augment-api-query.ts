@@ -315,17 +315,6 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * A map of ticks to expired file deletion requests.
-       **/
-      fileDeletionRequestExpirations: AugmentedQuery<
-        ApiType,
-        (
-          arg: u32 | AnyNumber | Uint8Array
-        ) => Observable<Vec<PalletFileSystemPendingFileDeletionRequest>>,
-        [u32]
-      > &
-        QueryableStorageEntry<ApiType, [u32]>;
-      /**
        * A map of ticks to expired move bucket requests.
        **/
       moveBucketRequestExpirations: AugmentedQuery<
@@ -335,16 +324,18 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [u32]>;
       /**
-       * A pointer to the earliest available tick to insert a new file deletion request expiration.
+       * Mapping from MSPs to the amount of pending file deletion requests they have.
        *
-       * This should always be greater or equal than current tick + [`Config::PendingFileDeletionRequestTtl`].
+       * This is used to keep track of the amount of pending file deletion requests each MSP has, so that MSPs are removed
+       * from the privileged providers list if they have at least one, and are added back if they have none.
+       * This is to ensure that MSPs are correctly incentivised to submit the required proofs for file deletions.
        **/
-      nextAvailableFileDeletionRequestExpirationTick: AugmentedQuery<
+      mspsAmountOfPendingFileDeletionRequests: AugmentedQuery<
         ApiType,
-        () => Observable<u32>,
-        []
+        (arg: H256 | string | Uint8Array) => Observable<u32>,
+        [H256]
       > &
-        QueryableStorageEntry<ApiType, []>;
+        QueryableStorageEntry<ApiType, [H256]>;
       /**
        * A pointer to the earliest available tick to insert a new move bucket request expiration.
        *
@@ -388,7 +379,7 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending file deletion requests.
        *
-       * A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
+       * A mapping from a user Account ID to a list of pending file deletion requests (which have the file information).
        **/
       pendingFileDeletionRequests: AugmentedQuery<
         ApiType,
@@ -1314,11 +1305,13 @@ declare module "@polkadot/api-base/types/storage" {
       lastDeletedTick: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
+       * The vector holding whether the last [`Config::BlockFullnessPeriod`] blocks were full or not.
        *
-       * This is used to check if the network is presumably under a spam attack.
+       * Each element in the vector represents a block, and is `true` if the block was full, and `false` otherwise.
+       * Note: Ideally we would use a `BitVec` to reduce storage, but since there's no bounded `BitVec` implementation
+       * we use a BoundedVec<bool> instead. This uses 7 more bits of storage per element.
        **/
-      notFullBlocksCount: AugmentedQuery<ApiType, () => Observable<u32>, []> &
+      pastBlocksStatus: AugmentedQuery<ApiType, () => Observable<Vec<bool>>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
        * A mapping from block number to the weight used in that block.

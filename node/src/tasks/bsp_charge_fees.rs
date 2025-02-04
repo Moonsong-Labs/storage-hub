@@ -1,7 +1,6 @@
 use anyhow::anyhow;
 use std::time::Duration;
 
-use pallet_storage_providers::types::StorageProviderId;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -12,10 +11,7 @@ use shc_blockchain_service::{
     },
     types::{StopStoringForInsolventUserRequest, Tip},
 };
-use shc_common::{
-    consts::CURRENT_FOREST_KEY,
-    types::{MaxUsersToCharge, ProofsDealerProviderId},
-};
+use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
 use storage_hub_runtime::Balance;
@@ -318,23 +314,6 @@ where
 
             trace!(target: LOG_TARGET, "Stop storing submitted successfully");
 
-            // Remove the file from the forest.
-            self.remove_file_from_forest(&file_key).await?;
-
-            // Check that the new Forest root matches the one on-chain.
-            let own_provider_id = match self
-                .storage_hub_handler
-                .blockchain
-                .query_storage_provider_id(None)
-                .await?
-                .ok_or(anyhow!("Failed to get own provider ID"))?
-            {
-                StorageProviderId::MainStorageProvider(id)
-                | StorageProviderId::BackupStorageProvider(id) => id,
-            };
-
-            self.check_provider_root(own_provider_id.into()).await?;
-
             // If that was the last file of the user then charge the user for the debt they have.
             if user_files.len() == 1 {
                 let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
@@ -377,69 +356,5 @@ where
         Self {
             storage_hub_handler,
         }
-    }
-
-    async fn remove_file_from_forest(&self, file_key: &H256) -> anyhow::Result<()> {
-        // Remove the file key from the Forest.
-        // Check that the new Forest root matches the one on-chain.
-        {
-            let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-            let fs = self
-                .storage_hub_handler
-                .forest_storage_handler
-                .get(&current_forest_key)
-                .await
-                .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
-
-            fs.write().await.delete_file_key(file_key).map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
-                anyhow!(
-                    "Failed to remove file key from Forest storage: {:?}",
-                    e
-                )
-            })?;
-        };
-
-        Ok(())
-    }
-
-    async fn check_provider_root(&self, provider_id: ProofsDealerProviderId) -> anyhow::Result<()> {
-        // Get root for this provider according to the runtime.
-        let onchain_root = self
-            .storage_hub_handler
-            .blockchain
-            .query_provider_forest_root(provider_id)
-            .await
-            .map_err(|e| {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to query provider root from runtime after successfully submitting proof. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
-                anyhow!(
-                    "Failed to query provider root from runtime after successfully submitting proof: {:?}",
-                    e
-                )
-            })?;
-
-        trace!(target: LOG_TARGET, "Provider root according to runtime: {:?}", onchain_root);
-
-        // Check that the new Forest root matches the one on-chain.
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-        let fs = self
-            .storage_hub_handler
-            .forest_storage_handler
-            .get(&current_forest_key)
-            .await
-            .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
-
-        let root = { fs.read().await.root() };
-
-        trace!(target: LOG_TARGET, "Provider root according to Forest Storage: {:?}", root);
-
-        if root != onchain_root {
-            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Applying mutations yielded different root than the one on-chain. This means that there is a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team.");
-            return Err(anyhow!(
-                "Applying mutations yielded different root than the one on-chain."
-            ));
-        }
-
-        Ok(())
     }
 }

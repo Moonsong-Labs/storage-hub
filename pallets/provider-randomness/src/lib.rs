@@ -395,7 +395,8 @@ pub mod pallet {
                 });
             }
 
-            // If the extrinsic has succeeded, it shouldn't pay any fee
+            // If the extrinsic has succeeded, it shouldn't pay any fee. This is to incentivise
+            // being a Provider in the network, since it diminishes the costs to be one substantially.
             Ok(Pays::No.into())
         }
 

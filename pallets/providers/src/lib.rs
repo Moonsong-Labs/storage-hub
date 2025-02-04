@@ -851,7 +851,7 @@ pub mod pallet {
             })?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
+            Self::deposit_event(Event::MspRequestSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
@@ -912,7 +912,7 @@ pub mod pallet {
             Self::do_request_bsp_sign_up(&bsp_info)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {
+            Self::deposit_event(Event::BspRequestSignUpSuccess {
                 who,
                 multiaddresses,
                 capacity,
@@ -953,7 +953,7 @@ pub mod pallet {
         pub fn confirm_sign_up(
             origin: OriginFor<T>,
             provider_account: Option<T::AccountId>,
-        ) -> DispatchResultWithPostInfo {
+        ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
 
@@ -964,8 +964,8 @@ pub mod pallet {
                 None => Self::do_confirm_sign_up(&who)?,
             }
 
-            // Return a successful DispatchResultWithPostInfo. If the extrinsic executed correctly, it will be free for the caller
-            Ok(Pays::No.into())
+            // Return a successful DispatchResult.
+            Ok(())
         }
 
         /// Dispatchable extrinsic that allows a user with a pending Sign Up Request to cancel it, getting the deposit back.
@@ -990,7 +990,7 @@ pub mod pallet {
             Self::do_cancel_sign_up(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::SignUpRequestCanceled { who });
+            Self::deposit_event(Event::SignUpRequestCanceled { who });
 
             Ok(().into())
         }
@@ -1019,7 +1019,7 @@ pub mod pallet {
             let msp_id = Self::do_msp_sign_off(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspSignOffSuccess { who, msp_id });
+            Self::deposit_event(Event::MspSignOffSuccess { who, msp_id });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -1050,7 +1050,7 @@ pub mod pallet {
             let bsp_id = Self::do_bsp_sign_off(&who)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspSignOffSuccess { who, bsp_id });
+            Self::deposit_event(Event::BspSignOffSuccess { who, bsp_id });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
@@ -1102,7 +1102,7 @@ pub mod pallet {
             let (provider_id, old_capacity) = Self::do_change_capacity(&who, new_capacity)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::CapacityChanged {
+            Self::deposit_event(Event::CapacityChanged {
                 who,
                 provider_id,
                 old_capacity,
@@ -1141,7 +1141,7 @@ pub mod pallet {
             )?;
 
             // Emit event
-            Self::deposit_event(Event::<T>::ValuePropAdded {
+            Self::deposit_event(Event::ValuePropAdded {
                 msp_id,
                 value_prop_id: value_prop.derive_id(),
                 value_prop,
@@ -1167,7 +1167,7 @@ pub mod pallet {
             let msp_id = Self::do_make_value_prop_unavailable(&who, value_prop_id)?;
 
             // Emit event
-            Self::deposit_event(Event::<T>::ValuePropUnavailable {
+            Self::deposit_event(Event::ValuePropUnavailable {
                 msp_id,
                 value_prop_id,
             });
@@ -1204,7 +1204,7 @@ pub mod pallet {
             let provider_id = Self::do_add_multiaddress(&who, &new_multiaddress)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MultiAddressAdded {
+            Self::deposit_event(Event::MultiAddressAdded {
                 provider_id,
                 new_multiaddress,
             });
@@ -1241,7 +1241,7 @@ pub mod pallet {
             let provider_id = Self::do_remove_multiaddress(&who, &multiaddress)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MultiAddressRemoved {
+            Self::deposit_event(Event::MultiAddressRemoved {
                 provider_id,
                 removed_multiaddress: multiaddress,
             });
@@ -1312,7 +1312,7 @@ pub mod pallet {
             Self::do_request_msp_sign_up(sign_up_request.clone())?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::MspRequestSignUpSuccess {
+            Self::deposit_event(Event::MspRequestSignUpSuccess {
                 who: who.clone(),
                 multiaddresses,
                 capacity,
@@ -1380,7 +1380,7 @@ pub mod pallet {
             Self::do_request_bsp_sign_up(&bsp_info)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::BspRequestSignUpSuccess {
+            Self::deposit_event(Event::BspRequestSignUpSuccess {
                 who: who.clone(),
                 multiaddresses,
                 capacity,
@@ -1403,7 +1403,7 @@ pub mod pallet {
         /// A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
         /// In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
         ///
-        /// This is a free operation.
+        /// This is a free operation to incentivise the community to slash misbehaving providers.
         #[pallet::call_index(13)]
         #[pallet::weight(T::WeightInfo::slash())]
         pub fn slash(
@@ -1415,23 +1415,24 @@ pub mod pallet {
 
             Self::do_slash(&provider_id)?;
 
+            // Return a successful DispatchResultWithPostInfo.
+            // If the extrinsic executed correctly and the Provider was slashed, the execution fee is refunded.
+            // This is to incentivise the community to slash misbehaving providers.
             Ok(Pays::No.into())
         }
 
         /// Dispatchable extrinsic to top-up the deposit of a Storage Provider.
         ///
         /// The dispatch origin for this call must be signed.
-        ///
-        /// This is a free transaction if the user successfully tops up their deposit.
         #[pallet::call_index(14)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
-        pub fn top_up_deposit(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+        pub fn top_up_deposit(origin: OriginFor<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             Self::do_top_up_deposit(&who)?;
 
-            Ok(Pays::No.into())
+            Ok(())
         }
 
         /// Delete a provider from the system.
@@ -1446,6 +1447,9 @@ pub mod pallet {
         /// to automate the process.
         ///
         /// Emits `MspDeleted` or `BspDeleted` event when successful.
+        ///
+        /// This operation is free if successful to encourage the community to delete insolvent providers,
+        /// debloating the state.
         #[pallet::call_index(15)]
         #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
         pub fn delete_provider(
@@ -1457,6 +1461,9 @@ pub mod pallet {
 
             Self::do_delete_provider(&provider_id)?;
 
+            // Return a successful DispatchResultWithPostInfo.
+            // If the extrinsic executed correctly and the Provider was deleted, the execution fee is refunded.
+            // This is to incentivise the community to delete insolvent providers, debloating state.
             Ok(Pays::No.into())
         }
 
@@ -1470,13 +1477,13 @@ pub mod pallet {
         /// If you are an BSP, the only requirement that must be met is that your root is the default one (an empty root).
         #[pallet::call_index(16)]
         #[pallet::weight(T::WeightInfo::stop_all_cycles())]
-        pub fn stop_all_cycles(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+        pub fn stop_all_cycles(origin: OriginFor<T>) -> DispatchResult {
             // Check that the extrinsic was signed.
             let who = ensure_signed(origin)?;
 
             Self::do_stop_all_cycles(&who)?;
 
-            Ok(Pays::No.into())
+            Ok(())
         }
     }
 

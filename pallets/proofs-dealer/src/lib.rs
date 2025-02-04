@@ -33,7 +33,7 @@ pub mod pallet {
         ReadChallengeableProvidersInterface, TrieMutation, TrieProofDeltaApplier,
     };
     use sp_runtime::{
-        traits::{CheckedSub, Convert, Saturating, Zero},
+        traits::{CheckedSub, Convert, Zero},
         Perbill, SaturatedConversion,
     };
     use sp_std::vec::Vec;
@@ -201,7 +201,7 @@ pub mod pallet {
         /// if the goal is to prevent spamming attacks that would prevent honest Providers from submitting
         /// their proofs in time.
         #[pallet::constant]
-        type BlockFullnessPeriod: Get<BlockNumberFor<Self>>;
+        type BlockFullnessPeriod: Get<u32>;
 
         /// The minimum unused weight that a block must have to be considered _not_ full.
         ///
@@ -377,11 +377,14 @@ pub mod pallet {
     pub type PastBlocksWeight<T: Config> =
         StorageMap<_, Blake2_128Concat, BlockNumberFor<T>, Weight>;
 
-    /// The number of blocks that have been considered _not_ full in the last [`Config::BlockFullnessPeriod`].
+    /// The vector holding whether the last [`Config::BlockFullnessPeriod`] blocks were full or not.
     ///
-    /// This is used to check if the network is presumably under a spam attack.
+    /// Each element in the vector represents a block, and is `true` if the block was full, and `false` otherwise.
+    /// Note: Ideally we would use a `BitVec` to reduce storage, but since there's no bounded `BitVec` implementation
+    /// we use a BoundedVec<bool> instead. This uses 7 more bits of storage per element.
     #[pallet::storage]
-    pub type NotFullBlocksCount<T: Config> = StorageValue<_, BlockNumberFor<T>, ValueQuery>;
+    pub type PastBlocksStatus<T: Config> =
+        StorageValue<_, BoundedVec<bool, BlockFullnessPeriodFor<T>>, ValueQuery>;
 
     /// The tick to check and see if Providers failed to submit proofs before their deadline.
     ///
@@ -469,10 +472,21 @@ pub mod pallet {
             maybe_provider_account: Option<T::AccountId>,
         },
 
-        /// A set of mutations has been applied to the Forest.
-        MutationsApplied {
-            provider: ProviderIdFor<T>,
+        /// A set of mutations has been applied to the Forest of a given Provider.
+        MutationsAppliedForProvider {
+            provider_id: ProviderIdFor<T>,
             mutations: Vec<(KeyFor<T>, TrieMutation)>,
+            old_root: KeyFor<T>,
+            new_root: KeyFor<T>,
+        },
+
+        /// A set of mutations has been applied to a given Forest.
+        /// This is the generic version of [`MutationsAppliedForProvider`](Event::MutationsAppliedForProvider)
+        /// when [`generic_apply_delta`](ProofsDealerInterface::generic_apply_delta) is used
+        /// and the root is not necessarily linked to a specific Provider.
+        MutationsApplied {
+            mutations: Vec<(KeyFor<T>, TrieMutation)>,
+            old_root: KeyFor<T>,
             new_root: KeyFor<T>,
         },
 
@@ -683,7 +697,8 @@ pub mod pallet {
             });
 
             // Return a successful DispatchResultWithPostInfo.
-            // If the proof is valid, the execution of this extrinsic should be refunded.
+            // If the proof is valid, the execution of this extrinsic should be refunded. This is
+            // to incentivise being a Provider in the network, since it diminishes the costs to be one substantially.
             Ok(Pays::No.into())
         }
 
@@ -706,6 +721,8 @@ pub mod pallet {
             <Self as ProofsDealerInterface>::initialise_challenge_cycle(&provider)?;
 
             // Return a successful DispatchResultWithPostInfo.
+            // This TX is free since is a sudo-only transaction used to fix potential issues
+            // and for testing.
             Ok(Pays::No.into())
         }
 
@@ -728,6 +745,7 @@ pub mod pallet {
             Self::deposit_event(Event::ChallengesTickerSet { paused });
 
             // Return a successful DispatchResultWithPostInfo.
+            // This TX is free since is a sudo-only transaction used for testing.
             Ok(Pays::No.into())
         }
     }
@@ -783,7 +801,7 @@ pub mod pallet {
 
             // Clear the storage for block at `current_block` - (`BlockFullnessPeriod` + 1).
             if let Some(oldest_block_fullness_number) =
-                block_number.checked_sub(&block_fullness_period.saturating_add(1u32.into()))
+                block_number.checked_sub(&block_fullness_period.saturating_add(1u32).into())
             {
                 // If it is older than `BlockFullnessPeriod` + 1, we clear the storage.
                 PastBlocksWeight::<T>::remove(oldest_block_fullness_number);
@@ -813,7 +831,7 @@ pub mod pallet {
 
             // Check that `BlockFullnessPeriod` is smaller or equal than `ChallengeTicksTolerance`.
             assert!(
-                T::BlockFullnessPeriod::get() <= T::ChallengeTicksTolerance::get(),
+                T::ChallengeTicksTolerance::get() >= T::BlockFullnessPeriod::get().into(),
                 "BlockFullnessPeriod const ({:?}) in ProofsDealer pallet should be smaller or equal than ChallengeTicksTolerance ({:?}).",
                 T::BlockFullnessPeriod::get(),
                 T::ChallengeTicksTolerance::get()

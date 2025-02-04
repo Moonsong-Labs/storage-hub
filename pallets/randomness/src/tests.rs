@@ -48,7 +48,7 @@ fn set_babe_randomness_works() {
 
         // Check that the event was emitted
         System::assert_last_event(
-            Event::<Test>::NewOneEpochAgoRandomnessAvailable {
+            Event::NewOneEpochAgoRandomnessAvailable {
                 randomness_seed: H256::from_slice(&blake2_256(
                     &last_processed_relay_epoch.to_le_bytes(),
                 )),
@@ -103,7 +103,7 @@ fn set_babe_randomness_works_after_a_few_epochs() {
 
             // Check that the event was emitted
             System::assert_last_event(
-                Event::<Test>::NewOneEpochAgoRandomnessAvailable {
+                Event::NewOneEpochAgoRandomnessAvailable {
                     randomness_seed: H256::from_slice(&blake2_256(
                         &last_processed_relay_epoch.to_le_bytes(),
                     )),

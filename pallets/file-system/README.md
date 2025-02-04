@@ -17,71 +17,77 @@ Once a pending file deletion request reaches its expiration time and it has not 
 ### Volunteering: Succeeding Threshold Checks
 
 BSPs are required to volunteer to store data for storage requests. To ensure data is probabilistically stored evenly across all BSPs, a threshold must be succeeded by each volunteering BSP.
-The threshold to succeed is different for every BSP since it is based on their reputation weight. Gaining more reputation will increase the probability of succeeding the threshold check.
+To succeed the threshold check, the eligibility value for the storage request must be greater than the computed threshold result of the BSP.
+
+The eligibility value of a storage request is different for every BSP since it is based on their reputation weight. Gaining more reputation will increase the eligibility value of the storage request for that BSP, increasing the probability of succeeding the threshold check.
 
 The computed threshold result of a BSP is formalized as $H(C(P, F))$ where $H$ is the hashing function, $C$ is the concatenation function, $P$ is the provider id and $F$ is the file key.
 The $n$ least significant bits of the hash result are converted into the configured runtime's threshold type, where $n$ is the number of bits required to represent the threshold type.
-The BSP is considered eligible to volunteer if the threshold result is less than or equal to the threshold to succeed.
 
 Formulas:
 
-1. **Threshold Global Starting Point ($T_{gsp}$)**: Establishes a baseline threshold for all BSPs to meet based on replication targets, global weight, and maximum threshold.
+1. **Maximum Eligibility Value ($M$)**: Maximum eligibility value for a storage request, where all BSPs would be eligible to volunteer.
 
-2. **Threshold Weighted Starting Point ($T_{wsp}$)**: Increases the threshold starting point of a BSP based on their weight, giving higher-weight BSPs a head start.
+2. **Global Eligibility Value Starting Point ($EV_{gsp}$)**: Establishes a baseline eligibility value for all BSPs to meet based on the replication target of the storage request, the global reputation weight of all BSPs, and maximum eligibility value (which allows any BSP to volunteer successfully).
 
-3. **Threshold Slope ($T_{s}$)**: Defines the rate at which the threshold increases from the starting point up to the maximum threshold over a specified number of blocks.
+3. **Weighted Eligibility Value Starting Point ($EV_{wsp}$)**: This is the global eligibility value starting point weighted by the reputation weight of the specific BSP that's trying to volunteer. This gives BSPs with higher reputation a head start, with increased odds of succeeding the threshold check.
 
-4. **Threshold ($T$)**: Calculates the current threshold to succeed for a BSP at a given block, combining the weighted starting point and the slope over elapsed blocks from the initiated storage request.
+4. **Eligibility Value Growth Slope ($EV_{s}$)**: Rate at which the eligibility value increases from the starting point up to the maximum threshold over a specified number of ticks.
 
-#### Threshold Global Starting Point
+5. **Weighted Eligibility Value Growth Slope ($EV_{ws}$)**: The eligibility value growth slope weighted by the reputation weight of the BSP.
 
-The goal here is to have half of the replication target $R_{t}$ be probabilistically volunteered for by eligible BSPs after the first block from initiating the storage request, while taking into account the cumulative weight $W_{g}$ of the entire set of BSPs which reduces the starting point.
+6. **Current Eligibility Value for BSP ($EV$)**: Represents the current eligibility value of a storage request for a BSP at a given tick, combining the weighted starting point and the weighted slope over the elapsed ticks since teh storage request was initiated.
 
-$$T_{gsp} = \frac{1}{2} \cdot \frac{R_{t}}{W_{g}} \cdot M$$
+#### Global Eligibility Value Starting Point
 
-$T_{gsp}$: _Threshold global starting point_
-$R_{t}$: _Replication target_ (number of BSPs required to fulfill a storage request)
-$W_{g}$: _Global weight_ (cumulative weight of all BSPs)
-$M$: _Maximum threshold_ (all BSPs would be eligible to volunteer, for example `u32::MAX`)
+The goal of the formula for the global eligibility value starting point is to have probabilistically $R_{t}$ BSPs (where $R_{t}$ is the replication target of the storage request) be able to volunteer for the storage request from the initial tick when it was initiated. This minimizes the chances that a malicious user controlling a big part of BSPs is able to fully control the storage request, since it would have to, by chance, control exactly the $R_{t}$ BSPs that have a head start, since only one honest BSP is needed for the malicious user to not be able to hold the stored file hostage.
+The global eligibility value starting point is also weighted by the global reputation weight of all BSPs $W_{g}$, which means that the initial set of eligible BSPs prioritizes higher reputation BSPs.
 
-#### Threshold Weighted Starting Point
+$$EV_{gsp} = \frac{R_{t}}{W_{g}} \cdot M$$
 
-Assuming the implemented reputation system sets all BSPs to have a starting weight of 1. Any increase in reputation (i.e. increase in weight) would give an advantage over other BSPs by multiplying their own weight to the global starting point $T_{gsp}$. This will increase their own starting point and increase the probability of succeeding the threshold check.
+$EV_{gsp}$: _Global eligibility value starting point_ (baseline eligibility value for all BSPs to meet)
+$R_{t}$: _Replication target_ (number of BSPs required to fulfill the storage request)
+$W_{g}$: _Global reputation weight_ (cumulative reputation weight of all BSPs)
+$M$: _Maximum eligibility value_ (where all BSPs would be eligible to volunteer, for example `u32::MAX`)
 
-$$T_{wsp} = w \cdot T_{gsp}$$
+#### Weighted Eligibility Value Starting Point
 
-$w$: _BSP weight_ (current weight of the BSP)
+Assuming the implemented reputation system sets all BSPs to have a starting reputation weight of 1, any increase in reputation that a BSP receives would give it an advantage over other BSPs by decreasing the global eligibility value starting point (since the cumulative reputation weight of all BSPs would increase) and then multiplying their own weight to that global starting point. This would increase their own eligibility value starting point and decrease the global eligibility value starting point, increasing its probability to succeed the threshold check.
 
-#### Global Threshold Slope
+$$EV_{wsp} = w \cdot EV_{gsp}$$
 
-The rate of increase of the threshold from the global starting point to the maximum threshold over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
-This global threshold slope is calculated taking into account the global starting point, so that it is the same for all BSPs.
+$w$: _BSP reputation weight_ (current reputation weight of the BSP)
 
-$$S_{g} = \frac{M - T_{gsp}}{B_{t}}$$
+#### Eligibility Value Growth Slope
 
-$B_{t}$: _Block time_ (number of blocks to pass to reach $M$)
+The linear rate of increase of the eligibility value from the global starting point $EV_{gsp}$ to its maximum value $M$ over a defined period of ticks $T$.
+This growth slope is calculated taking into account the global starting point, so that it is the same for all BSPs.
 
-#### Weighted Threshold Slope
+$$EV_{s} = \frac{M - EV_{gsp}}{T}$$
 
-The actual rate of increase of the threshold from the weighted starting point to the maximum threshold.
-This weighted threshold slope is calculated taking into account the BSP's weight, so that it is different for each BSP, and BSPs with higher weights will have a higher threshold slope.
+$T$: _Tick amount to reach maximum eligibility value_ (number of ticks required to reach the maximum eligibility value)
 
-$$S_{w} = w \cdot S_{g}$$
+#### Weighted Eligibility Value Growth Slope
 
-$w$: _BSP weight_ (current weight of the BSP)
+The actual rate of increase of the eligibility value from the weighted starting point to the maximum threshold.
+It's the baseline eligibility value growth slope weighted by the BSP's reputation weight, so higher reputation BSPs will have their eligibility value increase faster, decreasing the time it takes for them to be eligible to volunteer.
 
-#### Threshold
+$$EV_{ws} = w \cdot EV_{s}$$
 
-The threshold to succeed will be different for each BSP. By calculating their own starting point $T_{wsp}$ and increasing at a rate based on the global weight of all BSPs over a period of blocks $B_{t}$ required to reach the maximum threshold $M$.
+$w$: _BSP reputation weight_ (current reputation weight of the BSP)
 
-$$T = T_{wsp} + S_{w} \cdot b$$
+#### Current Eligibility Value for BSP
 
-$T_{wsp}$: _Threshold weighted starting point_ (taking into account the BSP's weight)
-$T_{s}$: _Threshold slope_ (rate of increase reaching constant within target block time)
-$b$: _Blocks passed_ (number of blocks passed since initiated storage request)
+The current eligibility value of a storage request will be different for each BSP. By calculating their own weighted starting point $EV_{wsp}$ and increasing at a rate equal to their weighted growth slope $EV_{ws}$.
+
+$$EV = EV_{wsp} + EV_{ws} \cdot t$$
+
+$EV_{wsp}$: _Weighted eligibility value starting point_ (baseline eligibility value for the BSP to meet)
+$EV_{ws}$: _Weighted eligibility value growth slope_ (rate at which the eligibility value increases for the BSP)
+$t$: _Elapsed ticks_ (number of ticks since the storage request was initiated)
 
 > Note ℹ️
 >
-> Actually, the threshold calculation is not done using _**blocks**_, but _**ticks**_. The reason for this is to prevent a potential spamming attack, where a malicious BSP would spam the network with tipped transactions, preventing honest BSPs from volunteering first, and thus letting blocks pass until they themselves can volunteer first.
+> The eligibility value calculation is not done using _**blocks**_, but _**ticks**_. The reason for this is to prevent a potential spamming attack, where a malicious BSP would spam the network with tipped transactions, preventing honest BSPs from volunteering first, and thus letting blocks pass until they themselves can volunteer first.
 >
 > For more information on ticks, check out the [Proofs Dealer Pallet](./../proofs-dealer/README.md).

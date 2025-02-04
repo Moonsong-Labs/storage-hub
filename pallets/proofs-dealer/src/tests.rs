@@ -37,7 +37,7 @@ use crate::{
         StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor,
     },
     ChallengesTicker, ChallengesTickerPaused, LastCheckpointTick, LastDeletedTick,
-    NotFullBlocksCount, ProviderToProofSubmissionRecord, SlashableProviders, TickToChallengesSeed,
+    PastBlocksStatus, ProviderToProofSubmissionRecord, SlashableProviders, TickToChallengesSeed,
     TickToCheckForSlashableProviders, TickToCheckpointChallenges, TickToProvidersDeadlines,
     ValidProofSubmittersLastTicks,
 };
@@ -1630,8 +1630,8 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
 
         // Check that the event for mutations applied is emitted.
         System::assert_has_event(
-            Event::MutationsApplied {
-                provider: provider_id,
+            Event::MutationsAppliedForProvider {
+                provider_id,
                 mutations: custom_challenges
                     .iter()
                     .filter_map(|custom_challenge| {
@@ -1642,6 +1642,7 @@ fn submit_proof_with_checkpoint_challenges_mutations_success() {
                         }
                     })
                     .collect(),
+                old_root: root,
                 new_root: challenges.last().unwrap().clone(),
             }
             .into(),
@@ -4531,12 +4532,23 @@ fn challenges_ticker_block_considered_full_with_max_normal_weight() {
         ProofsDealer::on_finalize(System::block_number());
 
         // Get the current count of non-full blocks.
-        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count();
 
         // In the next block, after executing `on_poll`, `NonFullBlocksCount` should NOT be incremented.
         System::set_block_number(System::block_number() + 1);
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
-        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full);
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        assert_eq!(
+            past_blocks_status
+                .iter()
+                .filter(|&&is_full| !is_full)
+                .count(),
+            blocks_not_full
+        );
     });
 }
 
@@ -4570,12 +4582,23 @@ fn challenges_ticker_block_considered_full_with_weight_left_smaller_than_headroo
         ProofsDealer::on_finalize(System::block_number());
 
         // Get the current count of non-full blocks.
-        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count();
 
         // In the next block, after executing `on_poll`, `NonFullBlocksCount` should NOT be incremented.
         System::set_block_number(System::block_number() + 1);
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
-        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full);
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        assert_eq!(
+            past_blocks_status
+                .iter()
+                .filter(|&&is_full| !is_full)
+                .count(),
+            blocks_not_full
+        );
     });
 }
 
@@ -4609,12 +4632,23 @@ fn challenges_ticker_block_considered_not_full_with_weight_left_equal_to_headroo
         ProofsDealer::on_finalize(System::block_number());
 
         // Get the current count of non-full blocks.
-        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count();
 
         // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
         System::set_block_number(System::block_number() + 1);
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
-        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        assert_eq!(
+            past_blocks_status
+                .iter()
+                .filter(|&&is_full| !is_full)
+                .count(),
+            blocks_not_full + 1
+        );
     });
 }
 
@@ -4648,12 +4682,23 @@ fn challenges_ticker_block_considered_not_full_with_weight_left_greater_than_hea
         ProofsDealer::on_finalize(System::block_number());
 
         // Get the current count of non-full blocks.
-        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count();
 
         // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
         System::set_block_number(System::block_number() + 1);
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
-        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        assert_eq!(
+            past_blocks_status
+                .iter()
+                .filter(|&&is_full| !is_full)
+                .count(),
+            blocks_not_full + 1
+        );
     });
 }
 
@@ -4667,7 +4712,8 @@ fn challenges_ticker_paused_only_after_tolerance_blocks() {
         assert_eq!(ChallengesTicker::<Test>::get(), 1);
 
         // Go until `BlockFullnessPeriodFor` blocks, with spammed blocks.
-        let block_fullness_period = BlockFullnessPeriodFor::<Test>::get();
+        let block_fullness_period: BlockNumberFor<Test> =
+            <<Test as crate::Config>::BlockFullnessPeriod as Get<u32>>::get().into();
         run_to_block_spammed(block_fullness_period);
 
         // Assert that the challenges ticker is NOT paused, and the tick counter advanced `BlockFullnessPeriodFor`.
@@ -4700,7 +4746,8 @@ fn challenges_ticker_paused_when_less_than_min_not_full_blocks_ratio_are_not_ful
 
         // Make sure there are `BlockFullnessPeriod * MinNotFullBlocksRatio` (floor)
         // not-spammed blocks. Consider that the first block was not spammed.
-        let block_fullness_period: u64 = BlockFullnessPeriodFor::<Test>::get();
+        let block_fullness_period: BlockNumberFor<Test> =
+            <<Test as crate::Config>::BlockFullnessPeriod as Get<u32>>::get().into();
         let min_not_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
         let blocks_to_spam = min_not_full_blocks_ratio
             .mul_floor(block_fullness_period)
@@ -4741,7 +4788,8 @@ fn challenges_ticker_not_paused_when_more_than_min_not_full_blocks_ratio_are_not
 
         // Make sure there are more than `BlockFullnessPeriod * MinNotFullBlocksRatio` (floor)
         // not-spammed blocks. Consider that the first block was not spammed.
-        let block_fullness_period: u64 = BlockFullnessPeriodFor::<Test>::get();
+        let block_fullness_period: BlockNumberFor<Test> =
+            <<Test as crate::Config>::BlockFullnessPeriod as Get<u32>>::get().into();
         let min_not_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
         let blocks_to_spam = min_not_full_blocks_ratio
             .mul_floor(block_fullness_period)
@@ -4798,7 +4846,11 @@ fn challenges_ticker_not_paused_when_blocks_dont_run_on_poll() {
         // Get the current count of non-full blocks. Should be zero as `on_poll` was only run
         // once in `run_to_block(1)`, taking into account the genesis block. In other words, not
         // adding anything.
-        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count();
         assert_eq!(blocks_not_full, 0);
 
         // Current ticker should be 1.
@@ -4807,7 +4859,14 @@ fn challenges_ticker_not_paused_when_blocks_dont_run_on_poll() {
         // In the next block, after executing `on_poll`, `NonFullBlocksCount` should be incremented.
         System::set_block_number(System::block_number() + 1);
         ProofsDealer::on_poll(System::block_number(), &mut WeightMeter::new());
-        assert_eq!(NotFullBlocksCount::<Test>::get(), blocks_not_full + 1);
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        assert_eq!(
+            past_blocks_status
+                .iter()
+                .filter(|&&is_full| !is_full)
+                .count(),
+            blocks_not_full + 1
+        );
     });
 }
 
@@ -4821,7 +4880,8 @@ fn challenges_ticker_unpaused_after_spam_finishes() {
         assert_eq!(ChallengesTicker::<Test>::get(), 1);
 
         // Go until `BlockFullnessPeriod` blocks, with spammed blocks.
-        let block_fullness_period = BlockFullnessPeriodFor::<Test>::get();
+        let block_fullness_period: BlockNumberFor<Test> =
+            <<Test as crate::Config>::BlockFullnessPeriod as Get<u32>>::get().into();
         run_to_block_spammed(block_fullness_period);
 
         // Go one more block beyond `BlockFullnessPeriod`.
@@ -4835,10 +4895,13 @@ fn challenges_ticker_unpaused_after_spam_finishes() {
 
         // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
         // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
-        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count() as u64;
         let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
-        let min_non_full_blocks: u64 =
-            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+        let min_non_full_blocks: u64 = min_non_full_blocks_ratio.mul_floor(block_fullness_period);
         let empty_blocks_to_advance = min_non_full_blocks + 1 - blocks_not_full;
 
         // Advance `empty_blocks_to_advance` blocks.
@@ -4867,7 +4930,8 @@ fn challenges_ticker_paused_twice() {
         assert_eq!(ChallengesTicker::<Test>::get(), 1);
 
         // Go until `BlockFullnessPeriod` blocks, with spammed blocks.
-        let block_fullness_period = BlockFullnessPeriodFor::<Test>::get();
+        let block_fullness_period: BlockNumberFor<Test> =
+            <<Test as crate::Config>::BlockFullnessPeriod as Get<u32>>::get().into();
         run_to_block_spammed(block_fullness_period);
 
         // Go one more block beyond `BlockFullnessPeriod`.
@@ -4881,10 +4945,13 @@ fn challenges_ticker_paused_twice() {
 
         // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
         // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
-        let blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count() as u64;
         let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
-        let min_non_full_blocks: u64 =
-            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+        let min_non_full_blocks: u64 = min_non_full_blocks_ratio.mul_floor(block_fullness_period);
         let empty_blocks_to_advance = min_non_full_blocks + 1 - blocks_not_full;
 
         // Advance `empty_blocks_to_advance` blocks.
@@ -4903,10 +4970,13 @@ fn challenges_ticker_paused_twice() {
 
         // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
         // We need to decrease that number so that it is smaller or equal to`BlockFullnessPeriod * MinNotFullBlocksRatio`.
-        let mut blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let mut blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count() as u64;
         let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
-        let min_non_full_blocks: u64 =
-            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+        let min_non_full_blocks: u64 = min_non_full_blocks_ratio.mul_floor(block_fullness_period);
 
         // We cannot just spam however many blocks of difference are in `blocks_not_full` - `min_non_full_blocks`
         // because the oldest blocks being considered were also spammed. We would be adding new spammed blocks
@@ -4917,7 +4987,11 @@ fn challenges_ticker_paused_twice() {
         while blocks_not_full > min_non_full_blocks {
             let current_block = System::block_number();
             run_to_block_spammed(current_block + 1);
-            blocks_not_full = NotFullBlocksCount::<Test>::get();
+            let past_blocks_status = PastBlocksStatus::<Test>::get();
+            blocks_not_full = past_blocks_status
+                .iter()
+                .filter(|&&is_full| !is_full)
+                .count() as u64;
             blocks_advanced += 1;
         }
 
@@ -4947,7 +5021,8 @@ fn challenges_ticker_provider_not_slashed_if_network_spammed() {
 
         // Go beyond `BlockFullnessPeriod` blocks, with not spammed blocks, to simulate
         // an operational scenario already.
-        let block_fullness_period: u64 = BlockFullnessPeriodFor::<Test>::get();
+        let block_fullness_period: BlockNumberFor<Test> =
+            <<Test as crate::Config>::BlockFullnessPeriod as Get<u32>>::get().into();
         run_to_block(block_fullness_period + 1);
 
         // Register user as a Provider in Providers pallet.
@@ -5025,7 +5100,11 @@ fn challenges_ticker_provider_not_slashed_if_network_spammed() {
 
         // Up until this point, all blocks have been not-spammed, so the `NotFullBlocksCount`
         // should be equal to `BlockFullnessPeriod`.
-        let current_not_full_blocks_count = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let current_not_full_blocks_count = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count() as u64;
         assert_eq!(current_not_full_blocks_count, block_fullness_period);
 
         // Advance until the next challenge period block without spammed blocks.
@@ -5040,16 +5119,23 @@ fn challenges_ticker_provider_not_slashed_if_network_spammed() {
 
         // Getting how many blocks have been considered NOT full from the last `BlockFullnessPeriod`.
         // We need to increase that number so that it is greater than `BlockFullnessPeriod * MinNotFullBlocksRatio`.
-        let mut blocks_not_full = NotFullBlocksCount::<Test>::get();
+        let past_blocks_status = PastBlocksStatus::<Test>::get();
+        let mut blocks_not_full = past_blocks_status
+            .iter()
+            .filter(|&&is_full| !is_full)
+            .count() as u64;
         let min_non_full_blocks_ratio = MinNotFullBlocksRatioFor::<Test>::get();
-        let min_non_full_blocks: u64 =
-            min_non_full_blocks_ratio.mul_floor(BlockFullnessPeriodFor::<Test>::get());
+        let min_non_full_blocks: u64 = min_non_full_blocks_ratio.mul_floor(block_fullness_period);
 
         let current_ticker = ChallengesTicker::<Test>::get();
         while blocks_not_full <= min_non_full_blocks {
             let current_block = System::block_number();
             run_to_block(current_block + 1);
-            blocks_not_full = NotFullBlocksCount::<Test>::get();
+            let past_blocks_status = PastBlocksStatus::<Test>::get();
+            blocks_not_full = past_blocks_status
+                .iter()
+                .filter(|&&is_full| !is_full)
+                .count() as u64;
         }
 
         // Now the `ChallengesTicker` shouldn't be paused. But current ticker should be the same.

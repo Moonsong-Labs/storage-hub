@@ -251,6 +251,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToGetOwnerAccount: AugmentedError<ApiType>;
       /**
+       * Failed to get the payment account of the provider.
+       **/
+      FailedToGetPaymentAccount: AugmentedError<ApiType>;
+      /**
        * Failed to query earliest volunteer tick
        **/
       FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;
@@ -335,6 +339,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
+      /**
+       * No BSP reputation weight set.
+       **/
+      NoBspReputationWeightSet: AugmentedError<ApiType>;
       /**
        * No file keys to confirm storing
        **/
