@@ -303,7 +303,7 @@ describeMspNet(
 
       // Wait for the BSPs to volunteer and confirm storing the files so the storage requests get fulfilled.
       for (const fileKey of acceptedFileKeys) {
-        await userApi.wait.storageRequestFulfilled(fileKey);
+        await userApi.wait.storageRequestNotOnChain(fileKey);
       }
     });
 
