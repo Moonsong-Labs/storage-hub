@@ -3,8 +3,9 @@ import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import assert from "node:assert";
-import type { Address, H256 } from "@polkadot/types/interfaces";
-import type { EnrichedBspApi, WaitForTxOptions } from "./test-api";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
+import * as Assertions from "../asserts";
+import type { WaitForTxOptions } from "./test-api";
 
 /**
  * Generic function to wait for a transaction in the pool.
@@ -530,10 +531,7 @@ export const waitForStorageRequestNotOnChain = async (api: ApiPromise, fileKey: 
   }
 };
 
-export const waitForStorageRequestFulfilled = async (
-  api: EnrichedBspApi,
-  fileKey: H256 | string
-) => {
+export const waitForStorageRequestFulfilled = async (api: ApiPromise, fileKey: H256 | string) => {
   // 10 iterations at 1 second per iteration = 10 seconds wait time
   const iterations = 10;
   const delay = 1000;
@@ -550,9 +548,12 @@ export const waitForStorageRequestFulfilled = async (
     try {
       await sleep(delay);
       // Check in the events of the last block to see if any StorageRequestFulfilled event were emitted and get them.
-      const storageRequestFulfilledEvents = await api.assert.eventMany(
+      const previous_block_events = (await api.query.system.events()) as EventRecord[];
+      const storageRequestFulfilledEvents = Assertions.assertEventMany(
+        api,
         "fileSystem",
-        "StorageRequestFulfilled"
+        "StorageRequestFulfilled",
+        previous_block_events
       );
 
       // Check if any of the events are for the file key we are waiting for.
