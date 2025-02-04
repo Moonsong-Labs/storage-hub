@@ -312,7 +312,7 @@ export class BspNetTestApi implements AsyncDisposable {
 
       /**
        * Waits for a storage request to be fulfilled on-chain.
-       * @param fileKey - File key of the storage request to wait for..
+       * @param fileKey - File key of the storage request to wait for.
        * @returns A promise that resolves when the storage request is fulfilled.
        */
       storageRequestFulfilled: (fileKey: H256 | string) =>
