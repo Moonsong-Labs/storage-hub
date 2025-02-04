@@ -502,3 +502,29 @@ export const waitForMspFileStorageComplete = async (api: ApiPromise, fileKey: H2
     }
   }
 };
+
+export const waitForStorageRequestFulfilled = async (api: ApiPromise, fileKey: H256 | string) => {
+  const iterations = 10;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      // Try to get the storage request from the chain
+      const result = await api.query.fileSystem.storageRequests(fileKey);
+
+      // If the storage request wasn't found, it has been fulfilled.
+      if (result.isNone) {
+        return;
+      }
+
+      // If it has been found, seal a new block and wait for the next iteration to check if
+      // it has been fulfilled.
+      await sealBlock(api);
+    } catch {
+      assert(
+        i !== iterations,
+        `Failed to detect storage request fulfilled after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};

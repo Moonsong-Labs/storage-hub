@@ -308,7 +308,15 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the address has no pending extrinsics.
        */
       waitForAvailabilityToSendTx: (address: string) =>
-        Waits.waitForAvailabilityToSendTx(this._api, address)
+        Waits.waitForAvailabilityToSendTx(this._api, address),
+
+      /**
+       * Waits for a storage request to be fulfilled on-chain.
+       * @param fileKey - File key of the storage request to wait for..
+       * @returns A promise that resolves when the storage request is fulfilled.
+       */
+      storageRequestFulfilled: (fileKey: H256 | string) =>
+        Waits.waitForStorageRequestFulfilled(this._api, fileKey)
     };
 
     /**

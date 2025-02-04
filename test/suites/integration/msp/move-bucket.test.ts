@@ -301,8 +301,10 @@ describeMspNet(
         allBucketFiles.push(fileKey);
       }
 
-      // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
-      await userApi.block.skip({ blocksToAdvance: 5, paddingMs: 500 });
+      // Wait for the BSPs to volunteer and confirm storing the files so the storage requests get fulfilled.
+      for (const fileKey of acceptedFileKeys) {
+        await userApi.wait.storageRequestFulfilled(fileKey);
+      }
     });
 
     it("User moves bucket to second MSP", async () => {
