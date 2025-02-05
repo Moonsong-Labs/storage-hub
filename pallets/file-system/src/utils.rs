@@ -126,26 +126,21 @@ where
     where
         T: frame_system::Config,
     {
-        // Get the tick number at which the storage request was created, the associated file fingerprint and
+        // Get the tick number at which the storage request was created and
         // the amount of BSPs required to confirm storing the file for the storage request
         // to be considered fulfilled (replication target).
-        let (storage_request_tick, fingerprint, replication_target) =
-            match <StorageRequests<T>>::get(&file_key) {
-                Some(storage_request) => (
-                    storage_request.requested_at,
-                    storage_request.fingerprint,
-                    storage_request.bsps_required,
-                ),
-                None => {
-                    return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
-                }
-            };
+        let (storage_request_tick, replication_target) = match <StorageRequests<T>>::get(&file_key)
+        {
+            Some(storage_request) => (storage_request.requested_at, storage_request.bsps_required),
+            None => {
+                return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
+            }
+        };
 
         // Get the threshold for the BSP to be able to volunteer for the storage request.
         // The current eligibility value of this storage request for this BSP has to be greater than
         // this for the BSP to be able to volunteer.
-        let bsp_volunteering_threshold =
-            Self::get_volunteer_threshold_of_bsp(&bsp_id, &fingerprint);
+        let bsp_volunteering_threshold = Self::get_volunteer_threshold_of_bsp(&bsp_id, &file_key);
 
         // Get the current eligibility value of this storage request and the slope with which it
         // increments every tick (this is weighted considering the BSP reputation so it depends on the BSP).
@@ -187,17 +182,19 @@ where
     }
 
     /// Compute the eligibility value threshold for a BSP to be able to volunteer for a storage request
-    /// for a file which has the specified fingerprint.
+    /// for a file which has the specified file key.
     ///
-    /// The threshold is computed by concatenating the encoded BSP ID and file's fingerprint,
+    /// The threshold is computed by concatenating the encoded BSP ID and file key,
     /// then hashing the result to get the volunteering hash. The volunteering hash is then
     /// converted to the threshold type.
+    ///
+    /// We use the file key for additional entropy to ensure that the threshold is unique.
     pub fn get_volunteer_threshold_of_bsp(
         bsp_id: &ProviderIdFor<T>,
-        fingerprint: &Fingerprint<T>,
+        file_key: &MerkleHash<T>,
     ) -> T::ThresholdType {
-        // Concatenate the encoded BSP ID and file's fingerprint and hash them to get the volunteering hash.
-        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
+        // Concatenate the encoded BSP ID and file key and hash them to get the volunteering hash.
+        let concatenated = sp_std::vec![bsp_id.encode(), file_key.encode()].concat();
         let volunteering_hash =
             <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
 
