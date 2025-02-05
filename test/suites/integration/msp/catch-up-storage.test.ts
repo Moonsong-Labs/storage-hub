@@ -1,10 +1,10 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, type EnrichedBspApi, sleep, waitFor } from "../../../util";
+import { describeMspNet, shUser, type EnrichedBspApi, sleep } from "../../../util";
 
 describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
   { initialised: false },
-  ({ before, createMsp1Api, it, createUserApi, createApi }) => {
+  ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
 
@@ -35,7 +35,7 @@ describeMspNet(
 
       assert(newBucketEventDataBlob, "Event doesn't match Type");
 
-      const { file_metadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
         userApi.shConsts.NODE_INFOS.user.AddressId,
@@ -56,7 +56,9 @@ describeMspNet(
             userApi.shConsts.TEST_ARTEFACTS[source].size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            null
+            {
+              Basic: null
+            }
           )
         ],
         signer: shUser
@@ -81,7 +83,7 @@ describeMspNet(
       // NOTE:
       // We shouldn't have to recreate an API but any other attempt to reconnect failed
       // Also had to guess for the port of MSP 1
-      await using newMspApi = await createApi("ws://127.0.0.1:9777");
+      // await using newMspApi = await createApi("ws://127.0.0.1:9777");
 
       // Required to trigger out of sync mode
       await userApi.rpc.engine.createBlock(true, true);
