@@ -117,7 +117,19 @@ where
         )
         .await?;
 
-        let total_size: u64 = files.iter().map(|file| file.size as u64).sum();
+        let total_size: u64 = match files
+            .iter()
+            .try_fold(0u64, |acc, file| acc.checked_add(file.size as u64))
+        {
+            Some(size) => size,
+            None => {
+                error!(
+                    target: LOG_TARGET,
+                    "Total size calculation overflowed u64 - bucket is too large"
+                );
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+        };
 
         let own_provider_id = self
             .storage_hub_handler
@@ -381,7 +393,6 @@ where
             file_key,
         );
 
-        let chunks_count = file_metadata.chunks_count();
         let mut bsp_peer_ids = file
             .get_bsp_peer_ids(
                 &mut self
@@ -402,6 +413,7 @@ where
         // but we could potentially stick with a responsive BSP until it fails
         let mut bsp_peer_ids_iter = bsp_peer_ids.iter().cycle();
 
+        let chunks_count = file_metadata.chunks_count();
         for chunk in 0..chunks_count {
             let mut downloaded = false;
             for _ in 0..DOWNLOAD_REQUEST_RETRY_COUNT {
