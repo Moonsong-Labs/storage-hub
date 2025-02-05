@@ -1,4 +1,4 @@
-use crate::*;
+use crate::{types::ShTickGetter, *};
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -25,7 +25,7 @@ use shp_traits::{
     MutateProvidersInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
     ProofSubmittersInterface, ReadBucketsInterface, ReadChallengeableProvidersInterface,
     ReadProvidersInterface, ReadStorageProvidersInterface, ReadUserSolvencyInterface,
-    SystemMetricsInterface,
+    StorageHubTickGetter, SystemMetricsInterface,
 };
 use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_runtime::traits::ConvertBack;
@@ -936,8 +936,17 @@ where
 
             // Remove provider from this storage so when the grace period ends and we process the provider top up expiration item,
             // they will not be slashed
-            AwaitingTopUpFromProviders::<T>::remove(&typed_provider_id);
+            let top_up_metadata = AwaitingTopUpFromProviders::<T>::take(&typed_provider_id);
 
+            // Remove provider top up expiration item from the queue
+            if let Some(top_up_metadata) = top_up_metadata {
+                ProviderTopUpExpirations::<T>::remove(top_up_metadata.end_block_grace_period);
+            } else {
+                log::warn!(
+                    "AwaitingTopUpFromProviders storage does not contain a top up metadata for provider {:?} while their held deposit covers the needed capacity",
+                    provider_id
+                );
+            }
             Self::deposit_event(Event::TopUpFulfilled {
                 provider_id: *provider_id,
                 amount: held_deposit_difference,
@@ -945,15 +954,14 @@ where
         } else {
             // Cannot hold enough balance, start tracking grace period and awaited top up
 
-            // Queue provider top up expiration
-            let block_number_expiry = Self::enqueue_expiration_item(
-                ExpirationItem::ProviderTopUp(typed_provider_id.clone()),
-            )?;
+            // Enqueue the ProviderTopUp expiration item to be processed when the grace period ends
+            let enqueued_at_tick = Self::enqueue_expiration_item(ExpirationItem::ProviderTopUp(
+                typed_provider_id.clone(),
+            ))?;
 
             let top_up_metadata = TopUpMetadata {
-                started_at:
-                    <T::PaymentStreams as shp_traits::PaymentStreamsInterface>::current_tick(),
-                end_block_grace_period: block_number_expiry,
+                started_at: ShTickGetter::<T>::get_current_tick(),
+                end_block_grace_period: enqueued_at_tick,
             };
 
             AwaitingTopUpFromProviders::<T>::insert(
@@ -1065,7 +1073,17 @@ where
 
         // Remove provider from this storage so when the grace period ends and we process the provider top up expiration item,
         // they will not be slashed
-        AwaitingTopUpFromProviders::<T>::remove(typed_provider_id);
+        let top_up_metadata = AwaitingTopUpFromProviders::<T>::take(&typed_provider_id);
+
+        // Remove provider top up expiration item from the queue
+        if let Some(top_up_metadata) = top_up_metadata {
+            ProviderTopUpExpirations::<T>::remove(top_up_metadata.end_block_grace_period);
+        } else {
+            log::warn!(
+                "AwaitingTopUpFromProviders storage does not contain a top up metadata for provider {:?} while their held deposit does not cover the needed capacity",
+                provider_id
+            );
+        }
 
         // Signal that the slashed amount has been topped up
         Self::deposit_event(Event::TopUpFulfilled {
@@ -1620,7 +1638,7 @@ where
         Ok(total_capacity)
     }
 
-    fn get_provider_details(
+    pub(crate) fn get_provider_details(
         provider_id: ProviderIdFor<T>,
     ) -> Result<(T::AccountId, StorageDataUnit<T>, StorageDataUnit<T>), DispatchError>
     where
@@ -2714,7 +2732,7 @@ mod hooks {
                 return;
             }
 
-            // Remove expired move bucket requests if any existed and process them.
+            // Remove expired provider top up periods if any existed and process them.
             let mut provider_top_up_expirations =
                 ProviderTopUpExpirations::<T>::take(*tick_to_process);
             meter.consume(minimum_required_weight_processing_expired_items);

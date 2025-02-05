@@ -1798,9 +1798,7 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn slash() -> Result<(), BenchmarkError> {
-        // TODO: once provider sign off is implemented for providers that run out of stake,
-        // add a benchmark to check which is the worst case scenario for this extrinsic
+    fn slash_without_awaiting_top_up() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         // Make sure the block number is not 0 so events can be deposited.
         if frame_system::Pallet::<T>::block_number() == Zero::zero() {
@@ -1899,7 +1897,7 @@ mod benchmarks {
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
-        _(RawOrigin::Signed(user_account.clone()), bsp_id);
+        slash(RawOrigin::Signed(user_account.clone()), bsp_id);
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the provider being slashed was emitted
@@ -1913,6 +1911,164 @@ mod benchmarks {
         let accrued_failed_proofs =
             <T as crate::Config>::BenchmarkHelpers::get_accrued_failed_proofs(bsp_id.into());
         assert!(accrued_failed_proofs == 0);
+
+        let (_account_id, _capacity, used_capacity) = Pallet::<T>::get_provider_details(bsp_id)?;
+
+        // Capacity needed for the provider to remain active
+        let needed_capacity = used_capacity.max(T::SpMinCapacity::get());
+
+        // Held deposit needed for required capacity
+        let required_held_amt = Pallet::<T>::compute_deposit_needed_for_capacity(needed_capacity)?;
+
+        // Needed balance to be held to increase capacity back to `needed_capacity`
+        use sp_runtime::Saturating;
+        let deposit_before_top_up = T::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        )
+        .saturating_sub(amount_to_slash);
+        let held_deposit_difference = required_held_amt.saturating_sub(deposit_before_top_up);
+
+        // Verify that we entered the top up branch of the `do_slash` execution.
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::TopUpFulfilled {
+            provider_id: bsp_id,
+            amount: held_deposit_difference,
+        });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn slash_with_awaiting_top_up() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        // (we register a BSP since the extrinsic first checks if the account is a MSP, so
+        // the worst case scenario is for the provider to be a BSP)
+        let initial_capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the BSP
+        Pallet::<T>::request_bsp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            initial_capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
+
+        // Verify that the event of the BSP requesting to sign up was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: initial_capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the BSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
+
+        // Verify that the BSP is now in the providers' storage
+        let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id);
+        assert!(bsp.is_some());
+
+        // Accrue failed proof submissions for this provider
+        <T as crate::Config>::BenchmarkHelpers::set_accrued_failed_proofs(bsp_id.into(), 3);
+
+        // Get the amount to be slashed
+        let amount_to_slash = Pallet::<T>::compute_worst_case_scenario_slashable_amount(&bsp_id)
+            .map_err(|_| {
+                BenchmarkError::Stop("Failed to compute worst case scenario slashable amount.")
+            })?;
+
+        // The amount to be slashed should be greater than 0
+        assert!(amount_to_slash > Zero::zero());
+
+        // The amount slashed will be the minimum between the amount to slash and the available
+        // funds to slash of the provider
+        let provider_stake = <T as pallet::Config>::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        );
+        let liquid_held_provider_funds =
+            <T as pallet::Config>::NativeBalance::reducible_total_balance_on_hold(
+                &user_account,
+                Fortitude::Polite,
+            );
+        let amount_to_slash = amount_to_slash
+            .min(provider_stake)
+            .min(liquid_held_provider_funds);
+        assert!(amount_to_slash <= provider_stake);
+
+        // Set BSP balance to existential deposit to simulate the provider not having enough funds to top up
+        // after being slashed.
+        <T as crate::Config>::NativeBalance::set_balance(&user_account, 1u32.into());
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        slash(RawOrigin::Signed(user_account.clone()), bsp_id);
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the event of the provider being slashed was emitted
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::Slashed {
+            provider_id: bsp_id,
+            amount: amount_to_slash,
+        });
+        frame_system::Pallet::<T>::assert_has_event(expected_event.into());
+
+        // Verify that the accrued failed proof submissions have been cleared
+        let accrued_failed_proofs =
+            <T as crate::Config>::BenchmarkHelpers::get_accrued_failed_proofs(bsp_id.into());
+        assert!(accrued_failed_proofs == 0);
+
+        // Fetch the stored TopUpMetadata for the provider
+        let typed_provider_id = StorageProviderId::BackupStorageProvider(bsp_id);
+        let top_up_metadata = AwaitingTopUpFromProviders::<T>::get(&typed_provider_id)
+            .ok_or(BenchmarkError::Stop("TopUpMetadata not found"))?;
+
+        // Construct the event with the actual metadata from storage
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::AwaitingTopUp {
+            provider_id: bsp_id,
+            top_up_metadata,
+        });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         Ok(())
     }

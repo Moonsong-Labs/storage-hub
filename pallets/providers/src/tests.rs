@@ -5301,7 +5301,7 @@ mod slash_and_top_up {
 
                     assert_eq!(
                         top_up_metadata.started_at,
-                        <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::current_tick()
+                        ShTickGetter::<Test>::get_current_tick()
                     );
                     assert_eq!(
                         top_up_metadata.end_block_grace_period,
@@ -5337,9 +5337,10 @@ mod slash_and_top_up {
             }
 
             fn manual_top_up(&self) {
-                let grace_period = ProviderTopUpTtl::<Test>::get();
-                let end_block_grace_period =
-                    ShTickGetter::<Test>::get_current_tick() + grace_period;
+                let pre_state_top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                )
+                .expect("calling manual_top_up expects the storage provider to be in the AwaitingTopUpFromProviders storage");
 
                 let pre_state_provider =
                     MainStorageProviders::<Test>::get(self.provider_id).unwrap();
@@ -5402,19 +5403,17 @@ mod slash_and_top_up {
                     pre_state_held_amount + amount
                 );
 
-                // Check that the provider top up expiration still exists
-                // This is cleared in the `on_idle` hook
-                assert!(
-                    ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
-                        .iter()
-                        .any(|provider_id| *provider_id
-                            == StorageProviderId::<Test>::MainStorageProvider(self.provider_id))
-                );
                 // Check that the storage has been cleared
                 assert!(AwaitingTopUpFromProviders::<Test>::get(
                     StorageProviderId::<Test>::MainStorageProvider(self.provider_id)
                 )
                 .is_none());
+                assert!(ProviderTopUpExpirations::<Test>::get(
+                    pre_state_top_up_metadata.end_block_grace_period
+                )
+                .iter()
+                .all(|provider_id| *provider_id
+                    != StorageProviderId::<Test>::MainStorageProvider(self.provider_id)));
             }
 
             fn wait_for_top_up_expiration(&self) {
@@ -5426,20 +5425,22 @@ mod slash_and_top_up {
                 let pre_state_treasury_balance =
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
 
-                let grace_period = ProviderTopUpTtl::<Test>::get();
-                let end_block_grace_period =
-                    ShTickGetter::<Test>::get_current_tick() + grace_period;
+                let top_up_metadata =
+                    AwaitingTopUpFromProviders::<Test>::get(
+                        StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                    )
+                    .unwrap();
 
                 // Wait for the grace period to expire
-                run_to_block((end_block_grace_period + 1).into());
+                run_to_block((top_up_metadata.end_block_grace_period + 1).into());
 
                 // Check that the provider top up expiration no longer exists
-                assert!(
-                    ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
-                        .iter()
-                        .all(|provider_id| *provider_id
-                            != StorageProviderId::<Test>::MainStorageProvider(self.provider_id))
-                );
+                assert!(ProviderTopUpExpirations::<Test>::get(
+                    top_up_metadata.end_block_grace_period
+                )
+                .iter()
+                .all(|provider_id| *provider_id
+                    != StorageProviderId::<Test>::MainStorageProvider(self.provider_id)));
                 // Storage should be cleared
                 assert!(AwaitingTopUpFromProviders::<Test>::get(
                     StorageProviderId::<Test>::MainStorageProvider(self.provider_id)
@@ -5586,14 +5587,6 @@ mod slash_and_top_up {
                 alice_test_setup.slash_and_verify();
 
                 alice_test_setup.manual_top_up();
-
-                alice_test_setup.wait_for_top_up_expiration();
-
-                // Check that the provider was not marked as insolvent
-                assert!(InsolventProviders::<Test>::get(
-                    StorageProviderId::<Test>::MainStorageProvider(alice_test_setup.provider_id)
-                )
-                .is_none());
             });
         }
     }
