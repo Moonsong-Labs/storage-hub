@@ -1379,6 +1379,18 @@ declare const _default: {
         providerId: string;
         amount: string;
       };
+      FailedToGetOwnerAccountOfInsolventProvider: {
+        providerId: string;
+      };
+      FailedToSlashInsolventProvider: {
+        providerId: string;
+        amountToSlash: string;
+        error: string;
+      };
+      FailedToStopAllCyclesForInsolventBsp: {
+        providerId: string;
+        error: string;
+      };
       ProviderInsolvent: {
         providerId: string;
       };

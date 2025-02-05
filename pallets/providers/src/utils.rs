@@ -731,6 +731,73 @@ where
         Ok(old_capacity)
     }
 
+    pub(crate) fn do_add_value_prop(
+        who: &T::AccountId,
+        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
+        bucket_data_limit: StorageDataUnit<T>,
+    ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        // Check if MSP is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                .is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
+        let value_prop = ValueProposition::<T>::new(
+            price_per_giga_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+        );
+        let value_prop_id = value_prop.derive_id();
+
+        if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {
+            return Err(Error::<T>::ValuePropositionAlreadyExists.into());
+        }
+
+        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
+
+        // Add one to the counter of value propositions that this MSP has stored.
+        MainStorageProviders::<T>::try_mutate(&msp_id, |msp| {
+            let msp = msp
+                .as_mut()
+                .ok_or(Error::<T>::SpRegisteredButDataNotFound)?;
+            msp.amount_of_value_props = msp
+                .amount_of_value_props
+                .checked_add(1u32)
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            Ok::<_, DispatchError>(())
+        })?;
+
+        Ok((msp_id, value_prop))
+    }
+
+    pub(crate) fn do_make_value_prop_unavailable(
+        who: &T::AccountId,
+        value_prop_id: ValuePropIdFor<T>,
+    ) -> Result<MainStorageProviderId<T>, DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
+            &msp_id,
+            value_prop_id,
+            |value_prop| {
+                let value_prop = value_prop
+                    .as_mut()
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
+                value_prop.available = false;
+
+                Ok(msp_id)
+            },
+        )
+    }
+
     /// This function holds the logic that checks if a user can add a new multiaddress to its storage
     /// and, if so, updates the storage to reflect the new multiaddress and returns the provider id if successful
     pub fn do_add_multiaddress(
@@ -1074,73 +1141,6 @@ where
         });
 
         Ok(())
-    }
-
-    pub(crate) fn do_add_value_prop(
-        who: &T::AccountId,
-        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
-        commitment: Commitment<T>,
-        bucket_data_limit: StorageDataUnit<T>,
-    ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-
-        // Check if MSP is insolvent
-        ensure!(
-            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
-                .is_none(),
-            Error::<T>::OperationNotAllowedForInsolventProvider
-        );
-
-        let value_prop = ValueProposition::<T>::new(
-            price_per_giga_unit_of_data_per_block,
-            commitment,
-            bucket_data_limit,
-        );
-        let value_prop_id = value_prop.derive_id();
-
-        if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {
-            return Err(Error::<T>::ValuePropositionAlreadyExists.into());
-        }
-
-        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
-
-        // Add one to the counter of value propositions that this MSP has stored.
-        MainStorageProviders::<T>::try_mutate(&msp_id, |msp| {
-            let msp = msp
-                .as_mut()
-                .ok_or(Error::<T>::SpRegisteredButDataNotFound)?;
-            msp.amount_of_value_props = msp
-                .amount_of_value_props
-                .checked_add(1u32)
-                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-
-            Ok::<_, DispatchError>(())
-        })?;
-
-        Ok((msp_id, value_prop))
-    }
-
-    pub(crate) fn do_make_value_prop_unavailable(
-        who: &T::AccountId,
-        value_prop_id: ValuePropIdFor<T>,
-    ) -> Result<MainStorageProviderId<T>, DispatchError> {
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-
-        MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
-            &msp_id,
-            value_prop_id,
-            |value_prop| {
-                let value_prop = value_prop
-                    .as_mut()
-                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
-                value_prop.available = false;
-
-                Ok(msp_id)
-            },
-        )
     }
 
     pub(crate) fn do_delete_provider(provider_id: &ProviderIdFor<T>) -> Result<(), DispatchError> {
@@ -2505,7 +2505,9 @@ impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
     }
 }
 
-/// Runtime API implementation for the Storage Providers pallet.
+/**************** Runtime API Implementations ****************/
+
+/// Runtime API implementations for the Storage Providers pallet.
 impl<T> Pallet<T>
 where
     T: pallet::Config,
@@ -2654,13 +2656,13 @@ where
     }
 }
 
+/**************** Hooks Implementations ****************/
+/// Hooks implementations for the Storage Providers pallet.
 mod hooks {
     use crate::{
-        pallet,
-        types::{ShTickGetter, StorageHubTickNumber},
-        utils::StorageProviderId,
-        AwaitingTopUpFromProviders, BackupStorageProviders, Event, HoldReason, InsolventProviders,
-        MainStorageProviders, NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
+        pallet, types::StorageHubTickNumber, utils::StorageProviderId, weights::WeightInfo,
+        AwaitingTopUpFromProviders, Event, HoldReason, InsolventProviders,
+        NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
     };
 
     use frame_support::{
@@ -2669,149 +2671,200 @@ mod hooks {
             tokens::{Fortitude, Precision, Restriction},
             Get,
         },
-        weights::WeightMeter,
+        weights::{RuntimeDbWeight, WeightMeter},
     };
-    use shp_traits::StorageHubTickGetter;
     use sp_runtime::{
         traits::{One, Zero},
         Saturating,
     };
 
     impl<T: pallet::Config> Pallet<T> {
-        pub(crate) fn do_on_idle(mut meter: &mut WeightMeter) -> &mut WeightMeter {
+        pub(crate) fn do_on_idle(
+            current_tick: StorageHubTickNumber<T>,
+            mut meter: &mut WeightMeter,
+        ) -> &mut WeightMeter {
             let db_weight = T::DbWeight::get();
-            let current_sh_tick = ShTickGetter::<T>::get_current_tick();
-            let mut sh_tick_to_clean = NextStartingShTickToCleanUp::<T>::get();
 
-            while sh_tick_to_clean <= current_sh_tick && !meter.remaining().is_zero() {
-                Self::process_block_expired_items(&mut sh_tick_to_clean, &mut meter);
+            // If there's enough weight to get from storage the next tick to clean up and possibly update it afterwards, continue
+            if meter.can_consume(T::DbWeight::get().reads_writes(1, 1)) {
+                // Get the next tick for which to clean up expired items
+                let mut tick_to_clean = NextStartingShTickToCleanUp::<T>::get();
+                let initial_tick_to_clean = tick_to_clean;
 
-                if meter.remaining().is_zero() {
-                    break;
+                // While the tick to clean up is less than or equal to the current tick, process the expired items for that tick.
+                while tick_to_clean <= current_tick {
+                    // Process the expired items for the current tick to cleanup.
+                    let exited_early =
+                        Self::process_tick_expired_items(tick_to_clean, &mut meter, &db_weight);
+
+                    // If processing had to exit early because of weight limitations, stop processing expired items.
+                    if exited_early {
+                        break;
+                    }
+                    // Otherwise, increment the tick to clean up and continue processing the next tick.
+                    tick_to_clean.saturating_accrue(StorageHubTickNumber::<T>::one());
                 }
 
-                sh_tick_to_clean.saturating_accrue(StorageHubTickNumber::<T>::one());
-            }
-
-            // Update the next starting block for cleanup
-            if sh_tick_to_clean > NextStartingShTickToCleanUp::<T>::get() {
-                NextStartingShTickToCleanUp::<T>::put(sh_tick_to_clean);
-                meter.consume(db_weight.writes(1));
+                // Update the next starting tick for cleanup
+                if tick_to_clean > initial_tick_to_clean {
+                    NextStartingShTickToCleanUp::<T>::put(tick_to_clean);
+                    meter.consume(db_weight.writes(1));
+                }
             }
 
             meter
         }
 
-        fn process_block_expired_items(
-            tick_to_process: &mut StorageHubTickNumber<T>,
+        fn process_tick_expired_items(
+            tick_to_process: StorageHubTickNumber<T>,
             meter: &mut WeightMeter,
-        ) {
-            let db_weight = T::DbWeight::get();
-            let minimum_required_weight_processing_expired_items = db_weight.reads_writes(2, 1);
+            db_weight: &RuntimeDbWeight,
+        ) -> bool {
+            let mut ran_out_of_weight = false;
 
-            // Check if there is enough remaining weight to process expired move bucket requests
-            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
-                return;
+            // If there's enough weight to take from storage the provider top up expirations for the current tick to process
+            // and reinsert them if needed, continue.
+            if meter.can_consume(db_weight.reads_writes(1, 2)) {
+                // Get the provider top ups that expired in the current tick.
+                let mut expired_provider_top_ups =
+                    ProviderTopUpExpirations::<T>::take(tick_to_process);
+                meter.consume(db_weight.reads_writes(1, 1));
+
+                // Get the required weight to process an expired provider top up in its worst case scenario.
+                let maximum_required_weight_expired_provider_top_up =
+                    T::WeightInfo::process_expired_provider_top_up_bsp()
+                        .max(T::WeightInfo::process_expired_provider_top_up_msp());
+
+                // While there's enough weight to process an expired provider top up in its worst-case scenario AND re-insert the remaining top ups to storage, continue.
+                while let Some(typed_provider_id) = expired_provider_top_ups.pop() {
+                    if meter.can_consume(
+                        maximum_required_weight_expired_provider_top_up
+                            .saturating_add(db_weight.writes(1)),
+                    ) {
+                        // Process a expired provider top up request. This internally consumes the used weight from the meter.
+                        Self::process_expired_provider_top_up(typed_provider_id, meter);
+                    } else {
+                        // Push back the expired provider top up into the provider top ups queue to be able to re-insert it.
+                        // This should never fail since this element was just taken from the bounded vector, so there must be space for it.
+                        let _ = expired_provider_top_ups.try_push(typed_provider_id);
+                        ran_out_of_weight = true;
+                        break;
+                    }
+                }
+
+                // If the expired provider top ups were not fully processed, re-insert them into storage to process them at a later time.
+                if !expired_provider_top_ups.is_empty() {
+                    ProviderTopUpExpirations::<T>::insert(
+                        &tick_to_process,
+                        expired_provider_top_ups,
+                    );
+                    meter.consume(db_weight.writes(1));
+                }
             }
 
-            // Remove expired move bucket requests if any existed and process them.
-            let mut provider_top_up_expirations =
-                ProviderTopUpExpirations::<T>::take(*tick_to_process);
-            meter.consume(minimum_required_weight_processing_expired_items);
-
-            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
-            // TODO: process all the expired move bucket requests. If not, we should return early.
-            while let Some(typed_provider_id) = provider_top_up_expirations.pop() {
-                Self::process_expired_provider_top_up_period(typed_provider_id, meter);
-            }
-
-            // If there are remaining items which were not processed, put them back in storage
-            if !provider_top_up_expirations.is_empty() {
-                ProviderTopUpExpirations::<T>::insert(tick_to_process, provider_top_up_expirations);
-                meter.consume(db_weight.writes(1));
-            }
+            ran_out_of_weight
         }
 
-        fn process_expired_provider_top_up_period(
+        pub(crate) fn process_expired_provider_top_up(
             typed_provider_id: StorageProviderId<T>,
             meter: &mut WeightMeter,
         ) {
-            let db_weight = T::DbWeight::get();
-            let potential_weight = db_weight.reads_writes(0, 2);
-
-            if !meter.can_consume(potential_weight) {
-                return;
-            }
-
-            // Clear awaiting top up storage
+            // Clear the storage that marks the provider as awaiting a top up.
             let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::take(&typed_provider_id);
 
             // Mark the provider as insolvent if it was awaiting a top up
             // If the provider was not awaiting a top up, it means they already topped up either via an
-            // automatic top up or a manual top up.
+            // automatic top up or a manual top up, and it shouldn't be marked as insolvent.
             if maybe_awaiting_top_up.is_some() {
+                // Add the provider to the InsolventProviders storage, to mark it as insolvent.
                 InsolventProviders::<T>::insert(typed_provider_id.clone(), ());
 
+                // Deposit the event of the provider being marked as insolvent.
                 Self::deposit_event(Event::ProviderInsolvent {
                     provider_id: *typed_provider_id.inner(),
                 });
 
-                let account_id = if let Some(bsp) =
-                    BackupStorageProviders::<T>::get(&typed_provider_id.inner())
-                {
-                    bsp.owner_account
-                } else if let Some(msp) = MainStorageProviders::<T>::get(&typed_provider_id.inner())
-                {
-                    msp.owner_account
-                } else {
-                    log::error!(
-                        target: "runtime::providers",
-                        "Could not slash any potentially remaining deposit for provider {:?} as it does not exist.",
-                        typed_provider_id
-                    );
-                    return;
-                };
+                // Get the account ID owner of the provider. If the account ID is not found log an error, emit the error event and return early.
+                let provider_account_id =
+                    match <Self as shp_traits::ReadProvidersInterface>::get_owner_account(
+                        *typed_provider_id.inner(),
+                    ) {
+                        Some(account_id) => account_id,
+                        None => {
+                            log::error!(
+                                target: "runtime::storage_providers::process_expired_provider_top_up",
+                                "Could not get owner account of provider {:?} to slash it.",
+                                typed_provider_id
+                            );
 
+                            Self::deposit_event(
+                                Event::FailedToGetOwnerAccountOfInsolventProvider {
+                                    provider_id: *typed_provider_id.inner(),
+                                },
+                            );
+
+                            return;
+                        }
+                    };
+
+                // Get the deposit that the provider has on hold.
                 let held_deposit = T::NativeBalance::balance_on_hold(
                     &HoldReason::StorageProviderDeposit.into(),
-                    &account_id,
+                    &provider_account_id,
                 );
 
+                // If the provider has a deposit on hold, slash it, transfering it to the treasury.
                 if !held_deposit.is_zero() {
-                    // Transfer all held deposit to treasury
                     if let Err(e) = T::NativeBalance::transfer_on_hold(
                         &HoldReason::StorageProviderDeposit.into(),
-                        &account_id,
+                        &provider_account_id,
                         &T::Treasury::get(),
                         held_deposit,
                         Precision::BestEffort,
                         Restriction::Free,
                         Fortitude::Force,
                     ) {
+                        // If there's an error slashing the provider, log the error and emit the error event.
                         log::error!(
-                            target: "runtime::providers",
+                            target: "runtime::storage_providers::process_expired_provider_top_up",
                             "Could not slash remaining deposit for provider {:?} due to error: {:?}",
                             typed_provider_id,
                             e
                         );
+
+                        Self::deposit_event(Event::FailedToSlashInsolventProvider {
+                            provider_id: *typed_provider_id.inner(),
+                            amount_to_slash: held_deposit,
+                            error: e,
+                        });
                     }
                 }
 
-                if let Err(e) =
-                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
-                        &typed_provider_id.inner(),
-                    )
-                {
-                    log::error!(
-                        target: "runtime::providers",
-                        "Could not stop challenge cycle for provider {:?} due to error: {:?}",
-                        typed_provider_id,
-                        e
-                    );
-                }
+                // If the provider is a Backup Storage Provider, stop all its cycles.
+                if let StorageProviderId::BackupStorageProvider(bsp_id) = typed_provider_id {
+                    if let Err(e) = Self::do_stop_all_cycles(&provider_account_id) {
+                        // If there's an error stopping all cycles for the provider, log the error and emit the error event.
+                        log::error!(
+                            target: "runtime::storage_providers::process_expired_provider_top_up",
+                            "Could not stop all cycles for provider {:?} due to error: {:?}",
+                            bsp_id,
+                            e
+                        );
+
+                        Self::deposit_event(Event::FailedToStopAllCyclesForInsolventBsp {
+                            provider_id: bsp_id,
+                            error: e,
+                        });
+                    }
+                };
             }
 
-            meter.consume(potential_weight);
+            // Consume the corresponding weight used by this function.
+            if let StorageProviderId::BackupStorageProvider(_) = typed_provider_id {
+                meter.consume(T::WeightInfo::process_expired_provider_top_up_bsp());
+            } else {
+                meter.consume(T::WeightInfo::process_expired_provider_top_up_msp());
+            }
         }
     }
 }

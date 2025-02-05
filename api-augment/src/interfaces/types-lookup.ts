@@ -1868,6 +1868,21 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
       readonly amount: u128;
     } & Struct;
+    readonly isFailedToGetOwnerAccountOfInsolventProvider: boolean;
+    readonly asFailedToGetOwnerAccountOfInsolventProvider: {
+      readonly providerId: H256;
+    } & Struct;
+    readonly isFailedToSlashInsolventProvider: boolean;
+    readonly asFailedToSlashInsolventProvider: {
+      readonly providerId: H256;
+      readonly amountToSlash: u128;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
+    readonly isFailedToStopAllCyclesForInsolventBsp: boolean;
+    readonly asFailedToStopAllCyclesForInsolventBsp: {
+      readonly providerId: H256;
+      readonly error: SpRuntimeDispatchError;
+    } & Struct;
     readonly isProviderInsolvent: boolean;
     readonly asProviderInsolvent: {
       readonly providerId: H256;
@@ -1924,6 +1939,9 @@ declare module "@polkadot/types/lookup" {
       | "Slashed"
       | "AwaitingTopUp"
       | "TopUpFulfilled"
+      | "FailedToGetOwnerAccountOfInsolventProvider"
+      | "FailedToSlashInsolventProvider"
+      | "FailedToStopAllCyclesForInsolventBsp"
       | "ProviderInsolvent"
       | "BucketsOfInsolventMsp"
       | "BucketRootChanged"
