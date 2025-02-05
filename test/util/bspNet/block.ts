@@ -127,6 +127,8 @@ export const sealBlock = async (
 
     // Send all transactions in sequence
     for (let i = 0; i < callArray.length; i++) {
+      const originalPendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
+
       const call = callArray[i];
       let hash: Hash;
 
@@ -136,7 +138,22 @@ export const sealBlock = async (
         hash = await call.signAndSend(signer || alice, { nonce: nonceToUse + i });
       }
 
-      results.hashes.push(hash);
+      for (let i = 0; i < 100; i++) {
+        const pendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
+        if (pendingTxs === originalPendingTxs + 1) {
+          results.hashes.push(hash);
+          break;
+        }
+        await sleep(50);
+      }
+
+      const pendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
+      if (pendingTxs !== originalPendingTxs + 1) {
+        console.error(`Original pending txs ${originalPendingTxs} and now ${pendingTxs}`);
+        throw new Error(
+          `Transaction ${call.method.section.toString()}:${call.method.method.toString()} failed to be included in the block`
+        );
+      }
     }
   }
 
