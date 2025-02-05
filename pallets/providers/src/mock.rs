@@ -364,6 +364,7 @@ impl crate::Config for Test {
     type StorageDataUnit = StorageDataUnit;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type SpCount = u32;
+    type BucketCount = u32;
     type MerklePatriciaRoot = H256;
     type MerkleTrieHashing = BlakeTwo256;
     type ProviderId = H256;
