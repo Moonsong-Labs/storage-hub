@@ -4454,6 +4454,11 @@ mod assign_msp_to_bucket {
                     alice_value_prop_id
                 ));
 
+                // Simulate Charlie having more than one value proposition to be able to deactivate his.
+                MainStorageProviders::<Test>::mutate(&charlie_msp_id, |msp| {
+                    msp.as_mut().unwrap().amount_of_value_props = 2;
+                });
+
                 // Make Charlie's value proposition unavailable.
                 assert_ok!(crate::Pallet::<Test>::do_make_value_prop_unavailable(
                     &charlie,
@@ -6382,6 +6387,14 @@ mod make_value_prop_unavailable {
                 let (_deposit_amount, _alice_msp, _) =
                     register_account_as_msp(alice, storage_amount, None, None);
 
+                // Get Alice's MSP ID.
+                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+
+                // Simulate the MSP having more than one value proposition.
+                MainStorageProviders::<Test>::mutate(msp_id, |msp| {
+                    msp.as_mut().unwrap().amount_of_value_props = 2;
+                });
+
                 let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
 
                 assert_noop!(
@@ -6390,6 +6403,26 @@ mod make_value_prop_unavailable {
                         value_prop.derive_id()
                     ),
                     Error::<Test>::ValuePropositionNotFound
+                );
+            });
+        }
+
+        #[test]
+        fn cant_deactivate_last_value_prop() {
+            ExtBuilder::build().execute_with(|| {
+                let alice: AccountId = accounts::ALICE.0;
+                let storage_amount: StorageDataUnit<Test> = 100;
+                let (_deposit_amount, _alice_msp, _) =
+                    register_account_as_msp(alice, storage_amount, None, None);
+
+                let value_prop = ValueProposition::<Test>::new(999, bounded_vec![], 999);
+
+                assert_noop!(
+                    StorageProviders::make_value_prop_unavailable(
+                        RuntimeOrigin::signed(alice),
+                        value_prop.derive_id()
+                    ),
+                    Error::<Test>::CantDeactivateLastValueProp
                 );
             });
         }
