@@ -385,7 +385,6 @@ describeBspNet(
         bspStartingWeight: 800_000_000n
       });
       const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
-      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
       // Wait for it to catch up to the top of the chain
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
@@ -398,7 +397,7 @@ describeBspNet(
       };
       const tickRangeToMaximumThresholdRuntimeParameter = {
         RuntimeConfig: {
-          TickRangeToMaximumThreshold: [null, 100]
+          TickRangeToMaximumThreshold: [null, 9001]
         }
       };
       const storageRequestTtlRuntimeParameter = {

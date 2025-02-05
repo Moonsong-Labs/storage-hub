@@ -700,7 +700,11 @@ where
             .blockchain
             .is_storage_request_open_to_volunteers(file_key.into())
             .await
-            .map_err(|e| anyhow!("Failed to query file can volunteer: {:?}", e))?;
+            .map_err(
+                |e: pallet_file_system_runtime_api::IsStorageRequestOpenToVolunteersError| {
+                    anyhow!("Failed to query file can volunteer: {:?}", e)
+                },
+            )?;
 
         // Skip volunteering if the storage request is no longer open to volunteers.
         // TODO: Handle the case where were catching up to the latest block. We probably either want to skip volunteering or wait until
