@@ -91,6 +91,7 @@ export const extendFork = async (
  * @param nonce - Optional starting nonce for the extrinsics.
  * @param parentHash - Optional parent hash to build the block on top of.
  * @param finaliseBlock - Whether to finalize the block. Defaults to true.
+ * @param failOnExtrinsicNonInclusion - Whether to fail if an extrinsic is not included in the block. Defaults to true.
  * @returns A Promise resolving to a SealedBlock object containing block details and events.
  *
  * @throws Will throw an error if the block creation fails or if extrinsics are unsuccessful.
@@ -103,7 +104,8 @@ export const sealBlock = async (
   signer?: KeyringPair,
   nonce?: number,
   parentHash?: string,
-  finaliseBlock = true
+  finaliseBlock = true,
+  failOnExtrinsicNonInclusion = true
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
@@ -148,7 +150,7 @@ export const sealBlock = async (
       }
 
       const pendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
-      if (pendingTxs !== originalPendingTxs + 1) {
+      if (failOnExtrinsicNonInclusion && pendingTxs !== originalPendingTxs + 1) {
         console.error(`Original pending txs ${originalPendingTxs} and now ${pendingTxs}`);
         throw new Error(
           `Transaction ${call.method.section.toString()}:${call.method.method.toString()} failed to be included in the block`
