@@ -203,6 +203,7 @@ pub struct Bucket<T: Config> {
     /// Whether the bucket is private or not.
     pub private: bool,
     /// If the bucket is private, it has to have a collection ID that holds the items that allow a user to access the bucket's data.
+    /// This is not enforced by the runtime but by the MSP storing that bucket.
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
     /// The current size of the bucket.
     pub size: StorageDataUnit<T>,
