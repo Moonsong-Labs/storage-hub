@@ -346,8 +346,8 @@ impl_runtime_apis! {
             FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
         }
 
-        fn storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<(H256, StorageRequestMetadata<Runtime>)> {
-            FileSystem::storage_requests_by_msp(msp_id)
+        fn unresponded_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<(H256, StorageRequestMetadata<Runtime>)> {
+            FileSystem::unresponded_storage_requests_by_msp(msp_id)
         }
     }
 

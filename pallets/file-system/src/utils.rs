@@ -2797,7 +2797,7 @@ where
         .file_key::<FileKeyHasher<T>>()
     }
 
-    pub fn storage_requests_by_msp(
+    pub fn unresponded_storage_requests_by_msp(
         msp_id: ProviderIdFor<T>,
     ) -> Vec<(MerkleHash<T>, StorageRequestMetadata<T>)> {
         // Get the storeage requests for a specific MSP
