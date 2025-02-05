@@ -5838,6 +5838,7 @@ declare module "@polkadot/types/lookup" {
     readonly bucketId: H256;
     readonly fileSize: u64;
     readonly depositPaidForCreation: u128;
+    readonly queuePriorityChallenge: bool;
   }
 
   /** @name PalletFileSystemPendingStopStoringRequest (465) */

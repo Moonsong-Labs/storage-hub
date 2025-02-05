@@ -4568,7 +4568,8 @@ export default {
     fileKey: "H256",
     bucketId: "H256",
     fileSize: "u64",
-    depositPaidForCreation: "u128"
+    depositPaidForCreation: "u128",
+    queuePriorityChallenge: "bool"
   },
   /**
    * Lookup465: pallet_file_system::types::PendingStopStoringRequest<T>
