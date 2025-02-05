@@ -4531,6 +4531,7 @@ export default {
       "ValuePropositionNotFound",
       "ValuePropositionAlreadyExists",
       "ValuePropositionNotAvailable",
+      "CantDeactivateLastValueProp",
       "ValuePropositionsDeletedAmountMismatch",
       "FixedRatePaymentStreamNotFound",
       "MspAlreadyAssignedToBucket",

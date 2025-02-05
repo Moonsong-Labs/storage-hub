@@ -1112,6 +1112,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CannotStopCycleWithNonDefaultRoot: AugmentedError<ApiType>;
       /**
+       * Error thrown when a MSP tries to deactivate its last value proposition.
+       **/
+      CantDeactivateLastValueProp: AugmentedError<ApiType>;
+      /**
        * Failed to delete a provider due to conditions not being met.
        *
        * Call `can_delete_provider` runtime API to check if the provider can be deleted.

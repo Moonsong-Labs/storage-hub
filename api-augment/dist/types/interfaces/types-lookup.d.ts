@@ -5492,6 +5492,7 @@ declare module "@polkadot/types/lookup" {
     readonly isValuePropositionNotFound: boolean;
     readonly isValuePropositionAlreadyExists: boolean;
     readonly isValuePropositionNotAvailable: boolean;
+    readonly isCantDeactivateLastValueProp: boolean;
     readonly isValuePropositionsDeletedAmountMismatch: boolean;
     readonly isFixedRatePaymentStreamNotFound: boolean;
     readonly isMspAlreadyAssignedToBucket: boolean;
@@ -5544,6 +5545,7 @@ declare module "@polkadot/types/lookup" {
       | "ValuePropositionNotFound"
       | "ValuePropositionAlreadyExists"
       | "ValuePropositionNotAvailable"
+      | "CantDeactivateLastValueProp"
       | "ValuePropositionsDeletedAmountMismatch"
       | "FixedRatePaymentStreamNotFound"
       | "MspAlreadyAssignedToBucket"
