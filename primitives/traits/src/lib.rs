@@ -795,8 +795,8 @@ pub trait ProofsDealerInterface {
 
     /// Stop a Provider's challenge cycle.
     ///
-    /// If the provider doesn't have any files left we remove it teh challenge cycle. It shouldn't
-    /// submit proof.
+    /// If the provider doesn't have any files left its random challenge cycle is stopped since it shouldn't
+    /// submit any proofs.
     fn stop_challenge_cycle(provider_id: &Self::ProviderId) -> DispatchResult;
 
     /// Initialise a Provider's challenge cycle.
