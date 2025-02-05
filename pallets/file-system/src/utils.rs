@@ -2818,7 +2818,7 @@ where
         BucketIdFor::<T>::decode(&mut encoded_event_info.as_ref())
     }
 
-    pub fn storage_requests_by_msp(
+    pub fn unresponded_storage_requests_by_msp(
         msp_id: ProviderIdFor<T>,
     ) -> Vec<(MerkleHash<T>, StorageRequestMetadata<T>)> {
         // Get the storeage requests for a specific MSP

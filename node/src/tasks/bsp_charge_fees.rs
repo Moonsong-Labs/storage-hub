@@ -272,7 +272,7 @@ where
             .map_err(|e| anyhow!("Failed to get metadata from Forest: {:?}", e))?;
 
         if !user_files.is_empty() {
-            let (file_key, metadata) = user_files.first().expect("User files is not empty");
+            let (file_key, metadata) = user_files.first().expect("User files is not empty"); // NOTE: WHY ONLY THE FIRST ONE ?
             let bucket_id = H256::from_slice(metadata.bucket_id.as_ref());
             let location = sp_runtime::BoundedVec::truncate_from(metadata.location.clone());
             let owner = insolvent_user.clone();
