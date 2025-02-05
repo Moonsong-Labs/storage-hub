@@ -576,6 +576,9 @@ impl IndexerService {
             pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
             pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
             pallet_storage_providers::Event::ProviderInsolvent { .. } => {}
+            pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => {
+                // TODO: Should we index this? Since this buckets are all going to have moves requested
+            }
             pallet_storage_providers::Event::MspDeleted { provider_id } => {
                 Msp::delete(conn, provider_id.to_string()).await?;
             }

@@ -126,26 +126,21 @@ where
     where
         T: frame_system::Config,
     {
-        // Get the tick number at which the storage request was created, the associated file fingerprint and
+        // Get the tick number at which the storage request was created and
         // the amount of BSPs required to confirm storing the file for the storage request
         // to be considered fulfilled (replication target).
-        let (storage_request_tick, fingerprint, replication_target) =
-            match <StorageRequests<T>>::get(&file_key) {
-                Some(storage_request) => (
-                    storage_request.requested_at,
-                    storage_request.fingerprint,
-                    storage_request.bsps_required,
-                ),
-                None => {
-                    return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
-                }
-            };
+        let (storage_request_tick, replication_target) = match <StorageRequests<T>>::get(&file_key)
+        {
+            Some(storage_request) => (storage_request.requested_at, storage_request.bsps_required),
+            None => {
+                return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
+            }
+        };
 
         // Get the threshold for the BSP to be able to volunteer for the storage request.
         // The current eligibility value of this storage request for this BSP has to be greater than
         // this for the BSP to be able to volunteer.
-        let bsp_volunteering_threshold =
-            Self::get_volunteer_threshold_of_bsp(&bsp_id, &fingerprint);
+        let bsp_volunteering_threshold = Self::get_volunteer_threshold_of_bsp(&bsp_id, &file_key);
 
         // Get the current eligibility value of this storage request and the slope with which it
         // increments every tick (this is weighted considering the BSP reputation so it depends on the BSP).
@@ -187,17 +182,19 @@ where
     }
 
     /// Compute the eligibility value threshold for a BSP to be able to volunteer for a storage request
-    /// for a file which has the specified fingerprint.
+    /// for a file which has the specified file key.
     ///
-    /// The threshold is computed by concatenating the encoded BSP ID and file's fingerprint,
+    /// The threshold is computed by concatenating the encoded BSP ID and file key,
     /// then hashing the result to get the volunteering hash. The volunteering hash is then
     /// converted to the threshold type.
+    ///
+    /// We use the file key for additional entropy to ensure that the threshold is unique.
     pub fn get_volunteer_threshold_of_bsp(
         bsp_id: &ProviderIdFor<T>,
-        fingerprint: &Fingerprint<T>,
+        file_key: &MerkleHash<T>,
     ) -> T::ThresholdType {
-        // Concatenate the encoded BSP ID and file's fingerprint and hash them to get the volunteering hash.
-        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
+        // Concatenate the encoded BSP ID and file key and hash them to get the volunteering hash.
+        let concatenated = sp_std::vec![bsp_id.encode(), file_key.encode()].concat();
         let volunteering_hash =
             <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
 
@@ -1380,6 +1377,48 @@ where
                 Error::<T>::InsufficientAvailableCapacity
             );
 
+            // All errors from the payment stream operations (create/update) are ignored, and the file key is added to the `skipped_file_keys` set instead of erroring out.
+            // This is done to avoid a malicious user, owner of one of the files from the batch of confirmations, being able to prevent the BSP from confirming any files by making itself insolvent so payment stream operations fail.
+            // This operation must be executed first, before updating any storage elements, to prevent potential cases
+            // where a storage element is updated but should not be.
+            match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
+				Some(previous_amount_provided) => {
+					// Update the payment stream.
+                    let new_amount_provided = &previous_amount_provided.checked_add(&storage_request_metadata.size).ok_or(ArithmeticError::Overflow)?;
+					if let Err(_) = <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						new_amount_provided,
+					) {
+                        // Skip file key if we could not successfully update the payment stream
+                        expect_or_err!(
+                            skipped_file_keys.try_insert(file_key),
+                            "Failed to push file key to skipped_file_keys",
+                            Error::<T>::TooManyStorageRequestResponses,
+                            result
+                        );
+                        continue;
+                    }
+				},
+				None => {
+					// Create the payment stream.
+					if let Err(_) = <T::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						&storage_request_metadata.size,
+					) {
+                        // Skip file key if we could not successfully create the payment stream
+                        expect_or_err!(
+                            skipped_file_keys.try_insert(file_key),
+                            "Failed to push file key to skipped_file_keys",
+                            Error::<T>::TooManyStorageRequestResponses,
+                            result
+                        );
+                        continue;
+                    }
+				}
+			}
+
             // Increment the number of BSPs confirmed.
             match storage_request_metadata
                 .bsps_confirmed
@@ -1418,28 +1457,6 @@ where
                 &bsp_id,
                 storage_request_metadata.size,
             )?;
-
-            // Check if a payment stream between the user and provider already exists.
-            // If it does not, create it. If it does, update it.
-            match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
-				Some(previous_amount_provided) => {
-					// Update the payment stream.
-                    let new_amount_provided = &previous_amount_provided.checked_add(&storage_request_metadata.size).ok_or(ArithmeticError::Overflow)?;
-					<T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-						&bsp_id,
-						&storage_request_metadata.owner,
-						new_amount_provided,
-					)?;
-				},
-				None => {
-					// Create the payment stream.
-					<T::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
-						&bsp_id,
-						&storage_request_metadata.owner,
-						&storage_request_metadata.size,
-					)?;
-				}
-			}
 
             // Get the file metadata to insert into the Provider's trie under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
