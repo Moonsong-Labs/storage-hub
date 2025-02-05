@@ -1382,6 +1382,10 @@ declare const _default: {
       ProviderInsolvent: {
         providerId: string;
       };
+      BucketsOfInsolventMsp: {
+        mspId: string;
+        buckets: string;
+      };
       BucketRootChanged: {
         bucketId: string;
         oldRoot: string;
@@ -1445,7 +1449,7 @@ declare const _default: {
     endBlockGracePeriod: string;
   };
   /**
-   * Lookup133: pallet_file_system::pallet::Event<T>
+   * Lookup134: pallet_file_system::pallet::Event<T>
    **/
   PalletFileSystemEvent: {
     _enum: {
@@ -3402,7 +3406,9 @@ declare const _default: {
         providerAccount: string;
       };
       cancel_sign_up: string;
-      msp_sign_off: string;
+      msp_sign_off: {
+        mspId: string;
+      };
       bsp_sign_off: string;
       change_capacity: {
         newCapacity: string;
@@ -4252,6 +4258,8 @@ declare const _default: {
     capacity: string;
     capacityUsed: string;
     multiaddresses: string;
+    amountOfBuckets: string;
+    amountOfValueProps: string;
     lastCapacityChange: string;
     ownerAccount: string;
     paymentAccount: string;
