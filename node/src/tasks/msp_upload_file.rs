@@ -14,7 +14,7 @@ use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewSt
 use shc_common::types::{
     FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
     StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
-    StorageRequestMspBucketResponse, BATCH_SIZE_BYTES,
+    StorageRequestMspBucketResponse, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
@@ -691,11 +691,11 @@ where
                     // Calculate total batch size
                     let total_batch_size: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
-                    if total_batch_size > BATCH_SIZE_BYTES {
+                    if total_batch_size > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
                         Err(anyhow::anyhow!(
                             "Total batch size {} bytes exceeds maximum allowed size of {} bytes",
                             total_batch_size,
-                            BATCH_SIZE_BYTES
+                            BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE
                         ))
                     } else {
                         Ok(proven)

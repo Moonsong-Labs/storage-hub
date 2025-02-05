@@ -18,7 +18,7 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
         Balance, FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
-        StorageProviderId, BATCH_SIZE_BYTES,
+        StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
@@ -700,11 +700,7 @@ where
             .blockchain
             .is_storage_request_open_to_volunteers(file_key.into())
             .await
-            .map_err(
-                |e: pallet_file_system_runtime_api::IsStorageRequestOpenToVolunteersError| {
-                    anyhow!("Failed to query file can volunteer: {:?}", e)
-                },
-            )?;
+            .map_err(|e| anyhow!("Failed to query file can volunteer: {:?}", e))?;
 
         // Skip volunteering if the storage request is no longer open to volunteers.
         // TODO: Handle the case where were catching up to the latest block. We probably either want to skip volunteering or wait until
@@ -834,11 +830,11 @@ where
                     // Calculate total batch size
                     let total_batch_size: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
-                    if total_batch_size > BATCH_SIZE_BYTES {
+                    if total_batch_size > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
                         Err(anyhow::anyhow!(
                             "Total batch size {} bytes exceeds maximum allowed size of {} bytes",
                             total_batch_size,
-                            BATCH_SIZE_BYTES
+                            BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE
                         ))
                     } else {
                         Ok(proven)
@@ -863,6 +859,7 @@ where
 
         // Process each proven chunk in the batch
         for chunk in proven {
+            // TODO: Add a batched write chunk method to the file storage.
             let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);
 
             match write_result {
@@ -917,22 +914,6 @@ where
                         )));
                     }
                 },
-            }
-        }
-
-        // If we haven't found the file to be complete during chunk processing,
-        // check if it's complete now (in case this was the last batch)
-        if !file_complete {
-            match write_file_storage.is_file_complete(&file_key) {
-                Ok(is_complete) => file_complete = is_complete,
-                Err(e) => {
-                    let err_msg = format!(
-                        "Failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
-                        event.file_key, e
-                    );
-                    error!(target: LOG_TARGET, "{}", err_msg);
-                    return Err(anyhow::anyhow!(err_msg));
-                }
             }
         }
 

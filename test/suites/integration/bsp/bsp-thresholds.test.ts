@@ -395,6 +395,9 @@ describeBspNet(
           MaxReplicationTarget: [null, 5]
         }
       };
+      // In order to test the reputation prioritisation, we need to set the tick to maximum
+      // threshold to a high enough number such that
+      // highReputationBspVolunteerTick - initialBspVolunteerTick > 2 (not 1!).
       const tickRangeToMaximumThresholdRuntimeParameter = {
         RuntimeConfig: {
           TickRangeToMaximumThreshold: [null, 9001]

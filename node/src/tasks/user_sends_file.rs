@@ -5,7 +5,9 @@ use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
-use shc_common::types::{FileMetadata, HashT, StorageProofsMerkleTrieLayout};
+use shc_common::types::{
+    FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+};
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
 use shp_constants::FILE_CHUNK_SIZE;
@@ -15,9 +17,6 @@ use sp_runtime::AccountId32;
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "user-sends-file-task";
-
-/// Size of each batch in bytes (2 MiB)
-const BATCH_SIZE_BYTES: usize = 2 * 1024 * 1024;
 
 /// [`UserSendsFileTask`]: Handles the events related to users sending a file to be stored by BSPs
 /// volunteering for that file.
@@ -215,12 +214,9 @@ where
                     FILE_CHUNK_SIZE as u64
                 };
 
-                // Add chunk to current batch
-                current_batch.push(ChunkId::new(chunk_id));
-                current_batch_size += chunk_size as usize;
-
-                // If we've reached BATCH_SIZE_BYTES or this is the last chunk, send the batch
-                if current_batch_size >= BATCH_SIZE_BYTES || chunk_id == chunk_count - 1 {
+                // Check if adding this chunk would exceed the batch size limit
+                if current_batch_size + (chunk_size as usize) > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
+                    // Send current batch before adding new chunk
                     debug!(
                         target: LOG_TARGET,
                         "Sending batch of {} chunks (total size: {} bytes) for file {:?} to peer {:?}",
@@ -310,6 +306,96 @@ where
                     // Clear the batch for next iteration
                     current_batch.clear();
                     current_batch_size = 0;
+                }
+
+                // Add chunk to current batch
+                current_batch.push(ChunkId::new(chunk_id));
+                current_batch_size += chunk_size as usize;
+
+                // If this is the last chunk, send the final batch
+                if chunk_id == chunk_count - 1 && !current_batch.is_empty() {
+                    debug!(
+                        target: LOG_TARGET,
+                        "Sending final batch of {} chunks (total size: {} bytes) for file {:?} to peer {:?}",
+                        current_batch.len(),
+                        current_batch_size,
+                        file_key,
+                        peer_id
+                    );
+
+                    // Generate proof for the final batch
+                    let proof = match self
+                        .storage_hub_handler
+                        .file_storage
+                        .read()
+                        .await
+                        .generate_proof(&file_key, &current_batch)
+                    {
+                        Ok(proof) => proof,
+                        Err(e) => {
+                            return Err(anyhow::anyhow!(
+                                "Failed to generate proof for final batch of file {:?}\n Error: {:?}",
+                                file_key,
+                                e
+                            ));
+                        }
+                    };
+
+                    let mut retry_attempts = 0;
+                    loop {
+                        let upload_response = self
+                            .storage_hub_handler
+                            .file_transfer
+                            .upload_request(peer_id, file_key.as_ref().into(), proof.clone(), None)
+                            .await;
+
+                        match upload_response {
+                            Ok(r) => {
+                                debug!(
+                                    target: LOG_TARGET,
+                                    "Successfully uploaded final batch for file {:?} to peer {:?}",
+                                    file_metadata.fingerprint,
+                                    peer_id
+                                );
+
+                                if r.file_complete {
+                                    info!(
+                                        target: LOG_TARGET,
+                                        "File upload complete. Peer {:?} has the entire file {:?}",
+                                        peer_id,
+                                        file_metadata.fingerprint
+                                    );
+                                }
+                                break;
+                            }
+                            Err(RequestError::RequestFailure(RequestFailure::Refused))
+                                if retry_attempts < 3 =>
+                            {
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "Final batch upload rejected by peer {:?}, retrying... (attempt {})",
+                                    peer_id,
+                                    retry_attempts + 1
+                                );
+                                retry_attempts += 1;
+
+                                // Wait for a short time before retrying
+                                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            }
+                            Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
+                                // TODO: Handle MSP not receiving file after multiple retries.
+                            }
+                            Err(e) => {
+                                error!(
+                                    target: LOG_TARGET,
+                                    "Failed to upload final batch to peer {:?}\n Error: {:?}",
+                                    peer_id,
+                                    e
+                                );
+                                break;
+                            }
+                        }
+                    }
                 }
             }
 
