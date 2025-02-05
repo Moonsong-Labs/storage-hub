@@ -1129,6 +1129,14 @@ where
         let msp_id =
             AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
 
+        // Check that the MSP has two or more value propositions. Otherwise, don't allow deactivating the value
+        // proposition since that would leave the MSP in an invalid state with no active value propositions.
+        let msp = MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+        ensure!(
+            msp.amount_of_value_props > 1,
+            Error::<T>::CantDeactivateLastValueProp,
+        );
+
         MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
             &msp_id,
             value_prop_id,

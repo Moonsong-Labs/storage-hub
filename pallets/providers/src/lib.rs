@@ -756,6 +756,8 @@ pub mod pallet {
         ValuePropositionAlreadyExists,
         /// Error thrown when a value proposition is not available.
         ValuePropositionNotAvailable,
+        /// Error thrown when a MSP tries to deactivate its last value proposition.
+        CantDeactivateLastValueProp,
         /// Error thrown when, after deleting all value propositions of a MSP when removing it from the system, the amount doesn't match the expected value.
         ValuePropositionsDeletedAmountMismatch,
         /// Error thrown when a fixed payment stream is not found.
