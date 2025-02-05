@@ -81,7 +81,7 @@ describeMspNet(
       // NOTE:
       // We shouldn't have to recreate an API but any other attempt to reconnect failed
       // Also had to guess for the port of MSP 1
-      await using newMspApi = await createApi(`ws://127.0.0.1:9777`);
+      await using newMspApi = await createApi("ws://127.0.0.1:9777");
 
       // Required to trigger out of sync mode
       await userApi.rpc.engine.createBlock(true, true);
