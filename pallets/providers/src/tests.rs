@@ -7,7 +7,7 @@ use crate::{
         StorageProviderId, ValueProposition, ValuePropositionWithId,
     },
     AccountIdToBackupStorageProviderId, AccountIdToMainStorageProviderId,
-    AwaitingTopUpFromProviders, BackupStorageProviders, BspCount, Buckets, Buckets, Error, Event,
+    AwaitingTopUpFromProviders, BackupStorageProviders, BspCount, Buckets, Error, Event,
     GlobalBspsReputationWeight, InsolventProviders, MainStorageProviderIdsToBuckets,
     MainStorageProviderIdsToValuePropositions, MainStorageProviders, MspCount,
     ProviderTopUpExpirations, SignUpRequest, TotalBspsCapacity, UsedBspsCapacity,
@@ -2352,7 +2352,7 @@ mod sign_off {
                     // Check the counter of registered MSPs
                     assert_eq!(StorageProviders::get_msp_count(), 1);
 
-                    // Check that Alice is a Main Storage Provider anymore
+                    // Check that Alice is a Main Storage Provider
                     let alice_sp_id = StorageProviders::get_provider_id(alice);
                     assert!(alice_sp_id.is_some());
 

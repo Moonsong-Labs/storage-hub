@@ -1811,7 +1811,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         MainStorageProviderIdsToBuckets::<T>::insert(msp_id, bucket_id, ());
 
         // Increase the amount of buckets stored by this MSP.
-        MainStorageProviders::<T>::try_mutate(provider_id, |msp| {
+        MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
             let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
 
             msp.amount_of_buckets = msp
@@ -1858,6 +1858,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
                 // Remove the bucket from the previous MSP's list of buckets.
                 MainStorageProviderIdsToBuckets::<T>::remove(previous_msp_id, bucket_id);
+
+                // Decrease the amount of buckets stored by this MSP.
+                MainStorageProviders::<T>::try_mutate(previous_msp_id, |msp| {
+                    let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                    msp.amount_of_buckets = msp
+                        .amount_of_buckets
+                        .checked_sub(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+                    Ok::<_, DispatchError>(())
+                })?;
             }
 
             // Ensure the value proposition selected is from the selected MSP and currently available.
@@ -1887,7 +1899,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             MainStorageProviderIdsToBuckets::<T>::insert(*new_msp_id, bucket_id, ());
 
             // Increase the amount of buckets stored by this MSP.
-            MainStorageProviders::<T>::try_mutate(new_msp, |msp| {
+            MainStorageProviders::<T>::try_mutate(new_msp_id, |msp| {
                 let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
 
                 msp.amount_of_buckets =
@@ -1988,6 +2000,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
             // Remove the bucket from the MSP's list of buckets.
             MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
+
+            // Decrease the amount of buckets stored by this MSP.
+            MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
+                let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                msp.amount_of_buckets =
+                    msp.amount_of_buckets
+                        .checked_sub(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+                Ok::<_, DispatchError>(())
+            })?;
         }
 
         // Remove the bucket's metadata from storage.
