@@ -2602,8 +2602,8 @@ mod hooks {
 
             // Expired storage requests clean up section:
             // If there's enough weight to get from storage the maximum amount of BSPs required for a storage request
-            // and get the storage request expirations for the current tick, continue.
-            if meter.can_consume(db_weight.reads_writes(2, 1)) {
+            // and get the storage request expirations for the current tick, and reinsert them if needed, continue.
+            if meter.can_consume(db_weight.reads_writes(2, 2)) {
                 // Get the maximum amount of BSPs required for a storage request.
                 // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
                 // We could increase this potential weight to account for potentially more volunteers.
@@ -2650,8 +2650,8 @@ mod hooks {
             }
 
             // Expired move bucket requests clean up section:
-            // If there's enough weight to get from storage the expired move bucket requests, continue.
-            if meter.can_consume(db_weight.reads_writes(1, 1)) {
+            // If there's enough weight to get from storage the expired move bucket requests and reinsert them if needed, continue.
+            if meter.can_consume(db_weight.reads_writes(1, 2)) {
                 // Get the expired move bucket requests for the current tick.
                 let mut expired_move_bucket_requests =
                     MoveBucketRequestExpirations::<T>::take(&tick);
