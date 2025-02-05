@@ -1202,10 +1202,8 @@ where
                 let storage_requests: Vec<(H256, StorageRequestMetadata)> = self
                     .client
                     .runtime_api()
-                    .storage_requests_by_msp(block_hash, msp_id)
+                    .unresponded_storage_requests_by_msp(block_hash, msp_id)
                     .unwrap();
-
-                dbg!(&storage_requests);
 
                 for (file_key, sr) in storage_requests {
                     self.emit(NewStorageRequest {
