@@ -731,6 +731,73 @@ where
         Ok(old_capacity)
     }
 
+    pub(crate) fn do_add_value_prop(
+        who: &T::AccountId,
+        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
+        bucket_data_limit: StorageDataUnit<T>,
+    ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        // Check if MSP is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                .is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
+        let value_prop = ValueProposition::<T>::new(
+            price_per_giga_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+        );
+        let value_prop_id = value_prop.derive_id();
+
+        if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {
+            return Err(Error::<T>::ValuePropositionAlreadyExists.into());
+        }
+
+        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
+
+        // Add one to the counter of value propositions that this MSP has stored.
+        MainStorageProviders::<T>::try_mutate(&msp_id, |msp| {
+            let msp = msp
+                .as_mut()
+                .ok_or(Error::<T>::SpRegisteredButDataNotFound)?;
+            msp.amount_of_value_props = msp
+                .amount_of_value_props
+                .checked_add(1u32)
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            Ok::<_, DispatchError>(())
+        })?;
+
+        Ok((msp_id, value_prop))
+    }
+
+    pub(crate) fn do_make_value_prop_unavailable(
+        who: &T::AccountId,
+        value_prop_id: ValuePropIdFor<T>,
+    ) -> Result<MainStorageProviderId<T>, DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
+            &msp_id,
+            value_prop_id,
+            |value_prop| {
+                let value_prop = value_prop
+                    .as_mut()
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
+                value_prop.available = false;
+
+                Ok(msp_id)
+            },
+        )
+    }
+
     /// This function holds the logic that checks if a user can add a new multiaddress to its storage
     /// and, if so, updates the storage to reflect the new multiaddress and returns the provider id if successful
     pub fn do_add_multiaddress(
@@ -1074,73 +1141,6 @@ where
         });
 
         Ok(())
-    }
-
-    pub(crate) fn do_add_value_prop(
-        who: &T::AccountId,
-        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
-        commitment: Commitment<T>,
-        bucket_data_limit: StorageDataUnit<T>,
-    ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-
-        // Check if MSP is insolvent
-        ensure!(
-            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
-                .is_none(),
-            Error::<T>::OperationNotAllowedForInsolventProvider
-        );
-
-        let value_prop = ValueProposition::<T>::new(
-            price_per_giga_unit_of_data_per_block,
-            commitment,
-            bucket_data_limit,
-        );
-        let value_prop_id = value_prop.derive_id();
-
-        if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {
-            return Err(Error::<T>::ValuePropositionAlreadyExists.into());
-        }
-
-        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
-
-        // Add one to the counter of value propositions that this MSP has stored.
-        MainStorageProviders::<T>::try_mutate(&msp_id, |msp| {
-            let msp = msp
-                .as_mut()
-                .ok_or(Error::<T>::SpRegisteredButDataNotFound)?;
-            msp.amount_of_value_props = msp
-                .amount_of_value_props
-                .checked_add(1u32)
-                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
-
-            Ok::<_, DispatchError>(())
-        })?;
-
-        Ok((msp_id, value_prop))
-    }
-
-    pub(crate) fn do_make_value_prop_unavailable(
-        who: &T::AccountId,
-        value_prop_id: ValuePropIdFor<T>,
-    ) -> Result<MainStorageProviderId<T>, DispatchError> {
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-
-        MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
-            &msp_id,
-            value_prop_id,
-            |value_prop| {
-                let value_prop = value_prop
-                    .as_mut()
-                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
-                value_prop.available = false;
-
-                Ok(msp_id)
-            },
-        )
     }
 
     pub(crate) fn do_delete_provider(provider_id: &ProviderIdFor<T>) -> Result<(), DispatchError> {
@@ -2505,7 +2505,9 @@ impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
     }
 }
 
-/// Runtime API implementation for the Storage Providers pallet.
+/**************** Runtime API Implementations ****************/
+
+/// Runtime API implementations for the Storage Providers pallet.
 impl<T> Pallet<T>
 where
     T: pallet::Config,
@@ -2654,11 +2656,13 @@ where
     }
 }
 
+/**************** Hooks Implementations ****************/
+/// Hooks implementations for the Storage Providers pallet.
 mod hooks {
     use crate::{
-        pallet, types::StorageHubTickNumber, utils::StorageProviderId, AwaitingTopUpFromProviders,
-        Event, HoldReason, InsolventProviders, NextStartingShTickToCleanUp, Pallet,
-        ProviderTopUpExpirations,
+        pallet, types::StorageHubTickNumber, utils::StorageProviderId, weights::WeightInfo,
+        AwaitingTopUpFromProviders, Event, HoldReason, InsolventProviders,
+        NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
     };
 
     use frame_support::{
@@ -2727,11 +2731,9 @@ mod hooks {
                 meter.consume(db_weight.reads_writes(1, 1));
 
                 // Get the required weight to process an expired provider top up in its worst case scenario.
-                let maximum_required_weight_expired_provider_top_up = db_weight.reads_writes(2, 1);
-                /* T::WeightInfo::process_expired_provider_top_up_bsp()
-                .max(
-                    T::WeightInfo::process_expired_provider_top_up_msp(),
-                ); */
+                let maximum_required_weight_expired_provider_top_up =
+                    T::WeightInfo::process_expired_provider_top_up_bsp()
+                        .max(T::WeightInfo::process_expired_provider_top_up_msp());
 
                 // While there's enough weight to process an expired provider top up in its worst-case scenario AND re-insert the remaining top ups to storage, continue.
                 while let Some(typed_provider_id) = expired_provider_top_ups.pop() {
@@ -2765,7 +2767,7 @@ mod hooks {
 
         pub(crate) fn process_expired_provider_top_up(
             typed_provider_id: StorageProviderId<T>,
-            _meter: &mut WeightMeter,
+            meter: &mut WeightMeter,
         ) {
             // Clear the storage that marks the provider as awaiting a top up.
             let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::take(&typed_provider_id);
@@ -2859,9 +2861,9 @@ mod hooks {
 
             // Consume the corresponding weight used by this function.
             if let StorageProviderId::BackupStorageProvider(_) = typed_provider_id {
-                //meter.consume(T::WeightInfo::process_expired_provider_top_up_bsp());
+                meter.consume(T::WeightInfo::process_expired_provider_top_up_bsp());
             } else {
-                //meter.consume(T::WeightInfo::process_expired_provider_top_up_msp());
+                meter.consume(T::WeightInfo::process_expired_provider_top_up_msp());
             }
         }
     }
