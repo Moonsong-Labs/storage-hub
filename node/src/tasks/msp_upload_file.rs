@@ -772,7 +772,8 @@ where
                 | FileStorageWriteError::FailedToReadStorage
                 | FileStorageWriteError::FailedToUpdatePartialRoot
                 | FileStorageWriteError::FailedToParsePartialRoot
-                | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                | FileStorageWriteError::FailedToGetStoredChunksCount
+                | FileStorageWriteError::ChunkCountOverflow => {
                     self.handle_rejected_storage_request(
                         &event.file_key.into(),
                         bucket_id,

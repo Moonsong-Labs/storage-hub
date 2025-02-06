@@ -347,8 +347,11 @@ where
         );
 
         // Increment chunk count
-        let current_count = self.chunk_counts.get(file_key).copied().unwrap_or(0);
-        let new_count = current_count + 1;
+        let current_count = self
+            .chunk_counts
+            .get(file_key)
+            .ok_or(FileStorageWriteError::FailedToGetStoredChunksCount)?;
+        let new_count = current_count.checked_add(1).ok_or(FileStorageWriteError::ChunkCountOverflow)?;
         self.chunk_counts.insert(*file_key, new_count);
 
         // Check if we have all the chunks for the file using the count

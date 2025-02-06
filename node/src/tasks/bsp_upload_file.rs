@@ -873,7 +873,8 @@ where
                 | FileStorageWriteError::FailedToReadStorage
                 | FileStorageWriteError::FailedToUpdatePartialRoot
                 | FileStorageWriteError::FailedToParsePartialRoot
-                | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                | FileStorageWriteError::FailedToGetStoredChunksCount
+                | FileStorageWriteError::ChunkCountOverflow => {
                     // This internal error should not happen.
                     // Unvolunteer the file.
                     self.unvolunteer_file(event.file_key.into()).await;

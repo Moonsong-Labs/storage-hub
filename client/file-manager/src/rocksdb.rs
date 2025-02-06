@@ -639,8 +639,11 @@ where
             FileStorageWriteError::FailedToGetStoredChunksCount
         })?;
 
-        // Increment chunk count
-        let new_count = current_count + 1;
+        // Increment chunk count.
+        // This should never overflow unless there is a bug or we support file sizes as large as 16 exabytes.
+        let new_count = current_count
+            .checked_add(1)
+            .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
         transaction.put(
             Column::ChunkCount.into(),
             file_key.as_ref(),

@@ -37,6 +37,8 @@ pub enum FileStorageWriteError {
     FailedToParsePartialRoot,
     /// Failed to get chunks count in storage.
     FailedToGetStoredChunksCount,
+    /// Reached chunk count limit (overflow)
+    ChunkCountOverflow,
 }
 
 #[derive(Debug)]
