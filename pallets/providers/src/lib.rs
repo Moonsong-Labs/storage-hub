@@ -367,7 +367,7 @@ pub mod pallet {
     /// This storage is updated in:
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
     /// - [change_root_bucket](shp_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
-    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
+    /// - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket), which removes the entry of the corresponding bucket.
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
@@ -377,7 +377,7 @@ pub mod pallet {
     ///
     /// This storage is updated in:
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
-    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+    /// - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket)
     #[pallet::storage]
     pub type MainStorageProviderIdsToBuckets<T: Config> = StorageDoubleMap<
         _,
@@ -772,6 +772,8 @@ pub mod pallet {
         ValuePropositionAlreadyExists,
         /// Error thrown when a value proposition is not available.
         ValuePropositionNotAvailable,
+        /// Error thrown when a MSP tries to deactivate its last value proposition.
+        CantDeactivateLastValueProp,
         /// Error thrown when, after deleting all value propositions of a MSP when removing it from the system, the amount doesn't match the expected value.
         ValuePropositionsDeletedAmountMismatch,
         /// Error thrown when a fixed payment stream is not found.
