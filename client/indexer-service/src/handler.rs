@@ -306,13 +306,15 @@ impl IndexerService {
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::SpStopStoringInsolventUser {
-                sp_id: _,
+                sp_id,
                 file_key,
                 owner: _,
                 location: _,
                 new_root: _,
             } => {
-                File::delete(conn, file_key).await?;
+                // We are now only deleting for BSP as BSP are associating with files
+                // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
+                BspFile::delete(conn, file_key, sp_id.to_string()).await?;
             }
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
             pallet_file_system::Event::FileDeletionRequest { .. } => {}
