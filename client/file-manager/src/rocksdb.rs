@@ -24,6 +24,7 @@ use strum::{EnumCount, VariantArray};
 
 #[derive(Debug, Clone, Copy, EnumCount, VariantArray)]
 pub enum Column {
+    /// Stores keys of 32 bytes representing the `file_key` with values being the serialized [`FileMetadata`].
     Metadata,
     /// Stores keys of 32 bytes representing the final `root` of the file based on the [`FileMetadata::fingerprint`] with values
     /// being the current `root` of the constructed file trie based on the chunks stored in the [`Column::Chunks`] for that `file_key`.
@@ -42,6 +43,9 @@ pub enum Column {
     ///
     /// Used for deleting all files in a bucket efficiently.
     BucketPrefix,
+    /// Exclude* columns stores keys of 32 bytes representing the `file_key` with empty values.
+    ///
+    /// These columns are used primarily to mark file keys as being excluded from certain operations.
     ExcludeFile,
     ExcludeUser,
     ExcludeBucket,
@@ -768,14 +772,18 @@ where
             &chunk_count.to_le_bytes(),
         );
 
-        let full_key = metadata
+        let bucket_prefixed_file_key = metadata
             .bucket_id
             .into_iter()
             .chain(file_key.as_ref().into_iter().cloned())
             .collect::<Vec<_>>();
 
         // Store the key prefixed by bucket id
-        transaction.put(Column::BucketPrefix.into(), full_key.as_ref(), &[]);
+        transaction.put(
+            Column::BucketPrefix.into(),
+            bucket_prefixed_file_key.as_ref(),
+            &[],
+        );
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -869,12 +877,15 @@ where
         transaction.delete(Column::Roots.into(), h_fingerprint.as_ref());
         transaction.delete(Column::ChunkCount.into(), file_key.as_ref());
 
-        let full_key = metadata
+        let bucket_prefixed_file_key = metadata
             .bucket_id
             .into_iter()
             .chain(file_key.as_ref().iter().cloned())
             .collect::<Vec<_>>();
-        transaction.delete(Column::BucketPrefix.into(), full_key.as_ref());
+        transaction.delete(
+            Column::BucketPrefix.into(),
+            bucket_prefixed_file_key.as_ref(),
+        );
 
         self.storage.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET,"{:?}", e);
@@ -952,7 +963,7 @@ where
         let exclude_column = get_exclude_type_db_column(exclude_type);
 
         let mut transaction = DBTransaction::new();
-        transaction.put(exclude_column, file_key.as_ref(), &Vec::<u8>::new());
+        transaction.put(exclude_column, file_key.as_ref(), &[]);
 
         self.storage.db.write(transaction).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to write to DB: {}", e);
