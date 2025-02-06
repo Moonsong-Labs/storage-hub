@@ -713,10 +713,19 @@ where
             return Err(anyhow::anyhow!(err_msg));
         }
 
+        // Optimistically create file in file storage so we can write uploaded chunks as soon as possible.
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+        write_file_storage
+            .insert_file(
+                metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
+                metadata,
+            )
+            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+        drop(write_file_storage);
+
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster
         // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
-        // BSP has registered the file and peer ID in the file transfer service.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
                 Ok(str_slice) => PeerId::from_str(str_slice).map_err(|e| {
@@ -731,16 +740,6 @@ where
                 .await
                 .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
-
-        // Also optimistically create file in file storage so we can write uploaded chunks as soon as possible.
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage
-            .insert_file(
-                metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
-                metadata,
-            )
-            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
-        drop(write_file_storage);
 
         // Build extrinsic.
         let call =
