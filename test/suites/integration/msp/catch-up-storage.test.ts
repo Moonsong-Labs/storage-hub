@@ -45,7 +45,7 @@ describeMspNet(
       await userApi.docker.pauseBspContainer("docker-sh-msp-1");
 
       // We need to wait so it won't try to answer the request storage
-      await sleep(10000);
+      await sleep(5000);
 
       await userApi.block.seal({
         calls: [
@@ -78,7 +78,7 @@ describeMspNet(
       await userApi.docker.restartBspContainer({ containerName: "docker-sh-msp-1" });
 
       // need to wait for the container to be up again
-      await sleep(10000);
+      // await sleep(5000);
 
       // NOTE:
       // We shouldn't have to recreate an API but any other attempt to reconnect failed
@@ -86,7 +86,7 @@ describeMspNet(
       // await using newMspApi = await createApi("ws://127.0.0.1:9777");
 
       // Required to trigger out of sync mode
-      await userApi.rpc.engine.createBlock(true, true);
+      // await userApi.rpc.engine.createBlock(true, true);
 
       // await waitFor({
       //   lambda: async () =>
