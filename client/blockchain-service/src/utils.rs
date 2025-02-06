@@ -271,7 +271,7 @@ where
 
     /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
     ///
-    /// If the nonce is higher, the account nonce is updated in the [`BlockchainService`].
+    /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
     pub(crate) fn sync_nonce(&mut self, block_hash: &H256) {
         let latest_nonce = self.account_nonce(block_hash);
         if latest_nonce > self.nonce_counter {
