@@ -472,6 +472,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       UserNotInsolvent: AugmentedError<ApiType>;
       /**
+       * The selected value proposition is not available in the MSP.
+       **/
+      ValuePropositionNotAvailable: AugmentedError<ApiType>;
+      /**
        * Generic error
        **/
       [key: string]: AugmentedError<ApiType>;
@@ -1107,6 +1111,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Cannot stop BSP cycles without a default root
        **/
       CannotStopCycleWithNonDefaultRoot: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a MSP tries to deactivate its last value proposition.
+       **/
+      CantDeactivateLastValueProp: AugmentedError<ApiType>;
       /**
        * Failed to delete a provider due to conditions not being met.
        *

@@ -219,12 +219,18 @@ export const sealBlock = async (
 
     for (const hash of results.hashes) {
       const extIndex = getExtIndex(hash);
-      const extEvents = allEvents.filter(
-        ({ phase }) =>
-          phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
-      );
-      results.events.push(...extEvents);
-      results.success.push(isExtSuccess(extEvents) ?? false);
+      if (extIndex >= 0) {
+        const extEvents = allEvents.filter(
+          ({ phase }) =>
+            phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
+        );
+        results.events.push(...extEvents);
+        results.success.push(isExtSuccess(extEvents) ?? false);
+      } else {
+        console.log(
+          `Extrinsic with hash ${hash.toString()} not found in block even though it was sent`
+        );
+      }
     }
   } else {
     results.events.push(...allEvents);
