@@ -97,10 +97,10 @@ impl SubmittedTransaction {
                 dispatch_info,
             } => {
                 error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
-                return Err(WatchTransactionError::TransactionFailed(
-                    format!("{:?}", dispatch_error),
-                    format!("{:?}", dispatch_info),
-                ));
+                return Err(WatchTransactionError::TransactionFailed {
+                    dispatch_info: format!("{:?}", dispatch_info),
+                    dispatch_error: format!("{:?}", dispatch_error),
+                });
             }
         }
 
@@ -142,10 +142,10 @@ impl SubmittedTransaction {
                 dispatch_info,
             } => {
                 error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
-                return Err(WatchTransactionError::TransactionFailed(
-                    format!("{:?}", dispatch_error),
-                    format!("{:?}", dispatch_info),
-                ));
+                return Err(WatchTransactionError::TransactionFailed {
+                    dispatch_info: format!("{:?}", dispatch_info),
+                    dispatch_error: format!("{:?}", dispatch_error),
+                });
             }
         }
 
@@ -275,8 +275,11 @@ pub enum WatchTransactionError {
     Timeout,
     #[error("Transaction watcher channel closed")]
     WatcherChannelClosed,
-    #[error("Transaction failed. DispatchError: {0}, DispatchInfo: {1}")]
-    TransactionFailed(String, String),
+    #[error("Transaction failed. DispatchError: {dispatch_error}, DispatchInfo: {dispatch_info}")]
+    TransactionFailed {
+        dispatch_error: String,
+        dispatch_info: String,
+    },
     #[error("Unexpected error: {0}")]
     Other(String),
 }
