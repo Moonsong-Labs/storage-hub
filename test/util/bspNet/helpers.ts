@@ -175,6 +175,7 @@ export const addBsp = async (
     extrinsicRetryTimeout?: number;
     additionalArgs?: string[];
     waitForIdle?: boolean;
+    initialCapacity?: bigint;
   }
 ) => {
   // Launch a BSP node.
@@ -213,7 +214,7 @@ export const addBsp = async (
       api.tx.providers.forceBspSignUp(
         bspKey.address,
         options?.bspId ?? bspKey.publicKey,
-        ShConsts.CAPACITY_512,
+        options?.initialCapacity ?? ShConsts.CAPACITY_512,
         [multiAddressBsp],
         bspKey.address,
         options?.bspStartingWeight ?? null

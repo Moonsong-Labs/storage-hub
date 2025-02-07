@@ -156,17 +156,21 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
 
     await userApi.wait.bspVolunteer();
-    await userApi.wait.bspStored();
+
+    const address = userApi.createType("Address", ShConsts.NODE_INFOS.bsp.AddressId);
+    await userApi.wait.bspStored(undefined, address);
 
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
 
     await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
+
     const { events, extSuccess } = await userApi.block.seal({
       calls: [userApi.tx.providers.changeCapacity(2n)],
       signer: bspKey
     });
     assert.strictEqual(extSuccess, false);
+
     const {
       data: { dispatchError: eventInfo }
     } = userApi.assert.fetchEvent(userApi.events.system.ExtrinsicFailed, events);
@@ -234,14 +238,16 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
   });
 
-  it("Test BSP storage size cannot go over MAX STORAGE", async () => {
+  it("Test BSP storage size cannot go over  MAXSTORAGE", async () => {
     const MAX_STORAGE_CAPACITY = 416600;
+
     // Add a second BSP
     const { rpcPort } = await addBsp(userApi, bspTwoKey, {
       name: "sh-bsp-two",
       bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
       maxStorageCapacity: MAX_STORAGE_CAPACITY,
+      initialCapacity: BigInt(MAX_STORAGE_CAPACITY),
       additionalArgs: ["--keystore-path=/keystore/bsp-two"]
     });
     await userApi.assert.eventPresent("providers", "BspSignUpSuccess");
@@ -263,12 +269,6 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
       bucketName1
     );
 
-    // Second storage request (both are biggar than the max storage capacity of the BSP two)
-    const source2 = "res/adolphus.jpg";
-    const location2 = "test/adolphus.jpg";
-    const bucketName2 = "kek2";
-    await userApi.file.createBucketAndSendNewStorageRequest(source2, location2, bucketName2);
-
     const bspVolunteerTick = (
       await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
         ShConsts.BSP_TWO_ID,
@@ -279,17 +279,37 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick) {
       await userApi.block.skipTo(bspVolunteerTick);
     }
-
     // We can only store one file.
     await userApi.wait.bspVolunteer();
     await userApi.wait.bspStored();
 
-    const capacityUsed = (await userApi.query.providers.backupStorageProviders(ShConsts.BSP_TWO_ID))
-      .unwrap()
-      .capacityUsed.toNumber();
+    // Second storage request (both are bigger than the max storage capacity of the BSP two)
+    const source2 = "res/adolphus.jpg";
+    const location2 = "test/adolphus.jpg";
+    const bucketName2 = "kek2";
+    const fileMetadata2 = await userApi.file.createBucketAndSendNewStorageRequest(
+      source2,
+      location2,
+      bucketName2
+    );
+
+    const bspVolunteerTick2 = (
+      await userApi.call.fileSystemApi.queryEarliestFileVolunteerTick(
+        ShConsts.BSP_TWO_ID,
+        fileMetadata2.fileKey
+      )
+    ).asOk.toNumber();
+
+    if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick2) {
+      await userApi.block.skipTo(bspVolunteerTick2);
+    }
+
+    const bspTwo = (
+      await userApi.query.providers.backupStorageProviders(ShConsts.BSP_TWO_ID)
+    ).unwrap();
 
     assert(
-      0 < capacityUsed && capacityUsed < MAX_STORAGE_CAPACITY,
+      0 < bspTwo.capacityUsed.toNumber() && bspTwo.capacityUsed.toNumber() < MAX_STORAGE_CAPACITY,
       "capacity used should be smaller than max storage capacity"
     );
 
