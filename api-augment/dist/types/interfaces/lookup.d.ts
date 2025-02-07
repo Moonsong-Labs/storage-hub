@@ -1567,6 +1567,11 @@ declare const _default: {
         location: string;
         newRoot: string;
       };
+      MspStopStoringBucketInsolventUser: {
+        mspId: string;
+        owner: string;
+        bucketId: string;
+      };
       FailedToQueuePriorityChallenge: {
         fileKey: string;
         error: string;
@@ -3553,6 +3558,9 @@ declare const _default: {
         fingerprint: string;
         size_: string;
         inclusionForestProof: string;
+      };
+      msp_stop_storing_bucket_for_insolvent_user: {
+        bucketId: string;
       };
       delete_file: {
         _alias: {
