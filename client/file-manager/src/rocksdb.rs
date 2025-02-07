@@ -20,9 +20,9 @@ use crate::{
     LOG_TARGET,
 };
 use codec::{Decode, Encode};
-use strum::{EnumCount, VariantArray};
+use strum::EnumCount;
 
-#[derive(Debug, Clone, Copy, EnumCount, VariantArray)]
+#[derive(Debug, Clone, Copy, EnumCount)]
 pub enum Column {
     /// Stores keys of 32 bytes representing the `file_key` with values being the serialized [`FileMetadata`].
     Metadata,
@@ -641,6 +641,7 @@ where
 
         // Increment chunk count.
         // This should never overflow unless there is a bug or we support file sizes as large as 16 exabytes.
+        // Since this is executed within the context of a write lock in the layer above, we should not have any chunk count syncing issues.
         let new_count = current_count
             .checked_add(1)
             .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
