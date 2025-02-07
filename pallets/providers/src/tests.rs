@@ -2353,7 +2353,7 @@ mod sign_off {
                     assert_eq!(StorageProviders::get_msp_count(), 1);
 
                     // Check that Alice is a Main Storage Provider
-                    let alice_sp_id = StorageProviders::get_provider_id(alice);
+                    let alice_sp_id = StorageProviders::get_provider_id(&alice);
                     assert!(alice_sp_id.is_some());
 
                     // Check that the value prop exists in storage
@@ -6388,7 +6388,7 @@ mod make_value_prop_unavailable {
                     register_account_as_msp(alice, storage_amount, None, None);
 
                 // Get Alice's MSP ID.
-                let msp_id = StorageProviders::get_provider_id(alice).unwrap();
+                let msp_id = StorageProviders::get_provider_id(&alice).unwrap();
 
                 // Simulate the MSP having more than one value proposition.
                 MainStorageProviders::<Test>::mutate(msp_id, |msp| {
