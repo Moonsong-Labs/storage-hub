@@ -86,7 +86,7 @@ impl SubmittedTransaction {
             .map_err(|_| {
               let err_msg = "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed";
               error!(target: LOG_TARGET, "{}", err_msg);
-              WatchTransactionError::Other(err_msg.to_string())
+              WatchTransactionError::Internal(err_msg.to_string())
             })?;
         match extrinsic_result {
             ExtrinsicResult::Success { dispatch_info } => {
@@ -130,7 +130,7 @@ impl SubmittedTransaction {
             .map_err(|_| {
               let err_msg = "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed";
               error!(target: LOG_TARGET, "{}", err_msg);
-              WatchTransactionError::Other(err_msg.to_string())
+              WatchTransactionError::Internal(err_msg.to_string())
             })?;
 
         match extrinsic_result {
@@ -212,7 +212,7 @@ impl SubmittedTransaction {
                     result
                 );
                 error!(target: LOG_TARGET, "{}", err_msg);
-                WatchTransactionError::Other(err_msg)
+                WatchTransactionError::Internal(err_msg)
             })?;
 
             debug!(target: LOG_TARGET, "Transaction information: {:?}", json);
@@ -223,13 +223,13 @@ impl SubmittedTransaction {
             if let Some(in_block) = json["params"]["result"]["inBlock"].as_str() {
                 block_hash = Some(H256::from_str(in_block).map_err(|_| {
                     error!(target: LOG_TARGET, "Block hash should be a valid H256; qed");
-                    WatchTransactionError::Other("Block hash should be a valid H256".to_string())
+                    WatchTransactionError::Internal("Block hash should be a valid H256".to_string())
                 })?);
                 let subscription_id =
                     json["params"]["subscription"].as_number().ok_or_else(|| {
                         let err_msg = "Subscription should exist and be a number; qed";
                         error!(target: LOG_TARGET, "{}", err_msg);
-                        WatchTransactionError::Other(err_msg.to_string())
+                        WatchTransactionError::Internal(err_msg.to_string())
                     })?;
 
                 // Unwatch extrinsic to release tx_watcher.
@@ -239,7 +239,7 @@ impl SubmittedTransaction {
                     .map_err(|e| {
                         let err_msg = format!("Error unwatching extrinsic: {:?}", e);
                         error!(target: LOG_TARGET, "{}", err_msg);
-                        WatchTransactionError::Other(err_msg)
+                        WatchTransactionError::Internal(err_msg)
                     })?;
 
                 // Breaking while loop.
@@ -255,7 +255,7 @@ impl SubmittedTransaction {
             || {
                 let err_msg = "Block hash should exist after waiting for extrinsic to be included in a block; qed";
                 error!(target: LOG_TARGET, "{}", err_msg);
-                WatchTransactionError::Other(err_msg.to_string())
+                WatchTransactionError::Internal(err_msg.to_string())
             })?;
         let extrinsic_in_block = blockchain
             .get_extrinsic_from_block(block_hash, self.hash)
@@ -263,7 +263,7 @@ impl SubmittedTransaction {
             .map_err(|e| {
                 let err_msg = format!("Error getting extrinsic from block: {:?}", e);
                 error!(target: LOG_TARGET, "{}", err_msg);
-                WatchTransactionError::Other(err_msg)
+                WatchTransactionError::Internal(err_msg)
             })?;
         Ok(extrinsic_in_block)
     }
@@ -281,5 +281,5 @@ pub enum WatchTransactionError {
         dispatch_info: String,
     },
     #[error("Unexpected error: {0}")]
-    Other(String),
+    Internal(String),
 }
