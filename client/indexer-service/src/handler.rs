@@ -306,6 +306,9 @@ impl IndexerService {
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => {
+                // TODO: Index this
+            }
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
             pallet_file_system::Event::FileDeletionRequest { .. } => {}
             pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => {}

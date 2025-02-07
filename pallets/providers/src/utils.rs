@@ -1997,6 +1997,58 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Ok(())
     }
 
+    fn force_delete_bucket(
+        msp_id: &Self::ProviderId,
+        bucket_id: &Self::BucketId,
+    ) -> DispatchResult {
+        let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
+
+        // This operation can only be performed by a consecuence of some MSP's action, so the bucket
+        // must be stored by the MSP.
+        ensure!(bucket.msp_id == Some(*msp_id), Error::<T>::MspOnlyOperation);
+
+        // Delete the payment stream between the user owner of the bucket and the MSP if it exists.
+        if <T::PaymentStreams as PaymentStreamsInterface>::get_fixed_rate_payment_stream_info(
+            &msp_id,
+            &bucket.user_id,
+        )
+        .is_some()
+        {
+            <T::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(
+                &msp_id,
+                &bucket.user_id,
+            )?;
+        }
+
+        // Remove the bucket from the MSP's bucket list.
+        MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
+
+        // Decrease the amount of buckets stored by this MSP.
+        MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
+            let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+            msp.amount_of_buckets = msp
+                .amount_of_buckets
+                .checked_sub(&T::BucketCount::one())
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+            Ok::<_, DispatchError>(())
+        })?;
+
+        // Remove the bucket from the global bucket map.
+        Buckets::<T>::remove(&bucket_id);
+
+        // Release the bucket deposit hold
+        T::NativeBalance::release(
+            &HoldReason::BucketDeposit.into(),
+            &bucket.user_id,
+            T::BucketDeposit::get(),
+            Precision::Exact,
+        )?;
+
+        Ok(())
+    }
+
     fn update_bucket_privacy(bucket_id: Self::BucketId, privacy: bool) -> DispatchResult {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
@@ -2252,8 +2304,8 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId> {
-        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who.clone()) {
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId> {
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             Some(bsp_id)
         } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             Some(msp_id)
@@ -2368,8 +2420,8 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
         }
     }
 
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId> {
-        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who.clone()) {
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId> {
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             Some(bsp_id)
         } else {
             None

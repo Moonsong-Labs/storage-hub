@@ -322,6 +322,12 @@ pub trait MutateBucketsInterface {
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult;
+
+    // Delete a bucket without checking whether it's empty or its root is the default one.
+    // Useful for cases when the runtime has to delete a bucket no matter its current status,
+    // for example for an insolvent user.
+    fn force_delete_bucket(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId)
+        -> DispatchResult;
 }
 
 /// A trait to read information about Storage Providers present in the
@@ -495,7 +501,7 @@ pub trait ReadChallengeableProvidersInterface {
     fn is_provider(who: Self::ProviderId) -> bool;
 
     /// Get the Provider Id from Account Id, if it is a registered challengeable Provider.
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId>;
 
     /// Get the Account Id of the owner of a registered challengeable Provider.
     fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;
@@ -606,7 +612,7 @@ pub trait ReadProvidersInterface {
     fn is_provider(who: Self::ProviderId) -> bool;
 
     /// Get the Provider Id from Account Id, if it is a registered Provider.
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId>;
 
     /// Get the Account Id of the owner of a registered Provider.
     fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;
