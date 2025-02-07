@@ -350,8 +350,8 @@ impl_runtime_apis! {
             FileSystem::decode_generic_apply_delta_event_info(encoded_event_info)
         }
 
-        fn unresponded_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<(H256, StorageRequestMetadata<Runtime>)> {
-            FileSystem::unresponded_storage_requests_by_msp(msp_id)
+        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<(H256, StorageRequestMetadata<Runtime>)> {
+            FileSystem::pending_storage_requests_by_msp(msp_id)
         }
     }
 
