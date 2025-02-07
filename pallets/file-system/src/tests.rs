@@ -62,7 +62,7 @@ mod create_bucket_tests {
                         H256::from_slice(&msp.as_slice()),
                         name,
                         true,
-                        Some(ValuePropId::<Test>::default())
+                        ValuePropId::<Test>::default()
                     ),
                     Error::<Test>::NotAMsp
                 );
@@ -81,13 +81,7 @@ mod create_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 assert_noop!(
-                    FileSystem::create_bucket(
-                        origin,
-                        msp_id,
-                        name.clone(),
-                        private,
-                        Some(value_prop_id)
-                    ),
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
                     pallet_storage_providers::Error::<Test>::NotEnoughBalance
                 );
             });
@@ -112,13 +106,7 @@ mod create_bucket_tests {
 
                 // Dispatch a signed extrinsic.
                 assert_noop!(
-                    FileSystem::create_bucket(
-                        origin,
-                        msp_id,
-                        name.clone(),
-                        private,
-                        Some(value_prop_id)
-                    ),
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
             });
@@ -155,7 +143,7 @@ mod create_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -194,7 +182,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -227,7 +215,7 @@ mod create_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -248,7 +236,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: None,
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -265,7 +253,7 @@ mod delete_bucket_tests {
         use super::*;
 
         #[test]
-        fn remove_bucket_bucket_not_found_fail() {
+        fn delete_bucket_bucket_not_found_fail() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -287,7 +275,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_not_bucket_owner_fail() {
+        fn delete_bucket_not_bucket_owner_fail() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let not_owner = Keyring::Bob.to_account_id();
@@ -309,7 +297,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 assert_noop!(
@@ -320,7 +308,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_bucket_not_empty_fail() {
+        fn delete_bucket_bucket_not_empty_fail() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -341,7 +329,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Dispatch a signed extrinsic of a storage request.
@@ -400,7 +388,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_bucket_provider_insolvent() {
+        fn delete_bucket_bucket_provider_insolvent() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -421,7 +409,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Dispatch a signed extrinsic of a storage request.
@@ -478,7 +466,7 @@ mod delete_bucket_tests {
         use super::*;
 
         #[test]
-        fn remove_bucket_success() {
+        fn delete_bucket_success() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -499,7 +487,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Dispatch a signed extrinsic.
@@ -525,7 +513,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_with_collection_success() {
+        fn delete_bucket_with_collection_success() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -546,7 +534,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Get the bucket's collection ID.
@@ -583,7 +571,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_after_being_used_success() {
+        fn delete_bucket_after_being_used_success() {
             new_test_ext().execute_with(|| {
 				let owner = Keyring::Alice.to_account_id();
 				let origin = RuntimeOrigin::signed(owner.clone());
@@ -604,7 +592,7 @@ mod delete_bucket_tests {
 					msp_id,
 					name.clone(),
 					private,
-					Some(value_prop_id)
+					value_prop_id
 				));
 
 				// Dispatch a signed extrinsic of a storage request.
@@ -712,11 +700,13 @@ mod request_move_bucket {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -737,7 +727,12 @@ mod request_move_bucket {
                 ));
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(
+                        origin,
+                        bucket_id,
+                        msp_dave_id,
+                        dave_value_prop_id
+                    ),
                     Error::<Test>::StorageRequestExists
                 );
             });
@@ -751,11 +746,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -767,11 +764,17 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(
+                        origin,
+                        bucket_id,
+                        msp_dave_id,
+                        dave_value_prop_id
+                    ),
                     Error::<Test>::BucketIsBeingMoved
                 );
             });
@@ -796,7 +799,12 @@ mod request_move_bucket {
                 ));
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_charlie_id),
+                    FileSystem::request_move_bucket(
+                        origin,
+                        bucket_id,
+                        msp_charlie_id,
+                        value_prop_id
+                    ),
                     Error::<Test>::MspAlreadyStoringBucket
                 );
             });
@@ -818,7 +826,7 @@ mod request_move_bucket {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id, value_prop_id),
                     Error::<Test>::NotAMsp
                 );
             });
@@ -833,14 +841,21 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(
+                        origin,
+                        bucket_id,
+                        msp_dave_id,
+                        dave_value_prop_id
+                    ),
                     Error::<Test>::NotBucketOwner
                 );
             });
@@ -854,11 +869,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Issue storage request with a big file size
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
@@ -955,7 +972,8 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -963,7 +981,8 @@ mod request_move_bucket {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -975,6 +994,7 @@ mod request_move_bucket {
                         who: owner,
                         bucket_id,
                         new_msp_id: msp_dave_id,
+                        new_value_prop_id: dave_value_prop_id,
                     }
                     .into(),
                 );
@@ -1009,11 +1029,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1029,8 +1051,54 @@ mod request_move_bucket {
 
                 // Dispatch a signed extrinsic.
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin.clone(), bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(
+                        origin.clone(),
+                        bucket_id,
+                        msp_dave_id,
+                        dave_value_prop_id
+                    ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+            });
+        }
+
+        #[test]
+        fn move_bucket_with_new_value_proposition_not_belonging_to_new_msp() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp_charlie = Keyring::Charlie.to_account_id();
+                let msp_dave = Keyring::Dave.to_account_id();
+
+                // Register Charlie and Dave as MSPs.
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, _) = add_msp_to_provider_storage(&msp_dave);
+
+                // Create a bucket with Charlie as the MSP.
+                let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+
+                // Make sure bucket is stored by Charlie after creation.
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
+
+                // Create a value proposition that does not belong to Dave.
+                let test_value_prop = ValueProposition::<Test>::new(1000, bounded_vec![], 1000);
+                let test_value_prop_id = test_value_prop.derive_id();
+
+                // Request to move the bucket to Dave with a value proposition that does not belong to Dave.
+                assert_noop!(
+                    FileSystem::request_move_bucket(
+                        origin.clone(),
+                        bucket_id,
+                        msp_dave_id,
+                        test_value_prop_id
+                    ),
+                    Error::<Test>::ValuePropositionNotAvailable
                 );
             });
         }
@@ -1047,11 +1115,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1063,7 +1133,8 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -1071,7 +1142,8 @@ mod request_move_bucket {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -1083,6 +1155,7 @@ mod request_move_bucket {
                         who: owner,
                         bucket_id,
                         new_msp_id: msp_dave_id,
+                        new_value_prop_id: dave_value_prop_id,
                     }
                     .into(),
                 );
@@ -1099,12 +1172,19 @@ mod request_move_bucket {
                     Event::MoveBucketAccepted {
                         msp_id: msp_dave_id,
                         bucket_id,
+                        value_prop_id: dave_value_prop_id,
                     }
                     .into(),
                 );
 
                 // Check bucket is stored by Dave
                 assert!(Providers::is_bucket_stored_by_msp(&msp_dave_id, &bucket_id));
+
+                // Check that the bucket's value proposition was updated
+                assert_eq!(
+                    Providers::get_bucket_value_prop_id(&bucket_id).unwrap(),
+                    dave_value_prop_id
+                );
 
                 // Check pending bucket storages are cleared
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
@@ -1123,11 +1203,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1139,7 +1221,8 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -1147,7 +1230,8 @@ mod request_move_bucket {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -1159,6 +1243,7 @@ mod request_move_bucket {
                         who: owner,
                         bucket_id,
                         new_msp_id: msp_dave_id,
+                        new_value_prop_id: dave_value_prop_id,
                     }
                     .into(),
                 );
@@ -1202,11 +1287,12 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1218,7 +1304,8 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+					dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -1226,7 +1313,8 @@ mod request_move_bucket {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+						new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -1238,6 +1326,7 @@ mod request_move_bucket {
                         who: owner,
                         bucket_id,
                         new_msp_id: msp_dave_id,
+						new_value_prop_id: dave_value_prop_id
                     }
                     .into(),
                 );
@@ -1313,7 +1402,7 @@ mod update_bucket_privacy_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1334,7 +1423,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -1387,7 +1476,7 @@ mod update_bucket_privacy_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1408,7 +1497,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -1488,7 +1577,7 @@ mod update_bucket_privacy_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -1509,7 +1598,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -1624,7 +1713,7 @@ mod create_and_associate_collection_with_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1756,11 +1845,13 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1772,7 +1863,8 @@ mod request_storage {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -1780,7 +1872,8 @@ mod request_storage {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -10924,7 +11017,7 @@ fn create_bucket(
         msp_id,
         name.clone(),
         false,
-        Some(value_prop_id)
+        value_prop_id
     ));
 
     // Assert bucket was created
@@ -10937,7 +11030,7 @@ fn create_bucket(
             private: false,
             read_access_group_id: None,
             size: 0,
-            value_prop_id: Some(value_prop_id),
+            value_prop_id,
         })
     );
 

@@ -91,6 +91,7 @@ export const extendFork = async (
  * @param nonce - Optional starting nonce for the extrinsics.
  * @param parentHash - Optional parent hash to build the block on top of.
  * @param finaliseBlock - Whether to finalize the block. Defaults to true.
+ * @param failOnExtrinsicNonInclusion - Whether to fail if an extrinsic is not included in the block. Defaults to true.
  * @returns A Promise resolving to a SealedBlock object containing block details and events.
  *
  * @throws Will throw an error if the block creation fails or if extrinsics are unsuccessful.
@@ -103,7 +104,8 @@ export const sealBlock = async (
   signer?: KeyringPair,
   nonce?: number,
   parentHash?: string,
-  finaliseBlock = true
+  finaliseBlock = true,
+  failOnExtrinsicNonInclusion = true
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
@@ -127,6 +129,8 @@ export const sealBlock = async (
 
     // Send all transactions in sequence
     for (let i = 0; i < callArray.length; i++) {
+      const originalPendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
+
       const call = callArray[i];
       let hash: Hash;
 
@@ -136,7 +140,22 @@ export const sealBlock = async (
         hash = await call.signAndSend(signer || alice, { nonce: nonceToUse + i });
       }
 
-      results.hashes.push(hash);
+      for (let i = 0; i < 100; i++) {
+        const pendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
+        if (pendingTxs === originalPendingTxs + 1) {
+          results.hashes.push(hash);
+          break;
+        }
+        await sleep(50);
+      }
+
+      const pendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
+      if (failOnExtrinsicNonInclusion && pendingTxs !== originalPendingTxs + 1) {
+        console.error(`Original pending txs ${originalPendingTxs} and now ${pendingTxs}`);
+        throw new Error(
+          `Transaction ${call.method.section.toString()}:${call.method.method.toString()} failed to be included in the block`
+        );
+      }
     }
   }
 
@@ -200,12 +219,18 @@ export const sealBlock = async (
 
     for (const hash of results.hashes) {
       const extIndex = getExtIndex(hash);
-      const extEvents = allEvents.filter(
-        ({ phase }) =>
-          phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
-      );
-      results.events.push(...extEvents);
-      results.success.push(isExtSuccess(extEvents) ?? false);
+      if (extIndex >= 0) {
+        const extEvents = allEvents.filter(
+          ({ phase }) =>
+            phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
+        );
+        results.events.push(...extEvents);
+        results.success.push(isExtSuccess(extEvents) ?? false);
+      } else {
+        console.log(
+          `Extrinsic with hash ${hash.toString()} not found in block even though it was sent`
+        );
+      }
     }
   } else {
     results.events.push(...allEvents);
