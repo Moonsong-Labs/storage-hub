@@ -99,6 +99,7 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+				ValuePropId = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::ValuePropId,
             > + shp_traits::MutateBucketsInterface<
                 AccountId = Self::AccountId,
                 BucketId = <Self::Providers as shp_traits::ReadBucketsInterface>::BucketId,
@@ -106,6 +107,7 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+				ValuePropId = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::ValuePropId,
             > + shp_traits::SystemMetricsInterface<
                 ProvidedUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
             >;
@@ -508,7 +510,7 @@ pub mod pallet {
             root: MerkleHash<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
-            value_prop_id: Option<ValuePropId<T>>,
+            value_prop_id: ValuePropId<T>,
         },
         /// Notifies that an empty bucket has been deleted.
         BucketDeleted {
@@ -521,6 +523,7 @@ pub mod pallet {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
             new_msp_id: ProviderIdFor<T>,
+            new_value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a bucket's privacy has been updated.
         BucketPrivacyUpdated {
@@ -662,10 +665,11 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
         },
-        /// Notifies that a bucket has been moved to a new MSP.
+        /// Notifies that a bucket has been moved to a new MSP under a new value proposition.
         MoveBucketAccepted {
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
+            value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a bucket move request has been rejected by the MSP.
         MoveBucketRejected {
@@ -776,6 +780,8 @@ pub mod pallet {
         BucketNotEmpty,
         /// Operation failed because the account is not the owner of the bucket.
         NotBucketOwner,
+        /// The selected value proposition is not available in the MSP.
+        ValuePropositionNotAvailable,
         /// Collection ID was not found.
         CollectionNotFound,
         /// Root of the provider not found.
@@ -892,7 +898,7 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             name: BucketNameFor<T>,
             private: bool,
-            value_prop_id: Option<ValuePropId<T>>,
+            value_prop_id: ValuePropId<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -919,15 +925,17 @@ pub mod pallet {
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
             new_msp_id: ProviderIdFor<T>,
+            new_value_prop_id: ValuePropId<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            Self::do_request_move_bucket(who.clone(), bucket_id, new_msp_id)?;
+            Self::do_request_move_bucket(who.clone(), bucket_id, new_msp_id, new_value_prop_id)?;
 
             Self::deposit_event(Event::MoveBucketRequested {
                 who,
                 bucket_id,
                 new_msp_id,
+                new_value_prop_id,
             });
 
             Ok(())
@@ -942,12 +950,16 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let msp_id =
+            let (msp_id, value_prop_id) =
                 Self::do_msp_respond_move_bucket_request(who.clone(), bucket_id, response.clone())?;
 
             match response {
                 BucketMoveRequestResponse::Accepted => {
-                    Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
+                    Self::deposit_event(Event::MoveBucketAccepted {
+                        bucket_id,
+                        msp_id,
+                        value_prop_id,
+                    });
                 }
                 BucketMoveRequestResponse::Rejected => {
                     Self::deposit_event(Event::MoveBucketRejected { bucket_id, msp_id });
