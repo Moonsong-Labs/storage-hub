@@ -908,7 +908,8 @@ where
                             event.file_key
                         )));
                     }
-                    FileStorageWriteError::FailedToConstructTrieIter => {
+                    FileStorageWriteError::FailedToConstructTrieIter
+                    | FileStorageWriteError::FailedToContructFileTrie => {
                         return Err(anyhow::anyhow!(format!(
                             "This is a bug! Failed to construct trie iter for key {:?}.",
                             event.file_key
