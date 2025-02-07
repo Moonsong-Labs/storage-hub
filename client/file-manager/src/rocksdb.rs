@@ -586,6 +586,22 @@ where
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
+        // Verify that the final root matches the expected fingerprint
+        if metadata.fingerprint
+            != file_trie.get_root().as_ref().try_into().map_err(|_| {
+                error!(target: LOG_TARGET, "Failed to convert root to fingerprint");
+                FileStorageWriteError::FailedToParseFingerprint
+            })?
+        {
+            error!(
+                target: LOG_TARGET,
+                "Fingerprint mismatch. Expected: {:?}, got: {:?}",
+                metadata.fingerprint,
+                file_trie.get_root()
+            );
+            return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
+        }
+
         Ok(FileStorageWriteOutcome::FileComplete)
     }
 

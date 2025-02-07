@@ -237,6 +237,17 @@ where
                         }
                     };
 
+                    // Verify that the fingerprint in the proof matches the expected file fingerprint
+                    let expected_fingerprint = file_metadata.fingerprint;
+                    if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+                        error!(
+                            target: LOG_TARGET,
+                            "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                            file_key, expected_fingerprint, file_key_proof.file_metadata.fingerprint
+                        );
+                        continue;
+                    }
+
                     let proven = match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
                         Ok(chunk_data) => chunk_data,
                         Err(error) => {
