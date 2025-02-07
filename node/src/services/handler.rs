@@ -190,23 +190,26 @@ where
     fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
 
-        // MspUploadFileTask is triggered by a NewStorageRequest event which registers the user's peer address for
-        // an upcoming RemoteUploadRequest events, which happens when the user connects to the MSP and submits chunks of the file,
-        // along with a proof of storage, which is then queued to batch accept many storage requests at once.
-        // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
+        // MspUploadFileTask is triggered by a NewStorageRequest event, to which it responds by
+        // accepting or rejecting the request. Then it waits for RemoteUploadRequest events, which
+        // happens when the user, now aware of the MSP accepting, submits chunks of the file,
+        // along with a proof of storage.
         let msp_upload_file_task = MspUploadFileTask::new(self.clone());
+
         // Subscribing to NewStorageRequest event from the BlockchainService.
         let new_storage_request_event_bus_listener: EventBusListener<NewStorageRequest, _> =
             msp_upload_file_task
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         new_storage_request_event_bus_listener.start();
+
         // Subscribing to RemoteUploadRequest event from the FileTransferService.
         let remote_upload_request_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
             msp_upload_file_task
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.file_transfer);
         remote_upload_request_event_bus_listener.start();
+
         // Subscribing to ProcessMspRespondStoringRequest event from the BlockchainService.
         let process_confirm_storing_request_event_bus_listener: EventBusListener<
             ProcessMspRespondStoringRequest,
@@ -215,6 +218,17 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         process_confirm_storing_request_event_bus_listener.start();
+
+        // MspMoveBucketTask handles events for moving buckets from another MSP to this MSP.
+        let msp_move_bucket_task = MspMoveBucketTask::new(self.clone());
+        // Subscribing to MoveBucketRequestedForNewMsp event from the BlockchainService.
+        let move_bucket_requested_for_new_msp_event_bus_listener: EventBusListener<
+            MoveBucketRequestedForNewMsp,
+            _,
+        > = msp_move_bucket_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        move_bucket_requested_for_new_msp_event_bus_listener.start();
 
         // MspStoppedStoringTask handles events for handling data deletion.
         let msp_stopped_storing_task = MspStoppedStoringTask::new(self.clone());
@@ -262,8 +276,8 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain);
         move_bucket_requested_for_new_msp_event_bus_listener.start();
-        let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
 
+        let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
         // Subscribing to NewStorageRequest event from the BlockchainService.
         let notify_period_event_bus_listener: EventBusListener<NotifyPeriod, _> =
             msp_charge_fees_task

@@ -348,12 +348,6 @@ where
             },
         );
 
-        info!(
-            target: LOG_TARGET,
-            "MSP: accepting move bucket request for bucket {:?}",
-            bucket_id.as_ref(),
-        );
-
         self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(

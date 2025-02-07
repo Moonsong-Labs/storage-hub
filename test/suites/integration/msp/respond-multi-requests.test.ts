@@ -2,8 +2,9 @@ import assert, { strictEqual } from "node:assert";
 import { describeMspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
 
 describeMspNet(
-  "Single MSP accepting multiple storage requests",
-  ({ before, createMsp1Api, it, createUserApi }) => {
+  "MSP responds to multiple storage requests",
+  { initialised: false, indexer: true },
+  ({ before, createMspApi, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
@@ -13,8 +14,10 @@ describeMspNet(
 
     before(async () => {
       userApi = await createUserApi();
-      const maybeMspApi = await createMsp1Api();
-      assert(maybeMspApi, "MSP API not available");
+      const maybeMspApi = await createMspApi();
+      if (!maybeMspApi) {
+        throw new Error("Failed to create MSP API");
+      }
       mspApi = maybeMspApi;
     });
 
