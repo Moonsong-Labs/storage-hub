@@ -349,7 +349,15 @@ describeBspNet(
 
     it("Resume BSPs, and they shouldn't volunteer for the expired storage request", async () => {
       // Advance a number of blocks up to when the storage request times out for sure.
-      const storageRequestTtl = Number(userApi.consts.fileSystem.storageRequestTtl);
+      const storageRequestTtl = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: {
+            StorageRequestTtl: null
+          }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asStorageRequestTtl.toNumber();
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, {
@@ -407,11 +415,11 @@ describeBspNet(
       if (nextChallengeTick > currentBlockNumber) {
         // Advance to the next challenge tick if needed
         await userApi.block.skipTo(nextChallengeTick, {
-          watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+          watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID]
         });
       }
 
-      // There should be three pending submit proof transactions, one per active BSP.
+      // There should be two pending submit proof transactions, one per active BSP.
       const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",

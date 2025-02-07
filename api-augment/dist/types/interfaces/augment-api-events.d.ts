@@ -662,14 +662,15 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Notifies that a bucket has been moved to a new MSP.
+       * Notifies that a bucket has been moved to a new MSP under a new value proposition.
        **/
       MoveBucketAccepted: AugmentedEvent<
         ApiType,
-        [bucketId: H256, mspId: H256],
+        [bucketId: H256, mspId: H256, valuePropId: H256],
         {
           bucketId: H256;
           mspId: H256;
+          valuePropId: H256;
         }
       >;
       /**
@@ -688,11 +689,12 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MoveBucketRequested: AugmentedEvent<
         ApiType,
-        [who: AccountId32, bucketId: H256, newMspId: H256],
+        [who: AccountId32, bucketId: H256, newMspId: H256, newValuePropId: H256],
         {
           who: AccountId32;
           bucketId: H256;
           newMspId: H256;
+          newValuePropId: H256;
         }
       >;
       /**
@@ -749,7 +751,7 @@ declare module "@polkadot/api-base/types/events" {
           root: H256,
           collectionId: Option<u32>,
           private: bool,
-          valuePropId: Option<H256>
+          valuePropId: H256
         ],
         {
           who: AccountId32;
@@ -759,7 +761,7 @@ declare module "@polkadot/api-base/types/events" {
           root: H256;
           collectionId: Option<u32>;
           private: bool;
-          valuePropId: Option<H256>;
+          valuePropId: H256;
         }
       >;
       /**
