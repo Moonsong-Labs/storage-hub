@@ -146,8 +146,9 @@ impl pallet_balances::Config for Test {
 pub(crate) type ThresholdType = u32;
 
 parameter_types! {
-    pub const MinWaitForStopStoring: BlockNumber = 1;
+    pub const MinWaitForStopStoring: BlockNumber = 30;
     pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const FileDeletionRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
@@ -235,6 +236,10 @@ impl ProofsDealerInterface for MockProofsDealer {
     fn get_current_tick() -> Self::TickNumber {
         System::block_number()
     }
+
+    fn get_checkpoint_challenge_period() -> Self::TickNumber {
+        5
+    }
 }
 
 impl pallet_file_system::Config for Test {
@@ -264,15 +269,21 @@ impl pallet_file_system::Config for Test {
     type MaxPeerIdSize = ConstU32<100>;
     type MaxNumberOfPeerIds = MaxNumberOfPeerIds;
     type MaxDataServerMultiAddresses = ConstU32<5>;
-    type MaxExpiredItemsInBlock = ConstU32<100u32>;
+    type MaxExpiredItemsInTick = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
-    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<5u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
-    type DefaultReplicationTarget = ConstU32<2>;
+    type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
+    type BasicReplicationTarget = ConstU32<2>;
+    type StandardReplicationTarget = ConstU32<3>;
+    type HighSecurityReplicationTarget = ConstU32<4>;
+    type SuperHighSecurityReplicationTarget = ConstU32<5>;
+    type UltraHighSecurityReplicationTarget = ConstU32<6>;
+    type MaxReplicationTarget = ConstU32<7>;
+    type TickRangeToMaximumThreshold = ConstU64<30>;
 }
 
 pub struct MockUserSolvency;
@@ -403,9 +414,11 @@ impl pallet_storage_providers::Config for Test {
         { shp_constants::FILE_SIZE_TO_CHALLENGES },
     >;
     type NativeBalance = Balances;
+    type CrRandomness = MockCommitRevealRandomness;
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
+    type BucketCount = u32;
     type MerklePatriciaRoot = H256;
     type MerkleTrieHashing = BlakeTwo256;
     type ProviderId = H256;

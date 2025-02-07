@@ -251,6 +251,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FailedToGetOwnerAccount: AugmentedError<ApiType>;
       /**
+       * Failed to get the payment account of the provider.
+       **/
+      FailedToGetPaymentAccount: AugmentedError<ApiType>;
+      /**
        * Failed to query earliest volunteer tick
        **/
       FailedToQueryEarliestFileVolunteerTick: AugmentedError<ApiType>;
@@ -299,11 +303,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;
       /**
-       * Error created in 2024. If you see this, you are well beyond the singularity and should
-       * probably stop using this pallet.
-       **/
-      MaxBlockNumberReached: AugmentedError<ApiType>;
-      /**
        * Maximum threshold cannot be zero.
        **/
       MaximumThresholdCannotBeZero: AugmentedError<ApiType>;
@@ -311,6 +310,11 @@ declare module "@polkadot/api-base/types/errors" {
        * Max replication target cannot be smaller than default replication target.
        **/
       MaxReplicationTargetSmallerThanDefault: AugmentedError<ApiType>;
+      /**
+       * Error created in 2024. If you see this, you are well beyond the singularity and should
+       * probably stop using this pallet.
+       **/
+      MaxTickNumberReached: AugmentedError<ApiType>;
       /**
        * Max number of user pending deletion requests reached.
        **/
@@ -335,6 +339,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Unauthorized operation, signer is not an MSP of the bucket id.
        **/
       MspNotStoringBucket: AugmentedError<ApiType>;
+      /**
+       * No BSP reputation weight set.
+       **/
+      NoBspReputationWeightSet: AugmentedError<ApiType>;
       /**
        * No file keys to confirm storing
        **/
@@ -420,7 +428,7 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       StorageRequestExists: AugmentedError<ApiType>;
       /**
-       * No slot available found in blocks to insert storage request expiration time.
+       * No slot available found in ticks to insert storage request expiration time.
        **/
       StorageRequestExpiredNoSlotAvailable: AugmentedError<ApiType>;
       /**
@@ -1060,6 +1068,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       AppendBucketToMspFailed: AugmentedError<ApiType>;
       /**
+       * An operation dedicated to BSPs only
+       **/
+      BspOnlyOperation: AugmentedError<ApiType>;
+      /**
        * Error thrown when a bucket ID already exists in storage.
        **/
       BucketAlreadyExists: AugmentedError<ApiType>;
@@ -1084,9 +1096,17 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketSizeExceedsLimit: AugmentedError<ApiType>;
       /**
+       * Error thrown when, after moving all buckets of a MSP when removing it from the system, the amount doesn't match the expected value.
+       **/
+      BucketsMovedAmountMismatch: AugmentedError<ApiType>;
+      /**
        * Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
+      /**
+       * Cannot stop BSP cycles without a default root
+       **/
+      CannotStopCycleWithNonDefaultRoot: AugmentedError<ApiType>;
       /**
        * Failed to delete a provider due to conditions not being met.
        *
@@ -1125,6 +1145,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when changing the MSP of a bucket to the same assigned MSP.
        **/
       MspAlreadyAssignedToBucket: AugmentedError<ApiType>;
+      /**
+       * An operation dedicated to MSPs only
+       **/
+      MspOnlyOperation: AugmentedError<ApiType>;
       /**
        * Error thrown when a Provider tries to add a new MultiAddress to its account but it already exists.
        **/
@@ -1237,6 +1261,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when the value proposition id is not found.
        **/
       ValuePropositionNotFound: AugmentedError<ApiType>;
+      /**
+       * Error thrown when, after deleting all value propositions of a MSP when removing it from the system, the amount doesn't match the expected value.
+       **/
+      ValuePropositionsDeletedAmountMismatch: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

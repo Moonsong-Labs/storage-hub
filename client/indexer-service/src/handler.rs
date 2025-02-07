@@ -320,7 +320,8 @@ impl IndexerService {
             } => {
                 Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::FailedToDecreaseBucketSize { .. } => {}
+            pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
+            pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
@@ -403,6 +404,7 @@ impl IndexerService {
         event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
+            pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. } => {}
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
             pallet_proofs_dealer::Event::ProofAccepted {
@@ -574,6 +576,9 @@ impl IndexerService {
             pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
             pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
             pallet_storage_providers::Event::ProviderInsolvent { .. } => {}
+            pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => {
+                // TODO: Should we index this? Since this buckets are all going to have moves requested
+            }
             pallet_storage_providers::Event::MspDeleted { provider_id } => {
                 Msp::delete(conn, provider_id.to_string()).await?;
             }

@@ -1,13 +1,13 @@
+use anyhow::anyhow;
 use codec::Decode;
-use rand::seq::SliceRandom;
-use sp_core::H256;
-use std::time::Duration;
-
 use pallet_file_system::types::BucketMoveRequestResponse;
+use rand::seq::SliceRandom;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface, events::MoveBucketRequestedForNewMsp, types::Tip,
+    commands::BlockchainServiceInterface,
+    events::MoveBucketRequestedForNewMsp,
+    types::{RetryStrategy, Tip},
 };
 use shc_common::types::{
     BucketId, FileKeyProof, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -16,7 +16,9 @@ use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::ChunkId;
+use sp_core::H256;
 use std::cmp::max;
+use std::time::Duration;
 use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{
@@ -27,26 +29,37 @@ use crate::services::{
 const LOG_TARGET: &str = "msp-move-bucket-task";
 const DOWNLOAD_REQUEST_RETRY_COUNT: usize = 30;
 
-/// MSP Move Bucket Task
+/// [`MspMoveBucketTask`] handles bucket move requests between MSPs.
 ///
-/// This task handles the `MoveBucketRequestedForNewMsp` event which is triggered when a bucket needs to be
-/// moved from another MSP to *this* MSP. The task follows this lifecycle:
+/// # Event Handling
+/// This task handles the [`MoveBucketRequestedForNewMsp`] event which is emitted when a user
+/// requests to move their bucket from one MSP to this MSP.
 ///
-/// 1. Validates prerequisites:
-///    - Checks if indexer is enabled and available
-///    - Verifies sufficient storage capacity
-///    - Ensures bucket data integrity
+/// # Lifecycle
+/// 1. When a move bucket request is received:
+///    - Verifies that indexer is enabled and accessible
+///    - Checks if there is sufficient storage capacity, increasing it if needed
+///    - Validates that all files in the bucket can be handled
+///    - Inserts file metadata into local storage and forest storage
+///    - Verifies BSP peer IDs are available for each file
 ///
-/// 2. Downloads bucket data:
-///    - Retrieves chunks from BSPs in a round-robin fashion
-///    - Retries failed downloads up to DOWNLOAD_REQUEST_RETRY_COUNT times
+/// 2. If all validations pass:
+///    - Accepts the move request by sending [`BucketMoveRequestResponse::Accepted`]
+///    - Downloads all files from BSPs in parallel
+///    - Updates local forest root to match on-chain state
 ///
-/// 3. Handles failures:
-///    - Rejects move request if prerequisites aren't met
-///    - Cleans up partial downloads on failure
-///    - Reports errors through appropriate channels
+/// 3. If any validation fails:
+///    - Rejects the move request by sending [`BucketMoveRequestResponse::Rejected`]
+///    - Cleans up any partially inserted file metadata
+///    - Removes any created forest storage
 ///
-/// [`MspMoveBucketTask`]: Handles the [`MoveBucketRequestedForNewMsp`] event.
+/// # Error Handling
+/// The task will reject the bucket move request if:
+/// - Indexer is disabled or inaccessible
+/// - Insufficient storage capacity and unable to increase
+/// - File metadata insertion fails
+/// - BSP peer IDs are unavailable
+/// - Database connection issues occur
 pub struct MspMoveBucketTask<NT>
 where
     NT: ShNodeType,
@@ -55,6 +68,167 @@ where
     storage_hub_handler: StorageHubHandler<NT>,
     file_storage_inserted_file_keys: Vec<H256>,
     pending_bucket_id: Option<BucketId>,
+}
+
+impl<NT> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    async fn handle_event(&mut self, event: MoveBucketRequestedForNewMsp) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "MSP: user requested to move bucket {:?} to us",
+            event.bucket_id,
+        );
+
+        let indexer_db_pool = if let Some(indexer_db_pool) =
+            self.storage_hub_handler.indexer_db_pool.clone()
+        {
+            indexer_db_pool
+        } else {
+            error!(
+                target: LOG_TARGET,
+                "Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."
+            );
+            return self.reject_bucket_move(event.bucket_id).await;
+        };
+
+        let mut indexer_connection = match indexer_db_pool.get().await {
+            Ok(connection) => connection,
+            Err(error) => {
+                error!(target: LOG_TARGET, "Failed to get indexer connection after timeout: {:?}", error);
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+        };
+        let bucket = event.bucket_id.as_ref().to_vec();
+
+        let forest_storage = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get_or_create(&bucket)
+            .await;
+
+        self.pending_bucket_id = Some(event.bucket_id);
+
+        let files = shc_indexer_db::models::File::get_by_onchain_bucket_id(
+            &mut indexer_connection,
+            bucket.clone(),
+        )
+        .await?;
+
+        let total_size: u64 = match files
+            .iter()
+            .try_fold(0u64, |acc, file| acc.checked_add(file.size as u64))
+        {
+            Some(size) => size,
+            None => {
+                error!(
+                    target: LOG_TARGET,
+                    "Total size calculation overflowed u64 - bucket is too large"
+                );
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+        };
+
+        let own_provider_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(None)
+            .await?;
+
+        let own_msp_id = match own_provider_id {
+            Some(StorageProviderId::MainStorageProvider(id)) => id,
+            Some(StorageProviderId::BackupStorageProvider(_)) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
+                );
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+            None => {
+                error!(target: LOG_TARGET, "Failed to get own MSP ID.");
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+        };
+
+        // Check and increase capacity if needed
+        if let Err(e) = self
+            .check_and_increase_capacity(total_size, own_msp_id)
+            .await
+        {
+            error!(
+                target: LOG_TARGET,
+                "Failed to ensure sufficient capacity: {:?}", e
+            );
+            return self.reject_bucket_move(event.bucket_id).await;
+        }
+
+        // Try to insert all files before accepting the request
+        for file in &files {
+            let file_metadata = file.to_file_metadata(bucket.clone());
+            let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+
+            let result = self
+                .storage_hub_handler
+                .file_storage
+                .write()
+                .await
+                .insert_file(file_key.clone(), file_metadata.clone());
+            if let Err(error) = result {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to insert file {:?} into file storage: {:?}",
+                    file_key, error
+                );
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+            self.file_storage_inserted_file_keys.push(file_key);
+
+            if let Err(error) = forest_storage
+                .write()
+                .await
+                .insert_files_metadata(&[file_metadata.clone()])
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to insert file {:?} into forest storage: {:?}",
+                    file_key, error
+                );
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+
+            let bsp_peer_ids = file.get_bsp_peer_ids(&mut indexer_connection).await?;
+            if bsp_peer_ids.is_empty() {
+                error!(
+                    target: LOG_TARGET,
+                    "No BSP peer IDs found for file {:?}",
+                    file_key,
+                );
+                return self.reject_bucket_move(event.bucket_id).await;
+            }
+        }
+
+        // TODO: check that we have enough space to accept the bucket and reject if not (+test)
+
+        // Accept the request since we've verified we can handle all files
+        self.accept_bucket_move(event.bucket_id).await?;
+
+        // Now download all the files
+        for file in files {
+            if let Err(error) = self.download_file(&file, &event.bucket_id).await {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to download file: {:?}",
+                    error
+                );
+                // Continue with other files even if one fails
+                continue;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<NT> Clone for MspMoveBucketTask<NT>
@@ -84,6 +258,20 @@ where
         }
     }
 
+    /// Rejects a bucket move request and performs cleanup of any partially created resources.
+    ///
+    /// # Arguments
+    /// * `bucket_id` - The ID of the bucket whose move request is being rejected
+    ///
+    /// # Cleanup Steps
+    /// 1. Deletes any files that were inserted into file storage during validation
+    /// 2. Removes the forest storage if it was created for this bucket
+    /// 3. Sends an extrinsic to reject the move request on-chain
+    ///
+    /// # Errors
+    /// Returns an error if:
+    /// - Failed to send or confirm the rejection extrinsic
+    /// Note: Cleanup errors are logged but don't prevent the rejection from being sent
     async fn reject_bucket_move(&mut self, bucket_id: BucketId) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -123,15 +311,25 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
-            .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .extrinsic_retry_timeout,
-            ))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(3)
+                    .with_max_tip(10.0)
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    )),
+                false,
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to submit move bucket rejection after 3 retries: {:?}",
+                    e
+                )
+            })?;
 
         Ok(())
     }
@@ -152,15 +350,25 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
-            .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .extrinsic_retry_timeout,
-            ))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
+            .submit_extrinsic_with_retry(
+                call,
+                RetryStrategy::default()
+                    .with_max_retries(3)
+                    .with_max_tip(10.0)
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    )),
+                false,
+            )
+            .await
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to submit move bucket acceptance after 3 retries: {:?}",
+                    e
+                )
+            })?;
 
         Ok(())
     }
@@ -179,7 +387,6 @@ where
             file_key,
         );
 
-        let chunks_count = file_metadata.chunks_count();
         let mut bsp_peer_ids = file
             .get_bsp_peer_ids(
                 &mut self
@@ -192,18 +399,21 @@ where
             )
             .await?;
 
-        // Shuffle BSP peer IDs to distribute load evenly across BSPs and prevent always hitting
-        // the same BSPs first, which could lead to hotspots
+        // Shuffle BSP peer IDs to distribute load randomly across BSPs and avoid
+        // overwhelming a single BSP with sequential requests
         bsp_peer_ids.shuffle(&mut rand::thread_rng());
 
+        // TODO: Consider optimizing BSP selection strategy - current approach uses round-robin,
+        // but we could potentially stick with a responsive BSP until it fails
         let mut bsp_peer_ids_iter = bsp_peer_ids.iter().cycle();
 
+        let chunks_count = file_metadata.chunks_count();
         for chunk in 0..chunks_count {
             let mut downloaded = false;
             for _ in 0..DOWNLOAD_REQUEST_RETRY_COUNT {
                 let peer_id = bsp_peer_ids_iter
                     .next()
-                    .expect("peer_id will always be available due to .cycle() iterator");
+                    .expect("Iterator will never be empty due to .cycle()");
 
                 let download_request = match self
                     .storage_hub_handler
@@ -298,6 +508,11 @@ where
                     chunk,
                     DOWNLOAD_REQUEST_RETRY_COUNT
                 );
+                // TODO: Improve handling of failed chunk downloads:
+                // - Consider implementing a retry mechanism with backoff
+                // - Track failed chunks for later retry attempts
+                // - Potentially notify the user about partial downloads
+                // - Add metrics/monitoring for failed downloads
             }
         }
 
@@ -437,152 +652,5 @@ where
         let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
 
         Ok(new_capacity)
-    }
-}
-
-impl<NT> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<NT>
-where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-{
-    async fn handle_event(&mut self, event: MoveBucketRequestedForNewMsp) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "MSP: user requested to move bucket {:?} to us",
-            event.bucket_id,
-        );
-
-        let indexer_db_pool = if let Some(indexer_db_pool) =
-            self.storage_hub_handler.indexer_db_pool.clone()
-        {
-            indexer_db_pool
-        } else {
-            error!(
-                target: LOG_TARGET,
-                "Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."
-            );
-            return self.reject_bucket_move(event.bucket_id).await;
-        };
-
-        let mut indexer_connection = match indexer_db_pool.get().await {
-            Ok(connection) => connection,
-            Err(error) => {
-                error!(target: LOG_TARGET, "Failed to get indexer connection after timeout: {:?}", error);
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
-        };
-        let bucket = event.bucket_id.as_ref().to_vec();
-
-        let forest_storage = self
-            .storage_hub_handler
-            .forest_storage_handler
-            .get_or_create(&bucket)
-            .await;
-
-        self.pending_bucket_id = Some(event.bucket_id);
-
-        let files = shc_indexer_db::models::File::get_by_onchain_bucket_id(
-            &mut indexer_connection,
-            bucket.clone(),
-        )
-        .await?;
-
-        let total_size: u64 = files.iter().map(|file| file.size as u64).sum();
-
-        let own_provider_id = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_id(None)
-            .await?;
-
-        let own_msp_id = match own_provider_id {
-            Some(StorageProviderId::MainStorageProvider(id)) => id,
-            Some(StorageProviderId::BackupStorageProvider(_)) => {
-                error!(
-                    target: LOG_TARGET,
-                    "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
-            None => {
-                error!(target: LOG_TARGET, "Failed to get own MSP ID.");
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
-        };
-
-        // Check and increase capacity if needed
-        if let Err(e) = self
-            .check_and_increase_capacity(total_size, own_msp_id)
-            .await
-        {
-            error!(
-                target: LOG_TARGET,
-                "Failed to ensure sufficient capacity: {:?}", e
-            );
-            return self.reject_bucket_move(event.bucket_id).await;
-        }
-
-        // Try to insert all files before accepting the request
-        for file in &files {
-            let file_metadata = file.to_file_metadata(bucket.clone());
-            let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
-
-            let result = self
-                .storage_hub_handler
-                .file_storage
-                .write()
-                .await
-                .insert_file(file_key.clone(), file_metadata.clone());
-            if let Err(error) = result {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to insert file {:?} into file storage: {:?}",
-                    file_key, error
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
-            self.file_storage_inserted_file_keys.push(file_key);
-
-            if let Err(error) = forest_storage
-                .write()
-                .await
-                .insert_files_metadata(&[file_metadata.clone()])
-            {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to insert file {:?} into forest storage: {:?}",
-                    file_key, error
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
-
-            let bsp_peer_ids = file.get_bsp_peer_ids(&mut indexer_connection).await?;
-            if bsp_peer_ids.is_empty() {
-                error!(
-                    target: LOG_TARGET,
-                    "No BSP peer IDs found for file {:?}",
-                    file_key,
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
-        }
-
-        // Accept the request since we've verified we can handle all files
-        self.accept_bucket_move(event.bucket_id).await?;
-
-        // Now download all the files
-        for file in files {
-            if let Err(error) = self.download_file(&file, &event.bucket_id).await {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to download file: {:?}",
-                    error
-                );
-                // Continue with other files even if one fails
-                continue;
-            }
-        }
-
-        Ok(())
     }
 }

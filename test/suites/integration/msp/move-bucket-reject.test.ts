@@ -10,9 +10,9 @@ import {
   describeMspNet,
   shUser,
   type EnrichedBspApi,
-  mspTwoKey,
   createSqlClient,
-  waitFor
+  waitFor,
+  mspTwoKey
 } from "../../../util";
 import { onboardMsp } from "../../../util/bspNet/docker";
 import Docker from "dockerode";
@@ -64,8 +64,29 @@ describeMspNet(
 
     it("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
       // Replicate to 2 BSPs, 5 blocks to maxthreshold
+      const maxReplicationTargetRuntimeParameter = {
+        RuntimeConfig: {
+          MaxReplicationTarget: [null, 2]
+        }
+      };
+      const tickRangeToMaximumThresholdRuntimeParameter = {
+        RuntimeConfig: {
+          TickRangeToMaximumThreshold: [null, 5]
+        }
+      };
       await userApi.block.seal({
-        calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(2, 5))]
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter)
+          )
+        ]
+      });
+      await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+          )
+        ]
       });
 
       await userApi.docker.onboardBsp({
@@ -124,7 +145,9 @@ describeMspNet(
             file_size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            2
+            {
+              Custom: 2
+            }
           )
         );
       }
@@ -142,18 +165,33 @@ describeMspNet(
         throw new Error(`Expected ${source.length} NewStorageRequest events`);
       }
 
-      // Allow time for the MSP to receive and store the files from the user
-      // TODO: Ideally, this should be turned into a polling helper function.
+      // Wait for the MSP to receive and store all files by polling until they are all in storage
       await waitFor({
         lambda: async () => {
-          const forestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-          return forestRoot !== null;
+          // Check if all files are in storage
+          for (const e of matchedEvents) {
+            const newStorageRequestDataBlob =
+              userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
+
+            if (!newStorageRequestDataBlob) {
+              return false;
+            }
+
+            const result = await msp1Api.rpc.storagehubclient.isFileInFileStorage(
+              newStorageRequestDataBlob.fileKey
+            );
+
+            if (!result.isFileFound) {
+              return false;
+            }
+          }
+          return true;
         },
-        iterations: 20, // 2 seconds total
+        iterations: 60, // Poll for up to 6 seconds (60 iterations * 100ms delay)
         delay: 100
       });
 
-      // Check if the MSP received the files.
+      // Store file keys for later verification
       for (const e of matchedEvents) {
         const newStorageRequestDataBlob =
           userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
@@ -161,17 +199,6 @@ describeMspNet(
         if (!newStorageRequestDataBlob) {
           throw new Error("Event doesn't match NewStorageRequest type");
         }
-
-        const result = await msp1Api.rpc.storagehubclient.isFileInFileStorage(
-          newStorageRequestDataBlob.fileKey
-        );
-
-        if (!result.isFileFound) {
-          throw new Error(
-            `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
-          );
-        }
-
         allBucketFiles.push(newStorageRequestDataBlob.fileKey.toString());
       }
 
@@ -182,32 +209,30 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      // Give time for the MSP to update the local forest root.
-      // TODO: Ideally, this should be turned into a polling helper function.
+      // Wait for the MSP to update its local forest root by polling until it matches the on-chain root
       await waitFor({
         lambda: async () => {
-          const forestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-          return forestRoot !== null;
+          // Get the local forest root from MSP
+          const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+
+          // Get the on-chain root from the latest BucketRootChanged event
+          const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
+            "providers",
+            "BucketRootChanged"
+          );
+          const bucketRootChangedDataBlob =
+            userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
+            bucketRootChangedEvent.data;
+          if (!bucketRootChangedDataBlob) {
+            return false;
+          }
+
+          // Compare the roots
+          return bucketRootChangedDataBlob.newRoot.toString() === localBucketRoot.toString();
         },
-        iterations: 20, // 2 seconds total
+        iterations: 20, // Poll for up to 2 seconds (20 iterations * 100ms delay)
         delay: 100
       });
-
-      // Check that the local forest root is updated, and matches th on-chain root.
-      const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-
-      const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
-        "providers",
-        "BucketRootChanged"
-      );
-      const bucketRootChangedDataBlob =
-        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
-        bucketRootChangedEvent.data;
-      if (!bucketRootChangedDataBlob) {
-        throw new Error("Expected BucketRootChanged event but received event of different type");
-      }
-
-      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
 
       // The MSP should have accepted exactly one file.
       // Register how many were accepted in the last block sealed.
@@ -233,32 +258,30 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      // Give time for the MSP to update the local forest root.
-      // TODO: Ideally, this should be turned into a polling helper function.
+      // Wait for the MSP to update its local forest root by polling until it matches the on-chain root
       await waitFor({
         lambda: async () => {
-          const forestRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-          return forestRoot !== null;
+          // Get the local forest root from MSP
+          const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+
+          // Get the on-chain root from the latest BucketRootChanged event
+          const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
+            "providers",
+            "BucketRootChanged"
+          );
+          const bucketRootChangedDataBlob2 =
+            userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
+            bucketRootChangedEvent2.data;
+          if (!bucketRootChangedDataBlob2) {
+            return false;
+          }
+
+          // Compare the roots
+          return bucketRootChangedDataBlob2.newRoot.toString() === localBucketRoot2.toString();
         },
-        iterations: 20, // 2 seconds total
+        iterations: 20, // Poll for up to 2 seconds (20 iterations * 100ms delay)
         delay: 100
       });
-
-      // Check that the local forest root is updated, and matches th on-chain root.
-      const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-
-      const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
-        "providers",
-        "BucketRootChanged"
-      );
-      const bucketRootChangedDataBlob2 =
-        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
-        bucketRootChangedEvent2.data;
-      if (!bucketRootChangedDataBlob2) {
-        throw new Error("Expected BucketRootChanged event but received event of different type");
-      }
-
-      strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), localBucketRoot2.toString());
 
       // The MSP should have accepted at least one file.
       // Register how many were accepted in the last block sealed.

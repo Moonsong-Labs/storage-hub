@@ -1,5 +1,5 @@
 CREATE TABLE paymentstream (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     account VARCHAR NOT NULL,
     provider VARCHAR NOT NULL,
     total_amount_paid NUMERIC(38, 0) NOT NULL DEFAULT 0,

@@ -1,5 +1,5 @@
-import { describeBspNet, sleep, type EnrichedBspApi } from "../../../util";
-import { assert } from "node:console";
+import { describeBspNet, type EnrichedBspApi } from "../../../util";
+import assert from "node:assert";
 
 describeBspNet(
   "BSP Automatic Tipping",
@@ -12,7 +12,6 @@ describeBspNet(
     });
 
     it("Confirm storing failure results in increased tip", async () => {
-      // Make a storage request and wait for the bsp to volunteer
       await userApi.file.createBucketAndSendNewStorageRequest(
         "res/whatsup.jpg",
         "test/whatsup.jpg",
@@ -20,14 +19,8 @@ describeBspNet(
       );
       await userApi.wait.bspVolunteer(1);
 
-      // Wait for the bsp to send the first confirm storing extrinsic (after it has stored the file)
-      await userApi.wait.bspStoredInTxPool();
+      await userApi.wait.bspStoredInTxPool({ expectedExts: 4, timeoutMs: 12000 });
 
-      // Wait for the bsp to send all the confirm retries
-      await sleep(12000);
-      await userApi.wait.bspStoredInTxPool(4);
-
-      // We get the confirm storing pending extrinsics to get their extrinsic index
       const confirmStoringPendingMatches = await userApi.assert.extrinsicPresent({
         method: "bspConfirmStoring",
         module: "fileSystem",
@@ -37,17 +30,12 @@ describeBspNet(
 
       const txPool = await userApi.rpc.author.pendingExtrinsics();
 
-      const confirmStoringPendingExts = confirmStoringPendingMatches.map(
-        (match) => txPool[match.extIndex]
+      const tips = confirmStoringPendingMatches.map((match) =>
+        txPool[match.extIndex].tip.toBigInt()
       );
+      const isIncreasing = tips.slice(1).every((current, i) => current > tips[i]);
 
-      for (let i = 1; i < confirmStoringPendingExts.length; ++i) {
-        assert(
-          confirmStoringPendingExts[i].tip.toBigInt() >
-            confirmStoringPendingExts[i - 1].tip.toBigInt(),
-          "Tip should increase with each retry"
-        );
-      }
+      assert(isIncreasing, "Tip should increase with each retry");
     });
   }
 );

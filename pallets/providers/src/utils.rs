@@ -31,10 +31,10 @@ use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_runtime::traits::ConvertBack;
 use sp_std::vec::Vec;
 use types::{
-    Bucket, Commitment, ExpirationItem, MainStorageProvider, MainStorageProviderSignUpRequest,
-    MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, SignUpRequestSpParams,
-    StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata, ValuePropIdFor,
-    ValueProposition, ValuePropositionWithId,
+    Bucket, BucketCount, Commitment, ExpirationItem, MainStorageProvider,
+    MainStorageProviderSignUpRequest, MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam,
+    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata,
+    ValuePropIdFor, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -297,8 +297,6 @@ where
         )?;
 
         let value_prop_id = value_prop.derive_id();
-        // Save the ValueProposition information in storage
-        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
 
         // Increment the counter of Main Storage Providers registered
         let new_amount_of_msps = MspCount::<T>::get()
@@ -309,10 +307,11 @@ where
         // Remove the sign up request from the SignUpRequests mapping
         SignUpRequests::<T>::remove(who);
 
-        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id)?;
+        // Add the MSP as a privileged provider.
+        <T::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id);
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::MspSignUpSuccess {
+        Self::deposit_event(Event::MspSignUpSuccess {
             who: who.clone(),
             msp_id,
             multiaddresses: sign_up_request.msp_info.multiaddresses.clone(),
@@ -375,7 +374,7 @@ where
         });
 
         // Emit the corresponding event
-        Self::deposit_event(Event::<T>::BspSignUpSuccess {
+        Self::deposit_event(Event::BspSignUpSuccess {
             who: who.clone(),
             bsp_id,
             root: bsp_info.root,
@@ -389,10 +388,15 @@ where
     /// This function holds the logic that checks if a user can sign off as a Main Storage Provider
     /// and, if so, updates the storage to remove the user as a Main Storage Provider, decrements the counter of Main Storage Providers,
     /// and returns the deposit to the user
-    pub fn do_msp_sign_off(who: &T::AccountId) -> Result<MainStorageProviderId<T>, DispatchError> {
-        // Check that the signer is registered as a MSP and get its info
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+    pub fn do_msp_sign_off(
+        who: &T::AccountId,
+        msp_id: ProviderIdFor<T>,
+    ) -> Result<MainStorageProviderId<T>, DispatchError> {
+        // Ensure the received MSP ID matches the one in storage.
+        ensure!(
+            Some(msp_id) == AccountIdToMainStorageProviderId::<T>::get(who),
+            Error::<T>::NotRegistered
+        );
 
         let msp = expect_or_err!(
             MainStorageProviders::<T>::get(&msp_id),
@@ -405,10 +409,22 @@ where
             msp.capacity_used == T::StorageDataUnit::zero(),
             Error::<T>::StorageStillInUse
         );
+        ensure!(
+            msp.amount_of_buckets == T::BucketCount::zero(),
+            Error::<T>::StorageStillInUse
+        );
 
-        // Update the MSPs storage, removing the signer as an MSP
+        // Update the MSPs storage, removing the signer as an MSP and deleting all value propositions, ensuring the amount deleted matches
+        // the amount of value propositions that the MSP had stored.
         AccountIdToMainStorageProviderId::<T>::remove(who);
         MainStorageProviders::<T>::remove(&msp_id);
+        let value_props_deleted =
+            MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&msp_id)
+                .fold(0, |acc, _| acc.saturating_add(One::one()));
+        ensure!(
+            value_props_deleted == msp.amount_of_value_props,
+            Error::<T>::ValuePropositionsDeletedAmountMismatch
+        );
 
         // Return the deposit to the signer (if all funds cannot be returned, it will fail and revert with the reason)
         T::NativeBalance::release_all(
@@ -429,7 +445,7 @@ where
             }
         })?;
 
-        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id)?;
+        <T::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
 
         Ok(msp_id)
     }
@@ -462,6 +478,9 @@ where
                 >= bsp.sign_up_block + T::BspSignUpLockPeriod::get(),
             Error::<T>::SignOffPeriodNotPassed
         );
+
+        // Stop all cycles before deleting the BSP since this function will check if the BSP has default root
+        Self::do_stop_all_cycles(who)?;
 
         // Update the BSPs storage, removing the signer as an BSP
         AccountIdToBackupStorageProviderId::<T>::remove(who);
@@ -875,7 +894,7 @@ where
         let mut final_capacity = new_decreased_capacity;
 
         // Slash amount could be 0, but this is still emitted as a signal for the provider and users to be aware
-        Self::deposit_event(Event::<T>::Slashed {
+        Self::deposit_event(Event::Slashed {
             provider_id: *provider_id,
             amount: actual_slashed,
         });
@@ -919,7 +938,7 @@ where
             // they will not be slashed
             AwaitingTopUpFromProviders::<T>::remove(&typed_provider_id);
 
-            Self::deposit_event(Event::<T>::TopUpFulfilled {
+            Self::deposit_event(Event::TopUpFulfilled {
                 provider_id: *provider_id,
                 amount: held_deposit_difference,
             });
@@ -943,7 +962,7 @@ where
             );
 
             // Signal to the provider that they need to top up their held deposit to match the current used capacity
-            Self::deposit_event(Event::<T>::AwaitingTopUp {
+            Self::deposit_event(Event::AwaitingTopUp {
                 provider_id: *provider_id,
                 top_up_metadata,
             });
@@ -1049,7 +1068,7 @@ where
         AwaitingTopUpFromProviders::<T>::remove(typed_provider_id);
 
         // Signal that the slashed amount has been topped up
-        Self::deposit_event(Event::<T>::TopUpFulfilled {
+        Self::deposit_event(Event::TopUpFulfilled {
             provider_id,
             amount: held_deposit_difference,
         });
@@ -1086,6 +1105,19 @@ where
 
         MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
 
+        // Add one to the counter of value propositions that this MSP has stored.
+        MainStorageProviders::<T>::try_mutate(&msp_id, |msp| {
+            let msp = msp
+                .as_mut()
+                .ok_or(Error::<T>::SpRegisteredButDataNotFound)?;
+            msp.amount_of_value_props = msp
+                .amount_of_value_props
+                .checked_add(1u32)
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            Ok::<_, DispatchError>(())
+        })?;
+
         Ok((msp_id, value_prop))
     }
 
@@ -1119,11 +1151,41 @@ where
 
         // Delete provider data
         if let Some(msp) = MainStorageProviders::<T>::get(provider_id) {
+            // Remove the Provider from the InsolventProviders storage
             InsolventProviders::<T>::remove(StorageProviderId::<T>::MainStorageProvider(
                 *provider_id,
             ));
+
+            // Delete the MSP's data
             MainStorageProviders::<T>::remove(&provider_id);
             AccountIdToMainStorageProviderId::<T>::remove(msp.owner_account);
+            let mut amount_of_buckets: BucketCount<T> = T::BucketCount::zero();
+            let value_props_deleted =
+                MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id)
+                    .fold(0, |acc, _| acc.saturating_add(One::one()));
+            ensure!(
+                value_props_deleted == msp.amount_of_value_props,
+                Error::<T>::ValuePropositionsDeletedAmountMismatch
+            );
+            // For the buckets, not only check that the amount deleted matches but also emit an event so users owners of
+            // these buckets can take the appropriate measures to secure them in another MSP.
+            let bucket_ids: Vec<BucketId<T>> =
+                MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id)
+                    .map(|(bucket_id, _)| {
+                        amount_of_buckets = amount_of_buckets.saturating_add(T::BucketCount::one());
+                        bucket_id
+                    })
+                    .collect();
+            ensure!(
+                msp.amount_of_buckets == amount_of_buckets,
+                Error::<T>::BucketsMovedAmountMismatch
+            );
+            Self::deposit_event(Event::BucketsOfInsolventMsp {
+                msp_id: *provider_id,
+                buckets: bucket_ids,
+            });
+
+            // Decrease the amount of MSPs in the system
             MspCount::<T>::mutate(|n| {
                 let new_amount_of_msps = n.checked_sub(&T::SpCount::one());
                 match new_amount_of_msps {
@@ -1134,18 +1196,29 @@ where
                     None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
                 }
             })?;
-            MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id);
-            MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id);
 
-            Self::deposit_event(Event::<T>::MspDeleted {
+            Self::deposit_event(Event::MspDeleted {
                 provider_id: *provider_id,
             });
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
+            // Remove the Provider from the InsolventProviders storage
             InsolventProviders::<T>::remove(StorageProviderId::<T>::BackupStorageProvider(
                 *provider_id,
             ));
+
+            // Update the Provider's root to the default one and stop its cycles.
+            BackupStorageProviders::<T>::mutate(provider_id, |bsp| {
+                bsp.as_mut()
+                    .expect("Checked beforehand if BSP existed in storage. qed")
+                    .root = T::DefaultMerkleRoot::get();
+            });
+            Self::do_stop_all_cycles(&bsp.owner_account)?;
+
+            // Delete the BSP's data
             BackupStorageProviders::<T>::remove(&provider_id);
             AccountIdToBackupStorageProviderId::<T>::remove(bsp.owner_account);
+
+            // Decrease the amount of BSPs in the system
             BspCount::<T>::mutate(|n| {
                 let new_amount_of_bsps = n.checked_sub(&T::SpCount::one());
                 match new_amount_of_bsps {
@@ -1156,6 +1229,8 @@ where
                     None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
                 }
             })?;
+
+            // Decrease the total BSP capacity of the network
             TotalBspsCapacity::<T>::mutate(|n| {
                 let new_total_bsp_capacity = n.checked_sub(&bsp.capacity);
                 match new_total_bsp_capacity {
@@ -1166,6 +1241,8 @@ where
                     None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
                 }
             })?;
+
+            // Decrease the used BSP capacity of the network
             UsedBspsCapacity::<T>::mutate(|n| {
                 let new_used_bsp_capacity = n.checked_sub(&bsp.capacity_used);
                 match new_used_bsp_capacity {
@@ -1176,14 +1253,41 @@ where
                     None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
                 }
             })?;
+
+            // Decrease the global reputation weight
             GlobalBspsReputationWeight::<T>::mutate(|n| {
                 *n = n.saturating_sub(bsp.reputation_weight);
             });
 
-            Self::deposit_event(Event::<T>::BspDeleted {
+            Self::deposit_event(Event::BspDeleted {
                 provider_id: *provider_id,
             });
+        } else {
+            // If the provider is not found, return an error
+            return Err(Error::<T>::NotRegistered.into());
         }
+
+        Ok(())
+    }
+
+    pub(crate) fn do_stop_all_cycles(account_id: &T::AccountId) -> DispatchResult {
+        let provider_id = AccountIdToBackupStorageProviderId::<T>::get(account_id)
+            .ok_or(Error::<T>::BspOnlyOperation)?;
+
+        if let Some(provider) = BackupStorageProviders::<T>::get(provider_id) {
+            ensure!(
+                provider.root == T::DefaultMerkleRoot::get(),
+                Error::<T>::CannotStopCycleWithNonDefaultRoot
+            );
+        } else {
+            return Err(Error::<T>::BspOnlyOperation.into());
+        }
+
+        <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&provider_id)?;
+
+        <T::CrRandomness as shp_traits::CommitRevealRandomnessInterface>::stop_randomness_cycle(
+            &provider_id,
+        )?;
 
         Ok(())
     }
@@ -1713,6 +1817,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
 
+        // Increase the amount of buckets stored by this MSP.
+        MainStorageProviders::<T>::try_mutate(provider_id, |msp| {
+            let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+            msp.amount_of_buckets = msp
+                .amount_of_buckets
+                .checked_add(&T::BucketCount::one())
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            Ok::<_, DispatchError>(())
+        })?;
+
         Self::apply_delta_fixed_rate_payment_stream(
             &provider_id,
             &bucket_id,
@@ -1743,6 +1859,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                 )?;
 
                 MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+
+                // Decrease the amount of buckets stored by this MSP.
+                MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
+                    let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                    msp.amount_of_buckets = msp
+                        .amount_of_buckets
+                        .checked_sub(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+                    Ok::<_, DispatchError>(())
+                })?;
             }
 
             bucket.msp_id = Some(*new_msp);
@@ -1755,6 +1883,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             )?;
 
             MainStorageProviderIdsToBuckets::<T>::insert(*new_msp, bucket_id, ());
+
+            // Increase the amount of buckets stored by this MSP.
+            MainStorageProviders::<T>::try_mutate(new_msp, |msp| {
+                let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                msp.amount_of_buckets =
+                    msp.amount_of_buckets
+                        .checked_add(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+                Ok::<_, DispatchError>(())
+            })?;
 
             Ok::<_, DispatchError>(())
         })
@@ -1780,6 +1920,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
             MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
 
+            // Decrease the amount of buckets stored by this MSP.
+            MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
+                let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                msp.amount_of_buckets =
+                    msp.amount_of_buckets
+                        .checked_sub(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+                Ok::<_, DispatchError>(())
+            })?;
+
             Ok::<_, DispatchError>(())
         })
     }
@@ -1788,7 +1940,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            Self::deposit_event(Event::<T>::BucketRootChanged {
+            Self::deposit_event(Event::BucketRootChanged {
                 bucket_id,
                 old_root: bucket.root,
                 new_root,
@@ -1818,6 +1970,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
             )?;
 
             MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
+
+            // Decrease the amount of buckets stored by this MSP.
+            MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
+                let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                msp.amount_of_buckets =
+                    msp.amount_of_buckets
+                        .checked_sub(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+                Ok::<_, DispatchError>(())
+            })?;
         };
 
         Buckets::<T>::remove(&bucket_id);

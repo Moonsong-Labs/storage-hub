@@ -73,6 +73,9 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         }
     }
 
+    /// Verifies and extracts proven chunks from a Merkle trie proof.
+    ///
+    /// Returns a `Vec<Leaf<ChunkId, Chunk>>` of proven chunks with their IDs (keys) and data (values)
     pub fn proven<T: TrieLayout>(&self) -> Result<Vec<Leaf<ChunkId, Chunk>>, ProvenFileKeyError>
     where
         <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,

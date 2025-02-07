@@ -33,7 +33,11 @@ mod benchmarks {
         BoundedVec,
     };
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
-    use sp_runtime::traits::{Bounded, Hash, Zero};
+    use shp_traits::ProofsDealerInterface;
+    use sp_runtime::{
+        format,
+        traits::{Bounded, Hash, One, Zero},
+    };
     use sp_std::vec;
 
     use super::*;
@@ -110,7 +114,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -189,7 +193,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -266,7 +270,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -287,14 +291,13 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the sign up confirmation was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspSignUpSuccess {
-                who: user_account.clone(),
-                bsp_id: AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap(),
-                capacity: capacity.into(),
-                multiaddresses: multiaddresses.clone(),
-                root: T::DefaultMerkleRoot::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::BspSignUpSuccess {
+            who: user_account.clone(),
+            bsp_id: AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap(),
+            capacity: capacity.into(),
+            multiaddresses: multiaddresses.clone(),
+            root: T::DefaultMerkleRoot::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the BSP is now in the providers' storage
@@ -356,7 +359,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: 100000u32.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -386,14 +389,13 @@ mod benchmarks {
             id: value_prop.derive_id(),
             value_prop: value_prop.clone(),
         };
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspSignUpSuccess {
-                who: user_account.clone(),
-                msp_id: AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap(),
-                capacity: 100000u32.into(),
-                multiaddresses: multiaddresses.clone(),
-                value_prop: value_prop_with_id,
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MspSignUpSuccess {
+            who: user_account.clone(),
+            msp_id: AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap(),
+            capacity: 100000u32.into(),
+            multiaddresses: multiaddresses.clone(),
+            value_prop: value_prop_with_id,
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the MSP is now in the providers' storage
@@ -448,7 +450,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -462,7 +464,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the sign up cancellation was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::SignUpRequestCanceled {
+            <T as pallet::Config>::RuntimeEvent::from(Event::SignUpRequestCanceled {
                 who: user_account.clone(),
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -482,8 +484,11 @@ mod benchmarks {
     }
 
     #[benchmark]
-    fn msp_sign_off() -> Result<(), BenchmarkError> {
+    fn msp_sign_off(n: Linear<0, 100>) -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
+        // Get the amount of value propositions that are going to have to be drained from storage.
+        let value_props_to_delete: u32 = n.into();
+
         // Make sure the block number is not 0 so events can be deposited.
         if frame_system::Pallet::<T>::block_number() == Zero::zero() {
             run_to_block::<T>(1u32.into());
@@ -532,7 +537,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: 100000u32.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -556,17 +561,27 @@ mod benchmarks {
         let msp = MainStorageProviders::<T>::get(&msp_id);
         assert!(msp.is_some());
 
+        // Fill up the MSP with value propositions up to the amount of value propositions to delete.
+        for i in 1..value_props_to_delete + 1 {
+            Pallet::<T>::add_value_prop(
+                RawOrigin::Signed(user_account.clone()).into(),
+                (i + 10).into(),
+                vec![i as u8, 2, 3].try_into().unwrap(),
+                100u32.into(),
+            )
+            .map_err(|_| BenchmarkError::Stop("Failed to add value proposition."))?;
+        }
+
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
-        _(RawOrigin::Signed(user_account.clone()));
+        _(RawOrigin::Signed(user_account.clone()), msp_id.clone());
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the MSP sign off was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspSignOffSuccess {
-                who: user_account.clone(),
-                msp_id,
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MspSignOffSuccess {
+            who: user_account.clone(),
+            msp_id,
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the MSP was removed from the providers' storage
@@ -620,7 +635,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -656,11 +671,10 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the BSP sign off was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspSignOffSuccess {
-                who: user_account.clone(),
-                bsp_id,
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::BspSignOffSuccess {
+            who: user_account.clone(),
+            bsp_id,
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the BSP was removed from the providers' storage
@@ -714,7 +728,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -759,15 +773,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::CapacityChanged {
-                who: user_account.clone(),
-                provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
-                old_capacity: initial_capacity.into(),
-                new_capacity: new_capacity.into(),
-                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::CapacityChanged {
+            who: user_account.clone(),
+            provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
+            old_capacity: initial_capacity.into(),
+            new_capacity: new_capacity.into(),
+            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -828,7 +841,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -873,15 +886,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::CapacityChanged {
-                who: user_account.clone(),
-                provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
-                old_capacity: initial_capacity.into(),
-                new_capacity: new_capacity.into(),
-                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::CapacityChanged {
+            who: user_account.clone(),
+            provider_id: StorageProviderId::BackupStorageProvider(bsp_id),
+            old_capacity: initial_capacity.into(),
+            new_capacity: new_capacity.into(),
+            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -949,7 +961,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -994,15 +1006,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::CapacityChanged {
-                who: user_account.clone(),
-                provider_id: StorageProviderId::MainStorageProvider(msp_id),
-                old_capacity: initial_capacity.into(),
-                new_capacity: new_capacity.into(),
-                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::CapacityChanged {
+            who: user_account.clone(),
+            provider_id: StorageProviderId::MainStorageProvider(msp_id),
+            old_capacity: initial_capacity.into(),
+            new_capacity: new_capacity.into(),
+            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -1070,7 +1081,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1115,15 +1126,14 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the capacity change was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::CapacityChanged {
-                who: user_account.clone(),
-                provider_id: StorageProviderId::MainStorageProvider(msp_id),
-                old_capacity: initial_capacity.into(),
-                new_capacity: new_capacity.into(),
-                next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
-                    + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::CapacityChanged {
+            who: user_account.clone(),
+            provider_id: StorageProviderId::MainStorageProvider(msp_id),
+            old_capacity: initial_capacity.into(),
+            new_capacity: new_capacity.into(),
+            next_block_when_change_allowed: frame_system::Pallet::<T>::block_number()
+                + <T as crate::Config>::MinBlocksBetweenCapacityChanges::get(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the capacity was changed
@@ -1191,7 +1201,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1246,12 +1256,11 @@ mod benchmarks {
             value_prop_max_data_limit.into(),
         );
         let value_prop_id = value_prop.derive_id();
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropAdded {
-                msp_id,
-                value_prop_id,
-                value_prop: value_prop.clone(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::ValuePropAdded {
+            msp_id,
+            value_prop_id,
+            value_prop: value_prop.clone(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the value proposition was added
@@ -1314,7 +1323,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1360,12 +1369,11 @@ mod benchmarks {
             value_prop_max_data_limit.into(),
         );
         let value_prop_id = value_prop.derive_id();
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropAdded {
-                msp_id,
-                value_prop_id,
-                value_prop,
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::ValuePropAdded {
+            msp_id,
+            value_prop_id,
+            value_prop,
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         /*********** Call the extrinsic to benchmark: ***********/
@@ -1375,7 +1383,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the value proposition being made unavailable was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::ValuePropUnavailable {
+            <T as pallet::Config>::RuntimeEvent::from(Event::ValuePropUnavailable {
                 msp_id,
                 value_prop_id,
             });
@@ -1436,7 +1444,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1481,11 +1489,10 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the added multiaddress was emitted
-        let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MultiAddressAdded {
-                provider_id: bsp_id,
-                new_multiaddress: new_multiaddress.clone(),
-            });
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MultiAddressAdded {
+            provider_id: bsp_id,
+            new_multiaddress: new_multiaddress.clone(),
+        });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
         // Verify that the multiaddress was added to the BSP
@@ -1541,7 +1548,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1610,7 +1617,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of removing a multiaddress was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MultiAddressRemoved {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MultiAddressRemoved {
                 provider_id: bsp_id,
                 removed_multiaddress: multiaddress_to_remove.clone(),
             });
@@ -1686,7 +1693,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the MSP requesting to sign up was emitted
         let msp_request_sign_up_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1695,7 +1702,7 @@ mod benchmarks {
 
         // Verify that the event of the MSP actually signing up was emitted
         let msp_sign_up_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::MspSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspSignUpSuccess {
                 who: user_account.clone(),
                 msp_id: msp_id,
                 multiaddresses: multiaddresses.clone(),
@@ -1765,7 +1772,7 @@ mod benchmarks {
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the BSP requesting to sign up was emitted
         let bsp_request_sign_up_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1774,7 +1781,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP actually signing up was emitted
         let bsp_sign_up_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspSignUpSuccess {
                 who: user_account.clone(),
                 bsp_id: bsp_id,
                 multiaddresses: multiaddresses.clone(),
@@ -1838,7 +1845,7 @@ mod benchmarks {
 
         // Verify that the event of the BSP requesting to sign up was emitted
         let expected_event =
-            <T as pallet::Config>::RuntimeEvent::from(Event::<T>::BspRequestSignUpSuccess {
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
                 who: user_account.clone(),
                 capacity: initial_capacity.into(),
                 multiaddresses: multiaddresses.clone(),
@@ -1896,16 +1903,441 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the provider being slashed was emitted
-        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::<T>::Slashed {
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::Slashed {
             provider_id: bsp_id,
             amount: amount_to_slash,
         });
-        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+        frame_system::Pallet::<T>::assert_has_event(expected_event.into());
 
         // Verify that the accrued failed proof submissions have been cleared
         let accrued_failed_proofs =
             <T as crate::Config>::BenchmarkHelpers::get_accrued_failed_proofs(bsp_id.into());
         assert!(accrued_failed_proofs == 0);
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn top_up_deposit() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        let initial_capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the BSP
+        Pallet::<T>::request_bsp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            initial_capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
+
+        // Verify that the event of the BSP requesting to sign up was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: initial_capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the BSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
+
+        // Verify that the BSP is now in the providers' storage
+        let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id);
+        assert!(bsp.is_some());
+
+        // Increase the used capacity of the BSP to be greater than its initial capacity.
+        // Also increase the total capacity since it can't be less that the used one.
+        let used_capacity = 2 * initial_capacity;
+        let total_capacity = 3 * initial_capacity;
+        BackupStorageProviders::<T>::mutate(&bsp_id, |bsp| {
+            bsp.as_mut().unwrap().capacity_used = used_capacity.into();
+            bsp.as_mut().unwrap().capacity = total_capacity.into();
+        });
+
+        // Add the BSP to the AwaitingTopUpFromProviders storage to be removed from it
+        AwaitingTopUpFromProviders::<T>::insert(
+            &StorageProviderId::BackupStorageProvider(bsp_id),
+            TopUpMetadata::<T> {
+                started_at: frame_system::Pallet::<T>::block_number(),
+                end_block_grace_period: frame_system::Pallet::<T>::block_number() + 10u32.into(),
+            },
+        );
+
+        // Get the previous deposit the BSP has before topping up
+        let previous_deposit = <T as crate::Config>::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        );
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(RawOrigin::Signed(user_account.clone()));
+
+        /*********** Post-benchmark checks: ***********/
+        // Verify that the deposit changed and is bigger than the previous one
+        let new_deposit = <T as crate::Config>::NativeBalance::balance_on_hold(
+            &HoldReason::StorageProviderDeposit.into(),
+            &user_account,
+        );
+        assert!(new_deposit > previous_deposit);
+
+        // Verify that the event of the top up fulfilled was emitted
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::TopUpFulfilled {
+            provider_id: bsp_id,
+            amount: new_deposit - previous_deposit,
+        });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Verify that the BSP was removed from the AwaitingTopUpFromProviders storage
+        assert!(!AwaitingTopUpFromProviders::<T>::contains_key(
+            &StorageProviderId::BackupStorageProvider(bsp_id)
+        ));
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn delete_provider_bsp() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        let initial_capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the BSP
+        Pallet::<T>::request_bsp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            initial_capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
+
+        // Verify that the event of the BSP requesting to sign up was emitted
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::BspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: initial_capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the BSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
+
+        // Verify that the BSP is now in the providers' storage
+        let bsp_id = AccountIdToBackupStorageProviderId::<T>::get(&user_account).unwrap();
+        let bsp = BackupStorageProviders::<T>::get(&bsp_id);
+        assert!(bsp.is_some());
+
+        // Set the BSP as insolvent by adding it to the InsolventProviders storage
+        InsolventProviders::<T>::insert(&StorageProviderId::BackupStorageProvider(bsp_id), ());
+
+        // Initialise the BSP's challenge cycle so it has to be stopped
+        <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::initialise_challenge_cycle(
+            &bsp_id,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to initialise challenge cycle."))?;
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        delete_provider(RawOrigin::Signed(user_account.clone()), bsp_id);
+
+        /*********** Post-benchmark checks: ***********/
+
+        // Verify that the event of the BSP being deleted was emitted
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::BspDeleted {
+            provider_id: bsp_id,
+        });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Verify that the BSP was removed from the InsolventProviders storage
+        assert!(!InsolventProviders::<T>::contains_key(
+            &StorageProviderId::BackupStorageProvider(bsp_id)
+        ));
+
+        // Verify that the BSP's data was removed from the system
+        assert!(BackupStorageProviders::<T>::get(&bsp_id).is_none());
+        assert!(AccountIdToBackupStorageProviderId::<T>::get(&user_account).is_none());
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn delete_provider_msp(n: Linear<0, 20>, m: Linear<0, 20>) -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get the amount of value propositions to delete and the amount of buckets to move to another MSP.
+        let amount_of_value_propositions_to_delete: u32 = n.into();
+        let amount_of_buckets_to_move: u32 = m.into();
+
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the MSP to register
+        let capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let value_prop_price_per_unit_of_data_per_block = BalanceOf::<T>::max_value();
+        let commitment: BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize> = vec![
+				1;
+				<T as crate::Config>::MaxCommitmentSize::get()
+					.try_into()
+					.unwrap()
+			]
+        .try_into()
+        .unwrap();
+        let value_prop_max_data_limit = StorageDataUnit::<T>::max_value();
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the MSP
+        Pallet::<T>::request_msp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            capacity.into(),
+            multiaddresses.clone(),
+            value_prop_price_per_unit_of_data_per_block.into(),
+            commitment.clone(),
+            value_prop_max_data_limit.into(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request MSP sign up."))?;
+
+        // Verify that the event of the MSP requesting to sign up was emitted
+        let msp_request_sign_up_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspRequestSignUpSuccess {
+                who: user_account.clone(),
+                capacity: capacity.into(),
+                multiaddresses: multiaddresses.clone(),
+            });
+        frame_system::Pallet::<T>::assert_last_event(msp_request_sign_up_event.into());
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the MSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm MSP sign up."))?;
+
+        // Verify that the MSP is now in the providers' storage
+        let msp_id = AccountIdToMainStorageProviderId::<T>::get(&user_account).unwrap();
+        let msp = MainStorageProviders::<T>::get(&msp_id);
+        assert!(msp.is_some());
+
+        // Fill up the MSP with value propositions up to the amount of value propositions to delete.
+        for i in 1..amount_of_value_propositions_to_delete + 1 {
+            Pallet::<T>::add_value_prop(
+                RawOrigin::Signed(user_account.clone()).into(),
+                (i + 10).into(),
+                vec![i as u8, 2, 3].try_into().unwrap(),
+                100u32.into(),
+            )
+            .map_err(|_| BenchmarkError::Stop("Failed to add value proposition."))?;
+        }
+
+        // Fill up the MSP with buckets up to the amount of buckets to move to another MSP.
+        for i in 0..amount_of_buckets_to_move {
+            let bucket_id = <<T as crate::Config>::ProviderIdHashing as Hash>::hash(
+                format!("bucket_id_{}", i).as_bytes(),
+            );
+            MainStorageProviderIdsToBuckets::<T>::insert(&msp_id, bucket_id, ());
+            MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+                msp.as_mut().unwrap().amount_of_buckets += T::BucketCount::one();
+            });
+        }
+
+        // Set the MSP as insolvent by adding it to the InsolventProviders storage
+        InsolventProviders::<T>::insert(&StorageProviderId::MainStorageProvider(msp_id), ());
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        delete_provider(RawOrigin::Signed(user_account.clone()), msp_id);
+
+        /*********** Post-benchmark checks: ***********/
+
+        // Verify that the event of the MSP being deleted was emitted
+        let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MspDeleted {
+            provider_id: msp_id,
+        });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // Verify that the MSP was removed from the InsolventProviders storage
+        assert!(!InsolventProviders::<T>::contains_key(
+            &StorageProviderId::MainStorageProvider(msp_id)
+        ));
+
+        // Verify that the MSP's data was removed from the system
+        assert!(MainStorageProviders::<T>::get(&msp_id).is_none());
+        assert!(AccountIdToMainStorageProviderId::<T>::get(&user_account).is_none());
+        assert!(
+            MainStorageProviderIdsToValuePropositions::<T>::iter_prefix_values(&msp_id)
+                .next()
+                .is_none()
+        );
+        assert!(
+            MainStorageProviderIdsToBuckets::<T>::iter_prefix_values(&msp_id)
+                .next()
+                .is_none()
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
+    fn stop_all_cycles() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Make sure the block number is not 0 so events can be deposited.
+        if frame_system::Pallet::<T>::block_number() == Zero::zero() {
+            run_to_block::<T>(1u32.into());
+        }
+
+        // Set up an account with some balance.
+        let user_account: T::AccountId = account("Alice", 0, 0);
+        let user_balance = match 1_000_000_000_000_000u128.try_into() {
+            Ok(balance) => balance,
+            Err(_) => return Err(BenchmarkError::Stop("Balance conversion failed.")),
+        };
+        assert_ok!(<T as crate::Config>::NativeBalance::mint_into(
+            &user_account,
+            user_balance,
+        ));
+
+        // Setup the parameters of the BSP to register
+        let capacity = 100000u32;
+        let mut multiaddresses: BoundedVec<MultiAddress<T>, MaxMultiAddressAmount<T>> =
+            BoundedVec::new();
+        multiaddresses.force_push(
+            "/ip4/127.0.0.1/udp/1234"
+                .as_bytes()
+                .to_vec()
+                .try_into()
+                .ok()
+                .unwrap(),
+        );
+        let payment_account = user_account.clone();
+
+        // Request the sign up of the BSP
+        Pallet::<T>::request_bsp_sign_up(
+            RawOrigin::Signed(user_account.clone()).into(),
+            capacity.into(),
+            multiaddresses.clone(),
+            payment_account,
+        )
+        .map_err(|_| BenchmarkError::Stop("Failed to request BSP sign up."))?;
+
+        // Advance enough blocks to set up a valid random seed
+        let random_seed = <T as frame_system::Config>::Hashing::hash(b"random_seed");
+        run_to_block::<T>(10u32.into());
+        pallet_randomness::LatestOneEpochAgoRandomness::<T>::set(Some((
+            random_seed,
+            frame_system::Pallet::<T>::block_number(),
+        )));
+
+        // Confirm the sign up of the BSP
+        Pallet::<T>::confirm_sign_up(RawOrigin::Signed(user_account.clone()).into(), None)
+            .map_err(|_| BenchmarkError::Stop("Failed to confirm BSP sign up."))?;
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(RawOrigin::Signed(user_account.clone()));
 
         Ok(())
     }

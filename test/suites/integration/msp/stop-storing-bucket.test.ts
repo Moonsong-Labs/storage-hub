@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, mspKey, sleep, type EnrichedBspApi } from "../../../util";
+import { describeMspNet, mspKey, waitFor, type EnrichedBspApi } from "../../../util";
 import type { H256 } from "@polkadot/types/interfaces";
 
 describeMspNet(
@@ -14,14 +14,6 @@ describeMspNet(
       const maybeMspApi = await createMspApi();
       assert(maybeMspApi, "MSP API not available");
       mspApi = maybeMspApi;
-    });
-
-    it("Network launches and can be queried", async () => {
-      const userNodePeerId = await userApi.rpc.system.localPeerId();
-      strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
-
-      const mspNodePeerId = await mspApi.rpc.system.localPeerId();
-      strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
     it("Create bucket and issue storage request", async () => {
@@ -101,7 +93,10 @@ describeMspNet(
       );
 
       // Allow time for the MSP to update the local forest root
-      await sleep(3000);
+      await waitFor({
+        lambda: async () =>
+          (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toHex())).isSome
+      });
 
       const local_bucket_root = await mspApi.rpc.storagehubclient.getForestRoot(
         newBucketEventDataBlob.bucketId.toString()
@@ -124,7 +119,11 @@ describeMspNet(
         finaliseBlock: false
       });
 
-      await sleep(1500);
+      // Check that bucket root exists before finalization
+      await waitFor({
+        lambda: async () =>
+          (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString())).isSome
+      });
 
       const bucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
 
@@ -134,14 +133,11 @@ describeMspNet(
       // Finalise block in MSP node to trigger the event to delete the bucket.
       await mspApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
 
-      // Allow time for the MSP to delete files and bucket from storage
-      await sleep(1500);
-
-      const nonExistantBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(
-        bucketId.toString()
-      );
-
-      strictEqual(nonExistantBucketRoot.isNone, true);
+      // Check if the bucket root is deleted
+      await waitFor({
+        lambda: async () =>
+          (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString())).isNone
+      });
     });
   }
 );

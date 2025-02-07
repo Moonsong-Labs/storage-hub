@@ -218,10 +218,12 @@ export class BspNetTestApi implements AsyncDisposable {
        * Checks that `expectedExts` extrinsics have been submitted to the tx pool.
        * Then seals a block and checks for the `BspConfirmedStoring` events.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
+       * @param sealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number, bspAccount?: Address) =>
-        Waits.waitForBspStored(this._api, expectedExts, bspAccount),
+      bspStored: (expectedExts?: number, bspAccount?: Address, sealBlock = true) =>
+        Waits.waitForBspStored(this._api, expectedExts, bspAccount, sealBlock),
 
       /**
        * A generic utility to wait for a transaction to be in the tx pool.
@@ -232,11 +234,16 @@ export class BspNetTestApi implements AsyncDisposable {
 
       /**
        * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
-       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @param options - Optional configuration object
+       * @param options.expectedExts - Optional number of expected extrinsics
+       * @param options.timeoutMs - Optional timeout in milliseconds
        * @returns A promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
        */
-      bspStoredInTxPool: (expectedExts?: number) =>
-        Waits.waitForBspStoredWithoutSealing(this._api, expectedExts),
+      bspStoredInTxPool: (options?: { expectedExts?: number; timeoutMs?: number }) =>
+        Waits.waitForBspStoredWithoutSealing(this._api, {
+          checkQuantity: options?.expectedExts,
+          timeout: options?.timeoutMs
+        }),
 
       /**
        * Waits for a Storage Provider to complete storing a file key.
@@ -271,6 +278,14 @@ export class BspNetTestApi implements AsyncDisposable {
 
       // TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
       /**
+       * Waits for a MSP to submit a proof for a pending file deletion request.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has submitted a proof for a pending file deletion request.
+       */
+      mspPendingFileDeletionRequestSubmitProof: (expectedExts?: number) =>
+        Waits.waitForMspPendingFileDeletionRequestSubmitProof(this._api, expectedExts),
+
+      /**
        * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
@@ -293,7 +308,26 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the address has no pending extrinsics.
        */
       waitForAvailabilityToSendTx: (address: string) =>
-        Waits.waitForAvailabilityToSendTx(this._api, address)
+        Waits.waitForAvailabilityToSendTx(this._api, address),
+
+      /**
+       * Waits for a storage request to be removed from on-chain storage.
+       * This could happen because the storage request was fulfilled, it has expired or
+       * it has been rejected by the MSP. Either way, we only care that it's not on-chain anymore.
+       * @param fileKey - File key of the storage request to wait for.
+       * @returns A promise that resolves when the storage request is not on-chain.
+       */
+      storageRequestNotOnChain: (fileKey: H256 | string) =>
+        Waits.waitForStorageRequestNotOnChain(this._api, fileKey),
+
+      /**
+       * Waits for a storage request to be fulfilled by waiting and sealing blocks until
+       * the StorageRequestFulfilled event is detected.
+       * @param fileKey - File key of the storage request to wait for.
+       * @returns A promise that resolves when the storage request has been fulfilled.
+       */
+      storageRequestFulfilled: (fileKey: H256 | string) =>
+        Waits.waitForStorageRequestFulfilled(this._api, fileKey)
     };
 
     /**
@@ -309,8 +343,12 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
        * @returns A promise that resolves to a new bucket event.
        */
-      newBucket: (bucketName: string, owner?: KeyringPair, valuePropId?: HexString | null) =>
-        Files.createBucket(this._api, bucketName, valuePropId, undefined, owner),
+      newBucket: (
+        bucketName: string,
+        owner?: KeyringPair,
+        valuePropId?: HexString | null,
+        mspId?: HexString | null
+      ) => Files.createBucket(this._api, bucketName, valuePropId, mspId, owner),
 
       /**
        * Issue a new storage request.
@@ -338,6 +376,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param bucketName - The name of the bucket to be created.
        * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
+       * @param replicationTarget - Optional number of replicas to store the file. Defaults to the BasicReplicationTarget of the runtime.
        * @returns A promise that resolves to file metadata.
        */
       createBucketAndSendNewStorageRequest: (
@@ -407,7 +446,14 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves to a SealedBlock object.
        */
       seal: (options?: SealBlockOptions) =>
-        BspNetBlock.sealBlock(this._api, options?.calls, options?.signer, options?.finaliseBlock),
+        BspNetBlock.sealBlock(
+          this._api,
+          options?.calls,
+          options?.signer,
+          options?.nonce,
+          options?.parentHash,
+          options?.finaliseBlock
+        ),
       /**
        * Seal blocks until the next challenge period block.
        * It will verify that the SlashableProvider event is emitted and check if the provider is slashable with an additional failed challenge deadline.
@@ -418,17 +464,34 @@ export class BspNetTestApi implements AsyncDisposable {
       skipToChallengePeriod: (nextChallengeTick: number, provider: string) =>
         BspNetBlock.runToNextChallengePeriodBlock(this._api, nextChallengeTick, provider),
       /**
-       * Skips a specified number of blocks.
-       * Note: This skips too quickly for nodes to BSPs to react. Use skipTo where reaction extrinsics are required.
-       * @param blocksToAdvance - The number of blocks to skip.
+       * Skips a specified number of blocks quickly.
+       * Use this when you just need to advance the chain and don't care about BSP reactions.
+       *
+       * @param input - Either:
+       *   - A number specifying how many blocks to advance, or
+       *   - An options object with:
+       *     @param blocksToAdvance - The number of blocks to skip
+       *     @param paddingMs - Time in milliseconds to wait between blocks
        * @returns A promise that resolves when the specified number of blocks have been skipped.
        */
-      skip: (blocksToAdvance: number) => BspNetBlock.skipBlocks(this._api, blocksToAdvance),
+      skip: (input: number | { blocksToAdvance: number; paddingMs?: number }) => {
+        if (typeof input === "number") {
+          return BspNetBlock.skipBlocks(this._api, input);
+        }
+        return BspNetBlock.skipBlocks(this._api, input.blocksToAdvance, input.paddingMs);
+      },
       /**
-       * Advances the chain to a specific block number.
-       * @param blockNumber - The target block number to advance to.
-       * @param options - Optional parameters for waiting between blocks and watching for BSP proofs.
-       * @returns A promise that resolves when the specified block number is reached.
+       * Advances the chain to a specific block number, allowing time for BSPs to react.
+       * Use this when you need BSPs to have time to submit proofs or other reactions.
+       *
+       * @param blockNumber - The target block number to advance to
+       * @param options - Optional configuration:
+       *   @param options.waitBetweenBlocks - Time to wait between blocks (ms), or true for default wait
+       *   @param options.watchForBspProofs - Array of BSP addresses to watch for proofs from
+       *   @param options.finalised - Whether to finalize the blocks
+       *   @param options.spam - Whether to include spam transactions
+       *   @param options.verbose - Whether to log detailed progress
+       * @returns A promise that resolves when the specified block number is reached
        */
       skipTo: (
         blockNumber: number,
@@ -452,24 +515,39 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param hashToFinalise - The hash of the block to finalise.
        * @returns A Promise that resolves when the chain reorganization is complete.
        */
-      finaliseBlock: (hasshToFinalise: string) =>
-        BspNetBlock.finaliseBlock(this._api, hasshToFinalise),
+      finaliseBlock: (hashToFinalise: string) =>
+        BspNetBlock.finaliseBlock(this._api, hashToFinalise),
+
       /**
-       * Causes a chain re-org by creating a finalised block on top of the last finalised block.
-       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * Performs a chain reorganisation by creating a finalised block on top of the parent block.
        *
-       * IMPORTANT! Finality is not a network-wide synced state. Each node will have its
-       * own finalised head, as far as it knows. So for this reorg to happen in all nodes,
-       * all nodes must be made aware of the new finalised head.
+       * This function is used to simulate network forks and test the system's ability to handle
+       * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+       * in face of potential consensus issues.
        *
-       * @returns A promise that resolves when the chain re-org is complete.
+       * @throws Will throw an error if the head block is already finalised.
+       * @returns A Promise that resolves when the chain reorganization is complete.
        */
       reOrgWithFinality: () => BspNetBlock.reOrgWithFinality(this._api),
       /**
-       * Causes a chain re-org by creating a longer forked chain.
-       * Note: This requires the head block to be unfinalised, otherwise it will throw!
+       * Performs a chain reorganisation by creating a longer forked chain.
+       * If no parent starting block is provided, the chain will start the fork from the last
+       * finalised block.
+       *
+       * !!! WARNING !!!
+       *
+       * The number of blocks this function can create for the alternative fork is limited by the
+       * "unincluded segment capacity" parameter, set in the `ConsensusHook` config type of the
+       * `cumulus-pallet-parachain-system`. If you try to build more blocks than this limit to
+       * achieve the reorg, the node will panic when building the block.
+       *
+       * This function is used to simulate network forks and test the system's ability to handle
+       * chain reorganizations. It's a critical tool for ensuring the robustness of the BSP network
+       * in face of potential consensus issues.
        *
        * @param startingBlockHash - Optional. The hash of the block to start the fork from.
+       * @throws Will throw an error if the last finalised block is greater than the starting block
+       *         or if the starting block is the same or higher than the current block.
        * @returns A promise that resolves when the chain re-org is complete.
        */
       reOrgWithLongerChain: (startingBlockHash?: string) =>

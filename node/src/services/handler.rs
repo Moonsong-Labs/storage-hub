@@ -7,10 +7,11 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
-        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForNewMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
+        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForNewMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
@@ -25,18 +26,20 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::tasks::{
-    bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
-    bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
-    bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-    msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
-    msp_move_bucket::MspMoveBucketTask, msp_upload_file::MspUploadFileTask,
-    sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
-};
-
-use super::types::{
-    BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
-    ShStorageLayer, UserRole,
+use crate::{
+    services::types::{
+        BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
+        ShStorageLayer, UserRole,
+    },
+    tasks::{
+        bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
+        bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
+        bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
+        msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
+        msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspMoveBucketTask,
+        msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
+        user_sends_file::UserSendsFileTask,
+    },
 };
 
 /// Configuration parameters for Storage Providers.
@@ -227,8 +230,6 @@ where
             .subscribe_to(&self.task_spawner, &self.blockchain);
         move_bucket_requested_for_new_msp_event_bus_listener.start();
 
-        let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
-
         // MspStoppedStoringTask handles events for handling data deletion.
         let msp_stopped_storing_task = MspStoppedStoringTask::new(self.clone());
         // Subscribing to FinalisedMspStoppedStoringBucket event from the BlockchainService.
@@ -240,6 +241,43 @@ where
             .subscribe_to(&self.task_spawner, &self.blockchain);
         finalised_msp_stopped_storing_bucket_event_bus_listener.start();
 
+        // MspDeleteFileTask handles events for deleting individual files from an MSP.
+        let msp_delete_file_task = MspDeleteFileTask::new(self.clone());
+        // Subscribing to FileDeletionRequest event from the BlockchainService.
+        let file_deletion_request_event_bus_listener: EventBusListener<FileDeletionRequest, _> =
+            msp_delete_file_task
+                .clone()
+                .subscribe_to(&self.task_spawner, &self.blockchain);
+        file_deletion_request_event_bus_listener.start();
+        // Subscribing to ProcessFileDeletionRequest event from the BlockchainService.
+        let process_file_deletion_request_event_bus_listener: EventBusListener<
+            ProcessFileDeletionRequest,
+            _,
+        > = msp_delete_file_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        process_file_deletion_request_event_bus_listener.start();
+        // Subscribing to FinalisedProofSubmittedForPendingFileDeletionRequest event from the BlockchainService.
+        let finalised_file_deletion_request_event_bus_listener: EventBusListener<
+            FinalisedProofSubmittedForPendingFileDeletionRequest,
+            _,
+        > = msp_delete_file_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        finalised_file_deletion_request_event_bus_listener.start();
+
+        // MspMoveBucketTask handles events for moving buckets to a new MSP.
+        let msp_move_bucket_task = MspMoveBucketTask::new(self.clone());
+        // Subscribing to MoveBucketRequestedForNewMsp event from the FileTransferService.
+        let move_bucket_requested_for_new_msp_event_bus_listener: EventBusListener<
+            MoveBucketRequestedForNewMsp,
+            _,
+        > = msp_move_bucket_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain);
+        move_bucket_requested_for_new_msp_event_bus_listener.start();
+
+        let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
         // Subscribing to NewStorageRequest event from the BlockchainService.
         let notify_period_event_bus_listener: EventBusListener<NotifyPeriod, _> =
             msp_charge_fees_task
@@ -404,15 +442,8 @@ where
                 .subscribe_to(&self.task_spawner, &self.blockchain);
         move_bucket_expired_event_bus_listener.start();
 
-        // Task that listen for `BspConfirmStoppedStoring` to delete file and update forest root.
+        // Task that listen for `FinalisedBspConfirmStoppedStoring` to delete file
         let bsp_delete_file_task = BspDeleteFileTask::new(self.clone());
-        let bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
-            BspConfirmStoppedStoring,
-            _,
-        > = bsp_delete_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
-        bsp_confirm_stopped_storing_event_bus_listener.start();
         let finalised_bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
             FinalisedBspConfirmStoppedStoring,
             _,

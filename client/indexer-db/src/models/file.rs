@@ -22,10 +22,10 @@ pub enum FileStorageRequestStep {
 #[diesel(table_name = file)]
 pub struct File {
     /// The ID of the file as stored in the database. For the runtime id, use `onchain_bsp_id`.
-    pub id: i32,
+    pub id: i64,
     pub account: Vec<u8>,
     pub file_key: Vec<u8>,
-    pub bucket_id: i32,
+    pub bucket_id: i64,
     pub location: Vec<u8>,
     pub fingerprint: Vec<u8>,
     pub size: i64,
@@ -41,8 +41,8 @@ pub struct File {
 #[diesel(belongs_to(File, foreign_key = file_id))]
 #[diesel(belongs_to(crate::models::PeerId, foreign_key = peer_id))]
 pub struct FilePeerId {
-    pub file_id: i32,
-    pub peer_id: i32,
+    pub file_id: i64,
+    pub peer_id: i64,
 }
 
 impl File {
@@ -50,7 +50,7 @@ impl File {
         conn: &mut DbConnection<'a>,
         account: impl Into<Vec<u8>>,
         file_key: impl Into<Vec<u8>>,
-        bucket_id: i32,
+        bucket_id: i64,
         location: impl Into<Vec<u8>>,
         fingerprint: impl Into<Vec<u8>>,
         size: i64,
@@ -129,7 +129,7 @@ impl File {
 
     pub async fn get_by_bucket_id<'a>(
         conn: &mut DbConnection<'a>,
-        bucket_id: i32,
+        bucket_id: i64,
     ) -> Result<Vec<Self>, diesel::result::Error> {
         let files = file::table
             .filter(file::bucket_id.eq(bucket_id))

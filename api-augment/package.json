@@ -1,6 +1,6 @@
 {
   "name": "@storagehub/api-augment",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "description": "",
   "scripts": {
     "scrape": "pnpm tsx scripts/scrapeMetadata.ts",
@@ -26,14 +26,14 @@
   },
   "license": "ISC",
   "dependencies": {
-    "@polkadot/api": "12.4.2",
-    "@polkadot/api-base": "12.4.2",
-    "@polkadot/rpc-core": "12.4.2",
-    "@polkadot/typegen": "12.4.2",
-    "@polkadot/types": "12.4.2",
-    "@polkadot/types-codec": "12.4.2",
+    "@polkadot/api": "*",
+    "@polkadot/api-base": "*",
+    "@polkadot/rpc-core": "*",
+    "@polkadot/typegen": "*",
+    "@polkadot/types": "*",
+    "@polkadot/types-codec": "*",
     "@storagehub/types-bundle": "workspace:*",
     "tsx": "4.19.0",
-    "typescript": "5.5.4"
+    "typescript": "*"
   }
 }

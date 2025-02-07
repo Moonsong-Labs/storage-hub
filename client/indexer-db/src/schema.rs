@@ -2,7 +2,7 @@
 
 diesel::table! {
     bsp (id) {
-        id -> Int4,
+        id -> Int8,
         account -> Varchar,
         capacity -> Numeric,
         stake -> Numeric,
@@ -16,22 +16,22 @@ diesel::table! {
 
 diesel::table! {
     bsp_file (bsp_id, file_id) {
-        bsp_id -> Int4,
-        file_id -> Int4,
+        bsp_id -> Int8,
+        file_id -> Int8,
     }
 }
 
 diesel::table! {
     bsp_multiaddress (bsp_id, multiaddress_id) {
-        bsp_id -> Int4,
-        multiaddress_id -> Int4,
+        bsp_id -> Int8,
+        multiaddress_id -> Int8,
     }
 }
 
 diesel::table! {
     bucket (id) {
-        id -> Int4,
-        msp_id -> Nullable<Int4>,
+        id -> Int8,
+        msp_id -> Nullable<Int8>,
         account -> Varchar,
         onchain_bucket_id -> Bytea,
         name -> Bytea,
@@ -45,10 +45,10 @@ diesel::table! {
 
 diesel::table! {
     file (id) {
-        id -> Int4,
+        id -> Int8,
         account -> Bytea,
         file_key -> Bytea,
-        bucket_id -> Int4,
+        bucket_id -> Int8,
         location -> Bytea,
         fingerprint -> Bytea,
         size -> Int8,
@@ -60,14 +60,14 @@ diesel::table! {
 
 diesel::table! {
     file_peer_id (file_id, peer_id) {
-        file_id -> Int4,
-        peer_id -> Int4,
+        file_id -> Int8,
+        peer_id -> Int8,
     }
 }
 
 diesel::table! {
     msp (id) {
-        id -> Int4,
+        id -> Int8,
         account -> Varchar,
         capacity -> Numeric,
         value_prop -> Varchar,
@@ -79,14 +79,14 @@ diesel::table! {
 
 diesel::table! {
     msp_multiaddress (msp_id, multiaddress_id) {
-        msp_id -> Int4,
-        multiaddress_id -> Int4,
+        msp_id -> Int8,
+        multiaddress_id -> Int8,
     }
 }
 
 diesel::table! {
     multiaddress (id) {
-        id -> Int4,
+        id -> Int8,
         address -> Bytea,
         created_at -> Timestamp,
         updated_at -> Timestamp,
@@ -95,7 +95,7 @@ diesel::table! {
 
 diesel::table! {
     paymentstream (id) {
-        id -> Int4,
+        id -> Int8,
         account -> Varchar,
         provider -> Varchar,
         total_amount_paid -> Numeric,
@@ -106,7 +106,7 @@ diesel::table! {
 
 diesel::table! {
     peer_id (id) {
-        id -> Int4,
+        id -> Int8,
         peer -> Bytea,
         created_at -> Timestamp,
         updated_at -> Timestamp,

@@ -374,6 +374,17 @@ export class NetworkLauncher {
 
   public async setupGlobal(api: EnrichedBspApi) {
     const amount = 10000n * 10n ** 12n;
+    const maxReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        MaxReplicationTarget: [null, 10]
+      }
+    };
+    const tickRangeToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 1]
+      }
+    };
+
     const signedCalls = [
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(bspKey.address, amount))
@@ -381,16 +392,21 @@ export class NetworkLauncher {
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(shUser.address, amount))
         .signAsync(alice, { nonce: 1 }),
-      api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(1, 1)).signAsync(alice, { nonce: 2 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(mspKey.address, amount))
-        .signAsync(alice, { nonce: 3 }),
+        .signAsync(alice, { nonce: 2 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(mspTwoKey.address, amount))
-        .signAsync(alice, { nonce: 4 }),
+        .signAsync(alice, { nonce: 3 }),
       api.tx.sudo
         .sudo(api.tx.balances.forceSetBalance(mspDownKey.address, amount))
-        .signAsync(alice, { nonce: 5 })
+        .signAsync(alice, { nonce: 4 }),
+      api.tx.sudo
+        .sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
+        .signAsync(alice, { nonce: 5 }),
+      api.tx.sudo
+        .sudo(api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter))
+        .signAsync(alice, { nonce: 6 })
     ];
 
     const sudoTxns = await Promise.all(signedCalls);
@@ -464,7 +480,15 @@ export class NetworkLauncher {
     //     MaximumTreasuryCut: [null, {VALUE_YOU_WANT}],
     //     BspStopStoringFilePenalty: [null, {VALUE_YOU_WANT}],
     //     ProviderTopUpTtl: [null, {VALUE_YOU_WANT}],
-    //     DefaultReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     BasicReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     StandardReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     HighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     SuperHighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     UltraHighSecurityReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     MaxReplicationTarget: [null, {VALUE_YOU_WANT}],
+    //     TickRangeToMaximumThreshold: [null, {VALUE_YOU_WANT}],
+    //     StorageRequestTtl: [null, {VALUE_YOU_WANT}],
+    //     MinWaitForStopStoring: [null, {VALUE_YOU_WANT}],
     //     MinSeedPeriod: [null, {VALUE_YOU_WANT}],
     //     StakeToSeedPeriod: [null, {VALUE_YOU_WANT}],
     //   }
@@ -507,15 +531,55 @@ export class NetworkLauncher {
     await api.block.seal({
       calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(minChallengePeriodRuntimeParameter))]
     });
-    const defaultReplicationTargetRuntimeParameter = {
+    const basicReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
-        DefaultReplicationTarget: [null, 3]
+        BasicReplicationTarget: [null, 3]
       }
     };
     await api.block.seal({
       calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(basicReplicationTargetRuntimeParameter))
       ]
+    });
+    const maxReplicationTargetRuntimeParameter = {
+      RuntimeConfig: {
+        MaxReplicationTarget: [null, 9]
+      }
+    };
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(maxReplicationTargetRuntimeParameter))
+      ]
+    });
+    const tickRangeToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 10]
+      }
+    };
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(
+          api.tx.parameters.setParameter(tickRangeToMaximumThresholdRuntimeParameter)
+        )
+      ]
+    });
+    const minWaitForStopStoringRuntimeParameter = {
+      RuntimeConfig: {
+        MinWaitForStopStoring: [null, 15]
+      }
+    };
+    await api.block.seal({
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(minWaitForStopStoringRuntimeParameter))
+      ]
+    });
+    const storageRequestTtlRuntimeParameter = {
+      RuntimeConfig: {
+        StorageRequestTtl: [null, 20]
+      }
+    };
+    await api.block.seal({
+      calls: [api.tx.sudo.sudo(api.tx.parameters.setParameter(storageRequestTtlRuntimeParameter))]
     });
   }
 
@@ -544,6 +608,7 @@ export class NetworkLauncher {
       // This will advance the block which also contains the BSP volunteer tx.
       // Hence why we can wait for the BSP to confirm storing.
       await api.wait.mspResponseInTxPool();
+      await api.wait.bspVolunteer();
       await api.block.seal();
       await api.wait.bspStored();
     }
@@ -554,19 +619,26 @@ export class NetworkLauncher {
   public async initExtraBsps() {
     await using api = await this.getApi("sh-user");
 
-    const defaultReplicationTargetRuntimeParameter = {
+    const basicReplicationTargetRuntimeParameter = {
       RuntimeConfig: {
-        DefaultReplicationTarget: [null, 4]
+        BasicReplicationTarget: [null, 4]
       }
     };
     await api.block.seal({
       calls: [
-        api.tx.sudo.sudo(api.tx.parameters.setParameter(defaultReplicationTargetRuntimeParameter))
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(basicReplicationTargetRuntimeParameter))
       ]
     });
 
+    const tickToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 1]
+      }
+    };
     await api.block.seal({
-      calls: [api.tx.sudo.sudo(api.tx.fileSystem.setGlobalParameters(null, 1))]
+      calls: [
+        api.tx.sudo.sudo(api.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter))
+      ]
     });
 
     // Add more BSPs to the network.

@@ -1,5 +1,5 @@
 import assert, { notEqual, strictEqual } from "node:assert";
-import { describeBspNet, shUser, sleep, type EnrichedBspApi } from "../../../util";
+import { describeBspNet, shUser, sleep, waitFor, type EnrichedBspApi } from "../../../util";
 import type { H256 } from "@polkadot/types/interfaces";
 import type { Bytes, u64, U8aFixed } from "@polkadot/types";
 
@@ -67,19 +67,26 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          1
+          {
+            Custom: 1
+          }
         )
       ],
       signer: shUser
     });
-
-    await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     await userApi.assert.extrinsicPresent({
       module: "fileSystem",
       method: "bspVolunteer",
       checkTxPool: true
     });
+
+    const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+
+    const newStorageRequestDataBlob =
+      userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+
+    assert(newStorageRequestDataBlob, "NewStorageRequest event data does not match expected type");
 
     await userApi.block.seal();
     const {
@@ -107,13 +114,18 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     );
     strictEqual(resSize.toBigInt(), file_size.toBigInt());
 
-    await sleep(5000); // wait for the bsp to download the file
-    await userApi.assert.extrinsicPresent({
-      module: "fileSystem",
-      method: "bspConfirmStoring",
-      checkTxPool: true
+    await waitFor({
+      lambda: async () =>
+        (await bspApi.rpc.storagehubclient.isFileInFileStorage(newStorageRequestDataBlob.fileKey))
+          .isFileFound
     });
 
+    // Wait for the BSP confirm extrinsic to be submitted to the TX pool
+    await userApi.wait.bspStoredInTxPool({
+      expectedExts: 1
+    });
+
+    // Seal the block with the confirm TX
     await userApi.block.seal();
     const {
       data: {
@@ -128,7 +140,13 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     strictEqual(bspConfirmRes_bspId.toHuman(), userApi.shConsts.TEST_ARTEFACTS[source].fingerprint);
 
-    await sleep(1000); // wait for the bsp to process the BspConfirmedStoring event
+    // TODO: Investigate what needs to be added to poll
+    await sleep(1000); // to avoid extFailure- IssueRequest already registered for file
+    await waitFor({
+      lambda: async () =>
+        (await bspApi.rpc.storagehubclient.getForestRoot(null)).toHex() !==
+        initialBspForestRoot.unwrap().toHex()
+    });
     const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
     strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
     notEqual(bspForestRootAfterConfirm.toString(), initialBspForestRoot.toString());
@@ -155,7 +173,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          1
+          {
+            Custom: 1
+          }
         )
       ],
       signer: shUser
@@ -181,9 +201,19 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
   });
 
   it("bsp volunteers multiple files properly", async () => {
+    const initialBspForestRoot = await bspApi.rpc.storagehubclient.getForestRoot(null);
     // 1 block to maxthreshold (i.e. instant acceptance)
+    const tickToMaximumThresholdRuntimeParameter = {
+      RuntimeConfig: {
+        TickRangeToMaximumThreshold: [null, 1]
+      }
+    };
     await userApi.block.seal({
-      calls: [userApi.tx.sudo.sudo(userApi.tx.fileSystem.setGlobalParameters(null, 1))]
+      calls: [
+        userApi.tx.sudo.sudo(
+          userApi.tx.parameters.setParameter(tickToMaximumThresholdRuntimeParameter)
+        )
+      ]
     });
 
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/cloud.jpg"];
@@ -215,7 +245,9 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          null
+          {
+            Basic: null
+          }
         )
       );
     }
@@ -262,7 +294,11 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     strictEqual(bspConfirmRes_fileKeys.length, 1);
 
     // Wait for the BSP to process the BspConfirmedStoring event.
-    await sleep(500);
+    await waitFor({
+      lambda: async () =>
+        (await bspApi.rpc.storagehubclient.getForestRoot(null)).toHex() !==
+        initialBspForestRoot.unwrap().toHex()
+    });
     const bspForestRootAfterConfirm = await bspApi.rpc.storagehubclient.getForestRoot(null);
 
     strictEqual(bspForestRootAfterConfirm.toString(), bspConfirmRes_newRoot.toString());
@@ -281,7 +317,12 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     // Here we expect 2 batched files to be confirmed.
     strictEqual(bspConfirm2Res_fileKeys.length, 2);
 
-    await sleep(500); // wait for the bsp to process the BspConfirmedStoring event
+    await waitFor({
+      lambda: async () =>
+        (await bspApi.rpc.storagehubclient.getForestRoot(null)).toHex() !==
+        bspForestRootAfterConfirm.toHex()
+    });
+
     const bspForestRootAfterConfirm2 = await bspApi.rpc.storagehubclient.getForestRoot(null);
     strictEqual(bspForestRootAfterConfirm2.toString(), bspConfirm2Res_newRoot.toString());
   });

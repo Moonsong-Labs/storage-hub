@@ -3,7 +3,8 @@ import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import assert from "node:assert";
-import type { Address, H256 } from "@polkadot/types/interfaces";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
+import * as Assertions from "../asserts";
 import type { WaitForTxOptions } from "./test-api";
 
 /**
@@ -123,6 +124,8 @@ export const waitForBspVolunteerWithoutSealing = async (
  *
  * @param api - The ApiPromise instance to interact with the blockchain.
  * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
+ * @param shouldSealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
  * @returns A Promise that resolves when a BSP has confirmed storing a file.
  *
  * @throws Will throw an error if the expected extrinsic or event is not found.
@@ -130,7 +133,8 @@ export const waitForBspVolunteerWithoutSealing = async (
 export const waitForBspStored = async (
   api: ApiPromise,
   checkQuantity?: number,
-  bspAccount?: Address
+  bspAccount?: Address,
+  shouldSealBlock = true
 ) => {
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
@@ -173,13 +177,16 @@ export const waitForBspStored = async (
           `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspConfirmStoring`
         );
       }
-      const { events } = await sealBlock(api);
-      assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
+
+      if (shouldSealBlock) {
+        const { events } = await sealBlock(api);
+        assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
+      }
       break;
-    } catch {
+    } catch (error) {
       assert(
         i !== iterations,
-        `Failed to detect BSP storage confirmation extrinsic in txPool after ${(i * delay) / 1000}s`
+        `Failed to confirm BSP storage after ${(i * delay) / 1000}s. Last error: ${error}`
       );
     }
   }
@@ -198,17 +205,20 @@ export const waitForBspStored = async (
  *
  * @throws Will throw an error if the expected extrinsic is not found.
  */
-export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuantity?: number) => {
+export const waitForBspStoredWithoutSealing = async (
+  api: ApiPromise,
+  options?: { checkQuantity?: number; timeout?: number }
+) => {
   await waitForTxInPool(api, {
     module: "fileSystem",
     method: "bspConfirmStoring",
-    checkQuantity,
-    timeout: 10000
+    checkQuantity: options?.checkQuantity,
+    timeout: options?.timeout ?? 10_000
   });
 };
 
 /**
- * Waits for a BSP to complete storing a file in its file storage.
+ * Waits for a Provider to complete storing a file in its file storage.
  *
  * This function performs the following steps:
  * 1. Waits for a longer period to allow for local file transfer.
@@ -216,13 +226,13 @@ export const waitForBspStoredWithoutSealing = async (api: ApiPromise, checkQuant
  *
  * @param api - The ApiPromise instance to interact with the RPC.
  * @param fileKey - The file key to check for in the file storage.
- * @returns A Promise that resolves when a BSP has correctly stored a file in its file storage.
+ * @returns A Promise that resolves when the Provider has correctly stored a file in its file storage.
  *
  * @throws Will throw an error if the file is not complete in the file storage after a timeout.
  */
 export const waitForFileStorageComplete = async (api: ApiPromise, fileKey: H256 | string) => {
-  // To allow time for local file transfer to complete (10s)
-  const iterations = 10;
+  // To allow time for local file transfer to complete (20s)
+  const iterations = 20;
   const delay = 1000;
   for (let i = 0; i < iterations + 1; i++) {
     try {
@@ -233,7 +243,7 @@ export const waitForFileStorageComplete = async (api: ApiPromise, fileKey: H256 
     } catch {
       assert(
         i !== iterations,
-        `Failed to detect BSP file in file storage after ${(i * delay) / 1000}s`
+        `Failed to detect file in Provider's file storage after ${(i * delay) / 1000}s`
       );
     }
   }
@@ -362,6 +372,31 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
 };
 
 /**
+ * Waits for a MSP to submit a proof for a pending file deletion request.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a short period to allow the node to react.
+ * 2. Checks for the presence of a 'pendingFileDeletionRequestSubmitProof' extrinsic in the transaction pool.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @returns A Promise that resolves when a MSP has submitted a proof for a pending file deletion request.
+ *
+ * @throws Will throw an error if the expected extrinsic is not found.
+ */
+export const waitForMspPendingFileDeletionRequestSubmitProof = async (
+  api: ApiPromise,
+  checkQuantity?: number
+) => {
+  await waitForTxInPool(api, {
+    module: "fileSystem",
+    method: "pendingFileDeletionRequestSubmitProof",
+    checkQuantity,
+    timeout: 10000
+  });
+};
+
+/**
  * Waits for a block where the given address has no pending extrinsics.
  *
  * This can be used to wait for a block where it is safe to send a transaction signed by the given address,
@@ -464,6 +499,87 @@ export const waitForMspFileStorageComplete = async (api: ApiPromise, fileKey: H2
       assert(
         i !== iterations,
         `Failed to detect MSP file in file storage after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+export const waitForStorageRequestNotOnChain = async (api: ApiPromise, fileKey: H256 | string) => {
+  // 10 iterations at 1 second per iteration = 10 seconds wait time
+  const iterations = 10;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      // Try to get the storage request from the chain
+      const result = await api.query.fileSystem.storageRequests(fileKey);
+
+      // If the storage request wasn't found, it has been fulfilled/expired/rejected.
+      if (result.isNone) {
+        return;
+      }
+
+      // If it has been found, seal a new block and wait for the next iteration to check if
+      // it has been fulfilled/expired/rejected.
+      await sealBlock(api);
+    } catch {
+      assert(
+        i !== iterations,
+        `Detected storage request in on-chain storage after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+export const waitForStorageRequestFulfilled = async (api: ApiPromise, fileKey: H256 | string) => {
+  // 10 iterations at 1 second per iteration = 10 seconds wait time
+  const iterations = 10;
+  const delay = 1000;
+
+  // First check that the storage request exists in storage, since otherwise the StorageRequestFulfilled event
+  // will never be emitted.
+  const storageRequest = await api.query.fileSystem.storageRequests(fileKey);
+  assert(
+    storageRequest.isSome,
+    "Storage request not found in storage but `waitForStorageRequestFulfilled` was called"
+  );
+
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      // Check in the events of the last block to see if any StorageRequestFulfilled event were emitted and get them.
+      const previous_block_events = (await api.query.system.events()) as EventRecord[];
+      const storageRequestFulfilledEvents = Assertions.assertEventMany(
+        api,
+        "fileSystem",
+        "StorageRequestFulfilled",
+        previous_block_events
+      );
+
+      // Check if any of the events are for the file key we are waiting for.
+      const storageRequestFulfilledEvent = storageRequestFulfilledEvents.find((event) => {
+        const storageRequestFulfilledEventData =
+          api.events.fileSystem.StorageRequestFulfilled.is(event.event) && event.event.data;
+        assert(
+          storageRequestFulfilledEventData,
+          "Event doesn't match type but eventMany should have filtered it out"
+        );
+        storageRequestFulfilledEventData.fileKey.toString() === fileKey.toString();
+      });
+
+      // If the event was found, check to make sure the storage request is not on-chain and return.
+      if (storageRequestFulfilledEvent) {
+        await waitForStorageRequestNotOnChain(api, fileKey);
+        return;
+      }
+
+      // If the event was not found, seal a new block and wait for the next iteration to check if
+      // it has been emitted.
+      await sealBlock(api);
+    } catch {
+      assert(
+        i !== iterations,
+        `Storage request has not been fulfilled after ${(i * delay) / 1000}s`
       );
     }
   }

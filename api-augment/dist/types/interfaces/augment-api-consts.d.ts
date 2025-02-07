@@ -62,13 +62,36 @@ declare module "@polkadot/api-base/types/consts" {
     };
     fileSystem: {
       /**
+       * Basic security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~1% chance of their file
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
+       **/
+      basicReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * Penalty payed by a BSP when they forcefully stop storing a file.
        **/
       bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
       /**
-       * Default replication target
+       * The deposit paid by a user to create a new file deletion request.
+       *
+       * This deposit gets returned to the user when the MSP submits an inclusion proof of the file to
+       * confirm its deletion, but gets sent to the MSP if the MSP did not actually had the file and
+       * sends a non-inclusion proof instead. This is done to prevent users being able to spam MSPs
+       * with malicious file deletion requests.
        **/
-      defaultReplicationTarget: u32 & AugmentedConst<ApiType>;
+      fileDeletionRequestDeposit: u128 & AugmentedConst<ApiType>;
+      /**
+       * High security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.01% chance of their file
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
+       **/
+      highSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
        **/
@@ -78,9 +101,9 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxDataServerMultiAddresses: u32 & AugmentedConst<ApiType>;
       /**
-       * Maximum number of expired items (per type) to clean up in a single block.
+       * Maximum number of expired items (per type) to clean up in a single tick.
        **/
-      maxExpiredItemsInBlock: u32 & AugmentedConst<ApiType>;
+      maxExpiredItemsInTick: u32 & AugmentedConst<ApiType>;
       /**
        * Maximum byte size of a file path.
        **/
@@ -94,6 +117,10 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxPeerIdSize: u32 & AugmentedConst<ApiType>;
       /**
+       * Maximum replication target that a user can select for a new storage request.
+       **/
+      maxReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
        * Maximum number of file deletion requests a user can have pending.
        **/
       maxUserPendingDeletionRequests: u32 & AugmentedConst<ApiType>;
@@ -102,7 +129,7 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       maxUserPendingMoveBucketRequests: u32 & AugmentedConst<ApiType>;
       /**
-       * Number of blocks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
+       * Number of ticks required to pass between a BSP requesting to stop storing a file and it being able to confirm to stop storing it.
        **/
       minWaitForStopStoring: u32 & AugmentedConst<ApiType>;
       /**
@@ -110,9 +137,14 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       moveBucketRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
-       * Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
+       * Standard security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.1% chance of their file
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
        **/
-      pendingFileDeletionRequestTtl: u32 & AugmentedConst<ApiType>;
+      standardReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * Deposit held from the User when creating a new storage request
        **/
@@ -122,9 +154,32 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       storageRequestTtl: u32 & AugmentedConst<ApiType>;
       /**
+       * Super high security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.001% chance of their file
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
+       **/
+      superHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
+      /**
+       * The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
+       * to arrive at its maximum value.
+       **/
+      tickRangeToMaximumThreshold: u32 & AugmentedConst<ApiType>;
+      /**
        * The treasury account of the runtime, where a fraction of each payment goes.
        **/
       treasuryAccount: AccountId32 & AugmentedConst<ApiType>;
+      /**
+       * Ultra high security replication target for a new storage request.
+       *
+       * This should be high enough so that it gives users a ~0.0001% chance of their file
+       * being controlled by a single malicious entity under certain network conditions.
+       *
+       * For more details, see [crate::types::ReplicationTarget].
+       **/
+      ultraHighSecurityReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
        * Generic const
        **/
