@@ -51,7 +51,7 @@ use crate::{
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{Extrinsic, MinimalBlockInfo, NewBlockNotificationKind, Tip},
+    types::{Extrinsic, MinimalBlockInfo, NewBlockNotificationKind, SendExtrinsicOptions, Tip},
     BlockchainService,
 };
 
@@ -336,8 +336,7 @@ where
     pub(crate) async fn send_extrinsic(
         &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-        tip: Tip,
-        nonce: Option<u32>,
+        options: SendExtrinsicOptions,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
@@ -345,12 +344,12 @@ where
 
         // Use the highest valid nonce.
         let nonce = max(
-            nonce.unwrap_or(self.nonce_counter),
+            options.nonce().unwrap_or(self.nonce_counter),
             self.account_nonce(&block_hash),
         );
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, tip);
+        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, options.tip());
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());

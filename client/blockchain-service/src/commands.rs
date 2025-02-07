@@ -27,7 +27,7 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
-use crate::transaction::WatchTransactionError;
+use crate::{transaction::WatchTransactionError, types::SendExtrinsicOptions};
 
 use super::{
     handler::BlockchainService,
@@ -35,7 +35,7 @@ use super::{
     types::{
         ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
         RespondStorageRequest, RetryStrategy, StopStoringForInsolventUserRequest,
-        SubmitProofRequest, Tip,
+        SubmitProofRequest,
     },
 };
 
@@ -45,8 +45,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 pub enum BlockchainServiceCommand {
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
-        tip: Tip,
-        nonce: Option<u32>,
+        options: SendExtrinsicOptions,
         callback: tokio::sync::oneshot::Sender<Result<SubmittedTransaction>>,
     },
     GetExtrinsicFromBlock {
@@ -213,8 +212,7 @@ pub trait BlockchainServiceInterface {
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
-        tip: Tip,
-        nonce: Option<u32>,
+        options: SendExtrinsicOptions,
     ) -> Result<SubmittedTransaction>;
 
     /// Get an extrinsic from a block.
@@ -410,15 +408,13 @@ where
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
-        tip: Tip,
-        nonce: Option<u32>,
+        options: SendExtrinsicOptions,
     ) -> Result<SubmittedTransaction> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::SendExtrinsic {
             call: call.into(),
-            tip,
-            nonce,
+            options,
             callback,
         };
         self.send(message).await;
@@ -831,8 +827,12 @@ where
         for retry_count in 0..=retry_strategy.max_retries {
             debug!(target: LOG_TARGET, "Submitting transaction {:?} with tip {}", call, tip);
 
+            let extrinsic_options = SendExtrinsicOptions::new()
+                .with_tip(tip as u128)
+                .with_nonce(nonce);
+
             let mut transaction = self
-                .send_extrinsic(call.clone(), Tip::from(tip as u128), nonce)
+                .send_extrinsic(call.clone(), extrinsic_options)
                 .await?
                 .with_timeout(retry_strategy.timeout);
 

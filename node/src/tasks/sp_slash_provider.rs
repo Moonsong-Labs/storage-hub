@@ -4,7 +4,7 @@ use sc_tracing::tracing::*;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface, events::SlashableProvider, types::Tip,
+    commands::BlockchainServiceInterface, events::SlashableProvider, types::SendExtrinsicOptions,
 };
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
@@ -79,7 +79,7 @@ where
         // Send extrinsic and wait for it to be included in the block.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0), None)
+            .send_extrinsic(call, SendExtrinsicOptions::default())
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler

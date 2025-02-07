@@ -12,7 +12,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    types::{ConfirmStoringRequest, RetryStrategy, Tip},
+    types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
@@ -614,7 +614,7 @@ where
 
                 self.storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, Tip::from(0), None)
+                    .send_extrinsic(call, SendExtrinsicOptions::default())
                     .await?
                     .with_timeout(Duration::from_secs(
                         self.storage_hub_handler
@@ -751,7 +751,7 @@ where
         let result = self
             .storage_hub_handler
             .blockchain
-            .send_extrinsic(call.clone(), Tip::from(0), None)
+            .send_extrinsic(call.clone(), SendExtrinsicOptions::default())
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler
@@ -780,7 +780,7 @@ where
             let result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Tip::from(0), None)
+                .send_extrinsic(call, SendExtrinsicOptions::default())
                 .await?
                 .with_timeout(Duration::from_secs(
                     self.storage_hub_handler

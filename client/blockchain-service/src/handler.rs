@@ -253,10 +253,9 @@ where
             match message {
                 BlockchainServiceCommand::SendExtrinsic {
                     call,
-                    tip,
-                    nonce,
+                    options,
                     callback,
-                } => match self.send_extrinsic(call, tip, nonce).await {
+                } => match self.send_extrinsic(call, options).await {
                     Ok(output) => {
                         debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
                         match callback.send(Ok(SubmittedTransaction::new(

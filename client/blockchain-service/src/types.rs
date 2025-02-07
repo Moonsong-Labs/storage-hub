@@ -480,3 +480,47 @@ impl Ord for ForestStorageSnapshotInfo {
         }
     }
 }
+
+/// Options for [`send_extrinsic`](crate::BlockchainService::send_extrinsic).
+///
+/// You can safely use [`SendExtrinsicOptions::default`] to create a new instance of `SendExtrinsicOptions`.
+#[derive(Debug)]
+pub struct SendExtrinsicOptions {
+    /// Tip to add to the transaction to incentivize the collator to include the transaction in a block.
+    tip: Tip,
+    /// Optionally override the nonce to use when sending the transaction.
+    nonce: Option<u32>,
+}
+
+impl SendExtrinsicOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_tip(mut self, tip: u128) -> Self {
+        self.tip = Tip::from(tip);
+        self
+    }
+
+    pub fn with_nonce(mut self, nonce: Option<u32>) -> Self {
+        self.nonce = nonce;
+        self
+    }
+
+    pub fn tip(&self) -> Tip {
+        self.tip.clone()
+    }
+
+    pub fn nonce(&self) -> Option<u32> {
+        self.nonce
+    }
+}
+
+impl Default for SendExtrinsicOptions {
+    fn default() -> Self {
+        Self {
+            tip: Tip::from(0),
+            nonce: None,
+        }
+    }
+}
