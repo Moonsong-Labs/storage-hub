@@ -46,7 +46,7 @@ pub enum QueryConfirmChunksToProveForFileError {
     ChallengedChunkToChunkIdError,
 }
 
-/// Error type for the `unresponded_storage_requests_by_msp`.
+/// Error type for the `pending_storage_requests_by_msp`.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum StorageRequestsByMSPError {
     FailedToRetrieveStorageRequests,
@@ -67,6 +67,6 @@ sp_api::decl_runtime_apis! {
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<TickNumber, QueryFileEarliestVolunteerTickError>;
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
         fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
-        fn unresponded_storage_requests_by_msp(msp_id: MainStorageProviderId) -> Vec<(H256, StorageRequestMetadata)>;
+        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId) -> Vec<(H256, StorageRequestMetadata)>;
     }
 }
