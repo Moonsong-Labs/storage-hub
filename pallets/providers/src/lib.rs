@@ -367,7 +367,7 @@ pub mod pallet {
     /// This storage is updated in:
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
     /// - [change_root_bucket](shp_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
-    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
+    /// - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket), which removes the entry of the corresponding bucket.
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
@@ -377,7 +377,7 @@ pub mod pallet {
     ///
     /// This storage is updated in:
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
-    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+    /// - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket)
     #[pallet::storage]
     pub type MainStorageProviderIdsToBuckets<T: Config> = StorageDoubleMap<
         _,
@@ -603,7 +603,7 @@ pub mod pallet {
         },
 
         /// Event emitted when a provider has been slashed and they have reached a capacity deficit (i.e. the provider's capacity fell below their used capacity)
-        /// signaling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
+        /// signalling the end of the grace period since an automatic top up could not be performed due to insufficient free balance.
         AwaitingTopUp {
             provider_id: ProviderIdFor<T>,
             top_up_metadata: TopUpMetadata<T>,
@@ -614,6 +614,22 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
             /// Amount that the provider has added to the held `StorageProviderDeposit` to pay for the outstanding slash amount.
             amount: BalanceOf<T>,
+        },
+
+        /// Event emitted when the account ID of a provider that has just been marked as insolvent can't be found in storage.
+        FailedToGetOwnerAccountOfInsolventProvider { provider_id: ProviderIdFor<T> },
+
+        /// Event emitted when there's an error slashing the now insolvent provider.
+        FailedToSlashInsolventProvider {
+            provider_id: ProviderIdFor<T>,
+            amount_to_slash: BalanceOf<T>,
+            error: DispatchError,
+        },
+
+        /// Event emitted when there's an error stopping all cycles for an insolvent Backup Storage Provider.
+        FailedToStopAllCyclesForInsolventBsp {
+            provider_id: ProviderIdFor<T>,
+            error: DispatchError,
         },
 
         /// Event emitted when a provider has been marked as insolvent.
@@ -756,6 +772,8 @@ pub mod pallet {
         ValuePropositionAlreadyExists,
         /// Error thrown when a value proposition is not available.
         ValuePropositionNotAvailable,
+        /// Error thrown when a MSP tries to deactivate its last value proposition.
+        CantDeactivateLastValueProp,
         /// Error thrown when, after deleting all value propositions of a MSP when removing it from the system, the amount doesn't match the expected value.
         ValuePropositionsDeletedAmountMismatch,
         /// Error thrown when a fixed payment stream is not found.
@@ -1535,7 +1553,13 @@ pub mod pallet {
     {
         fn on_idle(_: BlockNumberFor<T>, remaining_weight: Weight) -> Weight {
             let mut meter = WeightMeter::with_limit(remaining_weight);
-            Self::do_on_idle(&mut meter);
+
+            // If there's enough weight to at least read the current tick number, do it and proceed.
+            if meter.can_consume(T::DbWeight::get().reads(1)) {
+                let current_tick = ShTickGetter::<T>::get_current_tick();
+                meter.consume(T::DbWeight::get().reads(1));
+                Self::do_on_idle(current_tick, &mut meter);
+            }
 
             meter.consumed()
         }

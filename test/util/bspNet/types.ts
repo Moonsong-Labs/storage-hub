@@ -398,4 +398,10 @@ export type SealBlockOptions = {
    * Defaults to true if not specified.
    */
   finaliseBlock?: boolean;
+
+  /**
+   * Whether to fail the block if extrinsic is not included.
+   * Defaults to true if not specified.
+   */
+  failOnExtrinsicNonInclusion?: boolean;
 };

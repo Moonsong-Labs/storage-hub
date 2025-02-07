@@ -4,7 +4,7 @@ use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBu
 use shc_common::types::{
     Balance, BlockNumber, BucketId, CustomChallenge, FileKey, FileLocation, Fingerprint,
     ForestRoot, KeyProofs, PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput,
-    StorageData, TrieMutation,
+    StorageData, TrieMutation, ValuePropId,
 };
 use sp_core::H256;
 use sp_runtime::AccountId32;
@@ -270,6 +270,7 @@ impl EventBusMessage for MoveBucketRequested {}
 #[derive(Debug, Clone)]
 pub struct MoveBucketRequestedForNewMsp {
     pub bucket_id: BucketId,
+    pub value_prop_id: ValuePropId,
 }
 impl EventBusMessage for MoveBucketRequestedForNewMsp {}
 
