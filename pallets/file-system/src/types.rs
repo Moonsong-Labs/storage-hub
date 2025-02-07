@@ -365,6 +365,8 @@ pub enum BucketMoveRequestResponse {
 pub struct MoveBucketRequestMetadata<T: Config> {
     /// The user who requested to move the bucket.
     pub requester: T::AccountId,
+    /// The new value proposition that this bucket will have after it has been moved.
+    pub new_value_prop_id: ValuePropId<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]

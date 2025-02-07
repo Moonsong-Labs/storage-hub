@@ -206,13 +206,22 @@ pub struct BackupStorageProvider<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct Bucket<T: Config> {
+    /// The current root of the bucket.
     pub root: MerklePatriciaRoot<T>,
+    /// The user that owns the bucket.
     pub user_id: T::AccountId,
+    /// The MSP ID of the MSP that is currently storing the bucket. It's an Option because the
+    /// bucket can be in transit between MSPs after the first MSP stops storing it.
     pub msp_id: Option<MainStorageProviderId<T>>,
+    /// Whether the bucket is private or not.
     pub private: bool,
+    /// If the bucket is private, it has to have a collection ID that holds the items that allow a user to access the bucket's data.
+    /// This is not enforced by the runtime but by the MSP storing that bucket.
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
+    /// The current size of the bucket.
     pub size: StorageDataUnit<T>,
-    pub value_prop_id: Option<ValuePropIdFor<T>>,
+    /// The value proposition that the bucket is associated with. It's only valid if the bucket is associated with a MSP.
+    pub value_prop_id: ValuePropIdFor<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]

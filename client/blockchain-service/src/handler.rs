@@ -1406,6 +1406,7 @@ where
                                 who: _,
                                 bucket_id,
                                 new_msp_id,
+                                new_value_prop_id,
                             },
                         ) => {
                             match self.provider_id {
@@ -1420,7 +1421,10 @@ where
                                 Some(StorageProviderId::MainStorageProvider(msp_id))
                                     if msp_id == new_msp_id =>
                                 {
-                                    self.emit(MoveBucketRequestedForNewMsp { bucket_id });
+                                    self.emit(MoveBucketRequestedForNewMsp {
+                                        bucket_id,
+                                        value_prop_id: new_value_prop_id,
+                                    });
                                 }
                                 // Otherwise, ignore the event.
                                 _ => {}
@@ -1437,7 +1441,11 @@ where
                             }
                         }
                         RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::MoveBucketAccepted { bucket_id, msp_id },
+                            pallet_file_system::Event::MoveBucketAccepted {
+                                bucket_id,
+                                msp_id,
+                                value_prop_id: _,
+                            },
                         ) => {
                             // This event is relevant in case the Provider managed is a BSP.
                             if let Some(StorageProviderId::BackupStorageProvider(_)) =

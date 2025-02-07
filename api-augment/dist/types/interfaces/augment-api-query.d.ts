@@ -1609,7 +1609,7 @@ declare module "@polkadot/api-base/types/storage" {
        * This storage is updated in:
        * - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
        * - [change_root_bucket](shp_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
-       * - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
+       * - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket), which removes the entry of the corresponding bucket.
        **/
       buckets: AugmentedQuery<
         ApiType,
@@ -1651,7 +1651,7 @@ declare module "@polkadot/api-base/types/storage" {
        *
        * This storage is updated in:
        * - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
-       * - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+       * - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket)
        **/
       mainStorageProviderIdsToBuckets: AugmentedQuery<
         ApiType,

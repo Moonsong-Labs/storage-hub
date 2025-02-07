@@ -452,7 +452,8 @@ export class BspNetTestApi implements AsyncDisposable {
           options?.signer,
           options?.nonce,
           options?.parentHash,
-          options?.finaliseBlock
+          options?.finaliseBlock,
+          options?.failOnExtrinsicNonInclusion
         ),
       /**
        * Seal blocks until the next challenge period block.
