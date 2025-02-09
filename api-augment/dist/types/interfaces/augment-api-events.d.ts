@@ -702,9 +702,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MoveBucketRequestExpired: AugmentedEvent<
         ApiType,
-        [mspId: H256, bucketId: H256],
+        [bucketId: H256],
         {
-          mspId: H256;
           bucketId: H256;
         }
       >;
