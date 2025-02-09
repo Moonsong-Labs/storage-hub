@@ -2597,7 +2597,6 @@ mod benchmarks {
             &bucket_id,
             MoveBucketRequestMetadata {
                 requester: user.clone(),
-                previous_msp_id: None,
                 new_msp_id: msp_id,
                 new_value_prop_id: value_prop_id,
             },
