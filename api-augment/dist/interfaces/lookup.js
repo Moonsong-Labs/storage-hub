@@ -4596,7 +4596,6 @@ export default {
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
     requester: "AccountId32",
-    previousMspId: "Option<H256>",
     newMspId: "H256",
     newValuePropId: "H256"
   },

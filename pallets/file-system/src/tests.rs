@@ -980,7 +980,6 @@ mod request_move_bucket {
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
-                        previous_msp_id: Some(msp_charlie_id),
                         new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
@@ -1140,7 +1139,6 @@ mod request_move_bucket {
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
-                        previous_msp_id: Some(msp_charlie_id),
                         new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
@@ -1223,7 +1221,6 @@ mod request_move_bucket {
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
-                        previous_msp_id: Some(msp_charlie_id),
                         new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
@@ -1301,7 +1298,6 @@ mod request_move_bucket {
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
-                        previous_msp_id: Some(msp_charlie_id),
                         new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
@@ -1855,7 +1851,6 @@ mod request_storage {
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
-                        previous_msp_id: Some(msp_charlie_id),
                         new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })

@@ -510,7 +510,6 @@ where
             bucket_id,
             MoveBucketRequestMetadata {
                 requester: sender.clone(),
-                previous_msp_id: maybe_previous_msp_id,
                 new_msp_id,
                 new_value_prop_id,
             },
@@ -561,7 +560,8 @@ where
             let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
 
             // Get the previous MSP that was storing the bucket, if any.
-            let maybe_previous_msp_id = move_bucket_request_metadata.previous_msp_id;
+            let maybe_previous_msp_id =
+                <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
             // If another MSP was previously storing the bucket, update its used capacity to reflect the removal of the bucket.
             if let Some(previous_msp_id) = maybe_previous_msp_id {

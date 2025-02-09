@@ -5596,7 +5596,6 @@ declare module "@polkadot/types/lookup" {
   /** @name PalletFileSystemMoveBucketRequestMetadata (464) */
   interface PalletFileSystemMoveBucketRequestMetadata extends Struct {
     readonly requester: AccountId32;
-    readonly previousMspId: Option<H256>;
     readonly newMspId: H256;
     readonly newValuePropId: H256;
   }

@@ -4346,7 +4346,6 @@ declare const _default: {
    **/
   PalletFileSystemMoveBucketRequestMetadata: {
     requester: string;
-    previousMspId: string;
     newMspId: string;
     newValuePropId: string;
   };

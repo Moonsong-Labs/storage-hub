@@ -365,8 +365,6 @@ pub enum BucketMoveRequestResponse {
 pub struct MoveBucketRequestMetadata<T: Config> {
     /// The user who requested to move the bucket.
     pub requester: T::AccountId,
-    /// The MSP ID of the MSP that originally stored the bucket.
-    pub previous_msp_id: Option<ProviderIdFor<T>>,
     /// The MSP ID of the new MSP that the user requested to store the bucket.
     pub new_msp_id: ProviderIdFor<T>,
     /// The new value proposition that this bucket will have after it has been moved.
