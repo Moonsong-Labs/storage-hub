@@ -623,12 +623,6 @@ pub mod pallet {
             location: FileLocation<T>,
             new_root: MerkleHash<T>,
         },
-        /// Notifies that a MSP has stopped storing a bucket because its owner has become insolvent.
-        MspStopStoringBucketInsolventUser {
-            msp_id: ProviderIdFor<T>,
-            owner: T::AccountId,
-            bucket_id: BucketIdFor<T>,
-        },
         /// Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
         /// This can happen if the priority challenge queue is full, and the failed challenge should be manually
         /// queued at a later time.
@@ -1315,44 +1309,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Executed by a MSP to stop storing a bucket from an insolvent user.
-        ///
-        /// This is used when a user has become insolvent and the MSP needs to stop storing the buckets of that user, since
-        /// it won't be getting paid for them anymore.
-        /// It validates that:
-        /// - The sender is the MSP that's currently storing the bucket, and the bucket exists.
-        /// - That the user is currently insolvent OR
-        /// - That the payment stream between the MSP and user doesn't exist (which would occur as a consequence of the MSP previously
-        /// having deleted another bucket it was storing for this user through this extrinsic).
-        /// And then completely removes the bucket from the system.
-        ///
-        /// If there was a storage request pending for the bucket, it will eventually expire without being fulfilled (because the MSP can't
-        /// accept storage requests for insolvent users and BSPs can't volunteer nor confirm them either) and afterwards any BSPs that
-        /// had confirmed the file can just call `sp_stop_storing_for_insolvent_user` to get rid of it.
         #[pallet::call_index(15)]
-        // TODO: Replace this with the actual weight
-        #[pallet::weight(T::WeightInfo::stop_storing_for_insolvent_user_bsp().max(T::WeightInfo::stop_storing_for_insolvent_user_msp()))]
-        pub fn msp_stop_storing_bucket_for_insolvent_user(
-            origin: OriginFor<T>,
-            bucket_id: BucketIdFor<T>,
-        ) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            // Perform validations and stop storing the file.
-            let (msp_id, owner) =
-                Self::do_msp_stop_storing_bucket_for_insolvent_user(who.clone(), bucket_id)?;
-
-            // Emit event.
-            Self::deposit_event(Event::MspStopStoringBucketInsolventUser {
-                msp_id,
-                owner,
-                bucket_id,
-            });
-
-            Ok(())
-        }
-
-        #[pallet::call_index(16)]
         #[pallet::weight({
 			match maybe_inclusion_forest_proof {
 				Some(_) => T::WeightInfo::delete_file_with_inclusion_proof(),
@@ -1392,7 +1349,7 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(17)]
+        #[pallet::call_index(16)]
         #[pallet::weight(T::WeightInfo::pending_file_deletion_request_submit_proof())]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,

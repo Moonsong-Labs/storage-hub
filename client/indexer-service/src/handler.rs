@@ -309,9 +309,6 @@ impl IndexerService {
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
-            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => {
-                // TODO: Index this
-            }
             pallet_file_system::Event::SpStopStoringInsolventUser {
                 sp_id,
                 file_key,

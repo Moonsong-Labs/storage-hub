@@ -345,12 +345,6 @@ pub trait MutateBucketsInterface {
         bucket_id: &Self::BucketId,
         delta: Self::StorageDataUnit,
     ) -> DispatchResult;
-
-    // Delete a bucket without checking whether it's empty or its root is the default one.
-    // Useful for cases when the runtime has to delete a bucket no matter its current status,
-    // for example for an insolvent user.
-    fn force_delete_bucket(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId)
-        -> DispatchResult;
 }
 
 /// A trait to read information about Storage Providers present in the

@@ -578,14 +578,6 @@ declare module "@polkadot/api-base/types/events" {
         { mspId: H256; owner: AccountId32; bucketId: H256 }
       >;
       /**
-       * Notifies that a MSP has stopped storing a bucket because its owner has become insolvent.
-       **/
-      MspStopStoringBucketInsolventUser: AugmentedEvent<
-        ApiType,
-        [mspId: H256, owner: AccountId32, bucketId: H256],
-        { mspId: H256; owner: AccountId32; bucketId: H256 }
-      >;
-      /**
        * Notifies that a new bucket has been created.
        **/
       NewBucket: AugmentedEvent<
