@@ -260,6 +260,9 @@ pub struct SpStopStoringInsolventUser {
 }
 impl EventBusMessage for SpStopStoringInsolventUser {}
 
+/// A user has requested to move one of its bucket to a new MSP.
+///
+/// This event is emitted so the BSP can allow the new MSP to download the files from the bucket.
 #[derive(Debug, Clone)]
 pub struct MoveBucketRequested {
     pub bucket_id: BucketId,
@@ -267,6 +270,10 @@ pub struct MoveBucketRequested {
 }
 impl EventBusMessage for MoveBucketRequested {}
 
+/// A user has requested to move one of its bucket to a new MSP which matches a currently managed MSP.
+///
+/// This event is emitted so the MSP can verify if it can download all files of the bucket from BSPs,
+/// respond to the user accepting the request, download the bucket's files and insert the bucket into their forest.
 #[derive(Debug, Clone)]
 pub struct MoveBucketRequestedForNewMsp {
     pub bucket_id: BucketId,
@@ -274,6 +281,10 @@ pub struct MoveBucketRequestedForNewMsp {
 }
 impl EventBusMessage for MoveBucketRequestedForNewMsp {}
 
+/// The new MSP that the user chose to store a bucket has rejected the move request.
+///
+/// This event is emitted so the BSPs can stop allowing the new MSP to download the files
+/// from the bucket.
 #[derive(Debug, Clone)]
 pub struct MoveBucketRejected {
     pub bucket_id: BucketId,
@@ -281,6 +292,10 @@ pub struct MoveBucketRejected {
 }
 impl EventBusMessage for MoveBucketRejected {}
 
+/// The new MSP that the user chose to store a bucket has accepted the move request.
+///
+/// This event is emitted so the BSPs know that the new MSP is allowed to download the files
+/// from the bucket.
 #[derive(Debug, Clone)]
 pub struct MoveBucketAccepted {
     pub bucket_id: BucketId,
@@ -288,12 +303,16 @@ pub struct MoveBucketAccepted {
 }
 impl EventBusMessage for MoveBucketAccepted {}
 
+/// The move bucket request has expired without a response from the new MSP.
+///
+/// This event is emitted so the BSPs can stop allowing the new MSP to download the files
+/// from the bucket.
 #[derive(Debug, Clone)]
 pub struct MoveBucketExpired {
     pub bucket_id: BucketId,
-    pub msp_id: ProviderId,
 }
 impl EventBusMessage for MoveBucketExpired {}
+
 /// BSP stopped storing a specific file.
 ///
 /// This event is emitted when a BSP confirm stop storing a file.

@@ -415,7 +415,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         TickNumber<T>,
-        BoundedVec<(ProviderIdFor<T>, BucketIdFor<T>), T::MaxExpiredItemsInTick>,
+        BoundedVec<BucketIdFor<T>, T::MaxExpiredItemsInTick>,
         ValueQuery,
     >;
 
@@ -484,19 +484,8 @@ pub mod pallet {
     /// A double mapping from MSP IDs to a list of bucket IDs which they can accept or decline to take over.
     /// The value is the user who requested the move.
     #[pallet::storage]
-    pub type PendingMoveBucketRequests<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        Blake2_128Concat,
-        BucketIdFor<T>,
-        MoveBucketRequestMetadata<T>,
-    >;
-
-    /// Bookkeeping of buckets that are pending to be moved to a new MSP.
-    #[pallet::storage]
-    pub type PendingBucketsToMove<T: Config> =
-        StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
+    pub type PendingMoveBucketRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, BucketIdFor<T>, MoveBucketRequestMetadata<T>>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -655,10 +644,7 @@ pub mod pallet {
             bsp_id: ProviderIdFor<T>,
         },
         /// Notifies that a move bucket request has expired.
-        MoveBucketRequestExpired {
-            msp_id: ProviderIdFor<T>,
-            bucket_id: BucketIdFor<T>,
-        },
+        MoveBucketRequestExpired { bucket_id: BucketIdFor<T> },
         /// Notifies that a bucket has been moved to a new MSP under a new value proposition.
         MoveBucketAccepted {
             bucket_id: BucketIdFor<T>,
