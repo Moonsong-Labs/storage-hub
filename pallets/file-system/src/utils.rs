@@ -969,6 +969,86 @@ where
         Ok((msp_id, bucket_owner))
     }
 
+    /// Deletes a bucket from a user marked as insolvent and all its associated data.
+    /// This can be used by MSPs that detect that they are storing a bucket for an insolvent user.
+    /// This way, the MSP can remove the bucket and stop storing it, receiving from the user's deposit
+    /// the amount it's owed and deleting the payment stream between them in the process.
+    pub(crate) fn do_msp_stop_storing_bucket_for_insolvent_user(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
+        // Ensure the sender is a registered MSP.
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotAMsp)?;
+        ensure!(
+            <T::Providers as shp_traits::ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Ensure the bucket exists.
+        ensure!(
+            <T::Providers as shp_traits::ReadBucketsInterface>::bucket_exists(&bucket_id),
+            Error::<T>::BucketNotFound
+        );
+
+        // Ensure the bucket is stored by the MSP.
+        ensure!(
+            <T::Providers as shp_traits::ReadBucketsInterface>::is_bucket_stored_by_msp(
+                &msp_id, &bucket_id
+            ),
+            Error::<T>::MspNotStoringBucket
+        );
+
+        // Get the owner of the bucket.
+        let bucket_owner =
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
+
+        // Get the size of the bucket.
+        let bucket_size =
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+
+        // To allow the MSP to completely delete the bucket, either the user account is currently insolvent
+        // or no payment stream exists between the user and the MSP.
+        let is_user_insolvent =
+            <T::UserSolvency as shp_traits::ReadUserSolvencyInterface>::is_user_insolvent(
+                &bucket_owner,
+            );
+        let payment_stream_exists =
+            <T::PaymentStreams as shp_traits::PaymentStreamsInterface>::has_active_payment_stream_with_user(
+                &msp_id,
+                &bucket_owner,
+            );
+        ensure!(
+            is_user_insolvent || !payment_stream_exists,
+            Error::<T>::UserNotInsolvent
+        );
+
+        // Retrieve the collection ID associated with the bucket, if any.
+        let maybe_collection_id: Option<CollectionIdFor<T>> =
+            <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
+
+        // Delete the collection associated with the bucket if it existed.
+        if let Some(collection_id) = maybe_collection_id.clone() {
+            let destroy_witness = expect_or_err!(
+                T::Nfts::get_destroy_witness(&collection_id),
+                "Failed to get destroy witness for collection, when it was already checked to exist",
+                Error::<T>::CollectionNotFound
+            );
+            T::Nfts::destroy(collection_id, destroy_witness, Some(sender))?;
+        }
+
+        // Delete the bucket from the system.
+        <T::Providers as MutateBucketsInterface>::force_delete_bucket(&msp_id, &bucket_id)?;
+
+        // Decrease the used capacity of the MSP.
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &msp_id,
+            bucket_size,
+        )?;
+
+        Ok((msp_id, bucket_owner))
+    }
+
     /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.
     ///
     /// There should be a single non-inclusion forest proof for all file keys, and finally there should
