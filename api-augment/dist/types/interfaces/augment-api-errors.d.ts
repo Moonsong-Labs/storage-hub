@@ -380,6 +380,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       OperationNotAllowedWhileBucketIsNotStoredByMsp: AugmentedError<ApiType>;
       /**
+       * Certain operations (such as issuing new storage requests) are not allowed when interacting with insolvent users.
+       **/
+      OperationNotAllowedWithInsolventUser: AugmentedError<ApiType>;
+      /**
        * Pending stop storing request already exists.
        **/
       PendingStopStoringRequestAlreadyExists: AugmentedError<ApiType>;
