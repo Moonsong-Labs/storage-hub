@@ -4848,12 +4848,12 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
