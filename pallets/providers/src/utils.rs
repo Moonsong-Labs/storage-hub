@@ -31,10 +31,10 @@ use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_runtime::traits::ConvertBack;
 use sp_std::vec::Vec;
 use types::{
-    Bucket, Commitment, ExpirationItem, MainStorageProvider, MainStorageProviderSignUpRequest,
-    MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam, SignUpRequestSpParams,
-    StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata, ValuePropIdFor,
-    ValueProposition, ValuePropositionWithId,
+    Bucket, BucketCount, Commitment, ExpirationItem, MainStorageProvider,
+    MainStorageProviderSignUpRequest, MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam,
+    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata,
+    ValuePropIdFor, ValueProposition, ValuePropositionWithId,
 };
 
 macro_rules! expect_or_err {
@@ -297,8 +297,6 @@ where
         )?;
 
         let value_prop_id = value_prop.derive_id();
-        // Save the ValueProposition information in storage
-        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
 
         // Increment the counter of Main Storage Providers registered
         let new_amount_of_msps = MspCount::<T>::get()
@@ -390,10 +388,15 @@ where
     /// This function holds the logic that checks if a user can sign off as a Main Storage Provider
     /// and, if so, updates the storage to remove the user as a Main Storage Provider, decrements the counter of Main Storage Providers,
     /// and returns the deposit to the user
-    pub fn do_msp_sign_off(who: &T::AccountId) -> Result<MainStorageProviderId<T>, DispatchError> {
-        // Check that the signer is registered as a MSP and get its info
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+    pub fn do_msp_sign_off(
+        who: &T::AccountId,
+        msp_id: ProviderIdFor<T>,
+    ) -> Result<MainStorageProviderId<T>, DispatchError> {
+        // Ensure the received MSP ID matches the one in storage.
+        ensure!(
+            Some(msp_id) == AccountIdToMainStorageProviderId::<T>::get(who),
+            Error::<T>::NotRegistered
+        );
 
         let msp = expect_or_err!(
             MainStorageProviders::<T>::get(&msp_id),
@@ -406,10 +409,22 @@ where
             msp.capacity_used == T::StorageDataUnit::zero(),
             Error::<T>::StorageStillInUse
         );
+        ensure!(
+            msp.amount_of_buckets == T::BucketCount::zero(),
+            Error::<T>::StorageStillInUse
+        );
 
-        // Update the MSPs storage, removing the signer as an MSP
+        // Update the MSPs storage, removing the signer as an MSP and deleting all value propositions, ensuring the amount deleted matches
+        // the amount of value propositions that the MSP had stored.
         AccountIdToMainStorageProviderId::<T>::remove(who);
         MainStorageProviders::<T>::remove(&msp_id);
+        let value_props_deleted =
+            MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&msp_id)
+                .fold(0, |acc, _| acc.saturating_add(One::one()));
+        ensure!(
+            value_props_deleted == msp.amount_of_value_props,
+            Error::<T>::ValuePropositionsDeletedAmountMismatch
+        );
 
         // Return the deposit to the signer (if all funds cannot be returned, it will fail and revert with the reason)
         T::NativeBalance::release_all(
@@ -714,6 +729,81 @@ where
 
         // Return the old capacity
         Ok(old_capacity)
+    }
+
+    pub(crate) fn do_add_value_prop(
+        who: &T::AccountId,
+        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
+        commitment: Commitment<T>,
+        bucket_data_limit: StorageDataUnit<T>,
+    ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        // Check if MSP is insolvent
+        ensure!(
+            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
+                .is_none(),
+            Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
+        let value_prop = ValueProposition::<T>::new(
+            price_per_giga_unit_of_data_per_block,
+            commitment,
+            bucket_data_limit,
+        );
+        let value_prop_id = value_prop.derive_id();
+
+        if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {
+            return Err(Error::<T>::ValuePropositionAlreadyExists.into());
+        }
+
+        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
+
+        // Add one to the counter of value propositions that this MSP has stored.
+        MainStorageProviders::<T>::try_mutate(&msp_id, |msp| {
+            let msp = msp
+                .as_mut()
+                .ok_or(Error::<T>::SpRegisteredButDataNotFound)?;
+            msp.amount_of_value_props = msp
+                .amount_of_value_props
+                .checked_add(1u32)
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            Ok::<_, DispatchError>(())
+        })?;
+
+        Ok((msp_id, value_prop))
+    }
+
+    pub(crate) fn do_make_value_prop_unavailable(
+        who: &T::AccountId,
+        value_prop_id: ValuePropIdFor<T>,
+    ) -> Result<MainStorageProviderId<T>, DispatchError> {
+        let msp_id =
+            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
+
+        // Check that the MSP has two or more value propositions. Otherwise, don't allow deactivating the value
+        // proposition since that would leave the MSP in an invalid state with no active value propositions.
+        let msp = MainStorageProviders::<T>::get(&msp_id).ok_or(Error::<T>::NotRegistered)?;
+        ensure!(
+            msp.amount_of_value_props > 1,
+            Error::<T>::CantDeactivateLastValueProp,
+        );
+
+        MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
+            &msp_id,
+            value_prop_id,
+            |value_prop| {
+                let value_prop = value_prop
+                    .as_mut()
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+
+                value_prop.available = false;
+
+                Ok(msp_id)
+            },
+        )
     }
 
     /// This function holds the logic that checks if a user can add a new multiaddress to its storage
@@ -1061,60 +1151,6 @@ where
         Ok(())
     }
 
-    pub(crate) fn do_add_value_prop(
-        who: &T::AccountId,
-        price_per_giga_unit_of_data_per_block: BalanceOf<T>,
-        commitment: Commitment<T>,
-        bucket_data_limit: StorageDataUnit<T>,
-    ) -> Result<(MainStorageProviderId<T>, ValueProposition<T>), DispatchError> {
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-
-        // Check if MSP is insolvent
-        ensure!(
-            InsolventProviders::<T>::get(StorageProviderId::<T>::MainStorageProvider(msp_id))
-                .is_none(),
-            Error::<T>::OperationNotAllowedForInsolventProvider
-        );
-
-        let value_prop = ValueProposition::<T>::new(
-            price_per_giga_unit_of_data_per_block,
-            commitment,
-            bucket_data_limit,
-        );
-        let value_prop_id = value_prop.derive_id();
-
-        if MainStorageProviderIdsToValuePropositions::<T>::contains_key(&msp_id, &value_prop_id) {
-            return Err(Error::<T>::ValuePropositionAlreadyExists.into());
-        }
-
-        MainStorageProviderIdsToValuePropositions::<T>::insert(&msp_id, value_prop_id, &value_prop);
-
-        Ok((msp_id, value_prop))
-    }
-
-    pub(crate) fn do_make_value_prop_unavailable(
-        who: &T::AccountId,
-        value_prop_id: ValuePropIdFor<T>,
-    ) -> Result<MainStorageProviderId<T>, DispatchError> {
-        let msp_id =
-            AccountIdToMainStorageProviderId::<T>::get(who).ok_or(Error::<T>::NotRegistered)?;
-
-        MainStorageProviderIdsToValuePropositions::<T>::try_mutate_exists(
-            &msp_id,
-            value_prop_id,
-            |value_prop| {
-                let value_prop = value_prop
-                    .as_mut()
-                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
-
-                value_prop.available = false;
-
-                Ok(msp_id)
-            },
-        )
-    }
-
     pub(crate) fn do_delete_provider(provider_id: &ProviderIdFor<T>) -> Result<(), DispatchError> {
         ensure!(
             Self::can_delete_provider(provider_id),
@@ -1123,11 +1159,41 @@ where
 
         // Delete provider data
         if let Some(msp) = MainStorageProviders::<T>::get(provider_id) {
+            // Remove the Provider from the InsolventProviders storage
             InsolventProviders::<T>::remove(StorageProviderId::<T>::MainStorageProvider(
                 *provider_id,
             ));
+
+            // Delete the MSP's data
             MainStorageProviders::<T>::remove(&provider_id);
             AccountIdToMainStorageProviderId::<T>::remove(msp.owner_account);
+            let mut amount_of_buckets: BucketCount<T> = T::BucketCount::zero();
+            let value_props_deleted =
+                MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id)
+                    .fold(0, |acc, _| acc.saturating_add(One::one()));
+            ensure!(
+                value_props_deleted == msp.amount_of_value_props,
+                Error::<T>::ValuePropositionsDeletedAmountMismatch
+            );
+            // For the buckets, not only check that the amount deleted matches but also emit an event so users owners of
+            // these buckets can take the appropriate measures to secure them in another MSP.
+            let bucket_ids: Vec<BucketId<T>> =
+                MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id)
+                    .map(|(bucket_id, _)| {
+                        amount_of_buckets = amount_of_buckets.saturating_add(T::BucketCount::one());
+                        bucket_id
+                    })
+                    .collect();
+            ensure!(
+                msp.amount_of_buckets == amount_of_buckets,
+                Error::<T>::BucketsMovedAmountMismatch
+            );
+            Self::deposit_event(Event::BucketsOfInsolventMsp {
+                msp_id: *provider_id,
+                buckets: bucket_ids,
+            });
+
+            // Decrease the amount of MSPs in the system
             MspCount::<T>::mutate(|n| {
                 let new_amount_of_msps = n.checked_sub(&T::SpCount::one());
                 match new_amount_of_msps {
@@ -1138,18 +1204,29 @@ where
                     None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
                 }
             })?;
-            MainStorageProviderIdsToValuePropositions::<T>::drain_prefix(&provider_id);
-            MainStorageProviderIdsToBuckets::<T>::drain_prefix(&provider_id);
 
             Self::deposit_event(Event::MspDeleted {
                 provider_id: *provider_id,
             });
         } else if let Some(bsp) = BackupStorageProviders::<T>::get(provider_id) {
+            // Remove the Provider from the InsolventProviders storage
             InsolventProviders::<T>::remove(StorageProviderId::<T>::BackupStorageProvider(
                 *provider_id,
             ));
+
+            // Update the Provider's root to the default one and stop its cycles.
+            BackupStorageProviders::<T>::mutate(provider_id, |bsp| {
+                bsp.as_mut()
+                    .expect("Checked beforehand if BSP existed in storage. qed")
+                    .root = T::DefaultMerkleRoot::get();
+            });
+            Self::do_stop_all_cycles(&bsp.owner_account)?;
+
+            // Delete the BSP's data
             BackupStorageProviders::<T>::remove(&provider_id);
             AccountIdToBackupStorageProviderId::<T>::remove(bsp.owner_account);
+
+            // Decrease the amount of BSPs in the system
             BspCount::<T>::mutate(|n| {
                 let new_amount_of_bsps = n.checked_sub(&T::SpCount::one());
                 match new_amount_of_bsps {
@@ -1160,6 +1237,8 @@ where
                     None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
                 }
             })?;
+
+            // Decrease the total BSP capacity of the network
             TotalBspsCapacity::<T>::mutate(|n| {
                 let new_total_bsp_capacity = n.checked_sub(&bsp.capacity);
                 match new_total_bsp_capacity {
@@ -1170,6 +1249,8 @@ where
                     None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
                 }
             })?;
+
+            // Decrease the used BSP capacity of the network
             UsedBspsCapacity::<T>::mutate(|n| {
                 let new_used_bsp_capacity = n.checked_sub(&bsp.capacity_used);
                 match new_used_bsp_capacity {
@@ -1180,6 +1261,8 @@ where
                     None => Err(DispatchError::Arithmetic(ArithmeticError::Underflow)),
                 }
             })?;
+
+            // Decrease the global reputation weight
             GlobalBspsReputationWeight::<T>::mutate(|n| {
                 *n = n.saturating_sub(bsp.reputation_weight);
             });
@@ -1326,16 +1409,9 @@ where
 
             let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-            ensure!(
-                bucket.value_prop_id.is_some(),
-                Error::<T>::BucketHasNoValueProposition
-            );
-
-            let value_prop = MainStorageProviderIdsToValuePropositions::<T>::get(
-                &msp_id,
-                &bucket.value_prop_id.unwrap(),
-            )
-            .ok_or(Error::<T>::ValuePropositionNotFound)?;
+            let value_prop =
+                MainStorageProviderIdsToValuePropositions::<T>::get(&msp_id, &bucket.value_prop_id)
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
             let zero_sized_bucket_rate = T::ZeroSizeBucketFixedRate::get();
 
@@ -1596,6 +1672,7 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
     type ReadAccessGroupId = T::ReadAccessGroupId;
     type MerkleHash = MerklePatriciaRoot<T>;
     type StorageDataUnit = T::StorageDataUnit;
+    type ValuePropId = ValuePropIdFor<T>;
 
     fn bucket_exists(bucket_id: &Self::BucketId) -> bool {
         Buckets::<T>::contains_key(bucket_id)
@@ -1663,11 +1740,11 @@ impl<T: pallet::Config> ReadBucketsInterface for pallet::Pallet<T> {
         Ok(bucket.size)
     }
 
-    fn get_msp_bucket(
+    fn get_bucket_value_prop_id(
         bucket_id: &Self::BucketId,
-    ) -> Result<Option<Self::ProviderId>, DispatchError> {
+    ) -> Result<Self::ValuePropId, DispatchError> {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
-        Ok(bucket.msp_id)
+        Ok(bucket.value_prop_id)
     }
 }
 
@@ -1682,12 +1759,12 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     type ValuePropId = ValuePropIdFor<T>;
 
     fn add_bucket(
-        provider_id: Self::ProviderId,
+        msp_id: Self::ProviderId,
         user_id: Self::AccountId,
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
-        value_prop_id: Option<Self::ValuePropId>,
+        value_prop_id: Self::ValuePropId,
     ) -> DispatchResult {
         // Check if bucket already exists
         ensure!(
@@ -1703,20 +1780,18 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         // Check if the MSP exists
         ensure!(
-            MainStorageProviders::<T>::contains_key(&provider_id),
+            MainStorageProviders::<T>::contains_key(&msp_id),
             Error::<T>::NotRegistered
         );
 
-        if let Some(value_prop_id) = value_prop_id {
-            let value_prop =
-                MainStorageProviderIdsToValuePropositions::<T>::get(&provider_id, &value_prop_id)
-                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+        let value_prop =
+            MainStorageProviderIdsToValuePropositions::<T>::get(&msp_id, &value_prop_id)
+                .ok_or(Error::<T>::ValuePropositionNotFound)?;
 
-            ensure!(
-                value_prop.available,
-                Error::<T>::ValuePropositionNotAvailable
-            );
-        }
+        ensure!(
+            value_prop.available,
+            Error::<T>::ValuePropositionNotAvailable
+        );
 
         let deposit = T::BucketDeposit::get();
         ensure!(user_balance >= deposit, Error::<T>::NotEnoughBalance);
@@ -1730,7 +1805,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         let bucket = Bucket {
             root: T::DefaultMerkleRoot::get(),
-            msp_id: Some(provider_id),
+            msp_id: Some(msp_id),
             private: privacy,
             read_access_group_id: maybe_read_access_group_id,
             user_id: user_id.clone(),
@@ -1740,10 +1815,22 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
         Buckets::<T>::insert(&bucket_id, &bucket);
 
-        MainStorageProviderIdsToBuckets::<T>::insert(provider_id, bucket_id, ());
+        MainStorageProviderIdsToBuckets::<T>::insert(msp_id, bucket_id, ());
+
+        // Increase the amount of buckets stored by this MSP.
+        MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
+            let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+            msp.amount_of_buckets = msp
+                .amount_of_buckets
+                .checked_add(&T::BucketCount::one())
+                .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+            Ok::<_, DispatchError>(())
+        })?;
 
         Self::apply_delta_fixed_rate_payment_stream(
-            &provider_id,
+            &msp_id,
             &bucket_id,
             &user_id,
             RateDeltaParam::NewBucket,
@@ -1754,36 +1841,81 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
 
     fn assign_msp_to_bucket(
         bucket_id: &Self::BucketId,
-        new_msp: &Self::ProviderId,
+        new_msp_id: &Self::ProviderId,
+        new_value_prop_id: &Self::ValuePropId,
     ) -> DispatchResult {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            if let Some(msp_id) = bucket.msp_id {
-                if msp_id == *new_msp {
-                    return Err(Error::<T>::MspAlreadyAssignedToBucket.into());
-                }
+            // If the bucket is currently being stored by a MSP...
+            if let Some(previous_msp_id) = bucket.msp_id {
+                // Ensure the new MSP is different from the previous one.
+                ensure!(
+                    previous_msp_id != *new_msp_id,
+                    Error::<T>::MspAlreadyAssignedToBucket
+                );
 
+                // Update the payment stream between the user and the previous MSP to reflect the removal of the bucket.
                 Self::apply_delta_fixed_rate_payment_stream(
-                    &msp_id,
+                    &previous_msp_id,
                     bucket_id,
                     &bucket.user_id,
                     RateDeltaParam::RemoveBucket,
                 )?;
 
-                MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+                // Remove the bucket from the previous MSP's list of buckets.
+                MainStorageProviderIdsToBuckets::<T>::remove(previous_msp_id, bucket_id);
+
+                // Decrease the amount of buckets stored by this MSP.
+                MainStorageProviders::<T>::try_mutate(previous_msp_id, |msp| {
+                    let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                    msp.amount_of_buckets = msp
+                        .amount_of_buckets
+                        .checked_sub(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+                    Ok::<_, DispatchError>(())
+                })?;
             }
 
-            bucket.msp_id = Some(*new_msp);
+            // Ensure the value proposition selected is from the selected MSP and currently available.
+            let value_prop =
+                MainStorageProviderIdsToValuePropositions::<T>::get(new_msp_id, new_value_prop_id)
+                    .ok_or(Error::<T>::ValuePropositionNotFound)?;
+            ensure!(
+                value_prop.available,
+                Error::<T>::ValuePropositionNotAvailable
+            );
 
+            // Update the MSP that's currently storing the bucket to the new one.
+            bucket.msp_id = Some(*new_msp_id);
+
+            // Update the bucket's value proposition to the new one.
+            bucket.value_prop_id = *new_value_prop_id;
+
+            // Update the payment stream between the user and the new MSP to reflect the addition of the bucket.
             Self::apply_delta_fixed_rate_payment_stream(
-                new_msp,
+                new_msp_id,
                 bucket_id,
                 &bucket.user_id,
                 RateDeltaParam::NewBucket,
             )?;
 
-            MainStorageProviderIdsToBuckets::<T>::insert(*new_msp, bucket_id, ());
+            // Add the bucket to the new MSP's list of buckets.
+            MainStorageProviderIdsToBuckets::<T>::insert(*new_msp_id, bucket_id, ());
+
+            // Increase the amount of buckets stored by this MSP.
+            MainStorageProviders::<T>::try_mutate(new_msp_id, |msp| {
+                let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                msp.amount_of_buckets =
+                    msp.amount_of_buckets
+                        .checked_add(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Overflow))?;
+
+                Ok::<_, DispatchError>(())
+            })?;
 
             Ok::<_, DispatchError>(())
         })
@@ -1793,13 +1925,16 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
-            // MSP should exist within the context of this execution.
+            // Get the MSP ID of the MSP that's currently storing the bucket. A bucket cannot be unassigned
+            // from an MSP if it's not currently being stored by an MSP.
             let msp_id = bucket
                 .msp_id
                 .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
 
+            // Update the bucket's MSP to None, signaling that it is not currently being stored by any MSP.
             bucket.msp_id = None;
 
+            // Update the payment stream between the user and the MSP to reflect the removal of the bucket.
             Self::apply_delta_fixed_rate_payment_stream(
                 &msp_id,
                 bucket_id,
@@ -1807,7 +1942,20 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                 RateDeltaParam::RemoveBucket,
             )?;
 
+            // Remove the bucket from the MSP's list of buckets.
             MainStorageProviderIdsToBuckets::<T>::remove(msp_id, bucket_id);
+
+            // Decrease the amount of buckets stored by this MSP.
+            MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
+                let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                msp.amount_of_buckets =
+                    msp.amount_of_buckets
+                        .checked_sub(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+                Ok::<_, DispatchError>(())
+            })?;
 
             Ok::<_, DispatchError>(())
         })
@@ -1817,28 +1965,39 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |bucket| {
             let bucket = bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
+            // Ensure the bucket is currently stored by a MSP. A bucket cannot change its
+            // root if it's not currently being stored by an MSP.
+            ensure!(
+                bucket.msp_id.is_some(),
+                Error::<T>::BucketMustHaveMspForOperation
+            );
+
+            // Emit an event to signal the change of the bucket's root.
             Self::deposit_event(Event::BucketRootChanged {
                 bucket_id,
                 old_root: bucket.root,
                 new_root,
             });
 
+            // Update the bucket's root to the new one.
             bucket.root = new_root;
 
             Ok(())
         })
     }
 
-    fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult {
+    fn delete_bucket(bucket_id: Self::BucketId) -> DispatchResult {
         let bucket = Buckets::<T>::get(&bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        // Check if the bucket is empty
+        // Check if the bucket is empty i.e. its current root is the default root.
         ensure!(
             bucket.root == T::DefaultMerkleRoot::get(),
             Error::<T>::BucketNotEmpty
         );
 
+        // If the bucket is currently stored by a MSP...
         if let Some(msp_id) = bucket.msp_id {
+            // Update the payment stream between the user and the MSP to reflect the removal of the bucket.
             Self::apply_delta_fixed_rate_payment_stream(
                 &msp_id,
                 &bucket_id,
@@ -1846,12 +2005,26 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
                 RateDeltaParam::RemoveBucket,
             )?;
 
+            // Remove the bucket from the MSP's list of buckets.
             MainStorageProviderIdsToBuckets::<T>::remove(msp_id, &bucket_id);
-        };
 
+            // Decrease the amount of buckets stored by this MSP.
+            MainStorageProviders::<T>::try_mutate(msp_id, |msp| {
+                let msp = msp.as_mut().ok_or(Error::<T>::MspOnlyOperation)?;
+
+                msp.amount_of_buckets =
+                    msp.amount_of_buckets
+                        .checked_sub(&T::BucketCount::one())
+                        .ok_or(DispatchError::Arithmetic(ArithmeticError::Underflow))?;
+
+                Ok::<_, DispatchError>(())
+            })?;
+        }
+
+        // Remove the bucket's metadata from storage.
         Buckets::<T>::remove(&bucket_id);
 
-        // Release the bucket deposit hold
+        // Release the bucket deposit hold to the user.
         T::NativeBalance::release(
             &HoldReason::BucketDeposit.into(),
             &bucket.user_id,
@@ -1892,16 +2065,20 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
+            // Get the MSP ID of the MSP that's currently storing the bucket. A bucket cannot increase in size
+            // if it's not currently being stored by an MSP.
+            let msp_id = bucket
+                .msp_id
+                .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
+
             // First, try to update the fixed rate payment stream with the new rate, since
             // this function uses the current bucket size to calculate it
-            if let Some(msp_id) = bucket.msp_id {
-                Self::apply_delta_fixed_rate_payment_stream(
-                    &msp_id,
-                    bucket_id,
-                    &bucket.user_id,
-                    RateDeltaParam::Increase(delta),
-                )?;
-            }
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::Increase(delta),
+            )?;
 
             // Then, if that was successful, update the bucket size
             bucket.size = bucket.size.saturating_add(delta);
@@ -1917,16 +2094,20 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
         Buckets::<T>::try_mutate(&bucket_id, |maybe_bucket| {
             let bucket = maybe_bucket.as_mut().ok_or(Error::<T>::BucketNotFound)?;
 
+            // Get the MSP ID of the MSP that's currently storing the bucket. A bucket cannot decrease in size
+            // if it's not currently being stored by an MSP.
+            let msp_id = bucket
+                .msp_id
+                .ok_or(Error::<T>::BucketMustHaveMspForOperation)?;
+
             // First, try to update the fixed rate payment stream with the new rate, since
             // this function uses the current bucket size to calculate it
-            if let Some(msp_id) = bucket.msp_id {
-                Self::apply_delta_fixed_rate_payment_stream(
-                    &msp_id,
-                    bucket_id,
-                    &bucket.user_id,
-                    RateDeltaParam::Decrease(delta),
-                )?;
-            }
+            Self::apply_delta_fixed_rate_payment_stream(
+                &msp_id,
+                bucket_id,
+                &bucket.user_id,
+                RateDeltaParam::Decrease(delta),
+            )?;
 
             // Then, if that was successful, update the bucket size
             bucket.size = bucket.size.saturating_sub(delta);
@@ -1944,6 +2125,7 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
     type MultiAddress = MultiAddress<T>;
     type MaxNumberOfMultiAddresses = T::MaxMultiAddressAmount;
     type ReputationWeight = T::ReputationWeightType;
+    type ValuePropId = ValuePropIdFor<T>;
 
     fn is_bsp(who: &Self::ProviderId) -> bool {
         BackupStorageProviders::<T>::contains_key(&who)
@@ -2009,6 +2191,28 @@ impl<T: pallet::Config> ReadStorageProvidersInterface for pallet::Pallet<T> {
             Ok(BoundedVec::from(bsp.multiaddresses))
         } else {
             Err(Error::<T>::NotRegistered.into())
+        }
+    }
+
+    fn is_value_prop_of_msp(who: &Self::ProviderId, value_prop_id: &Self::ValuePropId) -> bool {
+        if let Some(_) = MainStorageProviders::<T>::get(who) {
+            MainStorageProviderIdsToValuePropositions::<T>::contains_key(&who, value_prop_id)
+        } else {
+            false
+        }
+    }
+
+    fn is_value_prop_available(who: &Self::ProviderId, value_prop_id: &Self::ValuePropId) -> bool {
+        if let Some(_) = MainStorageProviders::<T>::get(who) {
+            if let Some(value_prop) =
+                MainStorageProviderIdsToValuePropositions::<T>::get(&who, value_prop_id)
+            {
+                value_prop.available
+            } else {
+                false
+            }
+        } else {
+            false
         }
     }
 }
@@ -2096,7 +2300,6 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
             Some(msp.owner_account)
         } else if let Some(bucket) = Buckets::<T>::get(&who) {
             let msp_id = bucket.msp_id?;
-
             if let Some(msp) = MainStorageProviders::<T>::get(&msp_id) {
                 Some(msp.owner_account)
             } else {
@@ -2370,7 +2573,9 @@ impl<T: pallet::Config> SystemMetricsInterface for pallet::Pallet<T> {
     }
 }
 
-/// Runtime API implementation for the Storage Providers pallet.
+/**************** Runtime API Implementations ****************/
+
+/// Runtime API implementations for the Storage Providers pallet.
 impl<T> Pallet<T>
 where
     T: pallet::Config,
@@ -2519,13 +2724,13 @@ where
     }
 }
 
+/**************** Hooks Implementations ****************/
+/// Hooks implementations for the Storage Providers pallet.
 mod hooks {
     use crate::{
-        pallet,
-        types::{ShTickGetter, StorageHubTickNumber},
-        utils::StorageProviderId,
-        AwaitingTopUpFromProviders, BackupStorageProviders, Event, HoldReason, InsolventProviders,
-        MainStorageProviders, NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
+        pallet, types::StorageHubTickNumber, utils::StorageProviderId, weights::WeightInfo,
+        AwaitingTopUpFromProviders, Event, HoldReason, InsolventProviders,
+        NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
     };
 
     use frame_support::{
@@ -2534,149 +2739,200 @@ mod hooks {
             tokens::{Fortitude, Precision, Restriction},
             Get,
         },
-        weights::WeightMeter,
+        weights::{RuntimeDbWeight, WeightMeter},
     };
-    use shp_traits::StorageHubTickGetter;
     use sp_runtime::{
         traits::{One, Zero},
         Saturating,
     };
 
     impl<T: pallet::Config> Pallet<T> {
-        pub(crate) fn do_on_idle(mut meter: &mut WeightMeter) -> &mut WeightMeter {
+        pub(crate) fn do_on_idle(
+            current_tick: StorageHubTickNumber<T>,
+            mut meter: &mut WeightMeter,
+        ) -> &mut WeightMeter {
             let db_weight = T::DbWeight::get();
-            let current_sh_tick = ShTickGetter::<T>::get_current_tick();
-            let mut sh_tick_to_clean = NextStartingShTickToCleanUp::<T>::get();
 
-            while sh_tick_to_clean <= current_sh_tick && !meter.remaining().is_zero() {
-                Self::process_block_expired_items(&mut sh_tick_to_clean, &mut meter);
+            // If there's enough weight to get from storage the next tick to clean up and possibly update it afterwards, continue
+            if meter.can_consume(T::DbWeight::get().reads_writes(1, 1)) {
+                // Get the next tick for which to clean up expired items
+                let mut tick_to_clean = NextStartingShTickToCleanUp::<T>::get();
+                let initial_tick_to_clean = tick_to_clean;
 
-                if meter.remaining().is_zero() {
-                    break;
+                // While the tick to clean up is less than or equal to the current tick, process the expired items for that tick.
+                while tick_to_clean <= current_tick {
+                    // Process the expired items for the current tick to cleanup.
+                    let exited_early =
+                        Self::process_tick_expired_items(tick_to_clean, &mut meter, &db_weight);
+
+                    // If processing had to exit early because of weight limitations, stop processing expired items.
+                    if exited_early {
+                        break;
+                    }
+                    // Otherwise, increment the tick to clean up and continue processing the next tick.
+                    tick_to_clean.saturating_accrue(StorageHubTickNumber::<T>::one());
                 }
 
-                sh_tick_to_clean.saturating_accrue(StorageHubTickNumber::<T>::one());
-            }
-
-            // Update the next starting block for cleanup
-            if sh_tick_to_clean > NextStartingShTickToCleanUp::<T>::get() {
-                NextStartingShTickToCleanUp::<T>::put(sh_tick_to_clean);
-                meter.consume(db_weight.writes(1));
+                // Update the next starting tick for cleanup
+                if tick_to_clean > initial_tick_to_clean {
+                    NextStartingShTickToCleanUp::<T>::put(tick_to_clean);
+                    meter.consume(db_weight.writes(1));
+                }
             }
 
             meter
         }
 
-        fn process_block_expired_items(
-            tick_to_process: &mut StorageHubTickNumber<T>,
+        fn process_tick_expired_items(
+            tick_to_process: StorageHubTickNumber<T>,
             meter: &mut WeightMeter,
-        ) {
-            let db_weight = T::DbWeight::get();
-            let minimum_required_weight_processing_expired_items = db_weight.reads_writes(2, 1);
+            db_weight: &RuntimeDbWeight,
+        ) -> bool {
+            let mut ran_out_of_weight = false;
 
-            // Check if there is enough remaining weight to process expired move bucket requests
-            if !meter.can_consume(minimum_required_weight_processing_expired_items) {
-                return;
+            // If there's enough weight to take from storage the provider top up expirations for the current tick to process
+            // and reinsert them if needed, continue.
+            if meter.can_consume(db_weight.reads_writes(1, 2)) {
+                // Get the provider top ups that expired in the current tick.
+                let mut expired_provider_top_ups =
+                    ProviderTopUpExpirations::<T>::take(tick_to_process);
+                meter.consume(db_weight.reads_writes(1, 1));
+
+                // Get the required weight to process an expired provider top up in its worst case scenario.
+                let maximum_required_weight_expired_provider_top_up =
+                    T::WeightInfo::process_expired_provider_top_up_bsp()
+                        .max(T::WeightInfo::process_expired_provider_top_up_msp());
+
+                // While there's enough weight to process an expired provider top up in its worst-case scenario AND re-insert the remaining top ups to storage, continue.
+                while let Some(typed_provider_id) = expired_provider_top_ups.pop() {
+                    if meter.can_consume(
+                        maximum_required_weight_expired_provider_top_up
+                            .saturating_add(db_weight.writes(1)),
+                    ) {
+                        // Process a expired provider top up request. This internally consumes the used weight from the meter.
+                        Self::process_expired_provider_top_up(typed_provider_id, meter);
+                    } else {
+                        // Push back the expired provider top up into the provider top ups queue to be able to re-insert it.
+                        // This should never fail since this element was just taken from the bounded vector, so there must be space for it.
+                        let _ = expired_provider_top_ups.try_push(typed_provider_id);
+                        ran_out_of_weight = true;
+                        break;
+                    }
+                }
+
+                // If the expired provider top ups were not fully processed, re-insert them into storage to process them at a later time.
+                if !expired_provider_top_ups.is_empty() {
+                    ProviderTopUpExpirations::<T>::insert(
+                        &tick_to_process,
+                        expired_provider_top_ups,
+                    );
+                    meter.consume(db_weight.writes(1));
+                }
             }
 
-            // Remove expired move bucket requests if any existed and process them.
-            let mut provider_top_up_expirations =
-                ProviderTopUpExpirations::<T>::take(*tick_to_process);
-            meter.consume(minimum_required_weight_processing_expired_items);
-
-            // TODO: After benchmarking, we should check before this loop that there is enough remaining weight to
-            // TODO: process all the expired move bucket requests. If not, we should return early.
-            while let Some(typed_provider_id) = provider_top_up_expirations.pop() {
-                Self::process_expired_provider_top_up_period(typed_provider_id, meter);
-            }
-
-            // If there are remaining items which were not processed, put them back in storage
-            if !provider_top_up_expirations.is_empty() {
-                ProviderTopUpExpirations::<T>::insert(tick_to_process, provider_top_up_expirations);
-                meter.consume(db_weight.writes(1));
-            }
+            ran_out_of_weight
         }
 
-        fn process_expired_provider_top_up_period(
+        pub(crate) fn process_expired_provider_top_up(
             typed_provider_id: StorageProviderId<T>,
             meter: &mut WeightMeter,
         ) {
-            let db_weight = T::DbWeight::get();
-            let potential_weight = db_weight.reads_writes(0, 2);
-
-            if !meter.can_consume(potential_weight) {
-                return;
-            }
-
-            // Clear awaiting top up storage
+            // Clear the storage that marks the provider as awaiting a top up.
             let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::take(&typed_provider_id);
 
             // Mark the provider as insolvent if it was awaiting a top up
             // If the provider was not awaiting a top up, it means they already topped up either via an
-            // automatic top up or a manual top up.
+            // automatic top up or a manual top up, and it shouldn't be marked as insolvent.
             if maybe_awaiting_top_up.is_some() {
+                // Add the provider to the InsolventProviders storage, to mark it as insolvent.
                 InsolventProviders::<T>::insert(typed_provider_id.clone(), ());
 
+                // Deposit the event of the provider being marked as insolvent.
                 Self::deposit_event(Event::ProviderInsolvent {
                     provider_id: *typed_provider_id.inner(),
                 });
 
-                let account_id = if let Some(bsp) =
-                    BackupStorageProviders::<T>::get(&typed_provider_id.inner())
-                {
-                    bsp.owner_account
-                } else if let Some(msp) = MainStorageProviders::<T>::get(&typed_provider_id.inner())
-                {
-                    msp.owner_account
-                } else {
-                    log::error!(
-                        target: "runtime::providers",
-                        "Could not slash any potentially remaining deposit for provider {:?} as it does not exist.",
-                        typed_provider_id
-                    );
-                    return;
-                };
+                // Get the account ID owner of the provider. If the account ID is not found log an error, emit the error event and return early.
+                let provider_account_id =
+                    match <Self as shp_traits::ReadProvidersInterface>::get_owner_account(
+                        *typed_provider_id.inner(),
+                    ) {
+                        Some(account_id) => account_id,
+                        None => {
+                            log::error!(
+                                target: "runtime::storage_providers::process_expired_provider_top_up",
+                                "Could not get owner account of provider {:?} to slash it.",
+                                typed_provider_id
+                            );
 
+                            Self::deposit_event(
+                                Event::FailedToGetOwnerAccountOfInsolventProvider {
+                                    provider_id: *typed_provider_id.inner(),
+                                },
+                            );
+
+                            return;
+                        }
+                    };
+
+                // Get the deposit that the provider has on hold.
                 let held_deposit = T::NativeBalance::balance_on_hold(
                     &HoldReason::StorageProviderDeposit.into(),
-                    &account_id,
+                    &provider_account_id,
                 );
 
+                // If the provider has a deposit on hold, slash it, transfering it to the treasury.
                 if !held_deposit.is_zero() {
-                    // Transfer all held deposit to treasury
                     if let Err(e) = T::NativeBalance::transfer_on_hold(
                         &HoldReason::StorageProviderDeposit.into(),
-                        &account_id,
+                        &provider_account_id,
                         &T::Treasury::get(),
                         held_deposit,
                         Precision::BestEffort,
                         Restriction::Free,
                         Fortitude::Force,
                     ) {
+                        // If there's an error slashing the provider, log the error and emit the error event.
                         log::error!(
-                            target: "runtime::providers",
+                            target: "runtime::storage_providers::process_expired_provider_top_up",
                             "Could not slash remaining deposit for provider {:?} due to error: {:?}",
                             typed_provider_id,
                             e
                         );
+
+                        Self::deposit_event(Event::FailedToSlashInsolventProvider {
+                            provider_id: *typed_provider_id.inner(),
+                            amount_to_slash: held_deposit,
+                            error: e,
+                        });
                     }
                 }
 
-                if let Err(e) =
-                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(
-                        &typed_provider_id.inner(),
-                    )
-                {
-                    log::error!(
-                        target: "runtime::providers",
-                        "Could not stop challenge cycle for provider {:?} due to error: {:?}",
-                        typed_provider_id,
-                        e
-                    );
-                }
+                // If the provider is a Backup Storage Provider, stop all its cycles.
+                if let StorageProviderId::BackupStorageProvider(bsp_id) = typed_provider_id {
+                    if let Err(e) = Self::do_stop_all_cycles(&provider_account_id) {
+                        // If there's an error stopping all cycles for the provider, log the error and emit the error event.
+                        log::error!(
+                            target: "runtime::storage_providers::process_expired_provider_top_up",
+                            "Could not stop all cycles for provider {:?} due to error: {:?}",
+                            bsp_id,
+                            e
+                        );
+
+                        Self::deposit_event(Event::FailedToStopAllCyclesForInsolventBsp {
+                            provider_id: bsp_id,
+                            error: e,
+                        });
+                    }
+                };
             }
 
-            meter.consume(potential_weight);
+            // Consume the corresponding weight used by this function.
+            if let StorageProviderId::BackupStorageProvider(_) = typed_provider_id {
+                meter.consume(T::WeightInfo::process_expired_provider_top_up_bsp());
+            } else {
+                meter.consume(T::WeightInfo::process_expired_provider_top_up_msp());
+            }
         }
     }
 }

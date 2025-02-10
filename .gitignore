@@ -21,9 +21,6 @@ runtimes/
 **/tmp/
 res/benchmarking
 
-.DS_Store
-.vscode/
-.zed/
 
 # Chain Specs
 *.spec.json
@@ -37,3 +34,12 @@ cspell.json
 
 # Don't commit your config file
 config.toml
+
+
+# IDE
+
+.DS_Store
+.vscode/
+.zed/
+.idea/
+.cursorignore

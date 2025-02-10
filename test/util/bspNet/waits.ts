@@ -3,7 +3,8 @@ import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import assert from "node:assert";
-import type { Address, H256 } from "@polkadot/types/interfaces";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
+import * as Assertions from "../asserts";
 import type { WaitForTxOptions } from "./test-api";
 
 /**
@@ -498,6 +499,87 @@ export const waitForMspFileStorageComplete = async (api: ApiPromise, fileKey: H2
       assert(
         i !== iterations,
         `Failed to detect MSP file in file storage after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+export const waitForStorageRequestNotOnChain = async (api: ApiPromise, fileKey: H256 | string) => {
+  // 10 iterations at 1 second per iteration = 10 seconds wait time
+  const iterations = 10;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      // Try to get the storage request from the chain
+      const result = await api.query.fileSystem.storageRequests(fileKey);
+
+      // If the storage request wasn't found, it has been fulfilled/expired/rejected.
+      if (result.isNone) {
+        return;
+      }
+
+      // If it has been found, seal a new block and wait for the next iteration to check if
+      // it has been fulfilled/expired/rejected.
+      await sealBlock(api);
+    } catch {
+      assert(
+        i !== iterations,
+        `Detected storage request in on-chain storage after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+export const waitForStorageRequestFulfilled = async (api: ApiPromise, fileKey: H256 | string) => {
+  // 10 iterations at 1 second per iteration = 10 seconds wait time
+  const iterations = 10;
+  const delay = 1000;
+
+  // First check that the storage request exists in storage, since otherwise the StorageRequestFulfilled event
+  // will never be emitted.
+  const storageRequest = await api.query.fileSystem.storageRequests(fileKey);
+  assert(
+    storageRequest.isSome,
+    "Storage request not found in storage but `waitForStorageRequestFulfilled` was called"
+  );
+
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      // Check in the events of the last block to see if any StorageRequestFulfilled event were emitted and get them.
+      const previous_block_events = (await api.query.system.events()) as EventRecord[];
+      const storageRequestFulfilledEvents = Assertions.assertEventMany(
+        api,
+        "fileSystem",
+        "StorageRequestFulfilled",
+        previous_block_events
+      );
+
+      // Check if any of the events are for the file key we are waiting for.
+      const storageRequestFulfilledEvent = storageRequestFulfilledEvents.find((event) => {
+        const storageRequestFulfilledEventData =
+          api.events.fileSystem.StorageRequestFulfilled.is(event.event) && event.event.data;
+        assert(
+          storageRequestFulfilledEventData,
+          "Event doesn't match type but eventMany should have filtered it out"
+        );
+        storageRequestFulfilledEventData.fileKey.toString() === fileKey.toString();
+      });
+
+      // If the event was found, check to make sure the storage request is not on-chain and return.
+      if (storageRequestFulfilledEvent) {
+        await waitForStorageRequestNotOnChain(api, fileKey);
+        return;
+      }
+
+      // If the event was not found, seal a new block and wait for the next iteration to check if
+      // it has been emitted.
+      await sealBlock(api);
+    } catch {
+      assert(
+        i !== iterations,
+        `Storage request has not been fulfilled after ${(i * delay) / 1000}s`
       );
     }
   }

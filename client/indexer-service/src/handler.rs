@@ -205,7 +205,11 @@ impl IndexerService {
                 )
                 .await?;
             }
-            pallet_file_system::Event::MoveBucketAccepted { msp_id, bucket_id } => {
+            pallet_file_system::Event::MoveBucketAccepted {
+                msp_id,
+                bucket_id,
+                value_prop_id: _,
+            } => {
                 let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), msp.id).await?;
             }
@@ -305,7 +309,17 @@ impl IndexerService {
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
-            pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {}
+            pallet_file_system::Event::SpStopStoringInsolventUser {
+                sp_id,
+                file_key,
+                owner: _,
+                location: _,
+                new_root: _,
+            } => {
+                // We are now only deleting for BSP as BSP are associating with files
+                // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
+                BspFile::delete(conn, file_key, sp_id.to_string()).await?;
+            }
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
             pallet_file_system::Event::FileDeletionRequest { .. } => {}
             pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => {}
@@ -579,11 +593,25 @@ impl IndexerService {
             pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
             pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
             pallet_storage_providers::Event::ProviderInsolvent { .. } => {}
+            pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => {
+                // TODO: Should we index this? Since this buckets are all going to have moves requested
+            }
             pallet_storage_providers::Event::MspDeleted { provider_id } => {
                 Msp::delete(conn, provider_id.to_string()).await?;
             }
             pallet_storage_providers::Event::BspDeleted { provider_id } => {
                 Bsp::delete(conn, provider_id.to_string()).await?;
+            }
+            pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
+                ..
+            } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+            pallet_storage_providers::Event::FailedToSlashInsolventProvider { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+            pallet_storage_providers::Event::FailedToStopAllCyclesForInsolventBsp { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
             }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }

@@ -308,7 +308,26 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the address has no pending extrinsics.
        */
       waitForAvailabilityToSendTx: (address: string) =>
-        Waits.waitForAvailabilityToSendTx(this._api, address)
+        Waits.waitForAvailabilityToSendTx(this._api, address),
+
+      /**
+       * Waits for a storage request to be removed from on-chain storage.
+       * This could happen because the storage request was fulfilled, it has expired or
+       * it has been rejected by the MSP. Either way, we only care that it's not on-chain anymore.
+       * @param fileKey - File key of the storage request to wait for.
+       * @returns A promise that resolves when the storage request is not on-chain.
+       */
+      storageRequestNotOnChain: (fileKey: H256 | string) =>
+        Waits.waitForStorageRequestNotOnChain(this._api, fileKey),
+
+      /**
+       * Waits for a storage request to be fulfilled by waiting and sealing blocks until
+       * the StorageRequestFulfilled event is detected.
+       * @param fileKey - File key of the storage request to wait for.
+       * @returns A promise that resolves when the storage request has been fulfilled.
+       */
+      storageRequestFulfilled: (fileKey: H256 | string) =>
+        Waits.waitForStorageRequestFulfilled(this._api, fileKey)
     };
 
     /**
@@ -433,7 +452,8 @@ export class BspNetTestApi implements AsyncDisposable {
           options?.signer,
           options?.nonce,
           options?.parentHash,
-          options?.finaliseBlock
+          options?.finaliseBlock,
+          options?.failOnExtrinsicNonInclusion
         ),
       /**
        * Seal blocks until the next challenge period block.

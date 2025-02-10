@@ -510,9 +510,9 @@ declare module "@polkadot/api-base/types/submittable" {
           mspId: H256 | string | Uint8Array,
           name: Bytes | string | Uint8Array,
           private: bool | boolean | Uint8Array,
-          valuePropId: Option<H256> | null | Uint8Array | H256 | string
+          valuePropId: H256 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool, Option<H256>]
+        [H256, Bytes, bool, H256]
       >;
       /**
        * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
@@ -621,9 +621,10 @@ declare module "@polkadot/api-base/types/submittable" {
       requestMoveBucket: AugmentedSubmittable<
         (
           bucketId: H256 | string | Uint8Array,
-          newMspId: H256 | string | Uint8Array
+          newMspId: H256 | string | Uint8Array,
+          newValuePropId: H256 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256]
+        [H256, H256, H256]
       >;
       /**
        * Revoke storage request
@@ -3057,7 +3058,10 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * Emits `MspSignOffSuccess` event when successful.
        **/
-      mspSignOff: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      mspSignOff: AugmentedSubmittable<
+        (mspId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
+      >;
       /**
        * Dispatchable extrinsic that allows BSPs and MSPs to remove an existing multiaddress from their account.
        *
