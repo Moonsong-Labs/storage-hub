@@ -978,8 +978,9 @@ where
         bucket_id: BucketIdFor<T>,
     ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
         // Ensure the sender is a registered MSP.
-        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
-            .ok_or(Error::<T>::NotAMsp)?;
+        let msp_id =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
+                .ok_or(Error::<T>::NotAMsp)?;
         ensure!(
             <T::Providers as shp_traits::ReadStorageProvidersInterface>::is_msp(&msp_id),
             Error::<T>::NotAMsp
