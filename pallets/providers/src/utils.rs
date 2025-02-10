@@ -2320,8 +2320,8 @@ impl<T: pallet::Config> ReadProvidersInterface for pallet::Pallet<T> {
         }
     }
 
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId> {
-        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who.clone()) {
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId> {
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             Some(bsp_id)
         } else if let Some(msp_id) = AccountIdToMainStorageProviderId::<T>::get(who) {
             Some(msp_id)
@@ -2436,8 +2436,8 @@ impl<T: pallet::Config> ReadChallengeableProvidersInterface for pallet::Pallet<T
         }
     }
 
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId> {
-        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who.clone()) {
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId> {
+        if let Some(bsp_id) = AccountIdToBackupStorageProviderId::<T>::get(who) {
             Some(bsp_id)
         } else {
             None

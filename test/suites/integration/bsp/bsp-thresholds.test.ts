@@ -385,7 +385,6 @@ describeBspNet(
         bspStartingWeight: 800_000_000n
       });
       const bspThreeApi = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
-      await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
 
       // Wait for it to catch up to the top of the chain
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);
@@ -396,9 +395,12 @@ describeBspNet(
           MaxReplicationTarget: [null, 5]
         }
       };
+      // In order to test the reputation prioritisation, we need to set the tick to maximum
+      // threshold to a high enough number such that
+      // highReputationBspVolunteerTick - initialBspVolunteerTick > 2 (not 1!).
       const tickRangeToMaximumThresholdRuntimeParameter = {
         RuntimeConfig: {
-          TickRangeToMaximumThreshold: [null, 100]
+          TickRangeToMaximumThreshold: [null, 9001]
         }
       };
       const storageRequestTtlRuntimeParameter = {

@@ -18,7 +18,7 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
         Balance, FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
-        StorageProviderId,
+        StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
@@ -815,97 +815,108 @@ where
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
-        // Verify and extract chunk from proof
-        let proven = event
+        // Verify and extract chunks from proof
+        let proven = match event
             .file_key_proof
             .proven::<StorageProofsMerkleTrieLayout>()
-            .map_err(|e| anyhow!("Failed to verify proof: {:?}", e))?;
-        if proven.len() != 1 {
-            return Err(anyhow!(
-                "Expected exactly one proven chunk but got {}",
-                proven.len()
-            ));
-        }
+        {
+            Ok(proven) => {
+                if proven.is_empty() {
+                    Err(anyhow::anyhow!(
+                        "Expected at least one proven chunk but got none."
+                    ))
+                } else {
+                    // Calculate total batch size
+                    let total_batch_size: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
-        let proven_chunk: &shp_file_metadata::Leaf<shp_file_metadata::ChunkId, Vec<u8>> =
-            &proven[0];
-
-        match write_file_storage.write_chunk(&file_key, &proven_chunk.key, &proven_chunk.data) {
-            Ok(outcome) => match outcome {
-                FileStorageWriteOutcome::FileComplete => Ok(true),
-                FileStorageWriteOutcome::FileIncomplete => Ok(false),
-            },
-            Err(e) => match e {
-                FileStorageWriteError::FileChunkAlreadyExists => {
-                    // Check if the file is already complete
-                    let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-                    match read_file_storage.is_file_complete(&file_key) {
-                        Ok(is_complete) => Ok(is_complete),
-                        Err(e) => {
-                            // Unvolunteer the file.
-                            self.unvolunteer_file(event.file_key.into()).await;
-
-                            let err_msg = format!(
-                            "Received duplicate chunk but failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
-                            event.file_key, e
-                        );
-                            error!(target: LOG_TARGET, "{}", err_msg);
-                            Err(anyhow::anyhow!(err_msg))
-                        }
+                    if total_batch_size > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
+                        Err(anyhow::anyhow!(
+                            "Total batch size {} bytes exceeds maximum allowed size of {} bytes",
+                            total_batch_size,
+                            BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE
+                        ))
+                    } else {
+                        Ok(proven)
                     }
                 }
-                FileStorageWriteError::FileDoesNotExist => {
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
+            }
+            Err(e) => Err(anyhow::anyhow!(
+                "Failed to verify and get proven file key chunks: {:?}",
+                e
+            )),
+        };
 
-                    Err(anyhow::anyhow!(format!(
-                        "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
-                        event.file_key
-                    )))
-                }
-                FileStorageWriteError::FailedToGetFileChunk
-                | FileStorageWriteError::FailedToInsertFileChunk
-                | FileStorageWriteError::FailedToDeleteChunk
-                | FileStorageWriteError::FailedToPersistChanges
-                | FileStorageWriteError::FailedToParseFileMetadata
-                | FileStorageWriteError::FailedToParseFingerprint
-                | FileStorageWriteError::FailedToReadStorage
-                | FileStorageWriteError::FailedToUpdatePartialRoot
-                | FileStorageWriteError::FailedToParsePartialRoot
-                | FileStorageWriteError::FailedToGetStoredChunksCount => {
-                    // This internal error should not happen.
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
+        let proven = match proven {
+            Ok(proven) => proven,
+            Err(e) => {
+                error!(target: LOG_TARGET, "{}", e);
+                return Err(e);
+            }
+        };
 
-                    Err(anyhow::anyhow!(format!(
-                        "Internal trie read/write error {:?}:{:?}",
-                        event.file_key, proven_chunk.key
-                    )))
-                }
-                FileStorageWriteError::FingerprintAndStoredFileMismatch => {
-                    // This should never happen, given that the first check in the handler is verifying the proof.
-                    // This means that something is seriously wrong, so we error out the whole task.
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
+        let mut file_complete = false;
 
-                    Err(anyhow::anyhow!(format!(
-                        "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
-                        event.file_key
-                    )))
-                }
-                FileStorageWriteError::FailedToConstructTrieIter => {
-                    // This should never happen for a well constructed trie.
-                    // This means that something is seriously wrong, so we error out the whole task.
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
+        // Process each proven chunk in the batch
+        for chunk in proven {
+            // TODO: Add a batched write chunk method to the file storage.
+            let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);
 
-                    Err(anyhow::anyhow!(format!(
-                        "This is a bug! Failed to construct trie iter for key {:?}.",
-                        event.file_key
-                    )))
-                }
-            },
+            match write_result {
+                Ok(outcome) => match outcome {
+                    FileStorageWriteOutcome::FileComplete => {
+                        file_complete = true;
+                        break; // We can stop processing chunks if the file is complete
+                    }
+                    FileStorageWriteOutcome::FileIncomplete => continue,
+                },
+                Err(error) => match error {
+                    FileStorageWriteError::FileChunkAlreadyExists => {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Received duplicate chunk with key: {:?}",
+                            chunk.key
+                        );
+                        // Continue processing other chunks
+                        continue;
+                    }
+                    FileStorageWriteError::FileDoesNotExist => {
+                        return Err(anyhow::anyhow!(format!(
+                            "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                            event.file_key
+                        )));
+                    }
+                    FileStorageWriteError::FailedToGetFileChunk
+                    | FileStorageWriteError::FailedToInsertFileChunk
+                    | FileStorageWriteError::FailedToDeleteChunk
+                    | FileStorageWriteError::FailedToPersistChanges
+                    | FileStorageWriteError::FailedToParseFileMetadata
+                    | FileStorageWriteError::FailedToParseFingerprint
+                    | FileStorageWriteError::FailedToReadStorage
+                    | FileStorageWriteError::FailedToUpdatePartialRoot
+                    | FileStorageWriteError::FailedToParsePartialRoot
+                    | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                        return Err(anyhow::anyhow!(format!(
+                            "Internal trie read/write error {:?}:{:?}",
+                            event.file_key, chunk.key
+                        )));
+                    }
+                    FileStorageWriteError::FingerprintAndStoredFileMismatch => {
+                        return Err(anyhow::anyhow!(format!(
+                            "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
+                            event.file_key
+                        )));
+                    }
+                    FileStorageWriteError::FailedToConstructTrieIter => {
+                        return Err(anyhow::anyhow!(format!(
+                            "This is a bug! Failed to construct trie iter for key {:?}.",
+                            event.file_key
+                        )));
+                    }
+                },
+            }
         }
+
+        Ok(file_complete)
     }
 
     /// Calculate the new capacity after adding the required capacity for the file.
