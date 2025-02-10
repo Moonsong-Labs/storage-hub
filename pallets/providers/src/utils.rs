@@ -2813,7 +2813,11 @@ mod hooks {
                             .saturating_add(db_weight.writes(1)),
                     ) {
                         // Process a expired provider top up request. This internally consumes the used weight from the meter.
-                        Self::process_expired_provider_top_up(typed_provider_id, meter);
+                        Self::process_expired_provider_top_up(
+                            typed_provider_id,
+                            &tick_to_process,
+                            meter,
+                        );
                     } else {
                         // Push back the expired provider top up into the provider top ups queue to be able to re-insert it.
                         // This should never fail since this element was just taken from the bounded vector, so there must be space for it.
@@ -2839,7 +2843,7 @@ mod hooks {
         pub(crate) fn process_expired_provider_top_up(
             typed_provider_id: StorageProviderId<T>,
             current_tick_being_processed: &StorageHubTickNumber<T>,
-            _meter: &mut WeightMeter,
+            meter: &mut WeightMeter,
         ) {
             // Get the top up metadata of the provider that was awaiting a top up.
             let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::get(&typed_provider_id);
