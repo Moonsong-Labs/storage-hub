@@ -814,6 +814,8 @@ pub mod pallet {
         MinWaitForStopStoringNotReached,
         /// Pending stop storing request already exists.
         PendingStopStoringRequestAlreadyExists,
+        /// Certain operations (such as issuing new storage requests) are not allowed when interacting with insolvent users.
+        OperationNotAllowedWithInsolventUser,
         /// A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
         UserNotInsolvent,
         /// The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
