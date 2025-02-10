@@ -2883,7 +2883,7 @@ mod revoke_storage_request {
                 assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
 
                 System::assert_last_event(Event::StorageRequestRevoked { file_key }.into());
-                
+
                 // Ensure a file deletion request was created
                 assert!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id).iter().any(|r| r.file_key == file_key)
