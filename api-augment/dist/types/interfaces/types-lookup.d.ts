@@ -5654,6 +5654,7 @@ declare module "@polkadot/types/lookup" {
     readonly isPendingStopStoringRequestNotFound: boolean;
     readonly isMinWaitForStopStoringNotReached: boolean;
     readonly isPendingStopStoringRequestAlreadyExists: boolean;
+    readonly isOperationNotAllowedWithInsolventUser: boolean;
     readonly isUserNotInsolvent: boolean;
     readonly isNotSelectedMsp: boolean;
     readonly isMspAlreadyConfirmed: boolean;
@@ -5733,6 +5734,7 @@ declare module "@polkadot/types/lookup" {
       | "PendingStopStoringRequestNotFound"
       | "MinWaitForStopStoringNotReached"
       | "PendingStopStoringRequestAlreadyExists"
+      | "OperationNotAllowedWithInsolventUser"
       | "UserNotInsolvent"
       | "NotSelectedMsp"
       | "MspAlreadyConfirmed"

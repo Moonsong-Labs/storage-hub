@@ -155,15 +155,15 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     const bucketName = "nothingmuch-2";
     await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
 
-    await userApi.wait.bspVolunteer();
+    await userApi.wait.bspVolunteer(1);
 
-    const address = userApi.createType("Address", ShConsts.NODE_INFOS.bsp.AddressId);
-    await userApi.wait.bspStored(undefined, address);
+    const bspAddress = userApi.createType("Address", bspKey.address);
+    await userApi.wait.bspStored(1, bspAddress);
 
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
 
-    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
+    await userApi.wait.waitForAvailabilityToSendTx(bspAddress.toString());
 
     const { events, extSuccess } = await userApi.block.seal({
       calls: [userApi.tx.providers.changeCapacity(2n)],
@@ -238,7 +238,7 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     assert.strictEqual(bspCapacityAfter.unwrap().capacity.toBigInt(), updatedCapacity);
   });
 
-  it("Test BSP storage size cannot go over  MAXSTORAGE", async () => {
+  it("Test BSP storage size cannot go over MAXSTORAGE", async () => {
     const MAX_STORAGE_CAPACITY = 416600;
 
     // Add a second BSP
@@ -277,7 +277,8 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     ).asOk.toNumber();
 
     if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick) {
-      await userApi.block.skipTo(bspVolunteerTick);
+      // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
+      await userApi.block.skipTo(bspVolunteerTick - 1);
     }
     // We can only store one file.
     await userApi.wait.bspVolunteer();
@@ -301,7 +302,8 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     ).asOk.toNumber();
 
     if ((await userApi.rpc.chain.getHeader()).number.toNumber() < bspVolunteerTick2) {
-      await userApi.block.skipTo(bspVolunteerTick2);
+      // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
+      await userApi.block.skipTo(bspVolunteerTick2 - 1);
     }
 
     const bspTwo = (

@@ -31,6 +31,11 @@ use sp_runtime::{
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use std::{
+    sync::{RwLock, RwLockReadGuard},
+    thread,
+    time::Duration,
+};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -631,14 +636,40 @@ impl crate::Config for Test {
     type TickRangeToMaximumThreshold = ConstU64<30>;
 }
 
-// If we ever require a better mock that doesn't just return true if it is Eve, change this.
+// Use a RwLock for Eve’s insolvency status.
+static IS_EVE_INSOLVENT: RwLock<bool> = RwLock::new(true);
+
+/// Function to set or unset Eve's insolvency status. Returns a read lock to the RwLock
+/// that makes it so the caller thread can disallow other threads from writing to the lock
+/// until it has finished using it.
+pub fn set_eve_insolvent(insolvent: bool) -> RwLockReadGuard<'static, bool> {
+    // Spin until we can acquire the write lock without any active readers.
+    let mut write_guard = loop {
+        if let Ok(write_guard) = IS_EVE_INSOLVENT.try_write() {
+            // Successfully acquired the lock => no other readers.
+            break write_guard;
+        }
+        // There are active readers, so wait a bit before retrying.
+        thread::sleep(Duration::from_millis(10));
+    };
+
+    // Update Eve's insolvent status.
+    *write_guard = insolvent;
+
+    // Drop the write guard to be able to acquire a read lock.
+    drop(write_guard);
+
+    // Acquire a read lock to the RwLock.
+    IS_EVE_INSOLVENT.read().unwrap()
+}
+
 pub struct MockUserSolvency;
 impl ReadUserSolvencyInterface for MockUserSolvency {
     type AccountId = AccountId;
 
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool {
         if user_account == &Keyring::Eve.to_account_id() {
-            true
+            *IS_EVE_INSOLVENT.read().unwrap()
         } else {
             false
         }

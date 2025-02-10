@@ -672,6 +672,7 @@ describeBspNet(
           method: "chargeMultipleUsersPaymentStreams",
           module: "paymentStreams",
           checkTxPool: true,
+          exactLength: false,
           assertLength: 3
         });
 

@@ -2856,7 +2856,7 @@ mod revoke_storage_request {
                     ReplicationTarget::Standard
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account.clone(),
@@ -2869,7 +2869,7 @@ mod revoke_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -2949,7 +2949,7 @@ mod revoke_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -3595,7 +3595,7 @@ mod msp_respond_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -4411,7 +4411,7 @@ mod bsp_volunteer {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -4478,7 +4478,7 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
@@ -4575,7 +4575,7 @@ mod bsp_volunteer {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 // Get BSP ID.
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4654,7 +4654,7 @@ mod bsp_volunteer {
                     ReplicationTarget::Standard
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(bsp_id, |bsp| {
                     assert!(bsp.is_some());
@@ -4726,12 +4726,12 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -4798,7 +4798,7 @@ mod bsp_volunteer {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 // Get BSP ID.
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5112,7 +5112,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_bob_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_bob_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5195,7 +5195,7 @@ mod bsp_confirm {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Force BSP to pass all threshold checks when volunteering.
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -5335,7 +5335,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5423,7 +5423,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5438,7 +5438,7 @@ mod bsp_confirm {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
@@ -5525,12 +5525,12 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5680,7 +5680,7 @@ mod bsp_confirm {
 
                 // Setup BSP
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Create file keys with different file locations
                 let locations: Vec<FileLocation<Test>> = (0..3)
@@ -5723,7 +5723,7 @@ mod bsp_confirm {
                     .iter()
                     .map(|&file_key| {
                         FileSystem::query_earliest_file_volunteer_tick(
-                            Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                            Providers::get_provider_id(&bsp_account_id).unwrap(),
                             file_key,
                         )
                         .unwrap()
@@ -5853,12 +5853,12 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6007,7 +6007,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6116,7 +6116,7 @@ mod bsp_confirm {
 
                 // Sign up account as a Backup Storage Provider and get its ID.
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Compute the file key of the storage request to issue.
                 let file_key = FileSystem::compute_file_key(
@@ -6158,7 +6158,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6389,12 +6389,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6534,12 +6534,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6682,12 +6682,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6845,12 +6845,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7042,12 +7042,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7226,12 +7226,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7366,6 +7366,13 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
+				// Move the pending stop storing request from the `file_key` to the default trie root.
+				// This is so the cycles of the BSP are stopped, given that in the mock used for this tests
+				// the new root after applying the change will be the `file_key` of the applied change.
+				let pending_stop_storing_request = PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).unwrap();
+				let default_trie_root = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_default_root();
+				PendingStopStoringRequests::<Test>::insert(&bsp_id, &default_trie_root, pending_stop_storing_request);
+
                 // Advance enough blocks to allow the BSP to confirm the stop storing request.
                 roll_to(
                     frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
@@ -7374,14 +7381,14 @@ mod bsp_stop_storing {
                 // Dispatch BSP confirm stop storing.
                 assert_ok!(FileSystem::bsp_confirm_stop_storing(
                     bsp_signed.clone(),
-                    file_key,
+                    default_trie_root,
                     CompactProof {
-                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        encoded_nodes: vec![default_trie_root.as_ref().to_vec()],
                     },
                 ));
 
                 // Assert that the pending stop storing request was removed.
-                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &default_trie_root).is_none());
 
                 // Assert that the used capacity of this BSP is now 0
                 assert_eq!(Providers::get_used_capacity(&bsp_id), 0);
@@ -7403,7 +7410,7 @@ mod bsp_stop_storing {
                 System::assert_last_event(
                     Event::BspConfirmStoppedStoring {
                         bsp_id,
-                        file_key,
+                        file_key: default_trie_root,
                         new_root,
                     }
                     .into(),
@@ -7460,7 +7467,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
@@ -7471,7 +7478,7 @@ mod bsp_stop_storing {
 				// Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7711,7 +7718,7 @@ mod bsp_stop_storing {
 					second_file_fingerprint,
 				);
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(
@@ -7725,11 +7732,11 @@ mod bsp_stop_storing {
 				// Calculate in how many ticks the BSP can volunteer for the files
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = max(FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     first_file_key,
                 )
                 .unwrap(), FileSystem::query_earliest_file_volunteer_tick(
-					Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+					Providers::get_provider_id(&bsp_account_id).unwrap(),
 					second_file_key,
 				)
 				.unwrap());
@@ -7994,12 +8001,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -8130,7 +8137,7 @@ mod bsp_stop_storing {
                     ReplicationTarget::Standard,
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8216,7 +8223,7 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -9310,7 +9317,7 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let tick_number =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
@@ -9369,7 +9376,7 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let storage_request = file_system::StorageRequests::<Test>::get(file_key).unwrap();
 
@@ -9505,7 +9512,7 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set reputation weight of BSP to max
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -9544,7 +9551,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to zero
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(0);
@@ -9566,7 +9573,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to 1
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
@@ -9604,14 +9611,14 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_bob_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Create another BSP with higher weight
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to the sum of the two BSPs reputation weights
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(10 + 1);
@@ -9660,13 +9667,13 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_bob_id = Providers::get_provider_id(&bsp_account_id).unwrap();
                 // Create another BSP
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to the sum of the weights of the BSPs
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1 + 1);
@@ -9722,6 +9729,9 @@ mod stop_storing_for_insolvent_user {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+				// Initially set Eve as solvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -9758,12 +9768,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -9887,7 +9897,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the BSP has confirmed storing, we can simulate the user being insolvent
                 // and the BSP stopping storing for the user.
-                // Try to stop storing for the insolvent user.
+				// To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+				// value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_ok!(FileSystem::stop_storing_for_insolvent_user(
                     bsp_signed.clone(),
                     file_key,
@@ -9920,6 +9933,9 @@ mod stop_storing_for_insolvent_user {
                         .capacity_used,
                     0
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
             });
         }
 
@@ -9940,6 +9956,9 @@ mod stop_storing_for_insolvent_user {
                 let storage_amount: StorageData<Test> = 50;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+				// Initially set Eve as solvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
@@ -9980,7 +9999,7 @@ mod stop_storing_for_insolvent_user {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10030,13 +10049,6 @@ mod stop_storing_for_insolvent_user {
                     }],
                 ));
 
-                // TODO: Fix the
-                // TODO: Uncommenting this would result in test failing with the error `UserWithoutFunds`
-                // pallet_payment_streams::UsersWithoutFunds::<Test>::insert(
-                //     owner_account_id.clone(),
-                //     System::block_number(),
-                // );
-
                 // Assert that the storage was updated
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
@@ -10074,7 +10086,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the MSP has accepted storing, we can simulate the user being insolvent
                 // and the MSP stopping storing for the user.
-                // Try to stop storing for the insolvent user.
+				// To make the user insolvent, we release the read lock and wait until we can write
+				// the new value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_ok!(FileSystem::stop_storing_for_insolvent_user(
                     msp_signed.clone(),
                     file_key,
@@ -10111,6 +10126,9 @@ mod stop_storing_for_insolvent_user {
                         .capacity_used,
                     0
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
             });
         }
 
@@ -10167,12 +10185,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10352,11 +10370,17 @@ mod stop_storing_for_insolvent_user {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+                // Initially set Eve as solvent and get the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-                // Try to stop storing for the insolvent user.
+                // Try to stop storing for the insolvent user. To mark Eve as insolvent, drop the read lock and wait to be
+                // able to write the new value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         bsp_signed.clone(),
@@ -10372,6 +10396,9 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::NotASp
                 );
+
+                // Drop the latest acquired read lock.
+                drop(eve_flag_read_lock);
             });
         }
 
@@ -10428,12 +10455,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10580,6 +10607,9 @@ mod stop_storing_for_insolvent_user {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
                 add_msp_to_provider_storage(&another_msp);
 
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -10593,6 +10623,10 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 // Try to stop storing for the insolvent user using another MSP account.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         RuntimeOrigin::signed(another_msp.clone()),
@@ -10608,6 +10642,9 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::MspNotStoringBucket
                 );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
             });
         }
 
@@ -10627,6 +10664,9 @@ mod stop_storing_for_insolvent_user {
                 let storage_amount: StorageData<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+				// Initially unset Eve as insolvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
@@ -10664,12 +10704,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10785,6 +10825,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the BSP has confirmed storing, we can simulate the user being insolvent
                 // and the BSP trying to stop storing for that user with an incorrect inclusion proof.
+				// To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+				// value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         bsp_signed.clone(),
@@ -10800,6 +10844,9 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::ExpectedInclusionProof
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
             });
         }
     }
