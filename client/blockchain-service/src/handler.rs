@@ -1452,9 +1452,7 @@ where
                             }
                         }
                         RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::MoveBucketRequestExpired {
-                                bucket_id,
-                            },
+                            pallet_file_system::Event::MoveBucketRequestExpired { bucket_id },
                         ) => {
                             // This event is relevant in case the Provider managed is a BSP.
                             if let Some(StorageProviderId::BackupStorageProvider(_)) =
