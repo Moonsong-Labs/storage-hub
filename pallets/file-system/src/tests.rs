@@ -5112,7 +5112,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(&bsp_bob_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_bob_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
