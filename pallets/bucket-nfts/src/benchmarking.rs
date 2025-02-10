@@ -11,7 +11,7 @@ use frame_benchmarking::v2::*;
         MerklePatriciaRoot = <T as frame_system::Config>::Hash,
         StorageDataUnit = u64,
         ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId>
-    + pallet_balances::Config 
+    + pallet_balances::Config
     + pallet_file_system::Config<Fingerprint = <T as frame_system::Config>::Hash, Providers = pallet_storage_providers::Pallet<T>>,
     <T as crate::Config>::Buckets: shp_traits::ReadBucketsInterface<BucketId = <T as pallet_storage_providers::Config>::ProviderId, AccountId = <T as frame_system::Config>::AccountId, ProviderId = <T as pallet_storage_providers::Config>::ProviderId, ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId, BucketNameLimit = <T as pallet_storage_providers::Config>::BucketNameLimit>,
 )]
@@ -21,8 +21,8 @@ mod benchmarks {
     use frame_support::{assert_ok, traits::fungible::Mutate, BoundedVec};
     use frame_system::{pallet_prelude::BlockNumberFor, RawOrigin};
     use pallet_storage_providers::types::{
-        BucketId, MainStorageProvider, StorageDataUnit, ValuePropIdFor,
-        ValueProposition, ProviderIdFor
+        BucketId, MainStorageProvider, ProviderIdFor, StorageDataUnit, ValuePropIdFor,
+        ValueProposition,
     };
     use shp_traits::ReadBucketsInterface;
     use sp_core::Get;
@@ -55,7 +55,7 @@ mod benchmarks {
         let msp_account: T::AccountId = account("MSP", 0, 0);
         mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
         let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
-        
+
         // Create bucket with private access
         let (bucket_id, _read_access_group_id) =
             create_bucket_and_collection::<T>(issuer.clone(), msp_id, value_prop_id)?;
@@ -100,14 +100,14 @@ mod benchmarks {
         let issuer: T::AccountId = whitelisted_caller();
         mint_into_account::<T>(issuer.clone(), 1_000_000_000_000_000)?;
         let recipient: T::AccountId = account("Recipient", 0, 0);
-         // Register a MSP with a value proposition
-         let msp_account: T::AccountId = account("MSP", 0, 0);
-         mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
-         let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
-         
-         // Create bucket with private access
-         let (bucket_id, _read_access_group_id) =
-             create_bucket_and_collection::<T>(issuer.clone(), msp_id, value_prop_id)?;
+        // Register a MSP with a value proposition
+        let msp_account: T::AccountId = account("MSP", 0, 0);
+        mint_into_account::<T>(msp_account.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp_account);
+
+        // Create bucket with private access
+        let (bucket_id, _read_access_group_id) =
+            create_bucket_and_collection::<T>(issuer.clone(), msp_id, value_prop_id)?;
 
         let item_id = T::ItemId::from(1u32);
 
@@ -168,10 +168,19 @@ mod benchmarks {
         value_prop_id: ValuePropIdFor<T>,
     ) -> Result<(BucketId<T>, T::ReadAccessGroupId), BenchmarkError>
     where
-        T: crate::Config + pallet_storage_providers::Config<ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId> + pallet_file_system::Config<Providers = pallet_storage_providers::Pallet<T>>,
-        <T as crate::Config>::Buckets: shp_traits::ReadBucketsInterface<BucketId = <T as pallet_storage_providers::Config>::ProviderId, BucketNameLimit = <T as pallet_storage_providers::Config>::BucketNameLimit>
+        T: crate::Config
+            + pallet_storage_providers::Config<
+                ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId,
+            > + pallet_file_system::Config<Providers = pallet_storage_providers::Pallet<T>>,
+        <T as crate::Config>::Buckets: shp_traits::ReadBucketsInterface<
+            BucketId = <T as pallet_storage_providers::Config>::ProviderId,
+            BucketNameLimit = <T as pallet_storage_providers::Config>::BucketNameLimit,
+        >,
     {
-        let name: BoundedVec<u8, <<T as crate::Config>::Buckets as shp_traits::ReadBucketsInterface>::BucketNameLimit> = vec![1u8; 32]
+        let name: BoundedVec<
+            u8,
+            <<T as crate::Config>::Buckets as shp_traits::ReadBucketsInterface>::BucketNameLimit,
+        > = vec![1u8; 32]
             .try_into()
             .map_err(|_| BenchmarkError::Stop("Failed to create bucket name"))?;
 
@@ -196,11 +205,12 @@ mod benchmarks {
 
     fn add_msp_to_provider_storage<T>(msp: &T::AccountId) -> (ProviderIdFor<T>, ValuePropIdFor<T>)
     where
-        T: pallet_nfts::Config + pallet_storage_providers::Config<
-            ProviderId = <T as frame_system::Config>::Hash,
-            StorageDataUnit = u64,
-            ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId
-        >,
+        T: pallet_nfts::Config
+            + pallet_storage_providers::Config<
+                ProviderId = <T as frame_system::Config>::Hash,
+                StorageDataUnit = u64,
+                ReadAccessGroupId = <T as pallet_nfts::Config>::CollectionId,
+            >,
     {
         let msp_hash = T::Hashing::hash_of(&msp);
         let msp_id = ProviderIdFor::<T>::from(msp_hash);
