@@ -383,7 +383,8 @@ where
                                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                             }
                             Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
-                                // TODO: Handle MSP not receiving file after multiple retries.
+                                // If MSP doesnt receive file, the burden of downloading the file will be on the MSP.
+                                return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                             }
                             Err(e) => {
                                 error!(
