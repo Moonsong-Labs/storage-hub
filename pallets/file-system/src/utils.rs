@@ -1010,12 +1010,13 @@ where
         bucket_id: BucketIdFor<T>,
         accepted_file_keys: StorageRequestMspAcceptedFileKeys<T>,
     ) -> Result<MerkleHash<T>, DispatchError> {
-        // TODO: Since we are batching, we should maybe have a way to skip files instead of failing the whole batch.
         // Get the user owner of the bucket.
         let bucket_owner =
             <T::Providers as shp_traits::ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
 
-        // Check that the bucket owner is not currently insolvent.
+        // Check that the bucket owner is not currently insolvent. This is done to error out early, since otherwise
+        // it will go through with all the verification logic and then fail when trying to update the payment stream
+        // between the MSP and the user.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&bucket_owner),
             Error::<T>::OperationNotAllowedWithInsolventUser
@@ -1266,7 +1267,9 @@ where
         let mut storage_request_metadata =
             <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
-        // Check that the user that issued the storage request is not currently insolvent.
+        // Check that the user that issued the storage request is not currently insolvent. This is done
+        // to avoid the BSP the trouble of volunteering, then fetching the file from the user, generating
+        // the proof and then not being able to confirm storing the file because the user is insolvent.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(
                 &storage_request_metadata.owner
@@ -1428,7 +1431,8 @@ where
                 }
             };
 
-            // Check that the user that issued the storage request is not currently insolvent.
+            // Check that the user that issued the storage request is not currently insolvent. This is done to continue the loop early,
+            // since the file key would still be skipped after failing to update the payment stream between the user and the BSP.
             if <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(
                 &storage_request_metadata.owner,
             ) {
@@ -1439,6 +1443,7 @@ where
                     Error::<T>::TooManyStorageRequestResponses,
                     result
                 );
+                continue;
             }
 
             // Check that the BSP has volunteered for the storage request.
@@ -1996,6 +2001,8 @@ where
 
         // Check that the user that owns the file is not currently insolvent. The BSP should
         // call `sp_stop_storing_for_insolvent_user` instead if the user is insolvent.
+        // This is done to error out early since this extrinsic would eventually fail when trying
+        // to update the payment stream between the user and the BSP.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
             Error::<T>::OperationNotAllowedWithInsolventUser
@@ -2267,7 +2274,8 @@ where
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
         // Check that the user that's sending the deletion request is not currently insolvent.
         // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
-        // to delete their files and buckets using the available extrinsics.
+        // to delete their files and buckets using the available extrinsics or resolve their
+        // insolvency manually.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
             Error::<T>::OperationNotAllowedWithInsolventUser

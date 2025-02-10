@@ -138,7 +138,7 @@ export const sealBlock = async (
         hash = await call.signAndSend(signer || alice, { nonce: nonceToUse + i });
       }
 
-      // Wait for 2 seconds until the transaction is included in the pending extrinsics
+      // Poll for the transaction to be included in the pending extrinsics, or error out in 2 seconds
       const iterations = 20;
       const delay = 100;
       for (let i = 0; i < iterations; i++) {

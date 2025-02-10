@@ -7367,7 +7367,8 @@ mod bsp_stop_storing {
                 );
 
 				// Move the pending stop storing request from the `file_key` to the default trie root.
-				// This is so the cycles of the BSP get stopped.
+				// This is so the cycles of the BSP are stopped, given that in the mock used for this tests
+				// the new root after applying the change will be the `file_key` of the applied change.
 				let pending_stop_storing_request = PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).unwrap();
 				let default_trie_root = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_default_root();
 				PendingStopStoringRequests::<Test>::insert(&bsp_id, &default_trie_root, pending_stop_storing_request);
