@@ -155,15 +155,15 @@ describeBspNet("BSPNet: Validating max storage", ({ before, it, createUserApi })
     const bucketName = "nothingmuch-2";
     await userApi.file.createBucketAndSendNewStorageRequest(source, location, bucketName);
 
-    await userApi.wait.bspVolunteer();
+    await userApi.wait.bspVolunteer(1);
 
-    const address = userApi.createType("Address", ShConsts.NODE_INFOS.bsp.AddressId);
-    await userApi.wait.bspStored(undefined, address);
+    const bspAddress = userApi.createType("Address", ShConsts.NODE_INFOS.bsp.AddressId);
+    await userApi.wait.bspStored(1, bspAddress);
 
     // Skip block height past threshold
     await userApi.block.skipToMinChangeTime();
 
-    await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
+    await userApi.wait.waitForAvailabilityToSendTx(bspAddress.toString());
 
     const { events, extSuccess } = await userApi.block.seal({
       calls: [userApi.tx.providers.changeCapacity(2n)],

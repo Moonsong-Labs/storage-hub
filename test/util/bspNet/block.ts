@@ -129,8 +129,6 @@ export const sealBlock = async (
 
     // Send all transactions in sequence
     for (let i = 0; i < callArray.length; i++) {
-      const originalPendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
-
       const call = callArray[i];
       let hash: Hash;
 
@@ -140,22 +138,33 @@ export const sealBlock = async (
         hash = await call.signAndSend(signer || alice, { nonce: nonceToUse + i });
       }
 
-      for (let i = 0; i < 100; i++) {
-        const pendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
-        if (pendingTxs === originalPendingTxs + 1) {
-          results.hashes.push(hash);
+      // Wait for 2 seconds until the transaction is included in the pending extrinsics
+      const iterations = 20;
+      const delay = 100;
+      for (let i = 0; i < iterations; i++) {
+        // Get the pending extrinsics
+        const pendingExtrinsics = await api.rpc.author.pendingExtrinsics();
+
+        // Check if the hash of the transaction is in the pending extrinsics
+        if (pendingExtrinsics.map((ext) => ext.hash.toString()).includes(hash.toString())) {
           break;
         }
-        await sleep(50);
+
+        if (i < iterations) {
+          await sleep(delay);
+        } else {
+          if (failOnExtrinsicNonInclusion) {
+            console.error(
+              `Failed to find transaction ${hash.toString()} (${call.method.section.toString()}:${call.method.method.toString()}) in pending extrinsics`
+            );
+            throw new Error(
+              `Transaction ${call.method.section.toString()}:${call.method.method.toString()} failed to be included in the block`
+            );
+          }
+        }
       }
 
-      const pendingTxs = (await api.rpc.author.pendingExtrinsics()).length;
-      if (failOnExtrinsicNonInclusion && pendingTxs !== originalPendingTxs + 1) {
-        console.error(`Original pending txs ${originalPendingTxs} and now ${pendingTxs}`);
-        throw new Error(
-          `Transaction ${call.method.section.toString()}:${call.method.method.toString()} failed to be included in the block`
-        );
-      }
+      results.hashes.push(hash);
     }
   }
 
