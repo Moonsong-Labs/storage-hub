@@ -32,7 +32,7 @@ mod share_access_tests {
                 msp_id,
                 bucket_name.clone(),
                 true,
-                Some(value_prop_id)
+                value_prop_id
             ));
 
             let bucket_id =
@@ -83,7 +83,7 @@ mod share_access_tests {
                 msp_id,
                 bucket_name.clone(),
                 true,
-                Some(value_prop_id)
+                value_prop_id
             ));
 
             let bucket_id =
@@ -154,7 +154,7 @@ mod share_access_tests {
                 msp_id,
                 bucket_name.clone(),
                 false,
-                Some(value_prop_id)
+                value_prop_id
             ));
 
             let bucket_id =
@@ -193,7 +193,7 @@ mod share_access_tests {
                 msp_id,
                 bucket_name.clone(),
                 true,
-                Some(value_prop_id)
+                value_prop_id
             ));
 
             let bucket_id =
@@ -243,7 +243,7 @@ mod update_read_access_tests {
                 msp_id,
                 bucket_name.clone(),
                 true,
-                Some(value_prop_id)
+                value_prop_id
             ));
 
             let bucket_id =
@@ -304,7 +304,7 @@ mod update_read_access_tests {
                 msp_id,
                 bucket_name.clone(),
                 true,
-                Some(value_prop_id)
+                value_prop_id
             ));
 
             let bucket_id =
@@ -379,7 +379,7 @@ mod update_read_access_tests {
                 msp_id,
                 bucket_name.clone(),
                 true,
-                Some(value_prop_id)
+                value_prop_id
             ));
 
             let bucket_id =
@@ -419,6 +419,8 @@ fn add_msp_to_provider_storage(
         owner_account: msp.clone(),
         payment_account: msp.clone(),
         sign_up_block: frame_system::Pallet::<Test>::block_number(),
+        amount_of_buckets: 0,
+        amount_of_value_props: 1,
     };
 
     pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);

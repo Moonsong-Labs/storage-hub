@@ -526,12 +526,12 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Notifies that a bucket has been moved to a new MSP.
+       * Notifies that a bucket has been moved to a new MSP under a new value proposition.
        **/
       MoveBucketAccepted: AugmentedEvent<
         ApiType,
-        [bucketId: H256, mspId: H256],
-        { bucketId: H256; mspId: H256 }
+        [bucketId: H256, mspId: H256, valuePropId: H256],
+        { bucketId: H256; mspId: H256; valuePropId: H256 }
       >;
       /**
        * Notifies that a bucket move request has been rejected by the MSP.
@@ -546,8 +546,8 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MoveBucketRequested: AugmentedEvent<
         ApiType,
-        [who: AccountId32, bucketId: H256, newMspId: H256],
-        { who: AccountId32; bucketId: H256; newMspId: H256 }
+        [who: AccountId32, bucketId: H256, newMspId: H256, newValuePropId: H256],
+        { who: AccountId32; bucketId: H256; newMspId: H256; newValuePropId: H256 }
       >;
       /**
        * Notifies that a move bucket request has expired.
@@ -590,7 +590,7 @@ declare module "@polkadot/api-base/types/events" {
           root: H256,
           collectionId: Option<u32>,
           private: bool,
-          valuePropId: Option<H256>
+          valuePropId: H256
         ],
         {
           who: AccountId32;
@@ -600,7 +600,7 @@ declare module "@polkadot/api-base/types/events" {
           root: H256;
           collectionId: Option<u32>;
           private: bool;
-          valuePropId: Option<H256>;
+          valuePropId: H256;
         }
       >;
       /**
@@ -1785,6 +1785,15 @@ declare module "@polkadot/api-base/types/events" {
         { bucketId: H256; oldRoot: H256; newRoot: H256 }
       >;
       /**
+       * Event emitted when the provider that has been marked as insolvent was a MSP. It notifies the users of that MSP
+       * the buckets that it was holding, so they can take appropriate measures.
+       **/
+      BucketsOfInsolventMsp: AugmentedEvent<
+        ApiType,
+        [mspId: H256, buckets: Vec<H256>],
+        { mspId: H256; buckets: Vec<H256> }
+      >;
+      /**
        * Event emitted when a SP has changed its capacity successfully. Provides information about
        * that SP's account id, its old total data that could store, and the new total data.
        **/
@@ -1812,18 +1821,6 @@ declare module "@polkadot/api-base/types/events" {
         ApiType,
         [providerId: H256],
         { providerId: H256 }
-      >;
-      /**
-       * Event emitted when there was an inconsistency error and the provider was found in ProviderTopUpExpirations
-       * for a tick that wasn't actually when its top up expired, and when trying to insert it with the actual
-       * expiration tick in ProviderTopUpExpirations the append failed.
-       *
-       * The result of this is that
-       **/
-      FailedToInsertProviderTopUpExpiration: AugmentedEvent<
-        ApiType,
-        [providerId: H256, expirationTick: u32],
-        { providerId: H256; expirationTick: u32 }
       >;
       /**
        * Event emitted when there's an error slashing the now insolvent provider.

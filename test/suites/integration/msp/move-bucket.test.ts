@@ -301,13 +301,26 @@ describeMspNet(
         allBucketFiles.push(fileKey);
       }
 
-      // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
-      await userApi.block.skip({ blocksToAdvance: 5, paddingMs: 500 });
+      // Wait for the BSPs to volunteer and confirm storing the files so the storage requests get fulfilled.
+      for (const fileKey of acceptedFileKeys) {
+        await userApi.wait.storageRequestNotOnChain(fileKey);
+      }
     });
 
     it("User moves bucket to second MSP", async () => {
+      // Get the value propositions of the second MSP to use, and use the first one (can be any).
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID_2
+      );
+      const valuePropId = valueProps[0].id;
       const requestMoveBucketResult = await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2)],
+        calls: [
+          userApi.tx.fileSystem.requestMoveBucket(
+            bucketId,
+            msp2Api.shConsts.DUMMY_MSP_ID_2,
+            valuePropId
+          )
+        ],
         signer: shUser
       });
 

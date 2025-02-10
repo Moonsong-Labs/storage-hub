@@ -46,10 +46,13 @@ pub mod pallet {
     use frame_system::pallet_prelude::{BlockNumberFor, *};
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
-        FileMetadataInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+        FileMetadataInterface, NumericalParam, PaymentStreamsInterface, ProofSubmittersInterface,
         ReadUserSolvencyInterface, StorageHubTickGetter,
     };
-    use sp_runtime::traits::{Bounded, CheckedDiv, ConvertBack, Hash};
+    use sp_runtime::{
+        traits::{Bounded, CheckedDiv, ConvertBack, Hash},
+        Vec,
+    };
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -129,6 +132,9 @@ pub mod pallet {
             + Debug
             + scale_info::TypeInfo
             + MaxEncodedLen;
+
+        /// Type that is used to keep track of how many Buckets a Main Storage Provider is currently storing.
+        type BucketCount: NumericalParam;
 
         /// The type of the Merkle Patricia Root of the storage trie for BSPs and MSPs' buckets (a hash).
         type MerklePatriciaRoot: Parameter
@@ -361,7 +367,7 @@ pub mod pallet {
     /// This storage is updated in:
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket), which adds a new entry to the map.
     /// - [change_root_bucket](shp_traits::MutateProvidersInterface::change_root_bucket), which changes the corresponding bucket's root.
-    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket), which removes the entry of the corresponding bucket.
+    /// - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket), which removes the entry of the corresponding bucket.
     #[pallet::storage]
     pub type Buckets<T: Config> = StorageMap<_, Blake2_128Concat, BucketId<T>, Bucket<T>>;
 
@@ -371,7 +377,7 @@ pub mod pallet {
     ///
     /// This storage is updated in:
     /// - [add_bucket](shp_traits::MutateProvidersInterface::add_bucket)
-    /// - [remove_root_bucket](shp_traits::MutateProvidersInterface::remove_root_bucket)
+    /// - [delete_bucket](shp_traits::MutateProvidersInterface::delete_bucket)
     #[pallet::storage]
     pub type MainStorageProviderIdsToBuckets<T: Config> = StorageDoubleMap<
         _,
@@ -642,6 +648,13 @@ pub mod pallet {
         /// and they have a capacity deficit (i.e. their capacity based on their stake is below their used capacity by the files it stores).
         ProviderInsolvent { provider_id: ProviderIdFor<T> },
 
+        /// Event emitted when the provider that has been marked as insolvent was a MSP. It notifies the users of that MSP
+        /// the buckets that it was holding, so they can take appropriate measures.
+        BucketsOfInsolventMsp {
+            msp_id: ProviderIdFor<T>,
+            buckets: Vec<BucketId<T>>,
+        },
+
         /// Event emitted when a bucket's root has been changed.
         BucketRootChanged {
             bucket_id: BucketId<T>,
@@ -745,6 +758,8 @@ pub mod pallet {
         BucketAlreadyExists,
         /// Bucket cannot be deleted because it is not empty.
         BucketNotEmpty,
+        /// Error thrown when, after moving all buckets of a MSP when removing it from the system, the amount doesn't match the expected value.
+        BucketsMovedAmountMismatch,
         /// Error thrown when a bucket ID could not be added to the list of buckets of a MSP.
         AppendBucketToMspFailed,
         /// Error thrown when an attempt was made to slash an unslashable Storage Provider.
@@ -767,6 +782,10 @@ pub mod pallet {
         ValuePropositionAlreadyExists,
         /// Error thrown when a value proposition is not available.
         ValuePropositionNotAvailable,
+        /// Error thrown when a MSP tries to deactivate its last value proposition.
+        CantDeactivateLastValueProp,
+        /// Error thrown when, after deleting all value propositions of a MSP when removing it from the system, the amount doesn't match the expected value.
+        ValuePropositionsDeletedAmountMismatch,
         /// Error thrown when a fixed payment stream is not found.
         FixedRatePaymentStreamNotFound,
         /// Error thrown when changing the MSP of a bucket to the same assigned MSP.
@@ -787,6 +806,8 @@ pub mod pallet {
         CannotStopCycleWithNonDefaultRoot,
         /// An operation dedicated to BSPs only
         BspOnlyOperation,
+        /// An operation dedicated to MSPs only
+        MspOnlyOperation,
 
         // `MutateChallengeableProvidersInterface` errors:
         /// Error thrown when failing to decode the metadata from a received trie value that was removed.
@@ -860,6 +881,8 @@ pub mod pallet {
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
+                amount_of_buckets: T::BucketCount::zero(),
+                amount_of_value_props: 0u32,
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
@@ -1036,13 +1059,23 @@ pub mod pallet {
         ///
         /// Emits `MspSignOffSuccess` event when successful.
         #[pallet::call_index(4)]
-        #[pallet::weight(T::WeightInfo::msp_sign_off())]
-        pub fn msp_sign_off(origin: OriginFor<T>) -> DispatchResultWithPostInfo {
+        #[pallet::weight({
+			match MainStorageProviders::<T>::get(&msp_id) {
+				Some(msp) => T::WeightInfo::msp_sign_off(msp.amount_of_value_props)
+								.saturating_add(T::DbWeight::get().reads(1)),
+				None => T::WeightInfo::msp_sign_off(0)
+							.saturating_add(T::DbWeight::get().reads(1)),
+			}
+		})]
+        pub fn msp_sign_off(
+            origin: OriginFor<T>,
+            msp_id: ProviderIdFor<T>,
+        ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
 
             // Execute checks and logic, update storage
-            let msp_id = Self::do_msp_sign_off(&who)?;
+            Self::do_msp_sign_off(&who, msp_id)?;
 
             // Emit the corresponding event
             Self::deposit_event(Event::MspSignOffSuccess { who, msp_id });
@@ -1319,6 +1352,8 @@ pub mod pallet {
                 capacity,
                 capacity_used: StorageDataUnit::<T>::default(),
                 multiaddresses: multiaddresses.clone(),
+                amount_of_buckets: T::BucketCount::zero(),
+                amount_of_value_props: 0u32,
                 last_capacity_change: frame_system::Pallet::<T>::block_number(),
                 owner_account: who.clone(),
                 payment_account,
@@ -1451,7 +1486,7 @@ pub mod pallet {
         ///
         /// The dispatch origin for this call must be signed.
         #[pallet::call_index(14)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight(T::WeightInfo::top_up_deposit())]
         pub fn top_up_deposit(origin: OriginFor<T>) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin)?;
@@ -1477,7 +1512,15 @@ pub mod pallet {
         /// This operation is free if successful to encourage the community to delete insolvent providers,
         /// debloating the state.
         #[pallet::call_index(15)]
-        #[pallet::weight(Weight::from_parts(10_000, 0) + T::DbWeight::get().writes(1))]
+        #[pallet::weight({
+			let weight_required = if let Some(msp) = MainStorageProviders::<T>::get(provider_id) {
+				T::WeightInfo::delete_provider_msp(msp.amount_of_value_props, msp.amount_of_buckets.try_into().unwrap_or(u32::MAX))
+			} else {
+				T::WeightInfo::delete_provider_bsp()
+			};
+
+			weight_required.saturating_add(T::DbWeight::get().reads(1))
+		})]
         pub fn delete_provider(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,

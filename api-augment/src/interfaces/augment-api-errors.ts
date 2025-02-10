@@ -472,6 +472,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       UserNotInsolvent: AugmentedError<ApiType>;
       /**
+       * The selected value proposition is not available in the MSP.
+       **/
+      ValuePropositionNotAvailable: AugmentedError<ApiType>;
+      /**
        * Generic error
        **/
       [key: string]: AugmentedError<ApiType>;
@@ -1096,6 +1100,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       BucketSizeExceedsLimit: AugmentedError<ApiType>;
       /**
+       * Error thrown when, after moving all buckets of a MSP when removing it from the system, the amount doesn't match the expected value.
+       **/
+      BucketsMovedAmountMismatch: AugmentedError<ApiType>;
+      /**
        * Error thrown when the runtime cannot hold the required deposit from the account to register it as a SP or change its capacity.
        **/
       CannotHoldDeposit: AugmentedError<ApiType>;
@@ -1103,6 +1111,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Cannot stop BSP cycles without a default root
        **/
       CannotStopCycleWithNonDefaultRoot: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a MSP tries to deactivate its last value proposition.
+       **/
+      CantDeactivateLastValueProp: AugmentedError<ApiType>;
       /**
        * Failed to delete a provider due to conditions not being met.
        *
@@ -1141,6 +1153,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when changing the MSP of a bucket to the same assigned MSP.
        **/
       MspAlreadyAssignedToBucket: AugmentedError<ApiType>;
+      /**
+       * An operation dedicated to MSPs only
+       **/
+      MspOnlyOperation: AugmentedError<ApiType>;
       /**
        * Error thrown when a Provider tries to add a new MultiAddress to its account but it already exists.
        **/
@@ -1253,6 +1269,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Error thrown when the value proposition id is not found.
        **/
       ValuePropositionNotFound: AugmentedError<ApiType>;
+      /**
+       * Error thrown when, after deleting all value propositions of a MSP when removing it from the system, the amount doesn't match the expected value.
+       **/
+      ValuePropositionsDeletedAmountMismatch: AugmentedError<ApiType>;
       /**
        * Generic error
        **/

@@ -163,12 +163,25 @@ pub type Commitment<T> = BoundedVec<u8, <T as crate::Config>::MaxCommitmentSize>
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct MainStorageProvider<T: Config> {
+    /// The total capacity that this MSP can store.
     pub capacity: StorageDataUnit<T>,
+    /// The amount of data that this MSP is currently storing.
     pub capacity_used: StorageDataUnit<T>,
+    /// The multiaddresses that can be used to connect to this MSP.
     pub multiaddresses: Multiaddresses<T>,
+    /// The number of buckets that this MSP currently has. This is used for stats and to know how many Buckets have to moved
+    /// if the MSP ever gets deleted because of slashing.
+    pub amount_of_buckets: BucketCount<T>,
+    /// The number of value propositions that this MSP has registered over its lifetime. This is used to know how many storage
+    /// elements have to be deleted if this MSP signs off or gets deleted.
+    pub amount_of_value_props: u32,
+    /// The block at which this MSP last changed its total capacity.
     pub last_capacity_change: BlockNumberFor<T>,
+    /// The account ID of the owner of this MSP.
     pub owner_account: T::AccountId,
+    /// The account ID that this MSP uses to receive payments.
     pub payment_account: T::AccountId,
+    /// The block at which this MSP signed up.
     pub sign_up_block: BlockNumberFor<T>,
 }
 
@@ -193,13 +206,22 @@ pub struct BackupStorageProvider<T: Config> {
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct Bucket<T: Config> {
+    /// The current root of the bucket.
     pub root: MerklePatriciaRoot<T>,
+    /// The user that owns the bucket.
     pub user_id: T::AccountId,
+    /// The MSP ID of the MSP that is currently storing the bucket. It's an Option because the
+    /// bucket can be in transit between MSPs after the first MSP stops storing it.
     pub msp_id: Option<MainStorageProviderId<T>>,
+    /// Whether the bucket is private or not.
     pub private: bool,
+    /// If the bucket is private, it has to have a collection ID that holds the items that allow a user to access the bucket's data.
+    /// This is not enforced by the runtime but by the MSP storing that bucket.
     pub read_access_group_id: Option<T::ReadAccessGroupId>,
+    /// The current size of the bucket.
     pub size: StorageDataUnit<T>,
-    pub value_prop_id: Option<ValuePropIdFor<T>>,
+    /// The value proposition that the bucket is associated with. It's only valid if the bucket is associated with a MSP.
+    pub value_prop_id: ValuePropIdFor<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebugNoBound, PartialEq, Eq, Clone)]
@@ -293,6 +315,8 @@ pub type Hashing<T> = <T as frame_system::Config>::Hashing;
 /// StorageData is the type of the unit in which we measure data size. We define its required traits in the
 /// pallet configuration so the runtime can use any type that implements them.
 pub type StorageDataUnit<T> = <T as crate::Config>::StorageDataUnit;
+/// BucketCount is the type that is used to count the amount of buckets that a Main Storage Provider can have.
+pub type BucketCount<T> = <T as crate::Config>::BucketCount;
 
 /// Protocols is a vector of the protocols that (the runtime is aware of and) the Main Storage Provider supports.
 /// Its maximum size is defined in the runtime configuration, as MaxProtocols.
