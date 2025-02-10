@@ -4675,6 +4675,7 @@ export default {
       "PendingStopStoringRequestNotFound",
       "MinWaitForStopStoringNotReached",
       "PendingStopStoringRequestAlreadyExists",
+      "OperationNotAllowedWithInsolventUser",
       "UserNotInsolvent",
       "NotSelectedMsp",
       "MspAlreadyConfirmed",

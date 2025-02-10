@@ -542,7 +542,7 @@ pub trait ReadChallengeableProvidersInterface {
     fn is_provider(who: Self::ProviderId) -> bool;
 
     /// Get the Provider Id from Account Id, if it is a registered challengeable Provider.
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId>;
 
     /// Get the Account Id of the owner of a registered challengeable Provider.
     fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;
@@ -653,7 +653,7 @@ pub trait ReadProvidersInterface {
     fn is_provider(who: Self::ProviderId) -> bool;
 
     /// Get the Provider Id from Account Id, if it is a registered Provider.
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId>;
 
     /// Get the Account Id of the owner of a registered Provider.
     fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;

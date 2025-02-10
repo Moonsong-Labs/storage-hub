@@ -85,6 +85,7 @@ export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: numbe
     module: "fileSystem",
     method: "bspVolunteer",
     checkQuantity,
+    strictQuantity: (checkQuantity ?? 0) > 0,
     shouldSeal: true,
     expectedEvent: "AcceptedBspVolunteer"
   });
@@ -138,9 +139,10 @@ export const waitForBspStored = async (
 ) => {
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
-  const delay = 200;
+  const delay = 100;
 
-  // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
+  // This check is because a BSP cannot confirm storing a file in the same block in which it has to submit a proof,
+  // since it can only send one root-changing transaction per block and proof submission is prioritized.
   assert(
     !(bspAccount && checkQuantity && checkQuantity > 1),
     "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
@@ -150,34 +152,32 @@ export const waitForBspStored = async (
     try {
       await sleep(delay);
 
-      // check if we have a submitProof extrinsic
+      // Check if there's a pending submit proof extrinsic from the BSP account.
       if (bspAccount) {
         const txs = await api.rpc.author.pendingExtrinsics();
         const match = txs.filter(
           (tx) => tx.method.method === "submitProof" && tx.signer.eq(bspAccount)
         );
 
-        // If we have a submit proof event at the same time we are trying to confirm storage
-        // we need to advance one block because the two event cannot happen at the same time
+        // If there's a submit proof extrinsic pending, advance one block to allow the BSP to submit
+        // the proof and be able to confirm storing the file and continue waiting.
         if (match.length === 1) {
           await sealBlock(api);
+          continue;
         }
       }
 
-      const matches = await assertExtrinsicPresent(api, {
+      // Check to see if the quantity of confirm storing extrinsics required are in the TX pool.
+      await assertExtrinsicPresent(api, {
         module: "fileSystem",
         method: "bspConfirmStoring",
         checkTxPool: true,
-        timeout: 10000,
-        assertLength: checkQuantity
+        timeout: 100, // Small timeout since we are already waiting between checks.
+        assertLength: checkQuantity,
+        exactLength: (checkQuantity ?? 0) > 0
       });
-      if (checkQuantity) {
-        assert(
-          matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspConfirmStoring`
-        );
-      }
 
+      // If there are exactly checkQuantity extrinsics (or at least one if checkQuantity is not defined), seal the block and check for the event.
       if (shouldSealBlock) {
         const { events } = await sealBlock(api);
         assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
