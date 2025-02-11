@@ -1063,7 +1063,7 @@ where
                 "Failed to get destroy witness for collection, when it was already checked to exist",
                 Error::<T>::CollectionNotFound
             );
-            T::Nfts::destroy(collection_id, destroy_witness, Some(sender))?;
+            T::Nfts::destroy(collection_id, destroy_witness, Some(bucket_owner.clone()))?;
         }
 
         // Delete the bucket from the system.

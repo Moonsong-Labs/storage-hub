@@ -11554,6 +11554,9 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                 // Sign up an account as a Main Storage Provider.
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
                 // Create the bucket.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let (bucket_id, _) = create_bucket(
@@ -11568,6 +11571,10 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                 // previous to the check of the user's solvency in the extrinsic.
 
                 // Try to stop storing the bucket for the insolvent user as a regular, not registered user.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::msp_stop_storing_bucket_for_insolvent_user(
                         other_account_signed.clone(),
@@ -11575,6 +11582,9 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     ),
                     Error::<Test>::NotAMsp
                 );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
             });
         }
 
@@ -11593,6 +11603,9 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                 let storage_amount: StorageData<Test> = 50;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
                 // Create the bucket.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let (bucket_id, _) = create_bucket(
@@ -11607,6 +11620,10 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                 // previous to the check of the user's solvency in the extrinsic.
 
                 // Try to stop storing the bucket for the insolvent user as the BSP.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::msp_stop_storing_bucket_for_insolvent_user(
                         bsp_signed.clone(),
@@ -11614,6 +11631,9 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     ),
                     Error::<Test>::NotAMsp
                 );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
             });
         }
 
@@ -12157,6 +12177,11 @@ fn create_bucket(
         value_prop_id
     ));
 
+    // Get the collection ID of the bucket.
+    let maybe_collection_id = pallet_storage_providers::Buckets::<Test>::get(bucket_id)
+        .expect("Bucket should exist in storage")
+        .read_access_group_id;
+
     // Assert bucket was created
     assert_eq!(
         pallet_storage_providers::Buckets::<Test>::get(bucket_id),
@@ -12165,7 +12190,7 @@ fn create_bucket(
             user_id: owner.clone(),
             msp_id: Some(msp_id),
             private,
-            read_access_group_id: None,
+            read_access_group_id: maybe_collection_id,
             size: 0,
             value_prop_id,
         })
@@ -12175,11 +12200,6 @@ fn create_bucket(
     assert!(
         <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner).is_some()
     );
-
-    // Get the collection ID of the bucket.
-    let maybe_collection_id = pallet_storage_providers::Buckets::<Test>::get(bucket_id)
-        .expect("Bucket should exist in storage")
-        .read_access_group_id;
 
     (bucket_id, maybe_collection_id)
 }
