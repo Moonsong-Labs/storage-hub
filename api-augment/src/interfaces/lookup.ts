@@ -1583,6 +1583,11 @@ export default {
         location: "Bytes",
         newRoot: "H256"
       },
+      MspStopStoringBucketInsolventUser: {
+        mspId: "H256",
+        owner: "AccountId32",
+        bucketId: "H256"
+      },
       FailedToQueuePriorityChallenge: {
         fileKey: "H256",
         error: "SpRuntimeDispatchError"
@@ -3644,6 +3649,9 @@ export default {
         fingerprint: "H256",
         size_: "u64",
         inclusionForestProof: "SpTrieStorageProofCompactProof"
+      },
+      msp_stop_storing_bucket_for_insolvent_user: {
+        bucketId: "H256"
       },
       delete_file: {
         _alias: {
