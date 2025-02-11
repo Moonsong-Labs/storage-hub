@@ -322,9 +322,20 @@ describeMspNet(
       const postgresContainer = docker.getContainer("docker-sh-postgres-1");
       await postgresContainer.pause();
 
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID_2
+      );
+      const valuePropId = valueProps[0].id;
+
       // User requests to move bucket to second MSP
       const requestMoveBucketResult = await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2)],
+        calls: [
+          userApi.tx.fileSystem.requestMoveBucket(
+            bucketId,
+            msp2Api.shConsts.DUMMY_MSP_ID_2,
+            valuePropId
+          )
+        ],
         signer: shUser
       });
 
@@ -363,9 +374,20 @@ describeMspNet(
       await sql`DELETE FROM bsp_file`;
       await sql.end();
 
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID_2
+      );
+      const valuePropId = valueProps[0].id;
+
       // User requests to move bucket to second MSP
       const requestMoveBucketResult = await userApi.block.seal({
-        calls: [userApi.tx.fileSystem.requestMoveBucket(bucketId, msp2Api.shConsts.DUMMY_MSP_ID_2)],
+        calls: [
+          userApi.tx.fileSystem.requestMoveBucket(
+            bucketId,
+            msp2Api.shConsts.DUMMY_MSP_ID_2,
+            valuePropId
+          )
+        ],
         signer: shUser
       });
 
