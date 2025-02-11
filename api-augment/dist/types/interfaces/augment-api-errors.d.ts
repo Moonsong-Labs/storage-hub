@@ -380,6 +380,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       OperationNotAllowedWhileBucketIsNotStoredByMsp: AugmentedError<ApiType>;
       /**
+       * Certain operations (such as issuing new storage requests) are not allowed when interacting with insolvent users.
+       **/
+      OperationNotAllowedWithInsolventUser: AugmentedError<ApiType>;
+      /**
        * Pending stop storing request already exists.
        **/
       PendingStopStoringRequestAlreadyExists: AugmentedError<ApiType>;
@@ -463,6 +467,10 @@ declare module "@polkadot/api-base/types/errors" {
        * A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
        **/
       UserNotInsolvent: AugmentedError<ApiType>;
+      /**
+       * The selected value proposition is not available in the MSP.
+       **/
+      ValuePropositionNotAvailable: AugmentedError<ApiType>;
       /**
        * Generic error
        **/
@@ -1099,6 +1107,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Cannot stop BSP cycles without a default root
        **/
       CannotStopCycleWithNonDefaultRoot: AugmentedError<ApiType>;
+      /**
+       * Error thrown when a MSP tries to deactivate its last value proposition.
+       **/
+      CantDeactivateLastValueProp: AugmentedError<ApiType>;
       /**
        * Failed to delete a provider due to conditions not being met.
        *

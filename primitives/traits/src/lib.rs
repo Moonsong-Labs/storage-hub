@@ -146,6 +146,22 @@ pub trait ReadBucketsInterface {
         + MaxEncodedLen
         + FullCodec;
 
+    /// Type of the ID that identifies a value proposition.
+    type ValuePropId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
     /// Type of a bucket's read-access group's ID (which is the read-access NFT collection's ID).
     type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
 
@@ -192,10 +208,10 @@ pub trait ReadBucketsInterface {
     /// Get bucket size.
     fn get_bucket_size(bucket_id: &Self::BucketId) -> Result<Self::StorageDataUnit, DispatchError>;
 
-    /// Get the MSP of a bucket.
-    fn get_msp_bucket(
+    /// Get the bucket's value proposition ID.
+    fn get_bucket_value_prop_id(
         bucket_id: &Self::BucketId,
-    ) -> Result<Option<Self::ProviderId>, DispatchError>;
+    ) -> Result<Self::ValuePropId, DispatchError>;
 }
 
 /// A trait to change the state of buckets registered in the system, such as updating their privacy
@@ -259,6 +275,7 @@ pub trait MutateBucketsInterface {
         + MaxEncodedLen
         + FullCodec;
 
+    /// Type of the ID that identifies a value proposition.
     type ValuePropId: Parameter
         + Member
         + MaybeSerializeDeserialize
@@ -293,13 +310,19 @@ pub trait MutateBucketsInterface {
         bucket_id: Self::BucketId,
         privacy: bool,
         maybe_read_access_group_id: Option<Self::ReadAccessGroupId>,
-        value_prop_id: Option<Self::ValuePropId>,
+        value_prop_id: Self::ValuePropId,
     ) -> DispatchResult;
 
-    /// Change MSP of a bucket.
+    /// Change the MSP that's currently storing the bucket.
+    ///
+    /// The new value proposition selected must belong to the new MSP.
+    /// Keep in mind this function does not check if the new MSP has enough capacity to store the bucket,
+    /// nor it updates the MSPs' used capacity. It only updates the payment streams and the lists of buckets
+    /// stored each MSP has.
     fn assign_msp_to_bucket(
         bucket_id: &Self::BucketId,
-        new_msp: &Self::ProviderId,
+        new_msp_id: &Self::ProviderId,
+        new_value_prop_id: &Self::ValuePropId,
     ) -> DispatchResult;
 
     /// Set a bucket's `msp_id` to `None` and also removing the element from the list in `MainStorageProviderIdsToBuckets`
@@ -309,7 +332,7 @@ pub trait MutateBucketsInterface {
     fn change_root_bucket(bucket_id: Self::BucketId, new_root: Self::MerkleHash) -> DispatchResult;
 
     /// Remove a root from a bucket of a MSP, removing the whole bucket from storage.
-    fn remove_root_bucket(bucket_id: Self::BucketId) -> DispatchResult;
+    fn delete_bucket(bucket_id: Self::BucketId) -> DispatchResult;
 
     /// Increase the size of a bucket.
     fn increase_bucket_size(
@@ -379,6 +402,22 @@ pub trait ReadStorageProvidersInterface {
         + PartialOrd
         + sp_runtime::traits::Zero;
 
+    /// Type of the ID that identifies a value proposition.
+    type ValuePropId: Parameter
+        + Member
+        + MaybeSerializeDeserialize
+        + Debug
+        + MaybeDisplay
+        + SimpleBitOps
+        + Ord
+        + Default
+        + Copy
+        + CheckEqual
+        + AsRef<[u8]>
+        + AsMut<[u8]>
+        + MaxEncodedLen
+        + FullCodec;
+
     /// Check if provider is a BSP.
     fn is_bsp(who: &Self::ProviderId) -> bool;
 
@@ -409,6 +448,14 @@ pub trait ReadStorageProvidersInterface {
     fn get_bsp_multiaddresses(
         who: &Self::ProviderId,
     ) -> Result<BoundedVec<Self::MultiAddress, Self::MaxNumberOfMultiAddresses>, DispatchError>;
+
+    /// Check if a value proposition belongs to a MSP. Keep in mind this does not error out
+    /// if the MSP does not exist, but returns false.
+    fn is_value_prop_of_msp(who: &Self::ProviderId, value_prop_id: &Self::ValuePropId) -> bool;
+
+    /// Check whether a value proposition of a MSP is currently available. Keep in mind this does not
+    /// error out if the MSP or the value proposition does not exist, but returns false.
+    fn is_value_prop_available(who: &Self::ProviderId, value_prop_id: &Self::ValuePropId) -> bool;
 }
 
 /// A trait to mutate the state of Storage Providers present in the `storage-providers` pallet.
@@ -495,7 +542,7 @@ pub trait ReadChallengeableProvidersInterface {
     fn is_provider(who: Self::ProviderId) -> bool;
 
     /// Get the Provider Id from Account Id, if it is a registered challengeable Provider.
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId>;
 
     /// Get the Account Id of the owner of a registered challengeable Provider.
     fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;
@@ -606,7 +653,7 @@ pub trait ReadProvidersInterface {
     fn is_provider(who: Self::ProviderId) -> bool;
 
     /// Get the Provider Id from Account Id, if it is a registered Provider.
-    fn get_provider_id(who: Self::AccountId) -> Option<Self::ProviderId>;
+    fn get_provider_id(who: &Self::AccountId) -> Option<Self::ProviderId>;
 
     /// Get the Account Id of the owner of a registered Provider.
     fn get_owner_account(who: Self::ProviderId) -> Option<Self::AccountId>;

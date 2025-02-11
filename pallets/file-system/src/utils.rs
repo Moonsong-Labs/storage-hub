@@ -396,7 +396,7 @@ where
         msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
-        value_prop_id: Option<ValuePropId<T>>,
+        value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // Check if the MSP is indeed an MSP.
         ensure!(
@@ -404,10 +404,25 @@ where
             Error::<T>::NotAMsp
         );
 
+        // Check that the selected value proposition is currently available under the MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_value_prop_available(
+                &msp_id,
+                &value_prop_id
+            ),
+            Error::<T>::ValuePropositionNotAvailable
+        );
+
         // Check if MSP is insolvent
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
             Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
         );
 
         // Create collection only if bucket is private
@@ -440,7 +455,14 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         new_msp_id: ProviderIdFor<T>,
+        new_value_prop_id: ValuePropId<T>,
     ) -> Result<(), DispatchError> {
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check if the sender is the owner of the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
@@ -451,6 +473,15 @@ where
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&new_msp_id),
             Error::<T>::NotAMsp
+        );
+
+        // Check if the new value proposition exists under the new MSP and is currently available.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_value_prop_available(
+                &new_msp_id,
+                &new_value_prop_id
+            ),
+            Error::<T>::ValuePropositionNotAvailable
         );
 
         // Check if the newly selected MSP is not insolvent
@@ -468,9 +499,11 @@ where
             Error::<T>::MspAlreadyStoringBucket
         );
 
-        if <PendingBucketsToMove<T>>::contains_key(&bucket_id) {
-            return Err(Error::<T>::BucketIsBeingMoved.into());
-        }
+        // Check that the bucket is not being moved.
+        ensure!(
+            !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            Error::<T>::BucketIsBeingMoved
+        );
 
         // Check if there are any open storage requests for the bucket.
         // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
@@ -487,6 +520,7 @@ where
             bucket_id,
             MoveBucketRequestMetadata {
                 requester: sender.clone(),
+                new_value_prop_id,
             },
         );
         <PendingBucketsToMove<T>>::insert(&bucket_id, ());
@@ -501,8 +535,8 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         response: BucketMoveRequestResponse,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
+    ) -> Result<(ProviderIdFor<T>, ValuePropId<T>), DispatchError> {
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
             .ok_or(Error::<T>::NotAMsp)?;
 
         // Check if MSP is insolvent.
@@ -517,29 +551,31 @@ where
             Error::<T>::NotAMsp
         );
 
-        // Check if the move bucket request exists for the MSP and bucket.
-        let move_bucket_requester = <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id);
-        ensure!(
-            move_bucket_requester.is_some(),
+        // Check if the move bucket request exists for the MSP and bucket, removing it from storage if it does.
+        let move_bucket_request_metadata = expect_or_err!(
+            <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id),
+            "Move bucket request should exist",
             Error::<T>::MoveBucketRequestNotFound
         );
 
+        // If the new MSP accepted storing the bucket...
         if response == BucketMoveRequestResponse::Accepted {
+            // Get the current size of the bucket.
             let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
 
+            // Get the previous MSP that was storing the bucket, if any.
             let previous_msp_id =
-                <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
+                <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
-            // Update the previous MSP's capacity used.
+            // If another MSP was previously storing the bucket, update its used capacity to reflect the removal of the bucket.
             if let Some(msp_id) = previous_msp_id {
-                // Decrease the used capacity of the previous MSP.
                 <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
                     &msp_id,
                     bucket_size,
                 )?;
             }
 
-            // Check if MSP has enough available capacity to store the bucket.
+            // Check if the new MSP has enough available capacity to store the bucket.
             ensure!(
                 <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
                     >= bucket_size,
@@ -547,7 +583,11 @@ where
             );
 
             // Change the MSP that stores the bucket.
-            <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(&bucket_id, &msp_id)?;
+            <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(
+                &bucket_id,
+                &msp_id,
+                &move_bucket_request_metadata.new_value_prop_id,
+            )?;
 
             // Increase the used capacity of the new MSP.
             <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
@@ -556,9 +596,10 @@ where
             )?;
         }
 
+        // Remove the bucket from the pending buckets to move.
         <PendingBucketsToMove<T>>::remove(&bucket_id);
 
-        Ok(msp_id)
+        Ok((msp_id, move_bucket_request_metadata.new_value_prop_id))
     }
 
     /// Update the privacy of a bucket.
@@ -573,6 +614,12 @@ where
         bucket_id: BucketIdFor<T>,
         private: bool,
     ) -> Result<Option<CollectionIdFor<T>>, DispatchError> {
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Ensure the sender is the owner of the bucket.
         ensure!(
             T::Providers::is_bucket_owner(&sender, &bucket_id)?,
@@ -618,6 +665,12 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
     ) -> Result<CollectionIdFor<T>, DispatchError> {
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check if sender is the owner of the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
@@ -678,7 +731,7 @@ where
             <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
 
         // Delete the bucket.
-        <T::Providers as MutateBucketsInterface>::remove_root_bucket(bucket_id)?;
+        <T::Providers as MutateBucketsInterface>::delete_bucket(bucket_id)?;
 
         // Delete the collection associated with the bucket if it existed.
         if let Some(collection_id) = maybe_collection_id.clone() {
@@ -691,6 +744,7 @@ where
         }
 
         // Return the collection ID associated with the bucket, if any.
+        // TODO: Check if the MSP is deleting the bucket from its local storage as well.
         Ok(maybe_collection_id)
     }
 
@@ -709,6 +763,12 @@ where
         replication_target: ReplicationTarget<T>,
         user_peer_ids: Option<PeerIds<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
 
@@ -850,9 +910,8 @@ where
         storage_request_msp_response: StorageRequestMspResponse<T>,
     ) -> Result<(), DispatchError> {
         // Check that the sender is a Storage Provider and get its MSP ID
-        let msp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotASp)?;
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotASp)?;
 
         // Check that the sender is an MSP
         ensure!(
@@ -904,9 +963,8 @@ where
         bucket_id: BucketIdFor<T>,
     ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
         // Check if the sender is a Provider.
-        let msp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotAMsp)?;
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotAMsp)?;
 
         // Check if the MSP is indeed an MSP.
         ensure!(
@@ -952,6 +1010,18 @@ where
         bucket_id: BucketIdFor<T>,
         accepted_file_keys: StorageRequestMspAcceptedFileKeys<T>,
     ) -> Result<MerkleHash<T>, DispatchError> {
+        // Get the user owner of the bucket.
+        let bucket_owner =
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
+
+        // Check that the bucket owner is not currently insolvent. This is done to error out early, since otherwise
+        // it will go through with all the verification logic and then fail when trying to update the payment stream
+        // between the MSP and the user.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&bucket_owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check if MSP is insolvent.
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
@@ -1178,9 +1248,8 @@ where
         ),
         DispatchError,
     > {
-        let bsp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check if BSP is insolvent.
         ensure!(
@@ -1197,6 +1266,16 @@ where
         // Check that the storage request exists.
         let mut storage_request_metadata =
             <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
+
+        // Check that the user that issued the storage request is not currently insolvent. This is done
+        // to avoid the BSP the trouble of volunteering, then fetching the file from the user, generating
+        // the proof and then not being able to confirm storing the file because the user is insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(
+                &storage_request_metadata.owner
+            ),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
 
         expect_or_err!(
             storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
@@ -1284,9 +1363,8 @@ where
         file_keys_and_proofs: BoundedVec<FileKeyWithProof<T>, T::MaxBatchConfirmStorageRequests>,
     ) -> DispatchResult {
         // Get the Provider ID of the sender.
-        let bsp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check if the Provider is insolvent.
         ensure!(
@@ -1352,6 +1430,21 @@ where
                     continue;
                 }
             };
+
+            // Check that the user that issued the storage request is not currently insolvent. This is done to continue the loop early,
+            // since the file key would still be skipped after failing to update the payment stream between the user and the BSP.
+            if <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(
+                &storage_request_metadata.owner,
+            ) {
+                // Skip file key if the owner of the file related to the storage request is currently insolvent.
+                expect_or_err!(
+                    skipped_file_keys.try_insert(file_key),
+                    "Failed to push file key to skipped_file_keys",
+                    Error::<T>::TooManyStorageRequestResponses,
+                    result
+                );
+                continue;
+            }
 
             // Check that the BSP has volunteered for the storage request.
             ensure!(
@@ -1739,9 +1832,15 @@ where
         can_serve: bool,
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let bsp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        // Check that the user that owns the file is not currently insolvent. The BSP should
+        // call `sp_stop_storing_for_insolvent_user` instead if the user is insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
@@ -1882,9 +1981,8 @@ where
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         // Get the SP ID of the sender
-        let bsp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotASp)?;
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotASp)?;
 
         // Ensure the ID belongs to a BSP, not a MSP
         ensure!(
@@ -1892,13 +1990,23 @@ where
             Error::<T>::NotABsp
         );
 
-        // Get the block when the pending stop storing request of the BSP for the file key was opened.
+        // Get the block when the pending stop storing request of the BSP for the file key was opened,
+        // the file size to stop storing and the file owner.
         let PendingStopStoringRequest {
             tick_when_requested,
             file_size,
             file_owner,
-        } = <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
+        } = <PendingStopStoringRequests<T>>::take(&bsp_id, &file_key)
             .ok_or(Error::<T>::PendingStopStoringRequestNotFound)?;
+
+        // Check that the user that owns the file is not currently insolvent. The BSP should
+        // call `sp_stop_storing_for_insolvent_user` instead if the user is insolvent.
+        // This is done to error out early since this extrinsic would eventually fail when trying
+        // to update the payment stream between the user and the BSP.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
 
         // Check that enough time has passed since the pending stop storing request was opened.
         ensure!(
@@ -1954,17 +2062,10 @@ where
             )?;
         }
 
-        // If the new capacity used for this BSP is 0, stop its randomness cycle.
-        if <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id)
-            == Zero::zero()
-        {
-            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
-        }
-
-        // Remove the pending stop storing request from storage.
-        <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
-
+        // If the root of the BSP is now the default root, stop its cycles.
         if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // Check the current used capacity of the BSP. Since its root is the default one, it should
+            // be zero.
             let used_capacity =
                 <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
             if used_capacity != Zero::zero() {
@@ -2000,9 +2101,8 @@ where
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         // Get the SP ID
-        let sp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotASp)?;
+        let sp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotASp)?;
 
         // Check that the owner of the file has been flagged as insolvent OR that the Provider does not
         // have any active payment streams with the user. The rationale here is that if there is a
@@ -2053,6 +2153,10 @@ where
                 &[(file_key, TrieRemoveMutation::default().into())],
                 &inclusion_forest_proof,
             )?;
+
+            // In case there was a pending stop storing request that the BSP had initiated before the user
+            // became insolvent, remove it.
+            <PendingStopStoringRequests<T>>::remove(&sp_id, &file_key);
 
             // Update root of the BSP.
             <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
@@ -2168,6 +2272,15 @@ where
         size: StorageData<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
+        // Check that the user that's sending the deletion request is not currently insolvent.
+        // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
+        // to delete their files and buckets using the available extrinsics or resolve their
+        // insolvency manually.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
             sender.clone(),
@@ -2314,9 +2427,8 @@ where
         bucket_id: BucketIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
-        let msp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotAMsp)?;
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotAMsp)?;
 
         // Check that the provider is indeed an MSP.
         ensure!(
@@ -2573,8 +2685,8 @@ mod hooks {
 
             // Expired storage requests clean up section:
             // If there's enough weight to get from storage the maximum amount of BSPs required for a storage request
-            // and get the storage request expirations for the current tick, continue.
-            if meter.can_consume(db_weight.reads_writes(2, 1)) {
+            // and get the storage request expirations for the current tick, and reinsert them if needed, continue.
+            if meter.can_consume(db_weight.reads_writes(2, 2)) {
                 // Get the maximum amount of BSPs required for a storage request.
                 // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
                 // We could increase this potential weight to account for potentially more volunteers.
@@ -2621,8 +2733,8 @@ mod hooks {
             }
 
             // Expired move bucket requests clean up section:
-            // If there's enough weight to get from storage the expired move bucket requests, continue.
-            if meter.can_consume(db_weight.reads_writes(1, 1)) {
+            // If there's enough weight to get from storage the expired move bucket requests and reinsert them if needed, continue.
+            if meter.can_consume(db_weight.reads_writes(1, 2)) {
                 // Get the expired move bucket requests for the current tick.
                 let mut expired_move_bucket_requests =
                     MoveBucketRequestExpirations::<T>::take(&tick);

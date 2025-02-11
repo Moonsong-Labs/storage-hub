@@ -179,7 +179,7 @@ export const createBucket = async (
     localValuePropId = valueProps[0].id;
   }
 
-  if (localValuePropId === undefined) {
+  if (localValuePropId === undefined || localValuePropId === null) {
     throw new Error("No value proposition found");
   }
 
