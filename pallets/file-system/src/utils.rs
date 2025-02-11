@@ -790,6 +790,25 @@ where
             Error::<T>::BucketIsBeingMoved
         );
 
+        // Get the MSP that's currently storing the bucket. It should exist since the bucket is not currently being moved.
+        let msp_id_storing_bucket = expect_or_err!(
+            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)
+                .expect("Bucket was checked to exist previously. qed"),
+            "MSP should exist for bucket",
+            Error::<T>::MspNotStoringBucket
+        );
+
+        // Ensure a payment stream between the MSP and the user exists. This is to avoid storage requests
+        // being issued for buckets that belonged to an insolvent user (that's no longer insolvent) and
+        // the MSP did not delete.
+        ensure!(
+            <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream_with_user(
+                &msp_id_storing_bucket,
+                &sender
+            ),
+            Error::<T>::FixedRatePaymentStreamNotFound
+        );
+
         // Check if we can hold the storage request creation deposit from the user
         let deposit = T::StorageRequestCreationDeposit::get();
         ensure!(
@@ -809,16 +828,16 @@ where
                 Error::<T>::NotAMsp
             );
 
+            // Check that it matches the one storing the bucket.
+            ensure!(
+                msp_id == &msp_id_storing_bucket,
+                Error::<T>::MspNotStoringBucket
+            );
+
             // Check if the MSP is insolvent
             ensure!(
                 !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
                 Error::<T>::OperationNotAllowedForInsolventProvider
-            );
-
-            // Check that the MSP received is the one storing the bucket.
-            ensure!(
-                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(msp_id, &bucket_id),
-                Error::<T>::MspNotStoringBucket
             );
 
             Some((*msp_id, false))
@@ -1530,6 +1549,15 @@ where
                 );
                 continue;
             }
+
+            // Check that the bucket of the file key still exists. This is done since if the user was previously insolvent the bucket
+            // of the storage request might have been deleted by the MSP.
+            ensure!(
+                <T::Providers as ReadBucketsInterface>::bucket_exists(
+                    &storage_request_metadata.bucket_id
+                ),
+                Error::<T>::BucketNotFound
+            );
 
             // Check that the BSP has volunteered for the storage request.
             ensure!(
@@ -2869,8 +2897,9 @@ mod hooks {
                 Some(storage_request_metadata) => match storage_request_metadata.msp {
                     None | Some((_, true)) => {
                         // If the request was originated by a request to stop storing from a BSP for a file that had no
-                        // storage request open, or if the MSP has already accepted storing the file, treat the storage request
-                        // as fulfilled with whatever amount of BSPs got to volunteer and confirm the file. For that:
+                        // storage request open, or if the MSP has already accepted storing the file (and the bucket and
+                        // payment stream with the user still exists), treat the storage request as fulfilled with whatever
+                        // amount of BSPs got to volunteer and confirm the file. For that:
                         // Return the storage request creation deposit to the user, emitting an error event if it fails
                         // but continuing execution.
                         let storage_request_creation_deposit =
