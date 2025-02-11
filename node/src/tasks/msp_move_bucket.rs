@@ -82,25 +82,45 @@ where
             event.bucket_id,
         );
 
+        if let Err(error) = self.handle_move_bucket_request(event.clone()).await {
+            error!(
+                target: LOG_TARGET,
+                "Failed to handle move bucket request: {:?}",
+                error
+            );
+            return self.reject_bucket_move(event.bucket_id).await;
+        }
+
+        Ok(())
+    }
+}
+
+impl<NT> MspMoveBucketTask<NT>
+where
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    /// Internal implementation of the move bucket request handling.
+    /// This function contains the core logic for processing a bucket move request.
+    /// If it returns an error, the caller (handle_event) will reject the bucket move request.
+    async fn handle_move_bucket_request(
+        &mut self,
+        event: MoveBucketRequestedForNewMsp,
+    ) -> anyhow::Result<()> {
         let indexer_db_pool = if let Some(indexer_db_pool) =
             self.storage_hub_handler.indexer_db_pool.clone()
         {
             indexer_db_pool
         } else {
-            error!(
-                target: LOG_TARGET,
-                "Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."
-            );
-            return self.reject_bucket_move(event.bucket_id).await;
+            return Err(anyhow!("Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."));
         };
 
-        let mut indexer_connection = match indexer_db_pool.get().await {
-            Ok(connection) => connection,
-            Err(error) => {
-                error!(target: LOG_TARGET, "Failed to get indexer connection after timeout: {:?}", error);
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
-        };
+        let mut indexer_connection = indexer_db_pool.get().await.map_err(|error| {
+            anyhow!(
+                "CRITICAL ❗️❗️❗️: Failed to get indexer connection after timeout: {:?}",
+                error
+            )
+        })?;
         let bucket = event.bucket_id.as_ref().to_vec();
 
         let forest_storage = self
@@ -117,19 +137,12 @@ where
         )
         .await?;
 
-        let total_size: u64 = match files
+        let total_size: u64 = files
             .iter()
             .try_fold(0u64, |acc, file| acc.checked_add(file.size as u64))
-        {
-            Some(size) => size,
-            None => {
-                error!(
-                    target: LOG_TARGET,
-                    "Total size calculation overflowed u64 - bucket is too large"
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
-        };
+            .ok_or_else(|| {
+                anyhow!("Total size calculation overflowed u64 - bucket is too large")
+            })?;
 
         let own_provider_id = self
             .storage_hub_handler
@@ -140,72 +153,52 @@ where
         let own_msp_id = match own_provider_id {
             Some(StorageProviderId::MainStorageProvider(id)) => id,
             Some(StorageProviderId::BackupStorageProvider(_)) => {
-                error!(
-                    target: LOG_TARGET,
-                    "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
+                return Err(anyhow!("CRITICAL ❗️❗️❗️: Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."));
             }
             None => {
-                error!(target: LOG_TARGET, "Failed to get own MSP ID.");
-                return self.reject_bucket_move(event.bucket_id).await;
+                return Err(anyhow!("CRITICAL ❗️❗️❗️: Failed to get own MSP ID."));
             }
         };
 
         // Check and increase capacity if needed
-        if let Err(e) = self
-            .check_and_increase_capacity(total_size, own_msp_id)
-            .await
-        {
-            error!(
-                target: LOG_TARGET,
-                "Failed to ensure sufficient capacity: {:?}", e
-            );
-            return self.reject_bucket_move(event.bucket_id).await;
-        }
+        self.check_and_increase_capacity(total_size, own_msp_id)
+            .await?;
 
         // Try to insert all files before accepting the request
         for file in &files {
             let file_metadata = file.to_file_metadata(bucket.clone());
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
-            let result = self
-                .storage_hub_handler
+            self.storage_hub_handler
                 .file_storage
                 .write()
                 .await
-                .insert_file(file_key.clone(), file_metadata.clone());
-            if let Err(error) = result {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to insert file {:?} into file storage: {:?}",
-                    file_key, error
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
+                .insert_file(file_key.clone(), file_metadata.clone())
+                .map_err(|error| {
+                    anyhow!(
+                        "CRITICAL ❗️❗️❗️: Failed to insert file {:?} into file storage: {:?}",
+                        file_key,
+                        error
+                    )
+                })?;
+
             self.file_storage_inserted_file_keys.push(file_key);
 
-            if let Err(error) = forest_storage
+            forest_storage
                 .write()
                 .await
                 .insert_files_metadata(&[file_metadata.clone()])
-            {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to insert file {:?} into forest storage: {:?}",
-                    file_key, error
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
-            }
+                .map_err(|error| {
+                    anyhow!(
+                        "CRITICAL ❗️❗️❗️: Failed to insert file {:?} into forest storage: {:?}",
+                        file_key,
+                        error
+                    )
+                })?;
 
             let bsp_peer_ids = file.get_bsp_peer_ids(&mut indexer_connection).await?;
             if bsp_peer_ids.is_empty() {
-                error!(
-                    target: LOG_TARGET,
-                    "No BSP peer IDs found for file {:?}",
-                    file_key,
-                );
-                return self.reject_bucket_move(event.bucket_id).await;
+                return Err(anyhow!("No BSP peer IDs found for file {:?}", file_key));
             }
         }
 
@@ -287,7 +280,7 @@ where
             {
                 error!(
                     target: LOG_TARGET,
-                    "Failed to delete (move bucket rollback) file {:?} from file storage: {:?}",
+                    "IMPORTANT ❗️❗️❗️: Failed to delete (move bucket rollback) file {:?} from file storage: {:?}",
                     file_key, error
                 );
             }
