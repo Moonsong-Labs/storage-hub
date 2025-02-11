@@ -1,8 +1,11 @@
 use anyhow::anyhow;
 use codec::Decode;
-use pallet_file_system::types::BucketMoveRequestResponse;
 use rand::seq::SliceRandom;
 use sc_tracing::tracing::*;
+use sp_core::H256;
+use std::{cmp::max, time::Duration};
+
+use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
@@ -16,9 +19,6 @@ use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::ChunkId;
-use sp_core::H256;
-use std::cmp::max;
-use std::time::Duration;
 use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{
@@ -45,7 +45,7 @@ const DOWNLOAD_REQUEST_RETRY_COUNT: usize = 30;
 ///
 /// 2. If all validations pass:
 ///    - Accepts the move request by sending [`BucketMoveRequestResponse::Accepted`]
-///    - Downloads all files from BSPs in parallel
+///    - Downloads all files from BSPs
 ///    - Updates local forest root to match on-chain state
 ///
 /// 3. If any validation fails:
@@ -208,8 +208,6 @@ where
                 return self.reject_bucket_move(event.bucket_id).await;
             }
         }
-
-        // TODO: check that we have enough space to accept the bucket and reject if not (+test)
 
         // Accept the request since we've verified we can handle all files
         self.accept_bucket_move(event.bucket_id).await?;
@@ -379,6 +377,39 @@ where
         Ok(())
     }
 
+    /// Downloads a file from BSPs (Backup Storage Providers) chunk by chunk.
+    ///
+    /// # Flow
+    /// 1. Constructs file metadata and key from the provided file and bucket information
+    /// 2. Retrieves and shuffles BSP peer IDs to distribute load across providers
+    /// 3. For each chunk in the file:
+    ///    - Cycles through BSP peers attempting to download the chunk
+    ///    - Retries failed downloads up to DOWNLOAD_REQUEST_RETRY_COUNT times
+    ///    - Verifies proof and chunk data integrity before storage
+    ///
+    /// # Verification Steps
+    /// - Decodes and validates the file key proof from the download response
+    /// - Ensures exactly one proven chunk is received
+    /// - Verifies chunk ID matches the expected chunk being downloaded
+    /// - Validates chunk data before writing to storage
+    ///
+    /// # Error Handling
+    /// - Logs errors for failed download attempts
+    /// - Continues to next BSP peer on failure
+    /// - Tracks download success/failure per chunk
+    /// - Continues to next chunk even if current chunk fails all retry attempts
+    ///
+    /// # Arguments
+    /// * `file` - The file model containing metadata and BSP information
+    /// * `bucket` - The bucket ID where the file belongs
+    ///
+    /// # Returns
+    /// Returns `Ok(())` if the download process completes (even with some failed chunks)
+    /// Returns `Err` for critical failures that prevent the download process from continuing
+    ///
+    /// # Note
+    /// The function implements a round-robin approach to BSP selection with random initial
+    /// distribution.
     async fn download_file(
         &self,
         file: &shc_indexer_db::models::File,
