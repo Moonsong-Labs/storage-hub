@@ -2,7 +2,6 @@ use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
-use shc_common::types::{BackupStorageProviderId, PeerId, ProviderId, StorageProviderId};
 
 use crate::{
     models::multiaddress::MultiAddress,
