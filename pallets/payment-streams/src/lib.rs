@@ -724,7 +724,7 @@ pub mod pallet {
 
             // Get the Provider ID of the signer
             let provider_id =
-                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(provider_account)
+                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(&provider_account)
                     .ok_or(Error::<T>::NotAProvider)?;
 
             // Execute checks and logic, update storage
@@ -788,7 +788,7 @@ pub mod pallet {
 
             // Get the Provider ID of the signer
             let provider_id =
-                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(provider_account)
+                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(&provider_account)
                     .ok_or(Error::<T>::NotAProvider)?;
 
             // Execute checks and logic, update storage
