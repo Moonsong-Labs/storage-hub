@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sc_tracing::tracing::warn;
+use sc_tracing::tracing::{error, warn};
 use tokio::sync::broadcast;
 
 use crate::{
@@ -102,8 +102,19 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
                         }
                     });
                 }
-                Err(broadcast::error::RecvError::Lagged(num_skipped_message)) => {
+                Err(broadcast::error::RecvError::Lagged(num_skipped_message))
+                    if std::any::type_name::<T>()
+                        .starts_with("shc_file_transfer_service::events") =>
+                {
+                    // If the receiver has dropped message from peers, it is not too bad. We are expecting it to retry.
+                    // Dropping messages avoid filling the queue and spawning unbounded amount of task
                     warn!("The receiver lagged behind. Old messages are being overwritten by new ({} skipped message)", num_skipped_message);
+                    continue;
+                }
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    // If we have dropped runtime events we are panicking. The node can be in an incoherent state. The node must stop.
+                    error!("CRITICAL❗️❗️ The receiver lagged behind for runtime events and some events have been not been processed. (events type {})", std::any::type_name::<T>());
+                    panic!("Some events have not been processed. The node could be an incoherent state.");
                 }
                 Err(broadcast::error::RecvError::Closed) => {
                     warn!("Closing listener. No more active sender for this event bus.");
