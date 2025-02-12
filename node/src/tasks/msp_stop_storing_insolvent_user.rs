@@ -1,5 +1,6 @@
 use anyhow::anyhow;
-use std::time::Duration;
+use std::{collections::HashSet, sync::Arc, time::Duration};
+use tokio::sync::Mutex;
 
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
@@ -53,6 +54,7 @@ where
     NT::FSH: MspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
+    buckets_stopped_storing: Arc<Mutex<HashSet<H256>>>,
 }
 
 impl<NT> Clone for MspStopStoringInsolventUserTask<NT>
@@ -63,6 +65,7 @@ where
     fn clone(&self) -> MspStopStoringInsolventUserTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            buckets_stopped_storing: self.buckets_stopped_storing.clone(),
         }
     }
 }
@@ -75,6 +78,7 @@ where
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
+            buckets_stopped_storing: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 }
@@ -259,24 +263,35 @@ where
         )
         .await?;
 
-        // Try to get the forest storage for a bucket from the list.
+        // Try to get the forest storage for a bucket from the list that hasn't yet been stopped storing.
         // Return the bucket ID of the first one that succeeds, or exit early if none are found. This is done because the indexed buckets
         // could have already been deleted from the forest storage but not from the indexer yet if finality has not been reached.
         let bucket_id = {
             let mut bucket_id_found = None;
             for bucket in stored_buckets {
+                // Try to get the forest storage for the bucket.
                 let bucket_id = bucket.onchain_bucket_id.clone();
-                if let Some(_) = self
+                let storage_result = self
                     .storage_hub_handler
                     .forest_storage_handler
                     .get(&bucket_id)
-                    .await
+                    .await;
+
+                // If there's a forest storage under the bucket ID and this bucket hasn't been stopped storing yet, stop storing it.
+                let bucket_id = H256::from_slice(&bucket_id);
+                if storage_result.is_some()
+                    && !self
+                        .buckets_stopped_storing
+                        .lock()
+                        .await
+                        .contains(&bucket_id)
                 {
-                    bucket_id_found = Some(H256::from_slice(&bucket_id));
+                    bucket_id_found = Some(bucket_id);
                     break;
                 }
             }
 
+            // If there was at least one bucket that's still in the forest storage and hasn't been processed yet, return its ID.
             if let Some(bucket_id) = bucket_id_found {
                 bucket_id
             } else {
@@ -305,6 +320,12 @@ where
             .await?;
 
         trace!(target: LOG_TARGET, "Stop storing bucket for insolvent user submitted successfully");
+
+        // Add this bucket to the hashset of buckets that this MSP has already stopped storing for this insolvent user.
+        self.buckets_stopped_storing
+            .lock()
+            .await
+            .insert(bucket_id.clone());
 
         // Release the forest root write "lock" since the on-chain bucket root has been deleted, and finish the task.
         self.storage_hub_handler
@@ -361,6 +382,13 @@ where
                     .map_err(|_| anyhow!("Invalid bucket id"))?,
             )
             .map_err(|e| anyhow!("Failed to delete files with prefix: {:?}", e))?;
+
+        // Remove this bucket from the hashset of buckets that this MSP has already stopped storing for this insolvent user.
+        // This is because this bucket has already been processed so it won't be picked up by the task again.
+        self.buckets_stopped_storing
+            .lock()
+            .await
+            .remove(&event.bucket_id);
 
         Ok(())
     }
