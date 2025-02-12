@@ -89,16 +89,27 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
     }
 
     async fn run(&mut self) {
-        while let Ok(event) = self.receiver.recv().await {
-            let mut cloned_event_handler = self.event_handler.clone();
-            self.spawner.spawn(async move {
-                match cloned_event_handler.handle_event(event).await {
-                    Ok(_) => {}
-                    Err(error) => {
-                        warn!("Task ended with error: {:?}", error);
-                    }
+        loop {
+            match self.receiver.recv().await {
+                Ok(event) => {
+                    let mut cloned_event_handler = self.event_handler.clone();
+                    self.spawner.spawn(async move {
+                        match cloned_event_handler.handle_event(event).await {
+                            Ok(_) => {}
+                            Err(error) => {
+                                warn!("Task ended with error: {:?}", error);
+                            }
+                        }
+                    });
                 }
-            });
+                Err(broadcast::error::RecvError::Lagged(num_skipped_message)) => {
+                    warn!("The receiver lagged behind. Old messages are being overwritten by new ({} skipped message)", num_skipped_message);
+                }
+                Err(broadcast::error::RecvError::Closed) => {
+                    warn!("Closing listener. No more active sender for this event bus.");
+                    break;
+                }
+            }
         }
     }
 
