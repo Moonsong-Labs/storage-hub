@@ -45,6 +45,7 @@ use shc_common::{
     },
 };
 use shp_file_metadata::FileKey;
+use std::collections::HashMap;
 use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
@@ -1201,12 +1202,20 @@ where
 
                 info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
 
-                let storage_requests: Vec<(H256, StorageRequestMetadata)> = self
+                let storage_requests: HashMap<H256, StorageRequestMetadata> = match self
                     .client
                     .runtime_api()
                     .pending_storage_requests_by_msp(block_hash, msp_id)
-                    .unwrap();
+                {
+                    Ok(sr) => sr.into_iter().collect(),
+                    Err(_) => {
+                        // If querying for pending storage requests fail, do not try to answer them
+                        warn!(target: LOG_TARGET, "Failed to get pending storage request");
+                        return;
+                    }
+                };
 
+                // loop over each pending storage requests to start a new storage request task for the MSP
                 for (file_key, sr) in storage_requests {
                     self.emit(NewStorageRequest {
                         who: sr.owner,
