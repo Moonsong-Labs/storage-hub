@@ -51,11 +51,12 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
-        FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
         LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForNewMsp, NewStorageRequest, SlashableProvider,
-        SpStopStoringInsolventUser, UserWithoutFunds,
+        MoveBucketRequested, MoveBucketRequestedForNewMsp, MspStopStoringBucketInsolventUser,
+        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -1398,6 +1399,32 @@ where
                                 }
                             }
                         }
+                        // A bucket was correctly deleted from a user without funds
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+                                msp_id,
+                                bucket_id,
+                                owner,
+                            },
+                        ) => {
+                            if let Some(managed_provider_id) = &self.provider_id {
+                                // We only emit the event if the Provider ID is the one that this node is managing
+                                // and is a MSP.
+                                match managed_provider_id {
+                                    StorageProviderId::MainStorageProvider(managed_msp_id)
+                                        if managed_msp_id == &msp_id =>
+                                    {
+                                        self.emit(MspStopStoringBucketInsolventUser {
+                                            msp_id,
+                                            bucket_id,
+                                            owner,
+                                        })
+                                    }
+                                    // Otherwise, ignore the event.
+                                    _ => {}
+                                }
+                            }
+                        }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketRequested {
                                 who: _,
@@ -1624,6 +1651,21 @@ where
                                 }
                             }
                         }
+						RuntimeEvent::FileSystem(pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+							msp_id,
+							owner: _,
+							bucket_id
+						}) => {
+							// This event is relevant in case the Provider managed is the MSP of the event.
+							if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) = &self.provider_id {
+								if msp_id == *managed_msp_id {
+									self.emit(FinalisedMspStopStoringBucketInsolventUser {
+										msp_id,
+										bucket_id
+									})
+								}
+							}
+						}
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::BspConfirmStoppedStoring {
                                 bsp_id,

@@ -118,4 +118,15 @@ impl Bucket {
             .await?;
         Ok(bucket)
     }
+
+    pub async fn get_by_owner<'a>(
+        conn: &mut DbConnection<'a>,
+        account: String,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let buckets = bucket::table
+            .filter(bucket::account.eq(account))
+            .load(conn)
+            .await?;
+        Ok(buckets)
+    }
 }
