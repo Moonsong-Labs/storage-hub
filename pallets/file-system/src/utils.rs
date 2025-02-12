@@ -2821,7 +2821,7 @@ where
     pub fn pending_storage_requests_by_msp(
         msp_id: ProviderIdFor<T>,
     ) -> Vec<(MerkleHash<T>, StorageRequestMetadata<T>)> {
-        // Get the storeage requests for a specific MSP
+        // Get the storage requests for a specific MSP
         StorageRequests::<T>::iter()
             .filter(|(_, metadata)| {
                 if let Some(msp) = metadata.msp {
