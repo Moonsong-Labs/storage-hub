@@ -68,8 +68,8 @@ describeBspNet(
       assert(initialNextDeadlineResult.isOk);
       const initialNextDeadline = initialNextDeadlineResult.asOk.toNumber();
 
-      // Skip to minimum change time before trying to change capacity
-      await userApi.block.skipToMinChangeTime();
+      // Skip blocks until the BSP can change its capacity.
+      await userApi.block.skipUntilBspCanChangeCapacity(userApi.shConsts.DUMMY_BSP_ID);
 
       // Get current capacity to calculate increase
       const currentBspMetadata = await userApi.query.providers.backupStorageProviders(
@@ -192,8 +192,8 @@ describeBspNet(
       const decreaseAmount = BigInt(1024 * 1024); // 1MB
       const newCapacity = currentCapacity - decreaseAmount;
 
-      // Skip to minimum change time before trying to change capacity
-      await userApi.block.skipToMinChangeTime();
+      // Skip blocks until the BSP can change its capacity.
+      await userApi.block.skipUntilBspCanChangeCapacity(userApi.shConsts.DUMMY_BSP_ID);
 
       // Send transaction to decrease capacity
       await userApi.wait.waitForAvailabilityToSendTx(bspKey.address.toString());
