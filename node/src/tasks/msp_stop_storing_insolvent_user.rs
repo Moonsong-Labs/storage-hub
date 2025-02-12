@@ -420,12 +420,6 @@ where
         // Get a write-lock on the file storage since we are going to be modifying it by removing all files from a bucket.
         let mut file_storage_write = file_storage.write().await;
 
-        // Delete the bucket from the forest storage.
-        self.storage_hub_handler
-            .forest_storage_handler
-            .remove_forest_storage(&event.bucket_id.as_bytes().to_vec())
-            .await;
-
         // Delete all files in the bucket from the file storage.
         file_storage_write
             .delete_files_with_prefix(
@@ -436,6 +430,15 @@ where
                     .map_err(|_| anyhow!("Invalid bucket id"))?,
             )
             .map_err(|e| anyhow!("Failed to delete files with prefix: {:?}", e))?;
+
+        // Release the write-lock on the file storage.
+        drop(file_storage_write);
+
+        // Delete the bucket from the forest storage.
+        self.storage_hub_handler
+            .forest_storage_handler
+            .remove_forest_storage(&event.bucket_id.as_bytes().to_vec())
+            .await;
 
         // Remove this bucket from the hashset of buckets that this MSP has already stopped storing for this insolvent user.
         // This is because this bucket has already been processed so it won't be picked up by the task again.
