@@ -1316,8 +1316,7 @@ pub mod pallet {
         /// accept storage requests for insolvent users and BSPs can't volunteer nor confirm them either) and afterwards any BSPs that
         /// had confirmed the file can just call `sp_stop_storing_for_insolvent_user` to get rid of it.
         #[pallet::call_index(15)]
-        // TODO: Replace this with the actual weight
-        #[pallet::weight(T::WeightInfo::stop_storing_for_insolvent_user_bsp().max(T::WeightInfo::stop_storing_for_insolvent_user_msp()))]
+        #[pallet::weight(T::WeightInfo::msp_stop_storing_bucket_for_insolvent_user())]
         pub fn msp_stop_storing_bucket_for_insolvent_user(
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
