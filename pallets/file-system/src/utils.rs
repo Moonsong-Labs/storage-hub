@@ -749,7 +749,6 @@ where
         }
 
         // Return the collection ID associated with the bucket, if any.
-        // TODO: Check if the MSP is deleting the bucket from its local storage as well.
         Ok(maybe_collection_id)
     }
 
