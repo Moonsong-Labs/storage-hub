@@ -48,7 +48,7 @@ pub enum QueryConfirmChunksToProveForFileError {
 
 /// Error type for the `pending_storage_requests_by_msp`.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
-pub enum StorageRequestsByMSPError {
+pub enum StorageRequestsByMspError {
     FailedToRetrieveStorageRequests,
 }
 
