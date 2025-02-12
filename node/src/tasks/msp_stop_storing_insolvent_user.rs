@@ -12,6 +12,7 @@ use shc_blockchain_service::{
     },
     types::{StopStoringForInsolventUserRequest, Tip},
 };
+use shc_common::types::StorageProviderId;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_core::H256;
@@ -117,9 +118,31 @@ where
         // this user that this MSP is storing.
         let mut indexer_connection = indexer_db_pool.get().await?;
 
-        // Get all the buckets this MSP is currently storing for the user.
-        let stored_buckets = shc_indexer_db::models::Bucket::get_by_owner(
+        // Get this MSP's on-chain ID.
+        let own_provider_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(None)
+            .await?;
+
+        let msp_on_chain_id =
+            match own_provider_id.ok_or_else(|| anyhow!("Failed to get own provider ID"))? {
+                StorageProviderId::MainStorageProvider(msp_id) => msp_id,
+                _ => return Err(anyhow!("Invalid MSP ID")),
+            };
+
+        // Get the ID of this MSP in the MSP indexer table.
+        let msp = shc_indexer_db::models::Msp::get_by_onchain_msp_id(
             &mut indexer_connection,
+            msp_on_chain_id.to_string(),
+        )
+        .await?;
+        let msp_id = msp.id;
+
+        // Get all the buckets this MSP is currently storing for the user.
+        let stored_buckets = shc_indexer_db::models::Bucket::get_by_msp_id_and_owner(
+            &mut indexer_connection,
+            msp_id,
             insolvent_user.to_string(),
         )
         .await?;
@@ -177,9 +200,31 @@ where
         // this user that this MSP is storing.
         let mut indexer_connection = indexer_db_pool.get().await?;
 
-        // Get all the buckets this MSP is currently storing for the user.
-        let stored_buckets = shc_indexer_db::models::Bucket::get_by_owner(
+        // Get this MSP's on-chain ID.
+        let own_provider_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(None)
+            .await?;
+
+        let msp_on_chain_id =
+            match own_provider_id.ok_or_else(|| anyhow!("Failed to get own provider ID"))? {
+                StorageProviderId::MainStorageProvider(msp_id) => msp_id,
+                _ => return Err(anyhow!("Invalid MSP ID")),
+            };
+
+        // Get the ID of this MSP in the MSP indexer table.
+        let msp = shc_indexer_db::models::Msp::get_by_onchain_msp_id(
             &mut indexer_connection,
+            msp_on_chain_id.to_string(),
+        )
+        .await?;
+        let msp_id = msp.id;
+
+        // Get all the buckets this MSP is currently storing for the user.
+        let stored_buckets = shc_indexer_db::models::Bucket::get_by_msp_id_and_owner(
+            &mut indexer_connection,
+            msp_id,
             insolvent_user.to_string(),
         )
         .await?;
@@ -256,9 +301,31 @@ where
         // this user that this MSP is storing.
         let mut indexer_connection = indexer_db_pool.get().await?;
 
-        // Get all the buckets this MSP is currently storing for the user.
-        let stored_buckets = shc_indexer_db::models::Bucket::get_by_owner(
+        // Get this MSP's on-chain ID.
+        let own_provider_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(None)
+            .await?;
+
+        let msp_on_chain_id =
+            match own_provider_id.ok_or_else(|| anyhow!("Failed to get own provider ID"))? {
+                StorageProviderId::MainStorageProvider(msp_id) => msp_id,
+                _ => return Err(anyhow!("Invalid MSP ID")),
+            };
+
+        // Get the ID of this MSP in the MSP indexer table.
+        let msp = shc_indexer_db::models::Msp::get_by_onchain_msp_id(
             &mut indexer_connection,
+            msp_on_chain_id.to_string(),
+        )
+        .await?;
+        let msp_id = msp.id;
+
+        // Get all the buckets this MSP is currently storing for the user.
+        let stored_buckets = shc_indexer_db::models::Bucket::get_by_msp_id_and_owner(
+            &mut indexer_connection,
+            msp_id,
             insolvent_user.to_string(),
         )
         .await?;
