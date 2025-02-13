@@ -1202,12 +1202,12 @@ where
 
                 info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
 
-                let storage_requests: HashMap<H256, StorageRequestMetadata> = match self
+                let storage_requests: BTreeMap<H256, StorageRequestMetadata> = match self
                     .client
                     .runtime_api()
                     .pending_storage_requests_by_msp(block_hash, msp_id)
                 {
-                    Ok(sr) => sr.into_iter().collect(),
+                    Ok(sr) => sr,
                     Err(_) => {
                         // If querying for pending storage requests fail, do not try to answer them
                         warn!(target: LOG_TARGET, "Failed to get pending storage request");
