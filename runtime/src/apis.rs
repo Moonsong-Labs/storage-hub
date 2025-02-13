@@ -25,8 +25,7 @@ use sp_runtime::{
     transaction_validity::{TransactionSource, TransactionValidity},
     ApplyExtrinsicResult, ExtrinsicInclusionMode,
 };
-use sp_std::collections::btree_map::BTreeMap;
-use sp_std::prelude::Vec;
+use sp_std::{collections::btree_map::BTreeMap, prelude::Vec};
 use sp_version::RuntimeVersion;
 use xcm::{
     latest::prelude::AssetId, VersionedAssetId, VersionedAssets, VersionedLocation, VersionedXcm,
