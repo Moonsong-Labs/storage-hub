@@ -11,7 +11,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::MoveBucketRequestedForNewMsp,
-    types::{RetryStrategy, Tip},
+    types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
     BucketId, FileKeyProof, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -625,7 +625,7 @@ where
 
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Tip::from(0))
+                .send_extrinsic(call, SendExtrinsicOptions::default())
                 .await?
                 .with_timeout(Duration::from_secs(60))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
