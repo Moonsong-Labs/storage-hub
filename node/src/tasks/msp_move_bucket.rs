@@ -624,7 +624,7 @@ where
 
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Tip::from(0))
+                .send_extrinsic(call, SendExtrinsicOptions::default())
                 .await?
                 .with_timeout(Duration::from_secs(60))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
