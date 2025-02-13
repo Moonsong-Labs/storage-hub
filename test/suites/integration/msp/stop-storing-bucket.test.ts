@@ -1,5 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, mspKey, sleep, waitFor, type EnrichedBspApi } from "../../../util";
+import { describeMspNet, mspKey, waitFor, type EnrichedBspApi } from "../../../util";
 import type { H256 } from "@polkadot/types/interfaces";
 
 describeMspNet(
@@ -119,7 +119,11 @@ describeMspNet(
         finaliseBlock: false
       });
 
-      await sleep(1500); // Mandatory sleep to allow the MSP time to respond (nothing should change)
+      // Check that bucket root exists before finalization
+      await waitFor({
+        lambda: async () =>
+          (await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString())).isSome
+      });
 
       const bucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(bucketId.toString());
 

@@ -1,5 +1,4 @@
-import { describeBspNet, type EnrichedBspApi } from "../../../util";
-import assert from "node:assert";
+import { assertDockerLog, describeBspNet, waitFor, type EnrichedBspApi } from "../../../util";
 
 describeBspNet(
   "BSP Automatic Tipping",
@@ -19,23 +18,33 @@ describeBspNet(
       );
       await userApi.wait.bspVolunteer(1);
 
-      await userApi.wait.bspStoredInTxPool({ expectedExts: 4, timeoutMs: 12000 });
-
-      const confirmStoringPendingMatches = await userApi.assert.extrinsicPresent({
-        method: "bspConfirmStoring",
-        module: "fileSystem",
-        checkTxPool: true,
-        assertLength: 4
+      await userApi.wait.bspStoredInTxPool({
+        expectedExts: 1,
+        timeoutMs: 12000
       });
 
-      const txPool = await userApi.rpc.author.pendingExtrinsics();
-
-      const tips = confirmStoringPendingMatches.map((match) =>
-        txPool[match.extIndex].tip.toBigInt()
+      await assertDockerLog(
+        "docker-sh-bsp-1",
+        "Failed to confirm file after 3 retries: Exhausted retry strategy",
+        12000
       );
-      const isIncreasing = tips.slice(1).every((current, i) => current > tips[i]);
 
-      assert(isIncreasing, "Tip should increase with each retry");
+      await waitFor({
+        lambda: async () => {
+          const confirmStoringMatch = await userApi.assert.extrinsicPresent({
+            method: "bspConfirmStoring",
+            module: "fileSystem",
+            checkTxPool: true,
+            assertLength: 1
+          });
+          const txPool = await userApi.rpc.author.pendingExtrinsics();
+          const tip = txPool[confirmStoringMatch[0].extIndex].tip.toBigInt();
+          const nonce = txPool[confirmStoringMatch[0].extIndex].nonce;
+          return tip > 0 && nonce.toNumber() === 1;
+        },
+        iterations: 100,
+        delay: 100
+      });
     });
   }
 );

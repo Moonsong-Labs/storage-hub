@@ -640,6 +640,27 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+       * the transfer of a part of that storage request's deposit to one of the volunteered BSPs failed.
+       **/
+      FailedToTransferDepositFundsToBsp: AugmentedEvent<
+        ApiType,
+        [
+          fileKey: H256,
+          owner: AccountId32,
+          bspId: H256,
+          amountToTransfer: u128,
+          error: SpRuntimeDispatchError
+        ],
+        {
+          fileKey: H256;
+          owner: AccountId32;
+          bspId: H256;
+          amountToTransfer: u128;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
        * Notifies that a file will be deleted.
        **/
       FileDeletionRequest: AugmentedEvent<
