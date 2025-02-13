@@ -506,9 +506,12 @@ export class BspNetTestApi implements AsyncDisposable {
       ) => BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber }),
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
+       *
+       * @param bspId - The ID of the BSP that the capacity change is for.
        * @returns A promise that resolves when the minimum change time is reached.
        */
-      skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
+      skipUntilBspCanChangeCapacity: (bspId?: `0x${string}` | H256 | Uint8Array) =>
+        BspNetBlock.skipBlocksUntilBspCanChangeCapacity(this._api, bspId),
       /**
        * Finalises a block (and therefore all of its predecessors) in the blockchain.
        *

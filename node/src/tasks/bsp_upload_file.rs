@@ -547,6 +547,11 @@ where
                 event.file_key
             );
 
+            // Note: the logic below is not ideal since it's not efficient (multiple increases in
+            // capacity might occur when one would suffice if multiple tasks are executing it, for example),
+            // but it's a temporary solution until we have a better way to handle this.
+
+            // Check that the BSP has not reached the maximum storage capacity.
             let current_capacity = self
                 .storage_hub_handler
                 .blockchain
@@ -573,6 +578,14 @@ where
                 return Err(anyhow::anyhow!(err_msg));
             }
 
+            // Register the capacity change in the queue.
+            let mut capacity_queue = self.capacity_queue.lock().await;
+            *capacity_queue = capacity_queue.add(event.size);
+            drop(capacity_queue);
+
+            // Get the earliest block at which this BSP can change its capacity.
+            // This is done after registering the capacity increase in the queue in case another task was currently
+            // increasing the capacity as well, so we have the most up-to-date earliest change capacity block.
             let earliest_change_capacity_block = self
                 .storage_hub_handler
                 .blockchain
@@ -586,28 +599,38 @@ where
                     anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
                 })?;
 
-            // we registered it to the queue
-            let mut capacity_queue = self.capacity_queue.lock().await;
-
-            *capacity_queue = capacity_queue.add(event.size);
-
-            drop(capacity_queue);
-
             // Wait for the earliest block where the capacity can be changed.
             self.storage_hub_handler
                 .blockchain
                 .wait_for_block(earliest_change_capacity_block)
                 .await?;
 
-            // we read from the queue
+            // Read from the queue if there is a capacity change remaining.
             let mut capacity_queue = self.capacity_queue.lock().await;
 
-            // if the queue is not empty it is that the capacity hasn't been updated yet
+            // If there is, apply it.
             if *capacity_queue > 0 {
                 let size: u64 = *capacity_queue;
 
+                // Get the current capacity of the BSP. This is needed since it could have changed between the time we
+                // registered the capacity increase in the queue and the time we are actually increasing the capacity.
+                let current_capacity = self
+                    .storage_hub_handler
+                    .blockchain
+                    .query_storage_provider_capacity(own_bsp_id)
+                    .await
+                    .map_err(|e| {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to query storage provider capacity: {:?}", e
+                        );
+                        anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                    })?;
+
+                // Calculate the new capacity that the BSP has to have to be able to volunteer for the storage request.
                 let new_capacity = self.calculate_capacity(size, current_capacity)?;
 
+                // Send the extrinsic to change this BSP's capacity and wait for it to succeed.
                 let call = storage_hub_runtime::RuntimeCall::Providers(
                     pallet_storage_providers::Call::change_capacity { new_capacity },
                 );
@@ -624,6 +647,7 @@ where
                     .watch_for_success(&self.storage_hub_handler.blockchain)
                     .await?;
 
+                // Reset the capacity queue.
                 *capacity_queue = 0;
 
                 info!(
