@@ -281,16 +281,18 @@ export const skipBlocks = async (api: ApiPromise, blocksToSkip: number, paddingM
   }
 };
 
-export const skipBlocksToMinChangeTime: (
+export const skipBlocksUntilBspCanChangeCapacity: (
   api: ApiPromise,
   bspId?: `0x${string}` | H256 | Uint8Array
 ) => Promise<void> = async (api, bspId = ShConsts.DUMMY_BSP_ID, verbose = false) => {
-  const lastCapacityChangeHeight = (await api.query.providers.backupStorageProviders(bspId))
-    .unwrap()
-    .lastCapacityChange.toNumber();
+  const queryEarliestChangeCapacityBlockResult =
+    await api.call.storageProvidersApi.queryEarliestChangeCapacityBlock(bspId);
+  assert(
+    queryEarliestChangeCapacityBlockResult.isOk,
+    "Failed to query earliest change capacity block"
+  );
+  const blockToAdvanceTo = queryEarliestChangeCapacityBlockResult.asOk.toNumber();
   const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
-  const minChangeTime = api.consts.providers.minBlocksBetweenCapacityChanges.toNumber();
-  const blockToAdvanceTo = lastCapacityChangeHeight + minChangeTime;
 
   if (blockToAdvanceTo > currentHeight) {
     verbose &&
