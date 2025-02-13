@@ -5,6 +5,7 @@ use scale_info::prelude::vec::Vec;
 use scale_info::TypeInfo;
 use sp_core::H256;
 use sp_runtime::RuntimeDebug;
+use sp_std::collections::btree_map::BTreeMap;
 
 /// Error type for the `is_storage_request_open_to_volunteers` runtime API call.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
@@ -75,6 +76,6 @@ sp_api::decl_runtime_apis! {
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
         fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
         fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<GenericApplyDeltaEventInfo, GenericApplyDeltaEventInfoError>;
-        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId) -> Vec<(H256, StorageRequestMetadata)>;
+        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId) -> BTreeMap<H256, StorageRequestMetadata>;
     }
 }

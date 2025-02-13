@@ -26,6 +26,7 @@ use sp_runtime::{
     transaction_validity::{TransactionSource, TransactionValidity},
     ApplyExtrinsicResult, ExtrinsicInclusionMode,
 };
+use sp_std::collections::btree_map::BTreeMap;
 use sp_std::prelude::Vec;
 use sp_version::RuntimeVersion;
 use xcm_runtime_apis::{
@@ -348,7 +349,7 @@ impl_runtime_apis! {
             FileSystem::decode_generic_apply_delta_event_info(encoded_event_info)
         }
 
-        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<(H256, StorageRequestMetadata<Runtime>)> {
+        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> BTreeMap<H256, StorageRequestMetadata<Runtime>> {
             FileSystem::pending_storage_requests_by_msp(msp_id)
         }
     }

@@ -29,6 +29,9 @@ describeMspNet(
       const destination = "test/smile.jpg";
       const bucketName = "trying-things";
 
+      // Stop the msp container so it will be behind when we restart the node.
+      await userApi.docker.pauseBspContainer("docker-sh-msp-1");
+
       const newBucketEventEvent = await userApi.createBucket(bucketName);
       const newBucketEventDataBlob =
         userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
@@ -41,11 +44,6 @@ describeMspNet(
         userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
-
-      await userApi.docker.pauseBspContainer("docker-sh-msp-1");
-
-      // We need to wait so it won't try to answer the request storage
-      await sleep(5000);
 
       await userApi.block.seal({
         calls: [
