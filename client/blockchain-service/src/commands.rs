@@ -859,7 +859,7 @@ where
 
                     warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", transaction.hash(), retry_count + 1);
 
-                    // TODO: Add pending transaction pool implementation to be able to resumbit transactions with nonces lower than the current one to avoid this transaction from being stuck.
+                    // TODO: Add pending transaction pool implementation to be able to resubmit transactions with nonces lower than the current one to avoid this transaction from being stuck.
                     if let WatchTransactionError::Timeout = err {
                         // Increase the tip to incentivize the collators to include the transaction in a block with priority
                         tip = retry_strategy.compute_tip(retry_count + 1);
