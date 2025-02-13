@@ -32,6 +32,7 @@ use shp_traits::{
     PaymentStreamsInterface, ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
     ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
+use sp_std::collections::btree_map::BTreeMap;
 
 use crate::{
     pallet,
@@ -2490,7 +2491,7 @@ where
 
     pub fn pending_storage_requests_by_msp(
         msp_id: ProviderIdFor<T>,
-    ) -> Vec<(MerkleHash<T>, StorageRequestMetadata<T>)> {
+    ) -> BTreeMap<MerkleHash<T>, StorageRequestMetadata<T>> {
         // Get the storage requests for a specific MSP
         StorageRequests::<T>::iter()
             .filter(|(_, metadata)| {

@@ -25,6 +25,7 @@ use sp_runtime::{
     transaction_validity::{TransactionSource, TransactionValidity},
     ApplyExtrinsicResult, ExtrinsicInclusionMode,
 };
+use sp_std::collections::btree_map::BTreeMap;
 use sp_std::prelude::Vec;
 use sp_version::RuntimeVersion;
 use xcm::{
@@ -346,7 +347,7 @@ impl_runtime_apis! {
             FileSystem::query_msp_confirm_chunks_to_prove_for_file(msp_id, file_key)
         }
 
-        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> Vec<(H256, StorageRequestMetadata<Runtime>)> {
+        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> BTreeMap<H256, StorageRequestMetadata<Runtime>> {
             FileSystem::pending_storage_requests_by_msp(msp_id)
         }
     }
