@@ -26,6 +26,7 @@ serde_json = { workspace = true }
 codec = { workspace = true }
 serde = { workspace = true, default-features = true }
 rocksdb = { workspace = true }
+thiserror = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
