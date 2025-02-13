@@ -49,7 +49,7 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// SPs will use this to determine if they have enough space to store the data.
     /// This is also used to verify that the data sent by the user matches the size specified here.
-    pub size: StorageData<T>,
+    pub size: StorageDataUnit<T>,
 
     /// MSP who is requested to store the data, and if it has already confirmed that it is storing it.
     ///
@@ -77,6 +77,12 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.
     pub bsps_volunteered: ReplicationTargetType<T>,
+
+    /// Deposit paid by the user to open this storage request.
+    ///
+    /// This is used to pay for the cost of the BSPs volunteering for the storage request in case it either expires
+    /// or gets revoked by the user. If the storage request is fulfilled, the deposit will be refunded to the user.
+    pub deposit_paid: BalanceOf<T>,
 }
 
 impl<T: Config> StorageRequestMetadata<T> {
@@ -275,8 +281,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
     pub user: T::AccountId,
     pub file_key: MerkleHash<T>,
     pub bucket_id: BucketIdFor<T>,
-    pub file_size: StorageData<T>,
-    /// Deposit paid for the creation of the file deletion request.
+    pub file_size: StorageDataUnit<T>,
     pub deposit_paid_for_creation: BalanceOf<T>,
     /// Flag to indicate if a priority challenge should be queued for this file deletion request.
     pub queue_priority_challenge: bool,
@@ -287,7 +292,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
 pub struct PendingStopStoringRequest<T: Config> {
     pub tick_when_requested: TickNumber<T>,
     pub file_owner: T::AccountId,
-    pub file_size: StorageData<T>,
+    pub file_size: StorageDataUnit<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -392,6 +397,22 @@ impl<T: Config> Debug for EitherAccountIdOrMspId<T> {
     }
 }
 
+impl<T: Config> EitherAccountIdOrMspId<T> {
+    pub fn is_account_id(&self) -> bool {
+        match self {
+            EitherAccountIdOrMspId::AccountId(_) => true,
+            EitherAccountIdOrMspId::MspId(_) => false,
+        }
+    }
+
+    pub fn is_msp_id(&self) -> bool {
+        match self {
+            EitherAccountIdOrMspId::AccountId(_) => false,
+            EitherAccountIdOrMspId::MspId(_) => true,
+        }
+    }
+}
+
 /// Alias for the `MerkleHash` type used in the ProofsDealerInterface representing file keys.
 pub type MerkleHash<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash;
@@ -417,8 +438,8 @@ pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;
 /// Alias for the `Fingerprint` type used in the FileSystem pallet.
 pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 
-/// Alias for the `StorageData` type used in the MutateProvidersInterface.
-pub type StorageData<T> =
+/// Alias for the `StorageDataUnit` type used in the MutateProvidersInterface.
+pub type StorageDataUnit<T> =
     <<T as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::StorageDataUnit;
 
 /// Alias for the `ReplicationTargetType` type used in the FileSystem pallet.
