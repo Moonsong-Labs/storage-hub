@@ -52,24 +52,26 @@ pub trait EventHandler<E: EventBusMessage>: Clone + Send + 'static {
         self,
         task_spawner: &TaskSpawner,
         provider: &EP,
+        critical: bool,
     ) -> EventBusListener<E, Self>
     where
         Self: Sized + Send,
     {
         let receiver = provider.event_bus().subscribe();
-        EventBusListener::new(task_spawner.clone(), self, receiver)
+        EventBusListener::new(task_spawner.clone(), self, receiver, critical)
     }
 
     fn subscribe_to<A: Actor>(
         self,
         task_spawner: &TaskSpawner,
         actor_handle: &ActorHandle<A>,
+        critical: bool,
     ) -> EventBusListener<E, Self>
     where
         Self: Sized + Send,
         <A as Actor>::EventBusProvider: ProvidesEventBus<E>,
     {
-        self.subscribe_to_provider(task_spawner, &actor_handle.event_bus_provider)
+        self.subscribe_to_provider(task_spawner, &actor_handle.event_bus_provider, critical)
     }
 }
 
@@ -77,14 +79,22 @@ pub struct EventBusListener<T: EventBusMessage, E: EventHandler<T>> {
     spawner: TaskSpawner,
     receiver: broadcast::Receiver<T>,
     event_handler: E,
+    // Indicate if the event is critical or not and if the receiver can drop it safely or have to panic.
+    critical: bool,
 }
 
 impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T, E> {
-    pub fn new(spawner: TaskSpawner, event_handler: E, receiver: broadcast::Receiver<T>) -> Self {
+    pub fn new(
+        spawner: TaskSpawner,
+        event_handler: E,
+        receiver: broadcast::Receiver<T>,
+        critical: bool,
+    ) -> Self {
         Self {
             spawner: spawner.with_group("event-handler-worker"),
             event_handler,
             receiver,
+            critical,
         }
     }
 
@@ -102,19 +112,16 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
                         }
                     });
                 }
-                Err(broadcast::error::RecvError::Lagged(num_skipped_message))
-                    if std::any::type_name::<T>()
-                        .starts_with("shc_file_transfer_service::events") =>
-                {
+                Err(broadcast::error::RecvError::Lagged(_)) if self.critical => {
+                    // If we have dropped critical events (critical events could be runtime events) we are panicking. The node can be in an incoherent state. The node must stop.
+                    error!("CRITICAL❗️❗️ The receiver lagged behind for critical events and some events have been not been processed. (events type {})", std::any::type_name::<T>());
+                    panic!("Some events have not been processed. The node could be an incoherent state.");
+                }
+                Err(broadcast::error::RecvError::Lagged(num_skipped_message)) => {
                     // If the receiver has dropped message from peers, it is not too bad. We are expecting it to retry.
                     // Dropping messages avoid filling the queue and spawning unbounded amount of task
                     warn!("The receiver lagged behind. Old messages are being overwritten by new ({} skipped message)", num_skipped_message);
                     continue;
-                }
-                Err(broadcast::error::RecvError::Lagged(_)) => {
-                    // If we have dropped runtime events we are panicking. The node can be in an incoherent state. The node must stop.
-                    error!("CRITICAL❗️❗️ The receiver lagged behind for runtime events and some events have been not been processed. (events type {})", std::any::type_name::<T>());
-                    panic!("Some events have not been processed. The node could be an incoherent state.");
                 }
                 Err(broadcast::error::RecvError::Closed) => {
                     warn!("Closing listener. No more active sender for this event bus.");
