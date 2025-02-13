@@ -4,6 +4,7 @@
 
 use super::*;
 use frame_benchmarking::v2::*;
+use sp_runtime::Saturating;
 
 pub trait BenchmarkHelpers<T: crate::Config> {
     type ProviderId: From<<T as crate::Config>::ProviderId>;
@@ -1924,7 +1925,6 @@ mod benchmarks {
         let required_held_amt = Pallet::<T>::compute_deposit_needed_for_capacity(needed_capacity)?;
 
         // Needed balance to be held to increase capacity back to `needed_capacity`
-        use sp_runtime::Saturating;
         let deposit_before_top_up = T::NativeBalance::balance_on_hold(
             &HoldReason::StorageProviderDeposit.into(),
             &user_account,

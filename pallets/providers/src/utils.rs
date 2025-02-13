@@ -1,4 +1,4 @@
-use crate::{types::ShTickGetter, *};
+use crate::{types::*, *};
 use codec::Encode;
 use frame_support::{
     ensure,
@@ -30,12 +30,6 @@ use shp_traits::{
 use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
 use sp_runtime::traits::ConvertBack;
 use sp_std::vec::Vec;
-use types::{
-    Bucket, BucketCount, Commitment, ExpirationItem, MainStorageProvider,
-    MainStorageProviderSignUpRequest, MultiAddress, Multiaddresses, ProviderIdFor, RateDeltaParam,
-    SignUpRequestSpParams, StorageDataUnitAndBalanceConverter, StorageProviderId, TopUpMetadata,
-    ValuePropIdFor, ValueProposition, ValuePropositionWithId,
-};
 
 macro_rules! expect_or_err {
     // Handle Option type
@@ -1016,12 +1010,8 @@ where
             // Remove provider top up expiration item from the queue
             if let Some(top_up_metadata) = top_up_metadata {
                 ProviderTopUpExpirations::<T>::remove(top_up_metadata.end_block_grace_period);
-            } else {
-                log::warn!(
-                    "AwaitingTopUpFromProviders storage does not contain a top up metadata for provider {:?} while their held deposit covers the needed capacity",
-                    provider_id
-                );
             }
+
             Self::deposit_event(Event::TopUpFulfilled {
                 provider_id: *provider_id,
                 amount: held_deposit_difference,
