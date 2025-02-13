@@ -64,7 +64,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
           file_size,
           userApi.shConsts.DUMMY_MSP_ID,
           [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-          1
+          {
+            Custom: 1
+          }
         )
       );
     }
@@ -136,8 +138,16 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     // Wait enough blocks for the deletion to be allowed.
     const currentBlock = await userApi.rpc.chain.getBlock();
     const currentBlockNumber = currentBlock.block.header.number.toNumber();
-    const cooldown =
-      currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+    const minWaitForStopStoring = (
+      await userApi.query.parameters.parameters({
+        RuntimeConfig: {
+          MinWaitForStopStoring: null
+        }
+      })
+    )
+      .unwrap()
+      .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
+    const cooldown = currentBlockNumber + minWaitForStopStoring;
     await userApi.block.skipTo(cooldown);
 
     for (let i = 0; i < fileKeys.length; i++) {
@@ -202,7 +212,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
             file_size,
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            1
+            {
+              Custom: 1
+            }
           )
         );
       }
@@ -277,8 +289,16 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const cooldown =
-        currentBlockNumber + userApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+      const minWaitForStopStoring = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: {
+            MinWaitForStopStoring: null
+          }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
+      const cooldown = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(cooldown);
 
       // Batching the delete confirmation should fail because of the wrong inclusionForestProof for extrinsinc 2 and 3

@@ -195,7 +195,7 @@ impl pallet_proofs_dealer::Config for Test {
     type StakeToChallengePeriod = StakeToChallengePeriod;
     type MinChallengePeriod = ConstU64<4>;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
-    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU32<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
@@ -364,6 +364,7 @@ impl crate::Config for Test {
     type StorageDataUnit = StorageDataUnit;
     type StorageDataUnitAndBalanceConvert = StorageDataUnitAndBalanceConverter;
     type SpCount = u32;
+    type BucketCount = u32;
     type MerklePatriciaRoot = H256;
     type MerkleTrieHashing = BlakeTwo256;
     type ProviderId = H256;
@@ -480,7 +481,7 @@ impl ProofSubmittersInterface for MockSubmittingProviders {
         let mut set = BoundedBTreeSet::<Self::ProviderId, Self::MaxProofSubmitters>::new();
         // We convert the block number + 1 to the corresponding Provider ID, to simulate that the Provider submitted a proof
         <StorageProviders as ReadChallengeableProvidersInterface>::get_provider_id(
-            *block_number + 1,
+            &(block_number + 1),
         )
         .map(|id| set.try_insert(id));
         Some(set)

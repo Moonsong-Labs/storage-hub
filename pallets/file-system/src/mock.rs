@@ -31,6 +31,11 @@ use sp_runtime::{
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use std::{
+    sync::{RwLock, RwLockReadGuard},
+    thread,
+    time::Duration,
+};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -384,6 +389,7 @@ impl pallet_storage_providers::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
+    type BucketCount = u32;
     type MerklePatriciaRoot = H256;
     type MerkleTrieHashing = BlakeTwo256;
     type ProviderId = H256;
@@ -500,7 +506,7 @@ impl pallet_proofs_dealer::Config for Test {
     type StakeToChallengePeriod = StakeToChallengePeriod;
     type MinChallengePeriod = ConstU64<4>;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
-    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU32<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
@@ -581,7 +587,9 @@ pub(crate) type ThresholdType = u32;
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 30;
     pub const StorageRequestCreationDeposit: Balance = 10;
-    pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
+    pub const FileDeletionRequestCreationDeposit: Balance = 10;
+    pub const FileSystemStorageRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
+    pub const FileSystemFileDeletionRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::FileDeletionRequestHold);
 }
 
 impl crate::Config for Test {
@@ -613,25 +621,55 @@ impl crate::Config for Test {
     type MaxDataServerMultiAddresses = ConstU32<5>;
     type MaxExpiredItemsInTick = ConstU32<100u32>;
     type StorageRequestTtl = ConstU32<40u32>;
-    type PendingFileDeletionRequestTtl = ConstU32<40u32>;
     type MoveBucketRequestTtl = ConstU32<40u32>;
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
     type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
-    type DefaultReplicationTarget = ConstU32<2>;
-    type MaxReplicationTarget = ConstU32<6>;
+    type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
+    type BasicReplicationTarget = ConstU32<2>;
+    type StandardReplicationTarget = ConstU32<3>;
+    type HighSecurityReplicationTarget = ConstU32<4>;
+    type SuperHighSecurityReplicationTarget = ConstU32<5>;
+    type UltraHighSecurityReplicationTarget = ConstU32<6>;
+    type MaxReplicationTarget = ConstU32<7>;
     type TickRangeToMaximumThreshold = ConstU64<30>;
 }
 
-// If we ever require a better mock that doesn't just return true if it is Eve, change this.
+// Use a RwLock for Eve’s insolvency status.
+static IS_EVE_INSOLVENT: RwLock<bool> = RwLock::new(true);
+
+/// Function to set or unset Eve's insolvency status. Returns a read lock to the RwLock
+/// that makes it so the caller thread can disallow other threads from writing to the lock
+/// until it has finished using it.
+pub fn set_eve_insolvent(insolvent: bool) -> RwLockReadGuard<'static, bool> {
+    // Spin until we can acquire the write lock without any active readers.
+    let mut write_guard = loop {
+        if let Ok(write_guard) = IS_EVE_INSOLVENT.try_write() {
+            // Successfully acquired the lock => no other readers.
+            break write_guard;
+        }
+        // There are active readers, so wait a bit before retrying.
+        thread::sleep(Duration::from_millis(10));
+    };
+
+    // Update Eve's insolvent status.
+    *write_guard = insolvent;
+
+    // Drop the write guard to be able to acquire a read lock.
+    drop(write_guard);
+
+    // Acquire a read lock to the RwLock.
+    IS_EVE_INSOLVENT.read().unwrap()
+}
+
 pub struct MockUserSolvency;
 impl ReadUserSolvencyInterface for MockUserSolvency {
     type AccountId = AccountId;
 
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool {
         if user_account == &Keyring::Eve.to_account_id() {
-            true
+            *IS_EVE_INSOLVENT.read().unwrap()
         } else {
             false
         }

@@ -4,7 +4,7 @@ use log::info;
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use shc_common::types::BlockNumber;
 
-use crate::events::ProcessMspRespondStoringRequestData;
+use crate::events::{ProcessFileDeletionRequestData, ProcessMspRespondStoringRequestData};
 use crate::{
     events::{ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequestData},
     typed_store::{
@@ -13,7 +13,8 @@ use crate::{
         TypedDbContext, TypedRocksDB,
     },
     types::{
-        StopStoringForInsolventUserRequest, {ConfirmStoringRequest, RespondStorageRequest},
+        ConfirmStoringRequest, FileDeletionRequest, RespondStorageRequest,
+        StopStoringForInsolventUserRequest,
     },
 };
 
@@ -140,7 +141,45 @@ impl SingleScaleEncodedValueCf for PendingStopStoringForInsolventUserRequestRigh
         "pending_stop_storing_for_insolvent_user_request_right_index";
 }
 
-const ALL_COLUMN_FAMILIES: [&str; 13] = [
+/// Current ongoing task which requires a forest write lock.
+pub struct OngoingProcessFileDeletionRequestCf;
+impl SingleScaleEncodedValueCf for OngoingProcessFileDeletionRequestCf {
+    type Value = ProcessFileDeletionRequestData;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_process_file_deletion_request";
+}
+
+/// Pending file deletion requests.
+#[derive(Default)]
+pub struct FileDeletionRequestCf;
+impl ScaleEncodedCf for FileDeletionRequestCf {
+    type Key = u64;
+    type Value = FileDeletionRequest;
+
+    const SCALE_ENCODED_NAME: &'static str = "pending_file_deletion_request";
+}
+
+/// Pending file deletion requests left side (inclusive) index for the [`PendingFileDeletionRequestCf`] CF.
+#[derive(Default)]
+pub struct FileDeletionRequestLeftIndexCf;
+impl SingleScaleEncodedValueCf for FileDeletionRequestLeftIndexCf {
+    type Value = u64;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+        "pending_file_deletion_request_left_index";
+}
+
+/// Pending file deletion requests right side (exclusive) index for the [`PendingFileDeletionRequestCf`] CF.
+#[derive(Default)]
+pub struct FileDeletionRequestRightIndexCf;
+impl SingleScaleEncodedValueCf for FileDeletionRequestRightIndexCf {
+    type Value = u64;
+
+    const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
+        "pending_file_deletion_request_right_index";
+}
+
+const ALL_COLUMN_FAMILIES: [&str; 17] = [
     LastProcessedBlockNumberCf::NAME,
     OngoingProcessConfirmStoringRequestCf::NAME,
     PendingConfirmStoringRequestLeftIndexCf::NAME,
@@ -154,6 +193,10 @@ const ALL_COLUMN_FAMILIES: [&str; 13] = [
     PendingStopStoringForInsolventUserRequestLeftIndexCf::NAME,
     PendingStopStoringForInsolventUserRequestRightIndexCf::NAME,
     PendingStopStoringForInsolventUserRequestCf::NAME,
+    OngoingProcessFileDeletionRequestCf::NAME,
+    FileDeletionRequestLeftIndexCf::NAME,
+    FileDeletionRequestRightIndexCf::NAME,
+    FileDeletionRequestCf::NAME,
 ];
 
 /// A persistent blockchain service state store.
@@ -232,6 +275,12 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         }
     }
 
+    pub fn pending_file_deletion_request_deque(&'a self) -> PendingFileDeletionRequestDequeAPI<'a> {
+        PendingFileDeletionRequestDequeAPI {
+            db_context: &self.db_context,
+        }
+    }
+
     /// Flushes the buffered writes to the DB.
     pub fn commit(self) {
         self.db_context.flush();
@@ -303,4 +352,23 @@ impl<'a> CFDequeAPI for PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
     type LeftIndexCF = PendingStopStoringForInsolventUserRequestLeftIndexCf;
     type RightIndexCF = PendingStopStoringForInsolventUserRequestRightIndexCf;
     type DataCF = PendingStopStoringForInsolventUserRequestCf;
+}
+
+pub struct PendingFileDeletionRequestDequeAPI<'a> {
+    db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+}
+
+impl<'a> ProvidesDbContext for PendingFileDeletionRequestDequeAPI<'a> {
+    fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+        &self.db_context
+    }
+}
+
+impl<'a> ProvidesTypedDbSingleAccess for PendingFileDeletionRequestDequeAPI<'a> {}
+
+impl<'a> CFDequeAPI for PendingFileDeletionRequestDequeAPI<'a> {
+    type Value = FileDeletionRequest;
+    type LeftIndexCF = FileDeletionRequestLeftIndexCf;
+    type RightIndexCF = FileDeletionRequestRightIndexCf;
+    type DataCF = FileDeletionRequestCf;
 }

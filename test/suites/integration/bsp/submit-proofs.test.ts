@@ -214,8 +214,16 @@ describeBspNet(
       // Wait enough blocks for the deletion to be allowed.
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      const cooldown =
-        currentBlockNumber + bspThreeApi.consts.fileSystem.minWaitForStopStoring.toNumber();
+      const minWaitForStopStoring = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: {
+            MinWaitForStopStoring: null
+          }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asMinWaitForStopStoring.toNumber();
+      const cooldown = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(cooldown);
       await userApi.wait.waitForAvailabilityToSendTx(bspThreeKey.address.toString());
 
@@ -280,9 +288,19 @@ describeBspNet(
       oneBspfileMetadata = fileMetadata;
     });
 
-    it("Only one BSP confirms it", async () => {
+    it("Only one BSP confirms it and the MSP accepts it", async () => {
+      // Wait for the MSP acceptance of the file to be in the TX pool
+      await userApi.assert.extrinsicPresent({
+        module: "fileSystem",
+        method: "mspRespondStorageRequestsMultipleBuckets",
+        checkTxPool: true,
+        timeout: 5000
+      });
+
+      // Then wait for the BSP volunteer to be in the TX pool and seal the block
       await userApi.wait.bspVolunteer(1);
 
+      // Finally, wait for the BSP to confirm storing the file and seal the block
       const address = userApi.createType("Address", NODE_INFOS.bsp.AddressId);
       await userApi.wait.bspStored(1, address);
     });
@@ -317,12 +335,6 @@ describeBspNet(
         checkTxPool: true
       });
 
-      await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "mspRespondStorageRequestsMultipleBuckets",
-        checkTxPool: true
-      });
-
       // Seal block and check that the transaction was successful.
       await userApi.block.seal();
 
@@ -337,7 +349,15 @@ describeBspNet(
 
     it("Resume BSPs, and they shouldn't volunteer for the expired storage request", async () => {
       // Advance a number of blocks up to when the storage request times out for sure.
-      const storageRequestTtl = Number(userApi.consts.fileSystem.storageRequestTtl);
+      const storageRequestTtl = (
+        await userApi.query.parameters.parameters({
+          RuntimeConfig: {
+            StorageRequestTtl: null
+          }
+        })
+      )
+        .unwrap()
+        .asRuntimeConfig.asStorageRequestTtl.toNumber();
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl, {
@@ -395,11 +415,11 @@ describeBspNet(
       if (nextChallengeTick > currentBlockNumber) {
         // Advance to the next challenge tick if needed
         await userApi.block.skipTo(nextChallengeTick, {
-          watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
+          watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID]
         });
       }
 
-      // There should be three pending submit proof transactions, one per active BSP.
+      // There should be two pending submit proof transactions, one per active BSP.
       const submitProofsPending = await userApi.assert.extrinsicPresent({
         module: "proofsDealer",
         method: "submitProof",
@@ -480,16 +500,9 @@ describeBspNet(
       // Check for a file deletion request event.
       await userApi.assert.eventPresent("fileSystem", "FileDeletionRequest");
 
-      // Advance until the deletion request expires so that it can be processed.
-      const deletionRequestTtl = Number(userApi.consts.fileSystem.pendingFileDeletionRequestTtl);
-      const currentBlock = await userApi.rpc.chain.getBlock();
-      const currentBlockNumber = currentBlock.block.header.number.toNumber();
-      await userApi.block.skipTo(currentBlockNumber + deletionRequestTtl, {
-        watchForBspProofs: [ShConsts.DUMMY_BSP_ID, ShConsts.BSP_TWO_ID, ShConsts.BSP_THREE_ID]
-      });
-
-      // Check for a file deletion request event.
-      await userApi.assert.eventPresent("fileSystem", "PriorityChallengeForFileDeletionQueued");
+      // Wait for MSP to submit proof for the pending file deletion request
+      await userApi.wait.mspPendingFileDeletionRequestSubmitProof();
+      await userApi.block.seal();
     });
 
     it("Priority challenge is included in checkpoint challenge round", async () => {
@@ -540,7 +553,13 @@ describeBspNet(
       assert(dummyBspChallengePeriodResult.isOk);
       const dummyBspChallengePeriod = dummyBspChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
-      const dummyBspNextChallengeTick = lastTickBspSubmittedProof + dummyBspChallengePeriod;
+      let dummyBspNextChallengeTick = lastTickBspSubmittedProof + dummyBspChallengePeriod;
+      // Increment challenge periods until we get a number that is greater than the current tick.
+      const currentTick = (await userApi.call.proofsDealerApi.getCurrentTick()).toNumber();
+      while (currentTick > dummyBspNextChallengeTick) {
+        // Go one challenge period forward.
+        dummyBspNextChallengeTick += dummyBspChallengePeriod;
+      }
 
       // Calculate next challenge tick for BSP-Two.
       // We first get the last tick for which the BSP submitted a proof.
@@ -555,7 +574,12 @@ describeBspNet(
       assert(bspTwoChallengePeriodResult.isOk);
       const bspTwoChallengePeriod = bspTwoChallengePeriodResult.asOk.toNumber();
       // Then we calculate the next challenge tick.
-      const bspTwoNextChallengeTick = bspTwoLastTickBspTwoSubmittedProof + bspTwoChallengePeriod;
+      let bspTwoNextChallengeTick = bspTwoLastTickBspTwoSubmittedProof + bspTwoChallengePeriod;
+      // Increment challenge periods until we get a number that is greater than the current tick.
+      while (currentTick > bspTwoNextChallengeTick) {
+        // Go one challenge period forward.
+        bspTwoNextChallengeTick += bspTwoChallengePeriod;
+      }
 
       const firstBspToRespond =
         dummyBspNextChallengeTick < bspTwoNextChallengeTick

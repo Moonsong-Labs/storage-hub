@@ -17,6 +17,11 @@ use sp_trie::CompactProof;
 use storage_hub_runtime::{apis::RuntimeApi, opaque::Block, Runtime};
 use trie_db::TrieLayout;
 
+/// Size of each batch in bytes (2 MiB)
+/// This is the maximum size of a batch of chunks that can be uploaded in a single call
+/// (request-response round-trip).
+pub const BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE: usize = 2 * 1024 * 1024;
+
 /// The hash type of trie node keys
 pub type HashT<T> = <T as TrieLayout>::Hash;
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
@@ -45,7 +50,8 @@ pub type StorageRequestMspAcceptedFileKeys =
     pallet_file_system::types::StorageRequestMspAcceptedFileKeys<Runtime>;
 pub type FileKeyWithProof = pallet_file_system::types::FileKeyWithProof<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
-pub type BucketId = pallet_storage_providers::types::MerklePatriciaRoot<Runtime>;
+pub type BucketId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
+pub type ValuePropId = pallet_storage_providers::types::ValuePropId<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
 pub type BackupStorageProviderId =
     pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
@@ -138,6 +144,16 @@ pub struct ForestProof<T: TrieLayout> {
     pub proof: CompactProof,
     /// The root hash of the trie.
     pub root: HasherOutT<T>,
+}
+
+impl<T: TrieLayout> ForestProof<T> {
+    /// Returns whether a file key was found in the forest proof.
+    pub fn contains_file_key(&self, file_key: &HasherOutT<T>) -> bool {
+        self.proven.iter().any(|proven| match proven {
+            Proven::ExactKey(leaf) => leaf.key.as_ref() == file_key.as_ref(),
+            _ => false,
+        })
+    }
 }
 
 #[derive(Clone, Encode, Decode)]

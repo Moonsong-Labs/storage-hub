@@ -18,7 +18,7 @@ use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
         Balance, FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
-        StorageProviderId,
+        StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
@@ -547,6 +547,11 @@ where
                 event.file_key
             );
 
+            // Note: the logic below is not ideal since it's not efficient (multiple increases in
+            // capacity might occur when one would suffice if multiple tasks are executing it, for example),
+            // but it's a temporary solution until we have a better way to handle this.
+
+            // Check that the BSP has not reached the maximum storage capacity.
             let current_capacity = self
                 .storage_hub_handler
                 .blockchain
@@ -573,6 +578,14 @@ where
                 return Err(anyhow::anyhow!(err_msg));
             }
 
+            // Register the capacity change in the queue.
+            let mut capacity_queue = self.capacity_queue.lock().await;
+            *capacity_queue = capacity_queue.add(event.size);
+            drop(capacity_queue);
+
+            // Get the earliest block at which this BSP can change its capacity.
+            // This is done after registering the capacity increase in the queue in case another task was currently
+            // increasing the capacity as well, so we have the most up-to-date earliest change capacity block.
             let earliest_change_capacity_block = self
                 .storage_hub_handler
                 .blockchain
@@ -586,28 +599,38 @@ where
                     anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
                 })?;
 
-            // we registered it to the queue
-            let mut capacity_queue = self.capacity_queue.lock().await;
-
-            *capacity_queue = capacity_queue.add(event.size);
-
-            drop(capacity_queue);
-
             // Wait for the earliest block where the capacity can be changed.
             self.storage_hub_handler
                 .blockchain
                 .wait_for_block(earliest_change_capacity_block)
                 .await?;
 
-            // we read from the queue
+            // Read from the queue if there is a capacity change remaining.
             let mut capacity_queue = self.capacity_queue.lock().await;
 
-            // if the queue is not empty it is that the capacity hasn't been updated yet
+            // If there is, apply it.
             if *capacity_queue > 0 {
                 let size: u64 = *capacity_queue;
 
+                // Get the current capacity of the BSP. This is needed since it could have changed between the time we
+                // registered the capacity increase in the queue and the time we are actually increasing the capacity.
+                let current_capacity = self
+                    .storage_hub_handler
+                    .blockchain
+                    .query_storage_provider_capacity(own_bsp_id)
+                    .await
+                    .map_err(|e| {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to query storage provider capacity: {:?}", e
+                        );
+                        anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
+                    })?;
+
+                // Calculate the new capacity that the BSP has to have to be able to volunteer for the storage request.
                 let new_capacity = self.calculate_capacity(size, current_capacity)?;
 
+                // Send the extrinsic to change this BSP's capacity and wait for it to succeed.
                 let call = storage_hub_runtime::RuntimeCall::Providers(
                     pallet_storage_providers::Call::change_capacity { new_capacity },
                 );
@@ -624,6 +647,7 @@ where
                     .watch_for_success(&self.storage_hub_handler.blockchain)
                     .await?;
 
+                // Reset the capacity queue.
                 *capacity_queue = 0;
 
                 info!(
@@ -674,6 +698,11 @@ where
             .await
             .map_err(|e| anyhow!("Failed to query file earliest volunteer block: {:?}", e))?;
 
+        // Calculate the tick in which the BSP should send the extrinsic. It's one less that the tick
+        // in which the BSP can volunteer for the file because that way it the extrinsic will get included
+        // in the tick where the BSP can actually volunteer for the file.
+        let tick_to_wait_to_submit_volunteer = earliest_volunteer_tick.saturating_sub(1);
+
         info!(
             target: LOG_TARGET,
             "Waiting for tick {:?} to volunteer for file {:?}",
@@ -685,7 +714,7 @@ where
         // TODO: based on the limit above, also add a timeout for the task.
         self.storage_hub_handler
             .blockchain
-            .wait_for_tick(earliest_volunteer_tick)
+            .wait_for_tick(tick_to_wait_to_submit_volunteer)
             .await?;
 
         // TODO: Have this dynamically called at every tick in `wait_for_tick` to exit early without waiting until `earliest_volunteer_tick` in the event the storage request
@@ -708,10 +737,19 @@ where
             return Err(anyhow::anyhow!(err_msg));
         }
 
+        // Optimistically create file in file storage so we can write uploaded chunks as soon as possible.
+        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+        write_file_storage
+            .insert_file(
+                metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
+                metadata,
+            )
+            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
+        drop(write_file_storage);
+
         // Optimistically register the file for upload in the file transfer service.
         // This solves the race condition between the user and the BSP, where the user could react faster
         // to the BSP volunteering than the BSP, and therefore initiate a new upload request before the
-        // BSP has registered the file and peer ID in the file transfer service.
         for peer_id in event.user_peer_ids.iter() {
             let peer_id = match std::str::from_utf8(&peer_id.as_slice()) {
                 Ok(str_slice) => PeerId::from_str(str_slice).map_err(|e| {
@@ -727,16 +765,6 @@ where
                 .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
 
-        // Also optimistically create file in file storage so we can write uploaded chunks as soon as possible.
-        let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
-        write_file_storage
-            .insert_file(
-                metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>(),
-                metadata,
-            )
-            .map_err(|e| anyhow!("Failed to insert file in file storage: {:?}", e))?;
-        drop(write_file_storage);
-
         // Build extrinsic.
         let call =
             storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
@@ -747,7 +775,7 @@ where
         let result = self
             .storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
+            .send_extrinsic(call.clone(), Tip::from(0))
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler
@@ -765,7 +793,37 @@ where
                 e
             );
 
-            self.unvolunteer_file(file_key.into()).await;
+            // If the initial call errored out, it could mean the chain was spammed so the tick did not advance.
+            // Wait until the actual earliest volunteer tick to occur and retry volunteering.
+            self.storage_hub_handler
+                .blockchain
+                .wait_for_tick(earliest_volunteer_tick)
+                .await?;
+
+            // Send extrinsic and wait for it to be included in the block.
+            let result = self
+                .storage_hub_handler
+                .blockchain
+                .send_extrinsic(call, Tip::from(0))
+                .await?
+                .with_timeout(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .extrinsic_retry_timeout,
+                ))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await;
+
+            if let Err(e) = result {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to volunteer for file {:?} after retry in volunteer tick: {:?}",
+                    file_key,
+                    e
+                );
+
+                self.unvolunteer_file(file_key.into()).await;
+            }
         }
 
         Ok(())
@@ -781,97 +839,108 @@ where
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
-        // Verify and extract chunk from proof
-        let proven = event
+        // Verify and extract chunks from proof
+        let proven = match event
             .file_key_proof
             .proven::<StorageProofsMerkleTrieLayout>()
-            .map_err(|e| anyhow!("Failed to verify proof: {:?}", e))?;
-        if proven.len() != 1 {
-            return Err(anyhow!(
-                "Expected exactly one proven chunk but got {}",
-                proven.len()
-            ));
-        }
+        {
+            Ok(proven) => {
+                if proven.is_empty() {
+                    Err(anyhow::anyhow!(
+                        "Expected at least one proven chunk but got none."
+                    ))
+                } else {
+                    // Calculate total batch size
+                    let total_batch_size: usize = proven.iter().map(|chunk| chunk.data.len()).sum();
 
-        let proven_chunk: &shp_file_metadata::Leaf<shp_file_metadata::ChunkId, Vec<u8>> =
-            &proven[0];
-
-        match write_file_storage.write_chunk(&file_key, &proven_chunk.key, &proven_chunk.data) {
-            Ok(outcome) => match outcome {
-                FileStorageWriteOutcome::FileComplete => Ok(true),
-                FileStorageWriteOutcome::FileIncomplete => Ok(false),
-            },
-            Err(e) => match e {
-                FileStorageWriteError::FileChunkAlreadyExists => {
-                    // Check if the file is already complete
-                    let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-                    match read_file_storage.is_file_complete(&file_key) {
-                        Ok(is_complete) => Ok(is_complete),
-                        Err(e) => {
-                            // Unvolunteer the file.
-                            self.unvolunteer_file(event.file_key.into()).await;
-
-                            let err_msg = format!(
-                            "Received duplicate chunk but failed to check if file is complete. The file key {:?} is in a bad state with error: {:?}",
-                            event.file_key, e
-                        );
-                            error!(target: LOG_TARGET, "{}", err_msg);
-                            Err(anyhow::anyhow!(err_msg))
-                        }
+                    if total_batch_size > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
+                        Err(anyhow::anyhow!(
+                            "Total batch size {} bytes exceeds maximum allowed size of {} bytes",
+                            total_batch_size,
+                            BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE
+                        ))
+                    } else {
+                        Ok(proven)
                     }
                 }
-                FileStorageWriteError::FileDoesNotExist => {
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
+            }
+            Err(e) => Err(anyhow::anyhow!(
+                "Failed to verify and get proven file key chunks: {:?}",
+                e
+            )),
+        };
 
-                    Err(anyhow::anyhow!(format!(
-                        "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
-                        event.file_key
-                    )))
-                }
-                FileStorageWriteError::FailedToGetFileChunk
-                | FileStorageWriteError::FailedToInsertFileChunk
-                | FileStorageWriteError::FailedToDeleteChunk
-                | FileStorageWriteError::FailedToPersistChanges
-                | FileStorageWriteError::FailedToParseFileMetadata
-                | FileStorageWriteError::FailedToParseFingerprint
-                | FileStorageWriteError::FailedToReadStorage
-                | FileStorageWriteError::FailedToUpdatePartialRoot
-                | FileStorageWriteError::FailedToParsePartialRoot
-                | FileStorageWriteError::FailedToGetStoredChunksCount => {
-                    // This internal error should not happen.
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
+        let proven = match proven {
+            Ok(proven) => proven,
+            Err(e) => {
+                error!(target: LOG_TARGET, "{}", e);
+                return Err(e);
+            }
+        };
 
-                    Err(anyhow::anyhow!(format!(
-                        "Internal trie read/write error {:?}:{:?}",
-                        event.file_key, proven_chunk.key
-                    )))
-                }
-                FileStorageWriteError::FingerprintAndStoredFileMismatch => {
-                    // This should never happen, given that the first check in the handler is verifying the proof.
-                    // This means that something is seriously wrong, so we error out the whole task.
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
+        let mut file_complete = false;
 
-                    Err(anyhow::anyhow!(format!(
-                        "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
-                        event.file_key
-                    )))
-                }
-                FileStorageWriteError::FailedToConstructTrieIter => {
-                    // This should never happen for a well constructed trie.
-                    // This means that something is seriously wrong, so we error out the whole task.
-                    // Unvolunteer the file.
-                    self.unvolunteer_file(event.file_key.into()).await;
+        // Process each proven chunk in the batch
+        for chunk in proven {
+            // TODO: Add a batched write chunk method to the file storage.
+            let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);
 
-                    Err(anyhow::anyhow!(format!(
-                        "This is a bug! Failed to construct trie iter for key {:?}.",
-                        event.file_key
-                    )))
-                }
-            },
+            match write_result {
+                Ok(outcome) => match outcome {
+                    FileStorageWriteOutcome::FileComplete => {
+                        file_complete = true;
+                        break; // We can stop processing chunks if the file is complete
+                    }
+                    FileStorageWriteOutcome::FileIncomplete => continue,
+                },
+                Err(error) => match error {
+                    FileStorageWriteError::FileChunkAlreadyExists => {
+                        trace!(
+                            target: LOG_TARGET,
+                            "Received duplicate chunk with key: {:?}",
+                            chunk.key
+                        );
+                        // Continue processing other chunks
+                        continue;
+                    }
+                    FileStorageWriteError::FileDoesNotExist => {
+                        return Err(anyhow::anyhow!(format!(
+                            "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                            event.file_key
+                        )));
+                    }
+                    FileStorageWriteError::FailedToGetFileChunk
+                    | FileStorageWriteError::FailedToInsertFileChunk
+                    | FileStorageWriteError::FailedToDeleteChunk
+                    | FileStorageWriteError::FailedToPersistChanges
+                    | FileStorageWriteError::FailedToParseFileMetadata
+                    | FileStorageWriteError::FailedToParseFingerprint
+                    | FileStorageWriteError::FailedToReadStorage
+                    | FileStorageWriteError::FailedToUpdatePartialRoot
+                    | FileStorageWriteError::FailedToParsePartialRoot
+                    | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                        return Err(anyhow::anyhow!(format!(
+                            "Internal trie read/write error {:?}:{:?}",
+                            event.file_key, chunk.key
+                        )));
+                    }
+                    FileStorageWriteError::FingerprintAndStoredFileMismatch => {
+                        return Err(anyhow::anyhow!(format!(
+                            "Invariant broken! This is a bug! Fingerprint and stored file mismatch for key {:?}.",
+                            event.file_key
+                        )));
+                    }
+                    FileStorageWriteError::FailedToConstructTrieIter => {
+                        return Err(anyhow::anyhow!(format!(
+                            "This is a bug! Failed to construct trie iter for key {:?}.",
+                            event.file_key
+                        )));
+                    }
+                },
+            }
         }
+
+        Ok(file_complete)
     }
 
     /// Calculate the new capacity after adding the required capacity for the file.
@@ -886,7 +955,7 @@ where
         current_capacity: StorageDataUnit,
     ) -> Result<StorageDataUnit, anyhow::Error> {
         let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (required_additional_capacity + jump_capacity - 1) / jump_capacity;
+        let jumps_needed = required_additional_capacity.div_ceil(jump_capacity);
         let jumps = max(jumps_needed, 1);
         let bytes_to_add = jumps * jump_capacity;
         let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {

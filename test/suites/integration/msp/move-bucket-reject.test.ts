@@ -1,7 +1,6 @@
 import { strictEqual } from "node:assert";
 import assert from "node:assert";
 import {
-  waitFor,
   assertEventPresent,
   bspTwoKey,
   bspThreeKey,
@@ -10,11 +9,15 @@ import {
   ShConsts,
   describeMspNet,
   shUser,
-  type EnrichedBspApi
+  sleep,
+  type EnrichedBspApi,
+  createSqlClient,
+  waitFor
 } from "../../../util";
+import Docker from "dockerode";
 
 describeMspNet(
-  "MSP moves bucket to another MSP",
+  "MSP rejects bucket move requests",
   { initialised: false, indexer: true },
   ({ before, createMsp1Api, createMsp2Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
@@ -22,7 +25,7 @@ describeMspNet(
     let msp2Api: EnrichedBspApi;
     const source = ["res/whatsup.jpg", "res/adolphus.jpg", "res/smile.jpg"];
     const destination = ["test/whatsup.jpg", "test/adolphus.jpg", "test/smile.jpg"];
-    const bucketName = "nothingmuch-3";
+    const bucketName = "reject-move-bucket";
     let bucketId: string;
     const allBucketFiles: string[] = [];
 
@@ -151,8 +154,6 @@ describeMspNet(
     });
 
     it("MSP 1 receives files from user and accepts them", async () => {
-      const originalRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-
       // Get the events of the storage requests to extract the file keys and check
       // that the MSP received them.
       const events = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");
@@ -163,41 +164,42 @@ describeMspNet(
         throw new Error(`Expected ${source.length} NewStorageRequest events`);
       }
 
-      // Allow time for the MSP to receive and store the files from the user
+      // Wait for the MSP to receive and store all files by polling until they are all in storage
       await waitFor({
         lambda: async () => {
-          try {
-            // Check if the MSP received the files.
-            const fileKeys: string[] = [];
+          // Check if all files are in storage
+          for (const e of matchedEvents) {
+            const newStorageRequestDataBlob =
+              userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
 
-            for (const e of matchedEvents) {
-              const newStorageRequestDataBlob =
-                userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
-
-              if (!newStorageRequestDataBlob) {
-                throw new Error("Event doesn't match NewStorageRequest type");
-              }
-
-              const result = await msp1Api.rpc.storagehubclient.isFileInFileStorage(
-                newStorageRequestDataBlob.fileKey
-              );
-
-              if (!result.isFileFound) {
-                throw new Error(
-                  `File not found in storage for ${newStorageRequestDataBlob.location.toHuman()}`
-                );
-              }
-
-              fileKeys.push(newStorageRequestDataBlob.fileKey.toString());
+            if (!newStorageRequestDataBlob) {
+              return false;
             }
 
-            allBucketFiles.push(...new Set(allBucketFiles));
-            return true;
-          } catch {
-            return false;
+            const result = await msp1Api.rpc.storagehubclient.isFileInFileStorage(
+              newStorageRequestDataBlob.fileKey
+            );
+
+            if (!result.isFileFound) {
+              return false;
+            }
           }
-        }
+          return true;
+        },
+        iterations: 60, // Poll for up to 6 seconds (60 iterations * 100ms delay)
+        delay: 100
       });
+
+      // Store file keys for later verification
+      for (const e of matchedEvents) {
+        const newStorageRequestDataBlob =
+          userApi.events.fileSystem.NewStorageRequest.is(e.event) && e.event.data;
+
+        if (!newStorageRequestDataBlob) {
+          throw new Error("Event doesn't match NewStorageRequest type");
+        }
+        allBucketFiles.push(newStorageRequestDataBlob.fileKey.toString());
+      }
 
       // Seal block containing the MSP's first response.
       // MSPs batch responses to achieve higher throughput in periods of high demand. But they
@@ -206,28 +208,30 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      // Give time for the MSP to update the local forest root.
+      // Wait for the MSP to update its local forest root by polling until it matches the on-chain root
       await waitFor({
-        lambda: async () =>
-          (await msp1Api.rpc.storagehubclient.getForestRoot(bucketId)).toHex() !==
-          originalRoot.toHex()
+        lambda: async () => {
+          // Get the local forest root from MSP
+          const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+
+          // Get the on-chain root from the latest BucketRootChanged event
+          const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
+            "providers",
+            "BucketRootChanged"
+          );
+          const bucketRootChangedDataBlob =
+            userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
+            bucketRootChangedEvent.data;
+          if (!bucketRootChangedDataBlob) {
+            return false;
+          }
+
+          // Compare the roots
+          return bucketRootChangedDataBlob.newRoot.toString() === localBucketRoot.toString();
+        },
+        iterations: 20, // Poll for up to 2 seconds (20 iterations * 100ms delay)
+        delay: 100
       });
-
-      // Check that the local forest root is updated, and matches th on-chain root.
-      const localBucketRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-
-      const { event: bucketRootChangedEvent } = await userApi.assert.eventPresent(
-        "providers",
-        "BucketRootChanged"
-      );
-      const bucketRootChangedDataBlob =
-        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent) &&
-        bucketRootChangedEvent.data;
-      if (!bucketRootChangedDataBlob) {
-        throw new Error("Expected BucketRootChanged event but received event of different type");
-      }
-
-      strictEqual(bucketRootChangedDataBlob.newRoot.toString(), localBucketRoot.toString());
 
       // The MSP should have accepted exactly one file.
       // Register how many were accepted in the last block sealed.
@@ -253,28 +257,30 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      // Give time for the MSP to update the local forest root.
+      // Wait for the MSP to update its local forest root by polling until it matches the on-chain root
       await waitFor({
-        lambda: async () =>
-          (await msp1Api.rpc.storagehubclient.getForestRoot(bucketId)).toHex() !==
-          localBucketRoot.toHex()
+        lambda: async () => {
+          // Get the local forest root from MSP
+          const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
+
+          // Get the on-chain root from the latest BucketRootChanged event
+          const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
+            "providers",
+            "BucketRootChanged"
+          );
+          const bucketRootChangedDataBlob2 =
+            userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
+            bucketRootChangedEvent2.data;
+          if (!bucketRootChangedDataBlob2) {
+            return false;
+          }
+
+          // Compare the roots
+          return bucketRootChangedDataBlob2.newRoot.toString() === localBucketRoot2.toString();
+        },
+        iterations: 20, // Poll for up to 2 seconds (20 iterations * 100ms delay)
+        delay: 100
       });
-
-      // Check that the local forest root is updated, and matches th on-chain root.
-      const localBucketRoot2 = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
-
-      const { event: bucketRootChangedEvent2 } = await userApi.assert.eventPresent(
-        "providers",
-        "BucketRootChanged"
-      );
-      const bucketRootChangedDataBlob2 =
-        userApi.events.providers.BucketRootChanged.is(bucketRootChangedEvent2) &&
-        bucketRootChangedEvent2.data;
-      if (!bucketRootChangedDataBlob2) {
-        throw new Error("Expected BucketRootChanged event but received event of different type");
-      }
-
-      strictEqual(bucketRootChangedDataBlob2.newRoot.toString(), localBucketRoot2.toString());
 
       // The MSP should have accepted at least one file.
       // Register how many were accepted in the last block sealed.
@@ -301,18 +307,27 @@ describeMspNet(
         allBucketFiles.push(fileKey);
       }
 
-      // Wait for the BSPs to volunteer and confirm storing the files so the storage requests get fulfilled.
-      for (const fileKey of acceptedFileKeys) {
-        await userApi.wait.storageRequestNotOnChain(fileKey);
+      // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
+      for (let i = 0; i < 5; i++) {
+        await sleep(500);
+        const block = await userApi.block.seal();
+
+        await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
       }
     });
 
-    it("User moves bucket to second MSP", async () => {
-      // Get the value propositions of the second MSP to use, and use the first one (can be any).
+    it("MSP 2 rejects move request when indexer postgres DB is down", async () => {
+      // Pause the postgres container - this preserves the state
+      const docker = new Docker();
+      const postgresContainer = docker.getContainer("docker-sh-postgres-1");
+      await postgresContainer.pause();
+
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID_2
       );
       const valuePropId = valueProps[0].id;
+
+      // User requests to move bucket to second MSP
       const requestMoveBucketResult = await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.requestMoveBucket(
@@ -331,6 +346,59 @@ describeMspNet(
         requestMoveBucketResult.events
       );
 
+      // Wait for the rejection response from MSP2
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "mspRespondMoveBucketRequest",
+        timeout: 45000 // Increased timeout to account for DB connection timeout
+      });
+
+      const { events } = await userApi.block.seal();
+
+      // Verify that the move request was rejected
+      assertEventPresent(userApi, "fileSystem", "MoveBucketRejected", events);
+
+      // Resume postgres
+      await postgresContainer.unpause();
+
+      await userApi.docker.waitForLog({
+        containerName: "docker-sh-postgres-1",
+        searchString: "database system is ready to accept connections",
+        timeout: 5000
+      });
+    });
+
+    it("MSP 2 rejects move request when indexer data is corrupted", async () => {
+      // Delete all entries from bsp_file table to corrupt the replication data
+      const sql = createSqlClient();
+      await sql`DELETE FROM bsp_file`;
+      await sql.end();
+
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
+        userApi.shConsts.DUMMY_MSP_ID_2
+      );
+      const valuePropId = valueProps[0].id;
+
+      // User requests to move bucket to second MSP
+      const requestMoveBucketResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.fileSystem.requestMoveBucket(
+            bucketId,
+            msp2Api.shConsts.DUMMY_MSP_ID_2,
+            valuePropId
+          )
+        ],
+        signer: shUser
+      });
+
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "MoveBucketRequested",
+        requestMoveBucketResult.events
+      );
+
+      // Wait for the rejection response from MSP2
       await userApi.wait.waitForTxInPool({
         module: "fileSystem",
         method: "mspRespondMoveBucketRequest"
@@ -338,25 +406,8 @@ describeMspNet(
 
       const { events } = await userApi.block.seal();
 
-      assertEventPresent(userApi, "fileSystem", "MoveBucketAccepted", events);
-
-      // Wait for all files to be in the Forest of the second MSP.
-      await waitFor({
-        lambda: async () => {
-          for (const fileKey of allBucketFiles) {
-            const isFileInForest = await msp2Api.rpc.storagehubclient.isFileInForest(
-              bucketId,
-              fileKey
-            );
-            if (!isFileInForest.isTrue) {
-              return false;
-            }
-          }
-          return true;
-        },
-        iterations: 100,
-        delay: 1000
-      });
+      // Verify that the move request was rejected
+      assertEventPresent(userApi, "fileSystem", "MoveBucketRejected", events);
     });
   }
 );

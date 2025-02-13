@@ -91,6 +91,7 @@ export const extendFork = async (
  * @param nonce - Optional starting nonce for the extrinsics.
  * @param parentHash - Optional parent hash to build the block on top of.
  * @param finaliseBlock - Whether to finalize the block. Defaults to true.
+ * @param failOnExtrinsicNonInclusion - Whether to fail if an extrinsic is not included in the block. Defaults to true.
  * @returns A Promise resolving to a SealedBlock object containing block details and events.
  *
  * @throws Will throw an error if the block creation fails or if extrinsics are unsuccessful.
@@ -103,7 +104,8 @@ export const sealBlock = async (
   signer?: KeyringPair,
   nonce?: number,
   parentHash?: string,
-  finaliseBlock = true
+  finaliseBlock = true,
+  failOnExtrinsicNonInclusion = true
 ): Promise<SealedBlock> => {
   const initialHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
@@ -134,6 +136,32 @@ export const sealBlock = async (
         hash = await call.send();
       } else {
         hash = await call.signAndSend(signer || alice, { nonce: nonceToUse + i });
+      }
+
+      // Poll for the transaction to be included in the pending extrinsics, or error out in 2 seconds
+      const iterations = 20;
+      const delay = 100;
+      for (let i = 0; i < iterations; i++) {
+        // Get the pending extrinsics
+        const pendingExtrinsics = await api.rpc.author.pendingExtrinsics();
+
+        // Check if the hash of the transaction is in the pending extrinsics
+        if (pendingExtrinsics.map((ext) => ext.hash.toString()).includes(hash.toString())) {
+          break;
+        }
+
+        if (i < iterations) {
+          await sleep(delay);
+        } else {
+          if (failOnExtrinsicNonInclusion) {
+            console.error(
+              `Failed to find transaction ${hash.toString()} (${call.method.section.toString()}:${call.method.method.toString()}) in pending extrinsics`
+            );
+            throw new Error(
+              `Transaction ${call.method.section.toString()}:${call.method.method.toString()} failed to be included in the block`
+            );
+          }
+        }
       }
 
       results.hashes.push(hash);
@@ -200,12 +228,18 @@ export const sealBlock = async (
 
     for (const hash of results.hashes) {
       const extIndex = getExtIndex(hash);
-      const extEvents = allEvents.filter(
-        ({ phase }) =>
-          phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
-      );
-      results.events.push(...extEvents);
-      results.success.push(isExtSuccess(extEvents) ?? false);
+      if (extIndex >= 0) {
+        const extEvents = allEvents.filter(
+          ({ phase }) =>
+            phase.isApplyExtrinsic && Number(phase.asApplyExtrinsic.toString()) === extIndex
+        );
+        results.events.push(...extEvents);
+        results.success.push(isExtSuccess(extEvents) ?? false);
+      } else {
+        console.log(
+          `Extrinsic with hash ${hash.toString()} not found in block even though it was sent`
+        );
+      }
     }
   } else {
     results.events.push(...allEvents);
@@ -247,16 +281,18 @@ export const skipBlocks = async (api: ApiPromise, blocksToSkip: number, paddingM
   }
 };
 
-export const skipBlocksToMinChangeTime: (
+export const skipBlocksUntilBspCanChangeCapacity: (
   api: ApiPromise,
   bspId?: `0x${string}` | H256 | Uint8Array
 ) => Promise<void> = async (api, bspId = ShConsts.DUMMY_BSP_ID, verbose = false) => {
-  const lastCapacityChangeHeight = (await api.query.providers.backupStorageProviders(bspId))
-    .unwrap()
-    .lastCapacityChange.toNumber();
+  const queryEarliestChangeCapacityBlockResult =
+    await api.call.storageProvidersApi.queryEarliestChangeCapacityBlock(bspId);
+  assert(
+    queryEarliestChangeCapacityBlockResult.isOk,
+    "Failed to query earliest change capacity block"
+  );
+  const blockToAdvanceTo = queryEarliestChangeCapacityBlockResult.asOk.toNumber();
   const currentHeight = (await api.rpc.chain.getHeader()).number.toNumber();
-  const minChangeTime = api.consts.providers.minBlocksBetweenCapacityChanges.toNumber();
-  const blockToAdvanceTo = lastCapacityChangeHeight + minChangeTime;
 
   if (blockToAdvanceTo > currentHeight) {
     verbose &&

@@ -233,6 +233,7 @@ impl pallet_storage_providers::Config for Test {
     type RuntimeHoldReason = RuntimeHoldReason;
     type StorageDataUnit = StorageDataUnit;
     type SpCount = u32;
+    type BucketCount = u32;
     type MerklePatriciaRoot = H256;
     type MerkleTrieHashing = BlakeTwo256;
     type ProviderId = H256;
@@ -373,7 +374,7 @@ impl crate::Config for Test {
     type StakeToChallengePeriod = StakeToChallengePeriod;
     type MinChallengePeriod = ConstU64<4>;
     type ChallengeTicksTolerance = ChallengeTicksTolerance;
-    type BlockFullnessPeriod = ConstU64<10>;
+    type BlockFullnessPeriod = ConstU32<10>;
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;

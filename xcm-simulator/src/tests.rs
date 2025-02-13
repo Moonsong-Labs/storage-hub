@@ -467,7 +467,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -551,7 +551,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -664,7 +664,7 @@ mod providers {
         StorageHub::execute_with(|| {
             // We check that the parachain is now a provider in StorageHub.
             let parachain_provider_id =
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .unwrap();
             assert!(storagehub::Providers::is_provider(parachain_provider_id),);
         });
@@ -681,7 +681,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -805,7 +805,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -919,7 +919,7 @@ mod providers {
         StorageHub::execute_with(|| {
             // We check that the parachain is now a provider in StorageHub.
             let parachain_provider_id =
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .unwrap();
             assert!(storagehub::Providers::is_provider(parachain_provider_id),);
 
@@ -969,7 +969,7 @@ mod providers {
         StorageHub::execute_with(|| {
             // We check that the parachain is no longer a provider in StorageHub and has been returned its deposit.
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert!(
@@ -991,7 +991,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -1104,7 +1104,7 @@ mod providers {
         StorageHub::execute_with(|| {
             // We check that the parachain is now a provider in StorageHub.
             let parachain_provider_id =
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .unwrap();
             assert!(storagehub::Providers::is_provider(parachain_provider_id),);
 
@@ -1166,18 +1166,14 @@ mod providers {
 
 mod users {
 
-    use crate::sh_sibling_account_account_id;
-    use crate::CHARLIE;
-    use crate::SH_PARA_ID;
-    use pallet_file_system::types::FileKeyWithProof;
-    use pallet_file_system::types::MaxFilePathSize;
-    use pallet_file_system::types::MaxNumberOfPeerIds;
-    use pallet_file_system::types::MaxPeerIdSize;
-    use pallet_file_system::types::PendingFileDeletionRequest;
+    use crate::{sh_sibling_account_account_id, CHARLIE, SH_PARA_ID};
+    use pallet_file_system::types::{
+        FileKeyWithProof, MaxFilePathSize, MaxNumberOfPeerIds, MaxPeerIdSize,
+        PendingFileDeletionRequest, ReplicationTarget,
+    };
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
-    use storagehub::configs::BucketNameLimit;
-    use storagehub::configs::SpMinDeposit;
+    use storagehub::configs::{BucketNameLimit, SpMinDeposit};
 
     use super::*;
 
@@ -1247,7 +1243,7 @@ mod users {
                     msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
-                    value_prop_id: Some(value_prop_id),
+                    value_prop_id,
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1316,7 +1312,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: None,
+                    replication_target: ReplicationTarget::Standard,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1433,6 +1429,7 @@ mod users {
                 .len(),
                 1
             );
+            let file_deletion_request_deposit = <storagehub::Runtime as pallet_file_system::Config>::FileDeletionRequestDeposit::get();
             let mut file_deletion_requests_vec: BoundedVec<
                 PendingFileDeletionRequest<storagehub::Runtime>,
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
@@ -1442,6 +1439,7 @@ mod users {
                 file_key: file_key.clone(),
                 file_size: size,
                 bucket_id: bucket_id.clone(),
+                deposit_paid_for_creation: file_deletion_request_deposit,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(
@@ -1616,7 +1614,7 @@ mod users {
                     msp_id: alice_msp_id,
                     name: bucket_name.clone(),
                     private: false,
-                    value_prop_id: Some(value_prop_id),
+                    value_prop_id,
                 });
             let estimated_weight = bucket_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1697,7 +1695,7 @@ mod users {
                     size,
                     msp_id: alice_msp_id.clone(),
                     peer_ids: parachain_peer_id,
-                    replication_target: None,
+                    replication_target: ReplicationTarget::Standard,
                 });
             let estimated_weight = file_creation_call.get_dispatch_info().weight;
             // Remember, this message will be executed from the context of StorageHub
@@ -1836,6 +1834,8 @@ mod users {
                 .len(),
                 1
             );
+            let file_deletion_request_deposit = <storagehub::Runtime as pallet_file_system::Config>::FileDeletionRequestDeposit::get();
+
             let mut file_deletion_requests_vec: BoundedVec<
                 PendingFileDeletionRequest<storagehub::Runtime>,
                 <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
@@ -1845,6 +1845,7 @@ mod users {
                 file_key: file_key.clone(),
                 file_size: size,
                 bucket_id: bucket_id.clone(),
+                deposit_paid_for_creation: file_deletion_request_deposit,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(

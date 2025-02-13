@@ -278,6 +278,14 @@ export class BspNetTestApi implements AsyncDisposable {
 
       // TODO: Maybe we should refactor these to a different file under `mspNet` or something along those lines
       /**
+       * Waits for a MSP to submit a proof for a pending file deletion request.
+       * @param expectedExts - Optional param to specify the number of expected extrinsics.
+       * @returns A promise that resolves when a MSP has submitted a proof for a pending file deletion request.
+       */
+      mspPendingFileDeletionRequestSubmitProof: (expectedExts?: number) =>
+        Waits.waitForMspPendingFileDeletionRequestSubmitProof(this._api, expectedExts),
+
+      /**
        * Waits for a MSP to submit to the tx pool the extrinsic to respond to storage requests.
        * @param expectedExts - Optional param to specify the number of expected extrinsics.
        * @returns A promise that resolves when a MSP has submitted to the tx pool the extrinsic to respond to storage requests.
@@ -300,7 +308,26 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the address has no pending extrinsics.
        */
       waitForAvailabilityToSendTx: (address: string) =>
-        Waits.waitForAvailabilityToSendTx(this._api, address)
+        Waits.waitForAvailabilityToSendTx(this._api, address),
+
+      /**
+       * Waits for a storage request to be removed from on-chain storage.
+       * This could happen because the storage request was fulfilled, it has expired or
+       * it has been rejected by the MSP. Either way, we only care that it's not on-chain anymore.
+       * @param fileKey - File key of the storage request to wait for.
+       * @returns A promise that resolves when the storage request is not on-chain.
+       */
+      storageRequestNotOnChain: (fileKey: H256 | string) =>
+        Waits.waitForStorageRequestNotOnChain(this._api, fileKey),
+
+      /**
+       * Waits for a storage request to be fulfilled by waiting and sealing blocks until
+       * the StorageRequestFulfilled event is detected.
+       * @param fileKey - File key of the storage request to wait for.
+       * @returns A promise that resolves when the storage request has been fulfilled.
+       */
+      storageRequestFulfilled: (fileKey: H256 | string) =>
+        Waits.waitForStorageRequestFulfilled(this._api, fileKey)
     };
 
     /**
@@ -349,6 +376,7 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param bucketName - The name of the bucket to be created.
        * @param mspId - <TODO> Optional MSP ID to use for the new storage request. Defaults to DUMMY_MSP_ID.
        * @param owner - Optional signer with which to issue the newStorageRequest Defaults to SH_USER.
+       * @param replicationTarget - Optional number of replicas to store the file. Defaults to the BasicReplicationTarget of the runtime.
        * @returns A promise that resolves to file metadata.
        */
       createBucketAndSendNewStorageRequest: (
@@ -424,7 +452,8 @@ export class BspNetTestApi implements AsyncDisposable {
           options?.signer,
           options?.nonce,
           options?.parentHash,
-          options?.finaliseBlock
+          options?.finaliseBlock,
+          options?.failOnExtrinsicNonInclusion
         ),
       /**
        * Seal blocks until the next challenge period block.
@@ -477,9 +506,12 @@ export class BspNetTestApi implements AsyncDisposable {
       ) => BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber }),
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
+       *
+       * @param bspId - The ID of the BSP that the capacity change is for.
        * @returns A promise that resolves when the minimum change time is reached.
        */
-      skipToMinChangeTime: () => BspNetBlock.skipBlocksToMinChangeTime(this._api),
+      skipUntilBspCanChangeCapacity: (bspId?: `0x${string}` | H256 | Uint8Array) =>
+        BspNetBlock.skipBlocksUntilBspCanChangeCapacity(this._api, bspId),
       /**
        * Finalises a block (and therefore all of its predecessors) in the blockchain.
        *

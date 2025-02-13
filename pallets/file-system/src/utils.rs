@@ -1,11 +1,12 @@
 use codec::Encode;
+use core::cmp::max;
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
     traits::{
         fungible::{InspectHold, Mutate, MutateHold},
         nonfungibles_v2::{Create, Destroy},
-        tokens::{Precision, Preservation},
+        tokens::{Fortitude, Precision, Preservation, Restriction},
         Get,
     },
 };
@@ -36,17 +37,17 @@ use crate::{
     pallet,
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionRequestExpirationItem,
-        FileKeyHasher, FileKeyWithProof, FileLocation, Fingerprint, ForestProof, MerkleHash,
-        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingFileDeletionRequest,
-        PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTargetType,
+        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
+        FileLocation, Fingerprint, ForestProof, MerkleHash, MoveBucketRequestMetadata,
+        MultiAddresses, PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest,
+        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
         StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
-    BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingBucketsToMove,
-    PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
-    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+    BucketsWithStorageRequests, Error, Event, HoldReason, MspsAmountOfPendingFileDeletionRequests,
+    Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
+    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -125,57 +126,184 @@ where
     where
         T: frame_system::Config,
     {
-        // Get the tick number at which the storage request was created.
-        let (storage_request_tick, fingerprint) = match <StorageRequests<T>>::get(&file_key) {
-            Some(storage_request) => (storage_request.requested_at, storage_request.fingerprint),
+        // Get the tick number at which the storage request was created and
+        // the amount of BSPs required to confirm storing the file for the storage request
+        // to be considered fulfilled (replication target).
+        let (storage_request_tick, replication_target) = match <StorageRequests<T>>::get(&file_key)
+        {
+            Some(storage_request) => (storage_request.requested_at, storage_request.bsps_required),
             None => {
                 return Err(QueryFileEarliestVolunteerTickError::StorageRequestNotFound);
             }
         };
 
-        // Get the threshold needed for the BSP to be able to volunteer for the storage request.
-        let bsp_threshold = Self::get_threshold_for_bsp_request(&bsp_id, &fingerprint);
+        // Get the threshold for the BSP to be able to volunteer for the storage request.
+        // The current eligibility value of this storage request for this BSP has to be greater than
+        // this for the BSP to be able to volunteer.
+        let bsp_volunteering_threshold = Self::get_volunteer_threshold_of_bsp(&bsp_id, &file_key);
 
-        // Compute the tick number at which the BSP should send the volunteer request.
-        Self::compute_volunteer_tick_number(bsp_id, bsp_threshold, storage_request_tick)
-            .map_err(|_| QueryFileEarliestVolunteerTickError::ThresholdArithmeticError)
+        // Get the current eligibility value of this storage request and the slope with which it
+        // increments every tick (this is weighted considering the BSP reputation so it depends on the BSP).
+        let (bsp_current_eligibility_value, bsp_eligibility_slope) =
+            Self::compute_request_eligibility_criteria(
+                &bsp_id,
+                storage_request_tick,
+                replication_target,
+            )
+            .map_err(|_| QueryFileEarliestVolunteerTickError::FailedToComputeEligibilityCriteria)?;
+
+        // Calculate the difference between the BSP's threshold and the current eligibility value.
+        let eligibility_diff =
+            match bsp_volunteering_threshold.checked_sub(&bsp_current_eligibility_value) {
+                Some(diff) => diff,
+                None => {
+                    // The BSP's threshold is less than the eligibility current value, which means the BSP is already eligible to volunteer.
+                    let current_tick =
+                        <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                    return Ok(current_tick);
+                }
+            };
+
+        // If the BSP can't volunteer yet, calculate the number of ticks it has to wait for before it can.
+        let min_ticks_to_wait_to_volunteer =
+            match eligibility_diff.checked_div(&bsp_eligibility_slope) {
+                Some(ticks) => max(ticks, T::ThresholdType::one()),
+                None => {
+                    return Err(QueryFileEarliestVolunteerTickError::ThresholdArithmeticError);
+                }
+            };
+
+        // Compute the earliest tick number at which the BSP can send the volunteer request.
+        let earliest_volunteer_tick = storage_request_tick.saturating_add(
+            T::ThresholdTypeToTickNumber::convert(min_ticks_to_wait_to_volunteer),
+        );
+
+        Ok(earliest_volunteer_tick)
     }
 
-    fn compute_volunteer_tick_number(
-        bsp_id: ProviderIdFor<T>,
-        bsp_threshold: T::ThresholdType,
-        storage_request_tick: TickNumber<T>,
-    ) -> Result<TickNumber<T>, DispatchError>
-    where
-        T: frame_system::Config,
-    {
-        // Compute the threshold to succeed and the slope of the bsp.
-        let (to_succeed, slope) =
-            Self::compute_threshold_to_succeed(&bsp_id, storage_request_tick)?;
+    /// Compute the eligibility value threshold for a BSP to be able to volunteer for a storage request
+    /// for a file which has the specified file key.
+    ///
+    /// The threshold is computed by concatenating the encoded BSP ID and file key,
+    /// then hashing the result to get the volunteering hash. The volunteering hash is then
+    /// converted to the threshold type.
+    ///
+    /// We use the file key for additional entropy to ensure that the threshold is unique.
+    pub fn get_volunteer_threshold_of_bsp(
+        bsp_id: &ProviderIdFor<T>,
+        file_key: &MerkleHash<T>,
+    ) -> T::ThresholdType {
+        // Concatenate the encoded BSP ID and file key and hash them to get the volunteering hash.
+        let concatenated = sp_std::vec![bsp_id.encode(), file_key.encode()].concat();
+        let volunteering_hash =
+            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
 
-        let threshold_diff = match bsp_threshold.checked_sub(&to_succeed) {
-            Some(diff) => diff,
-            None => {
-                // The BSP's threshold is less than the current threshold.
-                let current_tick =
-                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
-                return Ok(current_tick);
-            }
-        };
+        // Return the threshold needed for the BSP to be able to volunteer for the storage request.
+        T::HashToThresholdType::convert(volunteering_hash)
+    }
 
-        // Calculate the number of ticks required to be below the threshold.
-        let ticks_to_wait = match threshold_diff.checked_div(&slope) {
-            Some(ticks) => ticks,
-            None => {
-                return Err(Error::<T>::ThresholdArithmeticError.into());
-            }
-        };
+    /// Compute the eligibility value of a storage request issued at `requested_at` with `bsps_required` as
+    /// its replication target, for a specific BSP identified by `bsp_id`, and the slope with which the
+    /// eligibility value increases every tick.
+    ///
+    /// The eligibility initial value depends on the global BSP reputation weight and the storage
+    /// request's replication target, and increases linearly over time to achieve its maximum value after
+    /// [`crate::Config::TickRangeToMaximumThreshold`] ticks, a constant defined in this pallet's configuration.
+    /// Both these values get weighted with the BSP's reputation weight to give an advantage to BSPs with
+    /// higher reputation weights, since both the initial weighted eligibility value and slope will be
+    /// higher for them.
+    ///
+    /// A BSP is eligible to volunteer for a storage request when the returned eligibility value
+    /// is greater than that BSP's volunteer threshold value.
+    ///
+    /// The formalized formulas are documented in the [README](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/README.md#volunteering-succeeding-threshold-checks).
+    pub fn compute_request_eligibility_criteria(
+        bsp_id: &ProviderIdFor<T>,
+        requested_at: TickNumber<T>,
+        replication_target: ReplicationTargetType<T>,
+    ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
+        // Get the maximum eligibility value, which would allow all BSP's to volunteer for the storage request.
+        let max_eligibility_value = T::ThresholdType::max_value();
 
-        // Compute the tick number at which the BSP should send the volunteer request.
-        let volunteer_tick_number = storage_request_tick
-            .saturating_add(T::ThresholdTypeToTickNumber::convert(ticks_to_wait));
+        // Get the global reputation weight of all BSPs.
+        let global_reputation_weight =
+            T::ThresholdType::from(T::Providers::get_global_bsps_reputation_weight());
 
-        Ok(volunteer_tick_number)
+        // If the global reputation weight is zero, there are no BSPs in the network, so no storage requests can be fulfilled.
+        if global_reputation_weight == T::ThresholdType::zero() {
+            return Err(Error::<T>::NoGlobalReputationWeightSet.into());
+        }
+
+        // Calculate the starting eligibility value for all BSPs, regardless of their reputation weight.
+        // This is set to maximize the probability that exactly `replication_target` BSPs with the starting
+        // reputation weight will be able to volunteer in the initial tick, which minimizes the probability
+        // that a malicious user controlling a large number of BSPs will be able to control all the
+        // BSPs that volunteer in the initial tick.
+        //
+        // The calculation is designed to achieve the following:
+        //
+        // 1. Initially, the global reputation weight will be low since there won't be many BSPs in the network,
+        // so the starting eligibility value will be high, allowing more BSPs to volunteer in the initial tick
+        // thus decreasing the time it takes for a storage request to be fulfilled even in the early days of the network.
+        //
+        // 2. As the global reputation weight of all BSPs increases (i.e., more BSPs join the network or the ones
+        // already participating gain reputation), the starting eligibility value for all BSPs will decrease, allowing
+        // less BSPs to volunteer in the initial tick and prioritizing higher reputation BSPs.
+        //
+        // 3. Multiplying the starting eligibility value by the replication target ensures that the number of BSPs with
+        // the starting reputation weight that can volunteer in the initial tick is probabilistically equal to the
+        // replication target chosen by the user, thus decreasing the time it takes for a storage request to be fulfilled
+        // (in comparison to not multiplying by the replication target) while still preserving the security of the network
+        // against malicious users controlling a large number of BSPs (in comparison to having a really high
+        // starting eligibility value).
+        let global_eligibility_starting_value = max_eligibility_value
+            .checked_div(&global_reputation_weight)
+            .unwrap_or(T::ThresholdType::one())
+            .saturating_mul(replication_target.into());
+
+        // Calculate the rate of increase per tick of the global eligibility value.
+        // This is such that, after `TickRangeToMaximumThreshold` ticks, the global eligibility value will be
+        // equal to `max_eligibility_value`, thus allowing all BSPs to volunteer.
+        // The base slope for the storage request should be at the very least 1, so that all BSPs can volunteer eventually.
+        let base_slope = max_eligibility_value
+            .saturating_sub(global_eligibility_starting_value)
+            .checked_div(&T::ThresholdTypeToTickNumber::convert_back(
+                T::TickRangeToMaximumThreshold::get(),
+            ))
+            .unwrap_or(T::ThresholdType::one());
+        let base_slope = max(base_slope, T::ThresholdType::one());
+
+        // Get the BSP's reputation weight.
+        let bsp_reputation_weight =
+            T::ThresholdType::from(T::Providers::get_bsp_reputation_weight(&bsp_id)?);
+
+        // If the BSP's reputation weight is zero, the BSP is not allowed to volunteer for any storage request.
+        if bsp_reputation_weight == T::ThresholdType::zero() {
+            return Err(Error::<T>::NoBspReputationWeightSet.into());
+        }
+
+        // The eligibility starting value for this BSP is the global one weighted by the BSP's reputation weight.
+        let bsp_eligibility_starting_value =
+            global_eligibility_starting_value.saturating_mul(bsp_reputation_weight);
+
+        // The rate of increase for this BSP is the global one weighted by the BSP's reputation weight.
+        let bsp_eligibility_slope = base_slope
+            .checked_mul(&bsp_reputation_weight)
+            .unwrap_or(max_eligibility_value);
+
+        // Get the current tick.
+        let current_tick_number =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+
+        // Get the amount of elapsed ticks since the storage request was issued and convert the number to the threshold type.
+        let elapsed_ticks = current_tick_number.saturating_sub(requested_at);
+        let elapsed_ticks = T::ThresholdTypeToTickNumber::convert_back(elapsed_ticks);
+
+        // Finally, calculate the current eligibility value for this BSP.
+        let current_eligibility_value_for_bsp = bsp_eligibility_starting_value
+            .saturating_add(bsp_eligibility_slope.saturating_mul(elapsed_ticks));
+
+        Ok((current_eligibility_value_for_bsp, bsp_eligibility_slope))
     }
 
     pub fn query_bsp_confirm_chunks_to_prove_for_file(
@@ -268,7 +396,7 @@ where
         msp_id: ProviderIdFor<T>,
         name: BucketNameFor<T>,
         private: bool,
-        value_prop_id: Option<ValuePropId<T>>,
+        value_prop_id: ValuePropId<T>,
     ) -> Result<(BucketIdFor<T>, Option<CollectionIdFor<T>>), DispatchError> {
         // Check if the MSP is indeed an MSP.
         ensure!(
@@ -276,10 +404,25 @@ where
             Error::<T>::NotAMsp
         );
 
+        // Check that the selected value proposition is currently available under the MSP.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_value_prop_available(
+                &msp_id,
+                &value_prop_id
+            ),
+            Error::<T>::ValuePropositionNotAvailable
+        );
+
         // Check if MSP is insolvent
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
             Error::<T>::OperationNotAllowedForInsolventProvider
+        );
+
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
         );
 
         // Create collection only if bucket is private
@@ -312,7 +455,14 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         new_msp_id: ProviderIdFor<T>,
+        new_value_prop_id: ValuePropId<T>,
     ) -> Result<(), DispatchError> {
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check if the sender is the owner of the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
@@ -323,6 +473,15 @@ where
         ensure!(
             <T::Providers as ReadStorageProvidersInterface>::is_msp(&new_msp_id),
             Error::<T>::NotAMsp
+        );
+
+        // Check if the new value proposition exists under the new MSP and is currently available.
+        ensure!(
+            <T::Providers as ReadStorageProvidersInterface>::is_value_prop_available(
+                &new_msp_id,
+                &new_value_prop_id
+            ),
+            Error::<T>::ValuePropositionNotAvailable
         );
 
         // Check if the newly selected MSP is not insolvent
@@ -340,9 +499,11 @@ where
             Error::<T>::MspAlreadyStoringBucket
         );
 
-        if <PendingBucketsToMove<T>>::contains_key(&bucket_id) {
-            return Err(Error::<T>::BucketIsBeingMoved.into());
-        }
+        // Check that the bucket is not being moved.
+        ensure!(
+            !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            Error::<T>::BucketIsBeingMoved
+        );
 
         // Check if there are any open storage requests for the bucket.
         // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
@@ -359,6 +520,7 @@ where
             bucket_id,
             MoveBucketRequestMetadata {
                 requester: sender.clone(),
+                new_value_prop_id,
             },
         );
         <PendingBucketsToMove<T>>::insert(&bucket_id, ());
@@ -373,8 +535,8 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         response: BucketMoveRequestResponse,
-    ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender)
+    ) -> Result<(ProviderIdFor<T>, ValuePropId<T>), DispatchError> {
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
             .ok_or(Error::<T>::NotAMsp)?;
 
         // Check if MSP is insolvent.
@@ -389,29 +551,31 @@ where
             Error::<T>::NotAMsp
         );
 
-        // Check if the move bucket request exists for the MSP and bucket.
-        let move_bucket_requester = <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id);
-        ensure!(
-            move_bucket_requester.is_some(),
+        // Check if the move bucket request exists for the MSP and bucket, removing it from storage if it does.
+        let move_bucket_request_metadata = expect_or_err!(
+            <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id),
+            "Move bucket request should exist",
             Error::<T>::MoveBucketRequestNotFound
         );
 
+        // If the new MSP accepted storing the bucket...
         if response == BucketMoveRequestResponse::Accepted {
+            // Get the current size of the bucket.
             let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
 
+            // Get the previous MSP that was storing the bucket, if any.
             let previous_msp_id =
-                <T::Providers as ReadBucketsInterface>::get_msp_bucket(&bucket_id)?;
+                <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
-            // Update the previous MSP's capacity used.
+            // If another MSP was previously storing the bucket, update its used capacity to reflect the removal of the bucket.
             if let Some(msp_id) = previous_msp_id {
-                // Decrease the used capacity of the previous MSP.
                 <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
                     &msp_id,
                     bucket_size,
                 )?;
             }
 
-            // Check if MSP has enough available capacity to store the bucket.
+            // Check if the new MSP has enough available capacity to store the bucket.
             ensure!(
                 <T::Providers as ReadStorageProvidersInterface>::available_capacity(&msp_id)
                     >= bucket_size,
@@ -419,7 +583,11 @@ where
             );
 
             // Change the MSP that stores the bucket.
-            <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(&bucket_id, &msp_id)?;
+            <T::Providers as MutateBucketsInterface>::assign_msp_to_bucket(
+                &bucket_id,
+                &msp_id,
+                &move_bucket_request_metadata.new_value_prop_id,
+            )?;
 
             // Increase the used capacity of the new MSP.
             <T::Providers as MutateStorageProvidersInterface>::increase_capacity_used(
@@ -428,9 +596,10 @@ where
             )?;
         }
 
+        // Remove the bucket from the pending buckets to move.
         <PendingBucketsToMove<T>>::remove(&bucket_id);
 
-        Ok(msp_id)
+        Ok((msp_id, move_bucket_request_metadata.new_value_prop_id))
     }
 
     /// Update the privacy of a bucket.
@@ -445,6 +614,12 @@ where
         bucket_id: BucketIdFor<T>,
         private: bool,
     ) -> Result<Option<CollectionIdFor<T>>, DispatchError> {
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Ensure the sender is the owner of the bucket.
         ensure!(
             T::Providers::is_bucket_owner(&sender, &bucket_id)?,
@@ -490,6 +665,12 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
     ) -> Result<CollectionIdFor<T>, DispatchError> {
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check if sender is the owner of the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
@@ -550,7 +731,7 @@ where
             <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
 
         // Delete the bucket.
-        <T::Providers as MutateBucketsInterface>::remove_root_bucket(bucket_id)?;
+        <T::Providers as MutateBucketsInterface>::delete_bucket(bucket_id)?;
 
         // Delete the collection associated with the bucket if it existed.
         if let Some(collection_id) = maybe_collection_id.clone() {
@@ -563,6 +744,7 @@ where
         }
 
         // Return the collection ID associated with the bucket, if any.
+        // TODO: Check if the MSP is deleting the bucket from its local storage as well.
         Ok(maybe_collection_id)
     }
 
@@ -578,9 +760,15 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         msp_id: Option<ProviderIdFor<T>>,
-        replication_target: Option<ReplicationTargetType<T>>,
+        replication_target: ReplicationTarget<T>,
         user_peer_ids: Option<PeerIds<T>>,
     ) -> Result<MerkleHash<T>, DispatchError> {
+        // Check that the user is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check that the file size is greater than zero.
         ensure!(size > Zero::zero(), Error::<T>::FileSizeCannotBeZero);
 
@@ -633,7 +821,14 @@ where
             None
         };
 
-        let replication_target = replication_target.unwrap_or(T::DefaultReplicationTarget::get());
+        let replication_target = match replication_target {
+            ReplicationTarget::Basic => T::BasicReplicationTarget::get(),
+            ReplicationTarget::Standard => T::StandardReplicationTarget::get(),
+            ReplicationTarget::HighSecurity => T::HighSecurityReplicationTarget::get(),
+            ReplicationTarget::SuperHighSecurity => T::SuperHighSecurityReplicationTarget::get(),
+            ReplicationTarget::UltraHighSecurity => T::UltraHighSecurityReplicationTarget::get(),
+            ReplicationTarget::Custom(replication_target) => replication_target,
+        };
 
         if replication_target.is_zero() {
             return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
@@ -715,9 +910,8 @@ where
         storage_request_msp_response: StorageRequestMspResponse<T>,
     ) -> Result<(), DispatchError> {
         // Check that the sender is a Storage Provider and get its MSP ID
-        let msp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotASp)?;
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotASp)?;
 
         // Check that the sender is an MSP
         ensure!(
@@ -769,9 +963,8 @@ where
         bucket_id: BucketIdFor<T>,
     ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
         // Check if the sender is a Provider.
-        let msp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotAMsp)?;
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotAMsp)?;
 
         // Check if the MSP is indeed an MSP.
         ensure!(
@@ -817,6 +1010,18 @@ where
         bucket_id: BucketIdFor<T>,
         accepted_file_keys: StorageRequestMspAcceptedFileKeys<T>,
     ) -> Result<MerkleHash<T>, DispatchError> {
+        // Get the user owner of the bucket.
+        let bucket_owner =
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
+
+        // Check that the bucket owner is not currently insolvent. This is done to error out early, since otherwise
+        // it will go through with all the verification logic and then fail when trying to update the payment stream
+        // between the MSP and the user.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&bucket_owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check if MSP is insolvent.
         ensure!(
             !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(msp_id),
@@ -950,10 +1155,10 @@ where
                 let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key_with_proof.file_key)
                     .fold(0, |acc, _| acc.saturating_add(One::one()));
 
-                // Make sure that the expected number of bsps were removed.
+                // Make sure that the expected number of BSPs were removed.
                 expect_or_err!(
                     storage_request_metadata.bsps_volunteered == removed.into(),
-                    "Number of volunteered bsps for storage request should have been removed",
+                    "Number of volunteered BSPs for storage request should have been removed",
                     Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                     bool
                 );
@@ -1044,9 +1249,8 @@ where
         ),
         DispatchError,
     > {
-        let bsp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check if BSP is insolvent.
         ensure!(
@@ -1064,9 +1268,19 @@ where
         let mut storage_request_metadata =
             <StorageRequests<T>>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
+        // Check that the user that issued the storage request is not currently insolvent. This is done
+        // to avoid the BSP the trouble of volunteering, then fetching the file from the user, generating
+        // the proof and then not being able to confirm storing the file because the user is insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(
+                &storage_request_metadata.owner
+            ),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         expect_or_err!(
             storage_request_metadata.bsps_confirmed < storage_request_metadata.bsps_required,
-            "Storage request should never have confirmed bsps equal to or greater than required bsps, since they are deleted when it is reached.",
+            "Storage request should never have confirmed BSPs equal to or greater than required bsps, since they are deleted when it is reached.",
             Error::<T>::StorageRequestBspsRequiredFulfilled,
             bool
         );
@@ -1113,7 +1327,7 @@ where
             },
         );
 
-        // Increment the number of bsps volunteered.
+        // Increment the number of BSPs volunteered.
         match storage_request_metadata
             .bsps_volunteered
             .checked_add(&ReplicationTargetType::<T>::one())
@@ -1150,9 +1364,8 @@ where
         file_keys_and_proofs: BoundedVec<FileKeyWithProof<T>, T::MaxBatchConfirmStorageRequests>,
     ) -> DispatchResult {
         // Get the Provider ID of the sender.
-        let bsp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check if the Provider is insolvent.
         ensure!(
@@ -1219,6 +1432,21 @@ where
                 }
             };
 
+            // Check that the user that issued the storage request is not currently insolvent. This is done to continue the loop early,
+            // since the file key would still be skipped after failing to update the payment stream between the user and the BSP.
+            if <T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(
+                &storage_request_metadata.owner,
+            ) {
+                // Skip file key if the owner of the file related to the storage request is currently insolvent.
+                expect_or_err!(
+                    skipped_file_keys.try_insert(file_key),
+                    "Failed to push file key to skipped_file_keys",
+                    Error::<T>::TooManyStorageRequestResponses,
+                    result
+                );
+                continue;
+            }
+
             // Check that the BSP has volunteered for the storage request.
             ensure!(
                 <StorageRequestBsps<T>>::contains_key(&file_key, &bsp_id),
@@ -1242,6 +1470,48 @@ where
                 available_capacity > storage_request_metadata.size,
                 Error::<T>::InsufficientAvailableCapacity
             );
+
+            // All errors from the payment stream operations (create/update) are ignored, and the file key is added to the `skipped_file_keys` set instead of erroring out.
+            // This is done to avoid a malicious user, owner of one of the files from the batch of confirmations, being able to prevent the BSP from confirming any files by making itself insolvent so payment stream operations fail.
+            // This operation must be executed first, before updating any storage elements, to prevent potential cases
+            // where a storage element is updated but should not be.
+            match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
+				Some(previous_amount_provided) => {
+					// Update the payment stream.
+                    let new_amount_provided = &previous_amount_provided.checked_add(&storage_request_metadata.size).ok_or(ArithmeticError::Overflow)?;
+					if let Err(_) = <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						new_amount_provided,
+					) {
+                        // Skip file key if we could not successfully update the payment stream
+                        expect_or_err!(
+                            skipped_file_keys.try_insert(file_key),
+                            "Failed to push file key to skipped_file_keys",
+                            Error::<T>::TooManyStorageRequestResponses,
+                            result
+                        );
+                        continue;
+                    }
+				},
+				None => {
+					// Create the payment stream.
+					if let Err(_) = <T::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
+						&bsp_id,
+						&storage_request_metadata.owner,
+						&storage_request_metadata.size,
+					) {
+                        // Skip file key if we could not successfully create the payment stream
+                        expect_or_err!(
+                            skipped_file_keys.try_insert(file_key),
+                            "Failed to push file key to skipped_file_keys",
+                            Error::<T>::TooManyStorageRequestResponses,
+                            result
+                        );
+                        continue;
+                    }
+				}
+			}
 
             // Increment the number of BSPs confirmed.
             match storage_request_metadata
@@ -1282,28 +1552,6 @@ where
                 storage_request_metadata.size,
             )?;
 
-            // Check if a payment stream between the user and provider already exists.
-            // If it does not, create it. If it does, update it.
-            match <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &storage_request_metadata.owner) {
-				Some(previous_amount_provided) => {
-					// Update the payment stream.
-                    let new_amount_provided = &previous_amount_provided.checked_add(&storage_request_metadata.size).ok_or(ArithmeticError::Overflow)?;
-					<T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-						&bsp_id,
-						&storage_request_metadata.owner,
-						new_amount_provided,
-					)?;
-				},
-				None => {
-					// Create the payment stream.
-					<T::PaymentStreams as PaymentStreamsInterface>::create_dynamic_rate_payment_stream(
-						&bsp_id,
-						&storage_request_metadata.owner,
-						&storage_request_metadata.size,
-					)?;
-				}
-			}
-
             // Get the file metadata to insert into the Provider's trie under the file key.
             let file_metadata = storage_request_metadata.clone().to_file_metadata();
             let encoded_trie_value = file_metadata.encode();
@@ -1341,7 +1589,7 @@ where
                 // Make sure that the expected number of BSPs were removed.
                 expect_or_err!(
                     storage_request_metadata.bsps_volunteered == removed.into(),
-                    "Number of volunteered bsps for storage request should have been removed",
+                    "Number of volunteered BSPs for storage request should have been removed",
                     Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
                     bool
                 );
@@ -1487,6 +1735,9 @@ where
     /// issued to force the BSPs to update their storage root to uninclude the file from their storage.
     ///
     /// All BSPs that have volunteered to store the file are removed from the storage request and the storage request is deleted.
+    ///
+    /// TODO: We should also clean up the MSP (decreasing its used capacity, the bucket size, etc) if it has already confirmed storing the file,
+    /// but we can't apply delta... so we need to think about how to do this.
     fn cleanup_storage_request(
         revoker: EitherAccountIdOrMspId<T>,
         file_key: MerkleHash<T>,
@@ -1510,10 +1761,10 @@ where
         let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key)
             .fold(0, |acc, _| acc.saturating_add(One::one()));
 
-        // Make sure that the expected number of bsps were removed.
+        // Make sure that the expected number of BSPs were removed.
         expect_or_err!(
             storage_request_metadata.bsps_volunteered == removed.into(),
-            "Number of volunteered bsps for storage request should have been removed",
+            "Number of volunteered BSPs for storage request should have been removed",
             Error::<T>::UnexpectedNumberOfRemovedVolunteeredBsps,
             bool
         );
@@ -1582,9 +1833,15 @@ where
         can_serve: bool,
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
-        let bsp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotABsp)?;
+        // Check that the user that owns the file is not currently insolvent. The BSP should
+        // call `sp_stop_storing_for_insolvent_user` instead if the user is insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotABsp)?;
 
         // Check that the provider is indeed a BSP.
         ensure!(
@@ -1645,7 +1902,7 @@ where
             Some(mut storage_request_metadata) => {
                 match <StorageRequestBsps<T>>::get(&file_key, &bsp_id) {
                     // We hit scenario 1. The BSP is a volunteer and has confirmed storing the file.
-                    // We need to decrement the number of bsps confirmed and volunteered, remove the BSP as a data server and from the storage request.
+                    // We need to decrement the number of BSPs confirmed and volunteered, remove the BSP as a data server and from the storage request.
                     Some(bsp) => {
                         expect_or_err!(
                             bsp.confirmed,
@@ -1665,7 +1922,7 @@ where
                         <StorageRequestBsps<T>>::remove(&file_key, &bsp_id);
                     }
                     // We hit scenario 2. There is an open storage request but the BSP is not a volunteer.
-                    // We need to increment the number of bsps required.
+                    // We need to increment the number of BSPs required.
                     None => {
                         storage_request_metadata.bsps_required = storage_request_metadata
                             .bsps_required
@@ -1687,7 +1944,7 @@ where
                     fingerprint,
                     size,
                     None,
-                    Some(ReplicationTargetType::<T>::one()),
+                    ReplicationTarget::Custom(ReplicationTargetType::<T>::one()),
                     None,
                 )?;
 
@@ -1725,9 +1982,8 @@ where
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         // Get the SP ID of the sender
-        let bsp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotASp)?;
+        let bsp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotASp)?;
 
         // Ensure the ID belongs to a BSP, not a MSP
         ensure!(
@@ -1735,13 +1991,23 @@ where
             Error::<T>::NotABsp
         );
 
-        // Get the block when the pending stop storing request of the BSP for the file key was opened.
+        // Get the block when the pending stop storing request of the BSP for the file key was opened,
+        // the file size to stop storing and the file owner.
         let PendingStopStoringRequest {
             tick_when_requested,
             file_size,
             file_owner,
-        } = <PendingStopStoringRequests<T>>::get(&bsp_id, &file_key)
+        } = <PendingStopStoringRequests<T>>::take(&bsp_id, &file_key)
             .ok_or(Error::<T>::PendingStopStoringRequestNotFound)?;
+
+        // Check that the user that owns the file is not currently insolvent. The BSP should
+        // call `sp_stop_storing_for_insolvent_user` instead if the user is insolvent.
+        // This is done to error out early since this extrinsic would eventually fail when trying
+        // to update the payment stream between the user and the BSP.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
 
         // Check that enough time has passed since the pending stop storing request was opened.
         ensure!(
@@ -1797,17 +2063,10 @@ where
             )?;
         }
 
-        // If the new capacity used for this BSP is 0, stop its randomness cycle.
-        if <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id)
-            == Zero::zero()
-        {
-            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
-        }
-
-        // Remove the pending stop storing request from storage.
-        <PendingStopStoringRequests<T>>::remove(&bsp_id, &file_key);
-
+        // If the root of the BSP is now the default root, stop its cycles.
         if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // Check the current used capacity of the BSP. Since its root is the default one, it should
+            // be zero.
             let used_capacity =
                 <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
             if used_capacity != Zero::zero() {
@@ -1843,9 +2102,8 @@ where
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         // Get the SP ID
-        let sp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotASp)?;
+        let sp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotASp)?;
 
         // Check that the owner of the file has been flagged as insolvent OR that the Provider does not
         // have any active payment streams with the user. The rationale here is that if there is a
@@ -1896,6 +2154,10 @@ where
                 &[(file_key, TrieRemoveMutation::default().into())],
                 &inclusion_forest_proof,
             )?;
+
+            // In case there was a pending stop storing request that the BSP had initiated before the user
+            // became insolvent, remove it.
+            <PendingStopStoringRequests<T>>::remove(&sp_id, &file_key);
 
             // Update root of the BSP.
             <T::Providers as shp_traits::MutateProvidersInterface>::update_root(sp_id, new_root)?;
@@ -2011,7 +2273,16 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageData<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
-    ) -> Result<(bool, Option<ProviderIdFor<T>>), DispatchError> {
+    ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
+        // Check that the user that's sending the deletion request is not currently insolvent.
+        // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
+        // to delete their files and buckets using the available extrinsics or resolve their
+        // insolvency manually.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Compute the file key hash.
         let computed_file_key = Self::compute_file_key(
             sender.clone(),
@@ -2035,30 +2306,43 @@ where
 
         let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
-        ensure!(
-            msp_id.is_some(),
-            Error::<T>::OperationNotAllowedWhileBucketIsNotStoredByMsp
-        );
+        // The bucket must be stored by an MSP before deletion to maintain consistency between the bucket root and runtime state.
+        // This is required because the runtime needs the MSP to provide a proof of inclusion to apply a remove delta for an existing file key.
+        let msp_id = msp_id.ok_or(Error::<T>::OperationNotAllowedWhileBucketIsNotStoredByMsp)?;
 
         let file_key_included = match maybe_inclusion_forest_proof {
             // If the user did not supply a proof of inclusion, queue a pending deletion file request.
-            // This will leave a window of time for the MSP to provide the proof of (non-)inclusion. Until the MSP provides the proof, it is
+            // This will allow the MSP to provide the proof of (non-)inclusion. Until the MSP provides the proof, it is
             // removed from the privileged providers' list, which means it is not allowed to charge users.
-            // If the proof is not provided within the TTL, the hook will queue a priority challenge to remove the file key from all the providers.
             None => {
                 let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&sender);
 
-                // Check if the file key is already in the pending deletion requests.
+                // Ensure the file key is not already in the pending deletion requests.
+                ensure!(
+                    !pending_file_deletion_requests
+                        .iter()
+                        .any(|req| req.file_key == file_key),
+                    Error::<T>::FileKeyAlreadyPendingDeletion
+                );
+
+                // Get the deposit amount that the user has to pay for this file deletion request.
+                let file_deletion_request_deposit = T::FileDeletionRequestDeposit::get();
+
+                // Hold the deposit from the user's balance.
+                T::Currency::hold(
+                    &HoldReason::FileDeletionRequestHold.into(),
+                    &sender,
+                    file_deletion_request_deposit,
+                )?;
+
+                // Create the pending file deletion request object to store in storage.
                 let pending_file_deletion_request = PendingFileDeletionRequest {
                     user: sender.clone(),
                     file_key,
                     bucket_id,
                     file_size: size,
+                    deposit_paid_for_creation: file_deletion_request_deposit,
                 };
-                ensure!(
-                    !pending_file_deletion_requests.contains(&pending_file_deletion_request),
-                    Error::<T>::FileKeyAlreadyPendingDeletion
-                );
 
                 // Add the file key to the pending deletion requests.
                 PendingFileDeletionRequests::<T>::try_append(
@@ -2067,21 +2351,13 @@ where
                 )
                 .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
 
-                // If the bucket is stored by a MSP, remove the MSP from the privileged providers list.
-                if let Some(msp_id) = msp_id {
-                    <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
-                }
+                // Remove the MSP from the privileged providers list.
+                <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
 
-                // Queue the expiration item.
-                let expiration_item = ExpirationItem::PendingFileDeletionRequests(
-                    FileDeletionRequestExpirationItem::<T> {
-                        user: sender.clone(),
-                        file_key,
-                        bucket_id,
-                        file_size: size,
-                    },
-                );
-                Self::enqueue_expiration_item(expiration_item)?;
+                // Add one to the amount of pending file deletion requests for the MSP.
+                MspsAmountOfPendingFileDeletionRequests::<T>::mutate(&msp_id, |amount| {
+                    *amount = amount.saturating_add(1);
+                });
 
                 false
             }
@@ -2123,12 +2399,10 @@ where
                 // Decrease size of the bucket.
                 <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
 
-                // If the bucket has a MSP, decrease its used capacity.
-                if let Some(msp_id) = msp_id {
-                    <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-                        &msp_id, size,
-                    )?;
-                }
+                // Decrease the MSP's used capacity.
+                <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+                    &msp_id, size,
+                )?;
 
                 // Initiate the priority challenge to remove the file key from all the providers.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
@@ -2156,9 +2430,8 @@ where
         bucket_id: BucketIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
-        let msp_id =
-            <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(sender.clone())
-                .ok_or(Error::<T>::NotAMsp)?;
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotAMsp)?;
 
         // Check that the provider is indeed an MSP.
         ensure!(
@@ -2166,25 +2439,22 @@ where
             Error::<T>::NotAMsp
         );
 
+        // Check that the MSP is storing the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
             Error::<T>::MspNotStoringBucket
         );
 
-        let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&user);
+        // Get the user's pending file deletion requests.
+        let mut pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&user);
 
-        // Check if the file key is in the pending deletion requests.
-        let pending_file_deletion_request_to_prove = PendingFileDeletionRequest {
-            user: user.clone(),
-            file_key,
-            bucket_id,
-            file_size,
-        };
-
-        ensure!(
-            pending_file_deletion_requests.contains(&pending_file_deletion_request_to_prove),
-            Error::<T>::FileKeyNotPendingDeletion
-        );
+        // Ensure the file key is in the pending deletion requests and remove it.
+        let pending_file_deletion_request_index = pending_file_deletion_requests
+            .iter()
+            .position(|req| req.file_key == file_key)
+            .ok_or(Error::<T>::FileKeyNotPendingDeletion)?;
+        let pending_file_deletion_request =
+            pending_file_deletion_requests.remove(pending_file_deletion_request_index);
 
         // Get the root of the bucket.
         let bucket_root =
@@ -2201,7 +2471,7 @@ where
 
         let file_key_included = proven_keys.contains(&file_key);
 
-        // If the file key was part of the forest, remove it from the forest and update the root of the bucket.
+        // If the file key was part of the forest, remove it from the forest, update the root of the bucket and return the deposit to the user.
         if file_key_included {
             // Compute new root after removing file key from forest partial trie.
             let new_root =
@@ -2230,24 +2500,50 @@ where
                 &file_key, true,
             )?;
 
+            // Return the file deletion request deposit to the user owner of the file.
+            T::Currency::release(
+                &HoldReason::FileDeletionRequestHold.into(),
+                &pending_file_deletion_request.user,
+                pending_file_deletion_request.deposit_paid_for_creation,
+                Precision::Exact,
+            )?;
+
             // Emit event.
             Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
                 issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
                 file_key,
             });
+        } else {
+            // If the file key was not a part of the forest, give the file deletion request deposit to the MSP for their troubles:
+
+            // Get the MSP payment account.
+            let msp_payment_account =
+                <T::Providers as shp_traits::ReadProvidersInterface>::get_payment_account(msp_id)
+                    .ok_or(Error::<T>::FailedToGetPaymentAccount)?;
+
+            // Transfer the deposit to the MSP.
+            T::Currency::transfer_on_hold(
+                &HoldReason::FileDeletionRequestHold.into(),
+                &pending_file_deletion_request.user,
+                &msp_payment_account,
+                pending_file_deletion_request.deposit_paid_for_creation,
+                Precision::Exact,
+                Restriction::Free,
+                Fortitude::Force,
+            )?;
         }
 
-        // Delete the pending deletion request.
-        <PendingFileDeletionRequests<T>>::mutate(&user, |requests| {
-            requests.retain(|pending_file_deletion_request| {
-                &pending_file_deletion_request.file_key != &file_key
-            });
-        });
+        // Insert the updated pending file deletion requests back to storage.
+        <PendingFileDeletionRequests<T>>::insert(&user, pending_file_deletion_requests);
 
-        // Add back the MSP to the privileged providers, to allow it to charge users again.
-        <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(
-            &msp_id,
-        );
+        // Substract one from the amount of pending file deletion requests for the MSP.
+        MspsAmountOfPendingFileDeletionRequests::<T>::mutate(&msp_id, |amount| {
+            *amount = amount.saturating_sub(1);
+            if *amount == 0 {
+                // If the MSP has no more pending file deletion requests, add it back to the privileged providers.
+                <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id);
+            }
+        });
 
         Ok((file_key_included, msp_id))
     }
@@ -2304,118 +2600,17 @@ where
         }
         .file_key::<FileKeyHasher<T>>()
     }
-
-    pub fn get_threshold_for_bsp_request(
-        bsp_id: &ProviderIdFor<T>,
-        fingerprint: &Fingerprint<T>,
-    ) -> T::ThresholdType {
-        // Concatenate the BSP ID and the fingerprint and hash them to get the volunteering hash.
-        let concatenated = sp_std::vec![bsp_id.encode(), fingerprint.encode()].concat();
-        let volunteering_hash =
-            <<T as frame_system::Config>::Hashing as Hash>::hash(concatenated.as_ref());
-
-        // Return the threshold needed for the BSP to be able to volunteer for the storage request.
-        T::HashToThresholdType::convert(volunteering_hash)
-    }
-
-    /// Compute the threshold for a BSP to succeed.
-    ///
-    /// Succeeding this threshold is required for the BSP to be eligible to volunteer for a storage request.
-    /// The threshold is computed based on the global reputation weight and the BSP's reputation weight, giving
-    /// an advantage to BSPs with higher reputation weights.
-    ///
-    /// The formalized formulas are documented in the [README](https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/README.md#volunteering-succeeding-threshold-checks).
-    pub fn compute_threshold_to_succeed(
-        bsp_id: &ProviderIdFor<T>,
-        requested_at: TickNumber<T>,
-    ) -> Result<(T::ThresholdType, T::ThresholdType), DispatchError> {
-        let maximum_threshold = T::ThresholdType::max_value();
-
-        let global_weight =
-            T::ThresholdType::from(T::Providers::get_global_bsps_reputation_weight());
-
-        if global_weight == T::ThresholdType::zero() {
-            return Err(Error::<T>::NoGlobalReputationWeightSet.into());
-        }
-
-        // Global threshold starting point from which all BSPs begin their threshold slope. All BSPs start at this point
-        // with the starting reputation weight.
-        //
-        // The calculation is designed to achieve the following:
-        //
-        // 1. In a regular scenario, `maximum_threshold` would be very large, and you'd start bringing it down with
-        //    `global_weight`, also a large number. That way, when you multiply it by the replication target,
-        //    you should still be within the numerical domain.
-        //
-        // 2. If `global_weight` is low still (in the early days of the network), when multiplying with
-        //    replication target, you'll get at most `u32::MAX` and then the threshold would be
-        //    u32::MAX / 2 (still pretty high).
-        //
-        // 3. If maximum_threshold is very low (like sometimes set in tests), the division would saturate to 1,
-        //    and then the threshold would be replication target / 2 (still very low).
-        let threshold_global_starting_point = maximum_threshold
-            .checked_div(&global_weight)
-            .unwrap_or(T::ThresholdType::one())
-            .checked_mul(&T::MaxReplicationTarget::get().into()).unwrap_or({
-                log::warn!("Global starting point is beyond MaximumThreshold. Setting it to half of the MaximumThreshold.");
-                maximum_threshold
-            })
-            .checked_div(&T::ThresholdType::from(2u32))
-            .unwrap_or(T::ThresholdType::one());
-
-        // Get the BSP's reputation weight.
-        let bsp_weight = T::ThresholdType::from(T::Providers::get_bsp_reputation_weight(&bsp_id)?);
-
-        // Actual BSP's threshold starting point, taking into account their reputation weight.
-        let threshold_weighted_starting_point =
-            bsp_weight.saturating_mul(threshold_global_starting_point);
-
-        // Rate of increase from the weighted threshold starting point up to the maximum threshold within a tick range.
-        let base_slope = maximum_threshold
-            .saturating_sub(threshold_global_starting_point)
-            .checked_div(&T::ThresholdTypeToTickNumber::convert_back(
-                T::TickRangeToMaximumThreshold::get(),
-            ))
-            .unwrap_or(T::ThresholdType::one());
-
-        let threshold_slope = base_slope
-            .checked_mul(&bsp_weight)
-            .unwrap_or(maximum_threshold);
-
-        // Since checked_div only returns None on a result of zero, there is the case when the result is between 0 and 1 and rounds down to 0.
-        let threshold_slope = if threshold_slope.is_zero() {
-            T::ThresholdType::one()
-        } else {
-            threshold_slope
-        };
-
-        let current_tick_number =
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
-
-        // Get number of ticks since the storage request was issued.
-        let ticks_since_requested = current_tick_number.saturating_sub(requested_at);
-        let ticks_since_requested =
-            T::ThresholdTypeToTickNumber::convert_back(ticks_since_requested);
-
-        let to_succeed = threshold_weighted_starting_point
-            .saturating_add(threshold_slope.saturating_mul(ticks_since_requested));
-
-        Ok((to_succeed, threshold_slope))
-    }
 }
 
 mod hooks {
     use crate::{
         pallet,
         types::{MerkleHash, RejectedStorageRequestReason, ReplicationTargetType, TickNumber},
-        utils::{
-            BucketIdFor, EitherAccountIdOrMspId, FileDeletionRequestExpirationItem, ProviderIdFor,
-        },
+        utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
         weights::WeightInfo,
-        BucketsWithStorageRequests, Event, FileDeletionRequestExpirations, HoldReason,
-        MoveBucketRequestExpirations, NextStartingTickToCleanUp, Pallet, PendingBucketsToMove,
-        PendingFileDeletionRequests, PendingMoveBucketRequests, StorageRequestBsps,
-        StorageRequestExpirations, StorageRequests,
+        BucketsWithStorageRequests, Event, HoldReason, MoveBucketRequestExpirations,
+        NextStartingTickToCleanUp, Pallet, PendingBucketsToMove, PendingMoveBucketRequests,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use frame_support::traits::{fungible::MutateHold, tokens::Precision};
     use sp_runtime::{
@@ -2494,8 +2689,8 @@ mod hooks {
 
             // Expired storage requests clean up section:
             // If there's enough weight to get from storage the maximum amount of BSPs required for a storage request
-            // and get the storage request expirations for the current tick, continue.
-            if meter.can_consume(db_weight.reads_writes(2, 1)) {
+            // and get the storage request expirations for the current tick, and reinsert them if needed, continue.
+            if meter.can_consume(db_weight.reads_writes(2, 2)) {
                 // Get the maximum amount of BSPs required for a storage request.
                 // As of right now, the upper bound limit to the number of BSPs required to fulfill a storage request is set by `MaxReplicationTarget`.
                 // We could increase this potential weight to account for potentially more volunteers.
@@ -2541,28 +2736,9 @@ mod hooks {
                 }
             }
 
-            // Expired file deletion requests clean up section:
-            // Note: this is unchanged since it has been deprecated and will be removed in another PR.
-            if !meter.can_consume(db_weight.reads_writes(1, 1)) {
-                return true;
-            }
-
-            let mut expired_file_deletion_requests =
-                FileDeletionRequestExpirations::<T>::take(&tick);
-            meter.consume(db_weight.reads_writes(1, 1));
-
-            while let Some(expired_file_deletion_request) = expired_file_deletion_requests.pop() {
-                Self::process_expired_pending_file_deletion(expired_file_deletion_request, meter);
-            }
-
-            if !expired_file_deletion_requests.is_empty() {
-                FileDeletionRequestExpirations::<T>::insert(&tick, expired_file_deletion_requests);
-                meter.consume(db_weight.writes(1));
-            }
-
             // Expired move bucket requests clean up section:
-            // If there's enough weight to get from storage the expired move bucket requests, continue.
-            if meter.can_consume(db_weight.reads_writes(1, 1)) {
+            // If there's enough weight to get from storage the expired move bucket requests and reinsert them if needed, continue.
+            if meter.can_consume(db_weight.reads_writes(1, 2)) {
                 // Get the expired move bucket requests for the current tick.
                 let mut expired_move_bucket_requests =
                     MoveBucketRequestExpirations::<T>::take(&tick);
@@ -2722,110 +2898,6 @@ mod hooks {
                     // the storage request is already gone.
                 }
             }
-        }
-
-        fn process_expired_pending_file_deletion(
-            expired_file_deletion_request: FileDeletionRequestExpirationItem<T>,
-            meter: &mut WeightMeter,
-        ) {
-            let db_weight = T::DbWeight::get();
-            let potential_weight = db_weight.reads_writes(2, 3);
-
-            if !meter.can_consume(potential_weight) {
-                return;
-            }
-
-            let requests =
-                PendingFileDeletionRequests::<T>::get(&expired_file_deletion_request.user);
-
-            // Check if the file key is still a pending deletion requests.
-            let expired_item_index =
-                match requests.iter().position(|pending_file_deletion_request| {
-                    &pending_file_deletion_request.file_key
-                        == &expired_file_deletion_request.file_key
-                }) {
-                    Some(i) => i,
-                    None => return,
-                };
-
-            // Remove the file key from the pending deletion requests.
-            PendingFileDeletionRequests::<T>::mutate(
-                &expired_file_deletion_request.user,
-                |requests| {
-                    requests.remove(expired_item_index);
-                },
-            );
-
-            let user = expired_file_deletion_request.user.clone();
-
-            // Attempt to decrease the bucket size while also reducing the fixed rate payment stream between the user and the MSP
-            if let Err(e) =
-                <T::Providers as shp_traits::MutateBucketsInterface>::decrease_bucket_size(
-                    &expired_file_deletion_request.bucket_id,
-                    expired_file_deletion_request.file_size,
-                )
-            {
-                Self::deposit_event(Event::FailedToDecreaseBucketSize {
-                    user: user.clone(),
-                    bucket_id: expired_file_deletion_request.bucket_id,
-                    file_key: expired_file_deletion_request.file_key,
-                    file_size: expired_file_deletion_request.file_size,
-                    error: e,
-                });
-
-                if !<T::Providers as shp_traits::ReadBucketsInterface>::bucket_exists(
-                    &expired_file_deletion_request.bucket_id,
-                ) {
-                    // Skip expired file deletion request if the bucket does not exist.
-                    return;
-                }
-            }
-
-            // Decrease the used capacity of the MSP.
-            if let Ok(Some(msp_id)) =
-                <T::Providers as shp_traits::ReadBucketsInterface>::get_msp_of_bucket(
-                    &expired_file_deletion_request.bucket_id,
-                )
-                .map_err(|e| {
-                    Self::deposit_event(Event::FailedToGetMspOfBucket {
-                        bucket_id: expired_file_deletion_request.bucket_id,
-                        error: e,
-                    });
-                })
-            {
-                let _ = <T::Providers as shp_traits::MutateStorageProvidersInterface>::decrease_capacity_used(
-					&msp_id,
-					expired_file_deletion_request.file_size,
-				)
-				.map_err(|e| {
-					Self::deposit_event(Event::FailedToDecreaseMspUsedCapacity {
-						user: user.clone(),
-						msp_id: msp_id.clone(),
-						file_key: expired_file_deletion_request.file_key,
-						file_size: expired_file_deletion_request.file_size,
-						error: e,
-					});
-				});
-            }
-
-            // Queue a priority challenge to remove the file key from all the providers.
-            let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &expired_file_deletion_request.file_key,
-                true,
-            )
-            .map_err(|e| {
-                Self::deposit_event(Event::FailedToQueuePriorityChallenge {
-                    file_key: expired_file_deletion_request.file_key,
-                    error: e,
-                });
-            });
-
-            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                issuer: EitherAccountIdOrMspId::<T>::AccountId(user.clone()),
-                file_key: expired_file_deletion_request.file_key,
-            });
-
-            meter.consume(potential_weight);
         }
 
         pub(crate) fn process_expired_move_bucket_request(

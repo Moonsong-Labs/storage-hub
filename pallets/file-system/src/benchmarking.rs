@@ -70,13 +70,7 @@ mod benchmarks {
         let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp, None);
 
         #[extrinsic_call]
-        _(
-            signed_origin.clone(),
-            msp_id,
-            name,
-            true,
-            Some(value_prop_id),
-        );
+        _(signed_origin.clone(), msp_id, name, true, value_prop_id);
 
         Ok(())
     }
@@ -107,7 +101,8 @@ mod benchmarks {
         // Register another MSP with a value proposition
         let new_msp_account: T::AccountId = account("MSP", 0, 1);
         mint_into_account::<T>(new_msp_account.clone(), 1_000_000_000_000_000)?;
-        let (new_msp_id, _) = add_msp_to_provider_storage::<T>(&new_msp_account, None);
+        let (new_msp_id, new_value_prop_id) =
+            add_msp_to_provider_storage::<T>(&new_msp_account, None);
 
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
@@ -115,12 +110,12 @@ mod benchmarks {
             initial_msp_id,
             name,
             true,
-            Some(initial_value_prop_id),
+            initial_value_prop_id,
         )?;
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
-        _(signed_origin, bucket_id, new_msp_id);
+        _(signed_origin, bucket_id, new_msp_id, new_value_prop_id);
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the PendingMoveBucketRequests storage has the created request
@@ -138,6 +133,7 @@ mod benchmarks {
                 who: user,
                 bucket_id,
                 new_msp_id,
+                new_value_prop_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
@@ -170,7 +166,8 @@ mod benchmarks {
         // Register another MSP with a value proposition
         let new_msp_account: T::AccountId = account("MSP", 0, 1);
         mint_into_account::<T>(new_msp_account.clone(), 1_000_000_000_000_000)?;
-        let (new_msp_id, _) = add_msp_to_provider_storage::<T>(&new_msp_account, None);
+        let (new_msp_id, new_value_prop_id) =
+            add_msp_to_provider_storage::<T>(&new_msp_account, None);
 
         // Create the bucket, assigning it to the initial MSP
         Pallet::<T>::create_bucket(
@@ -178,11 +175,16 @@ mod benchmarks {
             initial_msp_id,
             name,
             true,
-            Some(initial_value_prop_id),
+            initial_value_prop_id,
         )?;
 
         // Request the move of the bucket to the new MSP
-        Pallet::<T>::request_move_bucket(signed_origin.clone().into(), bucket_id, new_msp_id)?;
+        Pallet::<T>::request_move_bucket(
+            signed_origin.clone().into(),
+            bucket_id,
+            new_msp_id,
+            new_value_prop_id,
+        )?;
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
@@ -205,6 +207,7 @@ mod benchmarks {
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketAccepted {
             bucket_id,
             msp_id: new_msp_id,
+            value_prop_id: new_value_prop_id,
         });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
@@ -239,7 +242,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // The worst-case scenario is when the bucket has an associated collection but it doesn't exist in storage,
@@ -305,7 +308,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // The worst-case scenario is when the bucket has an associated collection but it doesn't exist in storage,
@@ -370,7 +373,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Get the collection ID of the bucket
@@ -435,7 +438,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         #[extrinsic_call]
@@ -447,7 +450,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::Standard,
         );
 
         Ok(())
@@ -464,6 +467,7 @@ mod benchmarks {
             },
         >,
     ) -> Result<(), BenchmarkError> {
+        let replication_target: u32 = n.into();
         let user: T::AccountId = account("Alice", 0, 0);
         let signed_origin = RawOrigin::Signed(user.clone());
         mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
@@ -499,7 +503,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         Pallet::<T>::issue_storage_request(
@@ -510,14 +514,14 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            Some(n.into()),
+            ReplicationTarget::Custom(replication_target.into()),
         )?;
 
         let file_key = Pallet::<T>::compute_file_key(user, bucket_id, location, size, fingerprint);
 
         // The `revoke_storage_request` executes the `drain_prefix` function to remove all sub keys including the primary key
         // from `StorageRequestBsps`.
-        for i in 0..n {
+        for i in 0..replication_target {
             let bsp_user: T::AccountId = account("bsp", i as u32, i as u32);
             mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
             let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
@@ -569,7 +573,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         #[extrinsic_call]
@@ -617,7 +621,7 @@ mod benchmarks {
                 bucket_id,
                 false,
                 None,
-                Some(value_prop_id),
+                value_prop_id,
             )?;
 
             // Update the bucket's size and root to match the generated proofs
@@ -656,7 +660,7 @@ mod benchmarks {
                     size,
                     msp: Some((msp_id, false)),
                     user_peer_ids: Default::default(),
-                    bsps_required: T::DefaultReplicationTarget::get(),
+                    bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
                 };
@@ -730,8 +734,8 @@ mod benchmarks {
                     size,
                     msp: Some((msp_id, false)),
                     user_peer_ids: Default::default(),
-                    bsps_required: T::DefaultReplicationTarget::get(),
-                    bsps_confirmed: T::DefaultReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
+                    bsps_required: T::StandardReplicationTarget::get(),
+                    bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
@@ -812,7 +816,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Issue the storage request from the user
@@ -837,7 +841,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key
@@ -866,6 +870,11 @@ mod benchmarks {
                 }
                 QueryFileEarliestVolunteerTickError::StorageRequestNotFound => {
                     return Err(BenchmarkError::Stop("Storage request not found."));
+                }
+                QueryFileEarliestVolunteerTickError::FailedToComputeEligibilityCriteria => {
+                    return Err(BenchmarkError::Stop(
+                        "Failed to compute eligibility criteria for BSP.",
+                    ));
                 }
                 QueryFileEarliestVolunteerTickError::InternalError => {
                     return Err(BenchmarkError::Stop("Internal runtime API error."));
@@ -948,7 +957,7 @@ mod benchmarks {
             bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Update the bucket's size and root to match the generated proofs
@@ -1034,8 +1043,8 @@ mod benchmarks {
 				size,
 				msp: Some((msp_id, true)), // MSP accepted means the logic to delete the storage request is executed
 				user_peer_ids: Default::default(),
-				bsps_required: T::DefaultReplicationTarget::get(),
-				bsps_confirmed: T::DefaultReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
+				bsps_required: T::StandardReplicationTarget::get(),
+				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
 				bsps_volunteered: ReplicationTargetType::<T>::zero(),
 			};
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
@@ -1069,6 +1078,11 @@ mod benchmarks {
                     }
                     QueryFileEarliestVolunteerTickError::StorageRequestNotFound => {
                         return Err(BenchmarkError::Stop("Storage request not found."));
+                    }
+                    QueryFileEarliestVolunteerTickError::FailedToComputeEligibilityCriteria => {
+                        return Err(BenchmarkError::Stop(
+                            "Failed to compute eligibility criteria for BSP.",
+                        ));
                     }
                     QueryFileEarliestVolunteerTickError::InternalError => {
                         return Err(BenchmarkError::Stop("Internal runtime API error."));
@@ -1180,7 +1194,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Get the file key for the BSP to request stop storing
@@ -1324,7 +1338,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Get the file key for the BSP to request stop storing
@@ -1504,7 +1518,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Get the file key for the BSP to request stop storing
@@ -1627,7 +1641,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Increase the used capacity of the MSP to match the file size
@@ -1801,7 +1815,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Increase the used capacity of the MSP to match the file size
@@ -1851,6 +1865,7 @@ mod benchmarks {
             T::MaxUserPendingDeletionRequests,
         > = BoundedVec::default();
 
+        let file_deletion_request_deposit = <T as crate::Config>::FileDeletionRequestDeposit::get();
         for i in 0..T::MaxUserPendingDeletionRequests::get() - 1 {
             filled_up_pending_file_deletion_requests
                 .try_push(PendingFileDeletionRequest {
@@ -1858,6 +1873,7 @@ mod benchmarks {
                     file_key: Default::default(),
                     bucket_id: Default::default(),
                     file_size: i.into(),
+					deposit_paid_for_creation: file_deletion_request_deposit,
                 })
                 .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
         }
@@ -1884,8 +1900,9 @@ mod benchmarks {
             <T as pallet::Config>::RuntimeEvent::from(Event::FileDeletionRequest {
                 user: user_account.clone(),
                 file_key,
+                file_size,
                 bucket_id: file_bucket_id,
-                msp_id: Some(msp_id),
+                msp_id,
                 proof_of_inclusion: false,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -1935,7 +1952,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Increase the used capacity of the MSP to match the file size
@@ -2025,8 +2042,9 @@ mod benchmarks {
             <T as pallet::Config>::RuntimeEvent::from(Event::FileDeletionRequest {
                 user: user_account.clone(),
                 file_key,
+                file_size,
                 bucket_id: file_bucket_id,
-                msp_id: Some(msp_id),
+                msp_id,
                 proof_of_inclusion: true,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
@@ -2101,7 +2119,7 @@ mod benchmarks {
             file_bucket_id,
             false,
             None,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Increase the used capacity of the MSP to match the file size
@@ -2151,6 +2169,7 @@ mod benchmarks {
             T::MaxUserPendingDeletionRequests,
         > = BoundedVec::default();
 
+        let file_deletion_request_deposit = <T as crate::Config>::FileDeletionRequestDeposit::get();
         for i in 0..T::MaxUserPendingDeletionRequests::get() - 1 {
             filled_up_pending_file_deletion_requests
                 .try_push(PendingFileDeletionRequest {
@@ -2158,6 +2177,7 @@ mod benchmarks {
                     file_key: Default::default(),
                     bucket_id: Default::default(),
                     file_size: i.into(),
+					deposit_paid_for_creation: file_deletion_request_deposit,
                 })
                 .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
         }
@@ -2222,6 +2242,7 @@ mod benchmarks {
             Event::ProofSubmittedForPendingFileDeletionRequest {
                 user: user_account.clone(),
                 file_key,
+                file_size,
                 bucket_id: file_bucket_id,
                 msp_id,
                 proof_of_inclusion: true,
@@ -2337,7 +2358,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Issue the storage request from the user
@@ -2362,7 +2383,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key
@@ -2453,7 +2474,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Issue the storage request from the user
@@ -2478,7 +2499,7 @@ mod benchmarks {
             size,
             msp_id,
             peer_ids,
-            None,
+            ReplicationTarget::Standard,
         )?;
 
         // Compute the file key
@@ -2566,7 +2587,7 @@ mod benchmarks {
             msp_id,
             name,
             true,
-            Some(value_prop_id),
+            value_prop_id,
         )?;
 
         // Add the bucket to the PendingBucketsToMove storage and to the PendingMoveBucketRequests storage
@@ -2576,6 +2597,7 @@ mod benchmarks {
             &bucket_id,
             MoveBucketRequestMetadata {
                 requester: user.clone(),
+                new_value_prop_id: value_prop_id,
             },
         );
 
@@ -2678,6 +2700,8 @@ mod benchmarks {
             owner_account: msp.clone(),
             payment_account: msp.clone(),
             sign_up_block: frame_system::Pallet::<T>::block_number(),
+            amount_of_value_props: 1u32,
+            amount_of_buckets: T::BucketCount::zero(),
         };
 
         pallet_storage_providers::MainStorageProviders::<T>::insert(msp_hash, msp_info);

@@ -3,7 +3,8 @@ import { assertEventPresent, assertExtrinsicPresent } from "../asserts";
 import { sleep } from "../timer";
 import { sealBlock } from "./block";
 import assert from "node:assert";
-import type { Address, H256 } from "@polkadot/types/interfaces";
+import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
+import * as Assertions from "../asserts";
 import type { WaitForTxOptions } from "./test-api";
 
 /**
@@ -84,6 +85,7 @@ export const waitForBspVolunteer = async (api: ApiPromise, checkQuantity?: numbe
     module: "fileSystem",
     method: "bspVolunteer",
     checkQuantity,
+    strictQuantity: (checkQuantity ?? 0) > 0,
     shouldSeal: true,
     expectedEvent: "AcceptedBspVolunteer"
   });
@@ -137,9 +139,10 @@ export const waitForBspStored = async (
 ) => {
   // To allow time for local file transfer to complete (10s)
   const iterations = 100;
-  const delay = 200;
+  const delay = 100;
 
-  // We do this because a BSP cannot call `bspConfirmStoring` in the same block in which it has to submit a proof, since it can only send one root-changing transaction per block and proof submission is prioritized.
+  // This check is because a BSP cannot confirm storing a file in the same block in which it has to submit a proof,
+  // since it can only send one root-changing transaction per block and proof submission is prioritized.
   assert(
     !(bspAccount && checkQuantity && checkQuantity > 1),
     "Invalid parameters: `waitForBspStored` cannot be used with an amount of extrinsics to wait for bigger than 1 if a BSP ID was specified."
@@ -149,34 +152,32 @@ export const waitForBspStored = async (
     try {
       await sleep(delay);
 
-      // check if we have a submitProof extrinsic
+      // Check if there's a pending submit proof extrinsic from the BSP account.
       if (bspAccount) {
         const txs = await api.rpc.author.pendingExtrinsics();
         const match = txs.filter(
           (tx) => tx.method.method === "submitProof" && tx.signer.eq(bspAccount)
         );
 
-        // If we have a submit proof event at the same time we are trying to confirm storage
-        // we need to advance one block because the two event cannot happen at the same time
+        // If there's a submit proof extrinsic pending, advance one block to allow the BSP to submit
+        // the proof and be able to confirm storing the file and continue waiting.
         if (match.length === 1) {
           await sealBlock(api);
+          continue;
         }
       }
 
-      const matches = await assertExtrinsicPresent(api, {
+      // Check to see if the quantity of confirm storing extrinsics required are in the TX pool.
+      await assertExtrinsicPresent(api, {
         module: "fileSystem",
         method: "bspConfirmStoring",
         checkTxPool: true,
-        timeout: 10000,
-        assertLength: checkQuantity
+        timeout: 100, // Small timeout since we are already waiting between checks.
+        assertLength: checkQuantity,
+        exactLength: (checkQuantity ?? 0) > 0
       });
-      if (checkQuantity) {
-        assert(
-          matches.length === checkQuantity,
-          `Expected ${checkQuantity} extrinsics, but found ${matches.length} for fileSystem.bspConfirmStoring`
-        );
-      }
 
+      // If there are exactly checkQuantity extrinsics (or at least one if checkQuantity is not defined), seal the block and check for the event.
       if (shouldSealBlock) {
         const { events } = await sealBlock(api);
         assertEventPresent(api, "fileSystem", "BspConfirmedStoring", events);
@@ -371,6 +372,31 @@ export const waitForMspResponseWithoutSealing = async (api: ApiPromise, checkQua
 };
 
 /**
+ * Waits for a MSP to submit a proof for a pending file deletion request.
+ *
+ * This function performs the following steps:
+ * 1. Waits for a short period to allow the node to react.
+ * 2. Checks for the presence of a 'pendingFileDeletionRequestSubmitProof' extrinsic in the transaction pool.
+ *
+ * @param api - The ApiPromise instance to interact with the blockchain.
+ * @param checkQuantity - Optional param to specify the number of expected extrinsics.
+ * @returns A Promise that resolves when a MSP has submitted a proof for a pending file deletion request.
+ *
+ * @throws Will throw an error if the expected extrinsic is not found.
+ */
+export const waitForMspPendingFileDeletionRequestSubmitProof = async (
+  api: ApiPromise,
+  checkQuantity?: number
+) => {
+  await waitForTxInPool(api, {
+    module: "fileSystem",
+    method: "pendingFileDeletionRequestSubmitProof",
+    checkQuantity,
+    timeout: 10000
+  });
+};
+
+/**
  * Waits for a block where the given address has no pending extrinsics.
  *
  * This can be used to wait for a block where it is safe to send a transaction signed by the given address,
@@ -473,6 +499,87 @@ export const waitForMspFileStorageComplete = async (api: ApiPromise, fileKey: H2
       assert(
         i !== iterations,
         `Failed to detect MSP file in file storage after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+export const waitForStorageRequestNotOnChain = async (api: ApiPromise, fileKey: H256 | string) => {
+  // 10 iterations at 1 second per iteration = 10 seconds wait time
+  const iterations = 10;
+  const delay = 1000;
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      // Try to get the storage request from the chain
+      const result = await api.query.fileSystem.storageRequests(fileKey);
+
+      // If the storage request wasn't found, it has been fulfilled/expired/rejected.
+      if (result.isNone) {
+        return;
+      }
+
+      // If it has been found, seal a new block and wait for the next iteration to check if
+      // it has been fulfilled/expired/rejected.
+      await sealBlock(api);
+    } catch {
+      assert(
+        i !== iterations,
+        `Detected storage request in on-chain storage after ${(i * delay) / 1000}s`
+      );
+    }
+  }
+};
+
+export const waitForStorageRequestFulfilled = async (api: ApiPromise, fileKey: H256 | string) => {
+  // 10 iterations at 1 second per iteration = 10 seconds wait time
+  const iterations = 10;
+  const delay = 1000;
+
+  // First check that the storage request exists in storage, since otherwise the StorageRequestFulfilled event
+  // will never be emitted.
+  const storageRequest = await api.query.fileSystem.storageRequests(fileKey);
+  assert(
+    storageRequest.isSome,
+    "Storage request not found in storage but `waitForStorageRequestFulfilled` was called"
+  );
+
+  for (let i = 0; i < iterations + 1; i++) {
+    try {
+      await sleep(delay);
+      // Check in the events of the last block to see if any StorageRequestFulfilled event were emitted and get them.
+      const previous_block_events = (await api.query.system.events()) as EventRecord[];
+      const storageRequestFulfilledEvents = Assertions.assertEventMany(
+        api,
+        "fileSystem",
+        "StorageRequestFulfilled",
+        previous_block_events
+      );
+
+      // Check if any of the events are for the file key we are waiting for.
+      const storageRequestFulfilledEvent = storageRequestFulfilledEvents.find((event) => {
+        const storageRequestFulfilledEventData =
+          api.events.fileSystem.StorageRequestFulfilled.is(event.event) && event.event.data;
+        assert(
+          storageRequestFulfilledEventData,
+          "Event doesn't match type but eventMany should have filtered it out"
+        );
+        storageRequestFulfilledEventData.fileKey.toString() === fileKey.toString();
+      });
+
+      // If the event was found, check to make sure the storage request is not on-chain and return.
+      if (storageRequestFulfilledEvent) {
+        await waitForStorageRequestNotOnChain(api, fileKey);
+        return;
+      }
+
+      // If the event was not found, seal a new block and wait for the next iteration to check if
+      // it has been emitted.
+      await sealBlock(api);
+    } catch {
+      assert(
+        i !== iterations,
+        `Storage request has not been fulfilled after ${(i * delay) / 1000}s`
       );
     }
   }

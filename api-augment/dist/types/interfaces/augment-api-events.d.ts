@@ -581,26 +581,6 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Failed to decrease bucket size for expired file deletion request
-       **/
-      FailedToDecreaseBucketSize: AugmentedEvent<
-        ApiType,
-        [
-          user: AccountId32,
-          bucketId: H256,
-          fileKey: H256,
-          fileSize: u64,
-          error: SpRuntimeDispatchError
-        ],
-        {
-          user: AccountId32;
-          bucketId: H256;
-          fileKey: H256;
-          fileSize: u64;
-          error: SpRuntimeDispatchError;
-        }
-      >;
-      /**
        * Failed to decrease MSP's used capacity for expired file deletion request
        **/
       FailedToDecreaseMspUsedCapacity: AugmentedEvent<
@@ -667,27 +647,30 @@ declare module "@polkadot/api-base/types/events" {
         [
           user: AccountId32,
           fileKey: H256,
+          fileSize: u64,
           bucketId: H256,
-          mspId: Option<H256>,
+          mspId: H256,
           proofOfInclusion: bool
         ],
         {
           user: AccountId32;
           fileKey: H256;
+          fileSize: u64;
           bucketId: H256;
-          mspId: Option<H256>;
+          mspId: H256;
           proofOfInclusion: bool;
         }
       >;
       /**
-       * Notifies that a bucket has been moved to a new MSP.
+       * Notifies that a bucket has been moved to a new MSP under a new value proposition.
        **/
       MoveBucketAccepted: AugmentedEvent<
         ApiType,
-        [bucketId: H256, mspId: H256],
+        [bucketId: H256, mspId: H256, valuePropId: H256],
         {
           bucketId: H256;
           mspId: H256;
+          valuePropId: H256;
         }
       >;
       /**
@@ -706,11 +689,12 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MoveBucketRequested: AugmentedEvent<
         ApiType,
-        [who: AccountId32, bucketId: H256, newMspId: H256],
+        [who: AccountId32, bucketId: H256, newMspId: H256, newValuePropId: H256],
         {
           who: AccountId32;
           bucketId: H256;
           newMspId: H256;
+          newValuePropId: H256;
         }
       >;
       /**
@@ -767,7 +751,7 @@ declare module "@polkadot/api-base/types/events" {
           root: H256,
           collectionId: Option<u32>,
           private: bool,
-          valuePropId: Option<H256>
+          valuePropId: H256
         ],
         {
           who: AccountId32;
@@ -777,7 +761,7 @@ declare module "@polkadot/api-base/types/events" {
           root: H256;
           collectionId: Option<u32>;
           private: bool;
-          valuePropId: Option<H256>;
+          valuePropId: H256;
         }
       >;
       /**
@@ -834,12 +818,20 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ProofSubmittedForPendingFileDeletionRequest: AugmentedEvent<
         ApiType,
-        [mspId: H256, user: AccountId32, fileKey: H256, bucketId: H256, proofOfInclusion: bool],
+        [
+          user: AccountId32,
+          fileKey: H256,
+          fileSize: u64,
+          bucketId: H256,
+          mspId: H256,
+          proofOfInclusion: bool
+        ],
         {
-          mspId: H256;
           user: AccountId32;
           fileKey: H256;
+          fileSize: u64;
           bucketId: H256;
+          mspId: H256;
           proofOfInclusion: bool;
         }
       >;
@@ -2328,6 +2320,18 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Event emitted when the provider that has been marked as insolvent was a MSP. It notifies the users of that MSP
+       * the buckets that it was holding, so they can take appropriate measures.
+       **/
+      BucketsOfInsolventMsp: AugmentedEvent<
+        ApiType,
+        [mspId: H256, buckets: Vec<H256>],
+        {
+          mspId: H256;
+          buckets: Vec<H256>;
+        }
+      >;
+      /**
        * Event emitted when a SP has changed its capacity successfully. Provides information about
        * that SP's account id, its old total data that could store, and the new total data.
        **/
@@ -2346,6 +2350,39 @@ declare module "@polkadot/api-base/types/events" {
           oldCapacity: u64;
           newCapacity: u64;
           nextBlockWhenChangeAllowed: u32;
+        }
+      >;
+      /**
+       * Event emitted when the account ID of a provider that has just been marked as insolvent can't be found in storage.
+       **/
+      FailedToGetOwnerAccountOfInsolventProvider: AugmentedEvent<
+        ApiType,
+        [providerId: H256],
+        {
+          providerId: H256;
+        }
+      >;
+      /**
+       * Event emitted when there's an error slashing the now insolvent provider.
+       **/
+      FailedToSlashInsolventProvider: AugmentedEvent<
+        ApiType,
+        [providerId: H256, amountToSlash: u128, error: SpRuntimeDispatchError],
+        {
+          providerId: H256;
+          amountToSlash: u128;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
+       * Event emitted when there's an error stopping all cycles for an insolvent Backup Storage Provider.
+       **/
+      FailedToStopAllCyclesForInsolventBsp: AugmentedEvent<
+        ApiType,
+        [providerId: H256, error: SpRuntimeDispatchError],
+        {
+          providerId: H256;
+          error: SpRuntimeDispatchError;
         }
       >;
       /**

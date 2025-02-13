@@ -2,11 +2,11 @@ use crate::{
     self as file_system,
     mock::*,
     types::{
-        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileDeletionRequestExpirationItem,
-        FileKeyWithProof, FileLocation, MoveBucketRequestMetadata, PeerIds,
-        PendingFileDeletionRequest, PendingFileDeletionRequestTtl, ProviderIdFor, StorageData,
-        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
-        StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
+        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileKeyWithProof, FileLocation,
+        MoveBucketRequestMetadata, PeerIds, PendingFileDeletionRequest, ProviderIdFor,
+        ReplicationTarget, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
+        ThresholdType, TickNumber, ValuePropId,
     },
     Config, Error, Event, NextAvailableStorageRequestExpirationTick, PendingBucketsToMove,
     PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
@@ -16,8 +16,9 @@ use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
     traits::{
-        fungible::{InspectHold, Mutate},
+        fungible::{Inspect, InspectHold, Mutate},
         nonfungibles_v2::Destroy,
+        tokens::{Fortitude, Preservation},
         Hooks, OriginTrait,
     },
     weights::Weight,
@@ -61,7 +62,7 @@ mod create_bucket_tests {
                         H256::from_slice(&msp.as_slice()),
                         name,
                         true,
-                        Some(ValuePropId::<Test>::default())
+                        ValuePropId::<Test>::default()
                     ),
                     Error::<Test>::NotAMsp
                 );
@@ -80,13 +81,7 @@ mod create_bucket_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 assert_noop!(
-                    FileSystem::create_bucket(
-                        origin,
-                        msp_id,
-                        name.clone(),
-                        private,
-                        Some(value_prop_id)
-                    ),
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
                     pallet_storage_providers::Error::<Test>::NotEnoughBalance
                 );
             });
@@ -111,13 +106,7 @@ mod create_bucket_tests {
 
                 // Dispatch a signed extrinsic.
                 assert_noop!(
-                    FileSystem::create_bucket(
-                        origin,
-                        msp_id,
-                        name.clone(),
-                        private,
-                        Some(value_prop_id)
-                    ),
+                    FileSystem::create_bucket(origin, msp_id, name.clone(), private, value_prop_id),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
             });
@@ -154,7 +143,7 @@ mod create_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -193,7 +182,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -226,7 +215,7 @@ mod create_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -247,7 +236,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: None,
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -264,7 +253,7 @@ mod delete_bucket_tests {
         use super::*;
 
         #[test]
-        fn remove_bucket_bucket_not_found_fail() {
+        fn delete_bucket_bucket_not_found_fail() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -286,7 +275,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_not_bucket_owner_fail() {
+        fn delete_bucket_not_bucket_owner_fail() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let not_owner = Keyring::Bob.to_account_id();
@@ -308,7 +297,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 assert_noop!(
@@ -319,7 +308,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_bucket_not_empty_fail() {
+        fn delete_bucket_bucket_not_empty_fail() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -340,7 +329,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Dispatch a signed extrinsic of a storage request.
@@ -352,7 +341,7 @@ mod delete_bucket_tests {
                     4,
                     msp_id,
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Accept the storage request to store the file, so the bucket is not empty.
@@ -399,7 +388,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_bucket_provider_insolvent() {
+        fn delete_bucket_bucket_provider_insolvent() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -420,7 +409,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Dispatch a signed extrinsic of a storage request.
@@ -432,7 +421,7 @@ mod delete_bucket_tests {
                     4,
                     msp_id,
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Simulate insolvent provider
@@ -477,7 +466,7 @@ mod delete_bucket_tests {
         use super::*;
 
         #[test]
-        fn remove_bucket_success() {
+        fn delete_bucket_success() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -498,7 +487,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Dispatch a signed extrinsic.
@@ -524,7 +513,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_with_collection_success() {
+        fn delete_bucket_with_collection_success() {
             new_test_ext().execute_with(|| {
                 let owner = Keyring::Alice.to_account_id();
                 let origin = RuntimeOrigin::signed(owner.clone());
@@ -545,7 +534,7 @@ mod delete_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Get the bucket's collection ID.
@@ -582,7 +571,7 @@ mod delete_bucket_tests {
         }
 
         #[test]
-        fn remove_bucket_after_being_used_success() {
+        fn delete_bucket_after_being_used_success() {
             new_test_ext().execute_with(|| {
 				let owner = Keyring::Alice.to_account_id();
 				let origin = RuntimeOrigin::signed(owner.clone());
@@ -603,7 +592,7 @@ mod delete_bucket_tests {
 					msp_id,
 					name.clone(),
 					private,
-					Some(value_prop_id)
+					value_prop_id
 				));
 
 				// Dispatch a signed extrinsic of a storage request.
@@ -615,7 +604,7 @@ mod delete_bucket_tests {
 					4,
 					msp_id,
 					BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap(),
-                    None
+                    ReplicationTarget::Standard
 				));
 
 				// Accept the storage request to store the file, so the bucket is not empty.
@@ -711,11 +700,13 @@ mod request_move_bucket {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -732,11 +723,16 @@ mod request_move_bucket {
                     4,
                     msp_charlie_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(
+                        origin,
+                        bucket_id,
+                        msp_dave_id,
+                        dave_value_prop_id
+                    ),
                     Error::<Test>::StorageRequestExists
                 );
             });
@@ -750,11 +746,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -766,11 +764,17 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(
+                        origin,
+                        bucket_id,
+                        msp_dave_id,
+                        dave_value_prop_id
+                    ),
                     Error::<Test>::BucketIsBeingMoved
                 );
             });
@@ -795,7 +799,12 @@ mod request_move_bucket {
                 ));
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_charlie_id),
+                    FileSystem::request_move_bucket(
+                        origin,
+                        bucket_id,
+                        msp_charlie_id,
+                        value_prop_id
+                    ),
                     Error::<Test>::MspAlreadyStoringBucket
                 );
             });
@@ -817,7 +826,7 @@ mod request_move_bucket {
                 let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id, value_prop_id),
                     Error::<Test>::NotAMsp
                 );
             });
@@ -832,14 +841,21 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(
+                        origin,
+                        bucket_id,
+                        msp_dave_id,
+                        dave_value_prop_id
+                    ),
                     Error::<Test>::NotBucketOwner
                 );
             });
@@ -853,11 +869,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Issue storage request with a big file size
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
@@ -875,7 +893,7 @@ mod request_move_bucket {
                     size,
                     msp_charlie_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Compute the file key.
@@ -954,7 +972,8 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -962,7 +981,8 @@ mod request_move_bucket {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -974,6 +994,7 @@ mod request_move_bucket {
                         who: owner,
                         bucket_id,
                         new_msp_id: msp_dave_id,
+                        new_value_prop_id: dave_value_prop_id,
                     }
                     .into(),
                 );
@@ -1008,11 +1029,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1028,8 +1051,54 @@ mod request_move_bucket {
 
                 // Dispatch a signed extrinsic.
                 assert_noop!(
-                    FileSystem::request_move_bucket(origin.clone(), bucket_id, msp_dave_id),
+                    FileSystem::request_move_bucket(
+                        origin.clone(),
+                        bucket_id,
+                        msp_dave_id,
+                        dave_value_prop_id
+                    ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
+                );
+            });
+        }
+
+        #[test]
+        fn move_bucket_with_new_value_proposition_not_belonging_to_new_msp() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let msp_charlie = Keyring::Charlie.to_account_id();
+                let msp_dave = Keyring::Dave.to_account_id();
+
+                // Register Charlie and Dave as MSPs.
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, _) = add_msp_to_provider_storage(&msp_dave);
+
+                // Create a bucket with Charlie as the MSP.
+                let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+
+                // Make sure bucket is stored by Charlie after creation.
+                assert!(Providers::is_bucket_stored_by_msp(
+                    &msp_charlie_id,
+                    &bucket_id
+                ));
+
+                // Create a value proposition that does not belong to Dave.
+                let test_value_prop = ValueProposition::<Test>::new(1000, bounded_vec![], 1000);
+                let test_value_prop_id = test_value_prop.derive_id();
+
+                // Request to move the bucket to Dave with a value proposition that does not belong to Dave.
+                assert_noop!(
+                    FileSystem::request_move_bucket(
+                        origin.clone(),
+                        bucket_id,
+                        msp_dave_id,
+                        test_value_prop_id
+                    ),
+                    Error::<Test>::ValuePropositionNotAvailable
                 );
             });
         }
@@ -1046,11 +1115,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1062,7 +1133,8 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -1070,7 +1142,8 @@ mod request_move_bucket {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -1082,6 +1155,7 @@ mod request_move_bucket {
                         who: owner,
                         bucket_id,
                         new_msp_id: msp_dave_id,
+                        new_value_prop_id: dave_value_prop_id,
                     }
                     .into(),
                 );
@@ -1098,12 +1172,19 @@ mod request_move_bucket {
                     Event::MoveBucketAccepted {
                         msp_id: msp_dave_id,
                         bucket_id,
+                        value_prop_id: dave_value_prop_id,
                     }
                     .into(),
                 );
 
                 // Check bucket is stored by Dave
                 assert!(Providers::is_bucket_stored_by_msp(&msp_dave_id, &bucket_id));
+
+                // Check that the bucket's value proposition was updated
+                assert_eq!(
+                    Providers::get_bucket_value_prop_id(&bucket_id).unwrap(),
+                    dave_value_prop_id
+                );
 
                 // Check pending bucket storages are cleared
                 assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
@@ -1122,11 +1203,13 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1138,7 +1221,8 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -1146,7 +1230,8 @@ mod request_move_bucket {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -1158,6 +1243,7 @@ mod request_move_bucket {
                         who: owner,
                         bucket_id,
                         new_msp_id: msp_dave_id,
+                        new_value_prop_id: dave_value_prop_id,
                     }
                     .into(),
                 );
@@ -1201,11 +1287,12 @@ mod request_move_bucket {
                 let msp_charlie = Keyring::Charlie.to_account_id();
                 let msp_dave = Keyring::Dave.to_account_id();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1217,7 +1304,8 @@ mod request_move_bucket {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+					dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -1225,7 +1313,8 @@ mod request_move_bucket {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+						new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -1237,6 +1326,7 @@ mod request_move_bucket {
                         who: owner,
                         bucket_id,
                         new_msp_id: msp_dave_id,
+						new_value_prop_id: dave_value_prop_id
                     }
                     .into(),
                 );
@@ -1312,7 +1402,7 @@ mod update_bucket_privacy_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1333,7 +1423,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -1386,7 +1476,7 @@ mod update_bucket_privacy_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1407,7 +1497,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -1487,7 +1577,7 @@ mod update_bucket_privacy_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check that the bucket does not have a corresponding collection
@@ -1508,7 +1598,7 @@ mod update_bucket_privacy_tests {
                         name,
                         collection_id: Some(0),
                         private,
-                        value_prop_id: Some(value_prop_id),
+                        value_prop_id: value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -1623,7 +1713,7 @@ mod create_and_associate_collection_with_bucket_tests {
                     msp_id,
                     name.clone(),
                     private,
-                    Some(value_prop_id)
+                    value_prop_id
                 ));
 
                 // Check if collection was created
@@ -1701,7 +1791,7 @@ mod request_storage {
                         4,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::Standard
                     ),
                     pallet_storage_providers::Error::<Test>::BucketNotFound
                 );
@@ -1735,7 +1825,7 @@ mod request_storage {
                         4,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::Standard
                     ),
                     Error::<Test>::NotBucketOwner
                 );
@@ -1755,11 +1845,13 @@ mod request_storage {
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-                let (msp_charlie_id, _) = add_msp_to_provider_storage(&msp_charlie);
-                let (msp_dave_id, value_prop_id) = add_msp_to_provider_storage(&msp_dave);
+                let (msp_charlie_id, charlie_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_charlie);
+                let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let bucket_id =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1771,7 +1863,8 @@ mod request_storage {
                 assert_ok!(FileSystem::request_move_bucket(
                     origin.clone(),
                     bucket_id,
-                    msp_dave_id
+                    msp_dave_id,
+                    dave_value_prop_id
                 ));
 
                 let pending_move_bucket =
@@ -1779,7 +1872,8 @@ mod request_storage {
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
-                        requester: owner.clone()
+                        requester: owner.clone(),
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
 
@@ -1792,7 +1886,7 @@ mod request_storage {
                         4,
                         msp_charlie_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::Standard
                     ),
                     Error::<Test>::BucketIsBeingMoved
                 );
@@ -1849,7 +1943,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::Standard
                     ),
                     Error::<Test>::CannotHoldDeposit
                 );
@@ -1900,7 +1994,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        Some(0)
+                        ReplicationTarget::Custom(0)
                     ),
                     Error::<Test>::ReplicationTargetCannotBeZero
                 );
@@ -1940,7 +2034,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        Some(
+                        ReplicationTarget::Custom(
                             <<Test as crate::Config>::MaxReplicationTarget as Get<u32>>::get() + 1
                         )
                     ),
@@ -1988,7 +2082,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::Standard
                     ),
                     Error::<Test>::OperationNotAllowedForInsolventProvider
                 );
@@ -2046,7 +2140,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2069,7 +2163,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request
@@ -2140,7 +2234,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(<Test as crate::Config>::MaxReplicationTarget::get())
+                    ReplicationTarget::Custom(<Test as crate::Config>::MaxReplicationTarget::get())
                 ),);
             });
         }
@@ -2187,7 +2281,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2210,7 +2304,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request
@@ -2226,7 +2320,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2249,7 +2343,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request
@@ -2306,7 +2400,7 @@ mod request_storage {
                         size,
                         msp_id,
                         peer_ids.clone(),
-                        None
+                        ReplicationTarget::Standard
                     ),
                     Error::<Test>::FileSizeCannotBeZero
                 );
@@ -2354,7 +2448,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2377,7 +2471,7 @@ mod request_storage {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request
@@ -2470,7 +2564,7 @@ mod request_storage {
                     4,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Assert that the storage request expirations storage is at max capacity
@@ -2549,7 +2643,7 @@ mod request_storage {
                     4,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let expected_expiration_tick_number: u32 = StorageRequestTtl::<Test>::get();
@@ -2648,7 +2742,7 @@ mod revoke_storage_request {
                     4,
                     msp_id,
                     Default::default(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2699,7 +2793,7 @@ mod revoke_storage_request {
                     4,
                     msp_id,
                     Default::default(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2759,10 +2853,10 @@ mod revoke_storage_request {
                     4,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account.clone(),
@@ -2775,7 +2869,7 @@ mod revoke_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -2841,7 +2935,7 @@ mod revoke_storage_request {
                     4,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2855,7 +2949,7 @@ mod revoke_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -2936,7 +3030,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Compute the file key.
@@ -2991,7 +3085,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Compute the file key.
@@ -3085,7 +3179,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Dispatch a storage request for the second file.
@@ -3097,7 +3191,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Dispatch the MSP accept request for the first file.
@@ -3212,7 +3306,7 @@ mod msp_respond_storage_request {
                     first_size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Dispatch a storage request for the second file.
@@ -3224,7 +3318,7 @@ mod msp_respond_storage_request {
                     second_size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Dispatch the MSP accept request for the second file.
@@ -3359,7 +3453,7 @@ mod msp_respond_storage_request {
                     first_size,
                     msp_id,
                     first_peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Dispatch a storage request for the second file.
@@ -3371,7 +3465,7 @@ mod msp_respond_storage_request {
                     second_size,
                     msp_id,
                     second_peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Dispatch the MSP accept request for the second file.
@@ -3480,7 +3574,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Compute the file key.
@@ -3501,7 +3595,7 @@ mod msp_respond_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -3638,7 +3732,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -3709,7 +3803,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -3782,7 +3876,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: None,
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
@@ -3851,7 +3945,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: None,
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
@@ -3922,7 +4016,7 @@ mod msp_respond_storage_request {
                     size,
                     expected_msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -3986,7 +4080,7 @@ mod msp_respond_storage_request {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4084,7 +4178,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: Some((expected_msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
@@ -4157,7 +4251,7 @@ mod msp_respond_storage_request {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
@@ -4226,7 +4320,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4303,7 +4397,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4317,7 +4411,7 @@ mod bsp_volunteer {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -4373,7 +4467,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4384,7 +4478,7 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
@@ -4433,7 +4527,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4481,7 +4575,7 @@ mod bsp_volunteer {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 // Get BSP ID.
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4492,7 +4586,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Compute the file key to volunteer for.
@@ -4557,10 +4651,10 @@ mod bsp_volunteer {
                     4,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(bsp_id, |bsp| {
                     assert!(bsp.is_some());
@@ -4621,7 +4715,7 @@ mod bsp_volunteer {
                     4,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4632,12 +4726,12 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -4704,7 +4798,7 @@ mod bsp_volunteer {
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 // Get BSP ID.
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4715,7 +4809,7 @@ mod bsp_volunteer {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Compute the file key to volunteer for.
@@ -4808,7 +4902,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4909,7 +5003,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -4976,7 +5070,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Custom(2)
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5018,7 +5112,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_bob_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_bob_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5101,7 +5195,7 @@ mod bsp_confirm {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Force BSP to pass all threshold checks when volunteering.
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -5130,7 +5224,7 @@ mod bsp_confirm {
                         size,
                         msp_id,
                         Default::default(),
-                        None
+                        ReplicationTarget::Standard
                     ));
 
                     let file_key = FileSystem::compute_file_key(
@@ -5227,7 +5321,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5241,7 +5335,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5315,7 +5409,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5329,7 +5423,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5344,7 +5438,7 @@ mod bsp_confirm {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
@@ -5420,7 +5514,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5431,12 +5525,12 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5481,7 +5575,7 @@ mod bsp_confirm {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -5586,7 +5680,7 @@ mod bsp_confirm {
 
                 // Setup BSP
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Create file keys with different file locations
                 let locations: Vec<FileLocation<Test>> = (0..3)
@@ -5608,7 +5702,7 @@ mod bsp_confirm {
                             size,
                             msp_id,
                             peer_ids.clone(),
-                            Some(1)
+                            ReplicationTarget::Custom(1)
                         ));
 
                         let file_key = FileSystem::compute_file_key(
@@ -5629,7 +5723,7 @@ mod bsp_confirm {
                     .iter()
                     .map(|&file_key| {
                         FileSystem::query_earliest_file_volunteer_tick(
-                            Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                            Providers::get_provider_id(&bsp_account_id).unwrap(),
                             file_key,
                         )
                         .unwrap()
@@ -5748,7 +5842,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5759,12 +5853,12 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5809,7 +5903,7 @@ mod bsp_confirm {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -5898,7 +5992,7 @@ mod bsp_confirm {
                     new_size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -5913,7 +6007,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5953,7 +6047,7 @@ mod bsp_confirm {
                         size: new_size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -6022,7 +6116,7 @@ mod bsp_confirm {
 
                 // Sign up account as a Backup Storage Provider and get its ID.
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Compute the file key of the storage request to issue.
                 let file_key = FileSystem::compute_file_key(
@@ -6052,7 +6146,7 @@ mod bsp_confirm {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    Some(1)
+                    ReplicationTarget::Custom(1)
                 ));
 
                 // Ensure the storage request expiration item was added to the expiration queue.
@@ -6064,7 +6158,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6211,7 +6305,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6284,7 +6378,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6295,12 +6389,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6352,7 +6446,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -6429,7 +6523,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6440,12 +6534,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6497,7 +6591,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -6577,7 +6671,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6588,12 +6682,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6645,7 +6739,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -6740,7 +6834,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6751,12 +6845,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6808,7 +6902,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -6853,7 +6947,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
@@ -6937,7 +7031,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -6948,12 +7042,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7005,7 +7099,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -7056,7 +7150,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
@@ -7121,7 +7215,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -7132,12 +7226,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7189,7 +7283,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -7251,7 +7345,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
@@ -7272,6 +7366,13 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
+				// Move the pending stop storing request from the `file_key` to the default trie root.
+				// This is so the cycles of the BSP are stopped, given that in the mock used for this tests
+				// the new root after applying the change will be the `file_key` of the applied change.
+				let pending_stop_storing_request = PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).unwrap();
+				let default_trie_root = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_default_root();
+				PendingStopStoringRequests::<Test>::insert(&bsp_id, &default_trie_root, pending_stop_storing_request);
+
                 // Advance enough blocks to allow the BSP to confirm the stop storing request.
                 roll_to(
                     frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
@@ -7280,14 +7381,14 @@ mod bsp_stop_storing {
                 // Dispatch BSP confirm stop storing.
                 assert_ok!(FileSystem::bsp_confirm_stop_storing(
                     bsp_signed.clone(),
-                    file_key,
+                    default_trie_root,
                     CompactProof {
-                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        encoded_nodes: vec![default_trie_root.as_ref().to_vec()],
                     },
                 ));
 
                 // Assert that the pending stop storing request was removed.
-                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &default_trie_root).is_none());
 
                 // Assert that the used capacity of this BSP is now 0
                 assert_eq!(Providers::get_used_capacity(&bsp_id), 0);
@@ -7309,7 +7410,7 @@ mod bsp_stop_storing {
                 System::assert_last_event(
                     Event::BspConfirmStoppedStoring {
                         bsp_id,
-                        file_key,
+                        file_key: default_trie_root,
                         new_root,
                     }
                     .into(),
@@ -7354,7 +7455,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-					None
+					ReplicationTarget::Standard
                 ));
 
 
@@ -7366,7 +7467,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
@@ -7377,7 +7478,7 @@ mod bsp_stop_storing {
 				// Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7445,7 +7546,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
@@ -7490,7 +7591,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
@@ -7587,7 +7688,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-					None
+					ReplicationTarget::Standard
                 ));
 
 				// Dispatch second storage request.
@@ -7599,7 +7700,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     peer_ids.clone(),
-					None
+					ReplicationTarget::Standard
                 ));
 
                 let first_file_key = FileSystem::compute_file_key(
@@ -7617,7 +7718,7 @@ mod bsp_stop_storing {
 					second_file_fingerprint,
 				);
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(
@@ -7631,11 +7732,11 @@ mod bsp_stop_storing {
 				// Calculate in how many ticks the BSP can volunteer for the files
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = max(FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     first_file_key,
                 )
                 .unwrap(), FileSystem::query_earliest_file_volunteer_tick(
-					Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+					Providers::get_provider_id(&bsp_account_id).unwrap(),
 					second_file_key,
 				)
 				.unwrap());
@@ -7727,7 +7828,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
@@ -7744,7 +7845,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
@@ -7781,7 +7882,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
@@ -7889,7 +7990,7 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     Default::default(),
-                    None,
+                    ReplicationTarget::Standard,
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -7900,12 +8001,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7973,7 +8074,7 @@ mod bsp_stop_storing {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: Default::default(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
@@ -8033,10 +8134,10 @@ mod bsp_stop_storing {
                     size,
                     msp_id,
                     Default::default(),
-                    None,
+                    ReplicationTarget::Standard,
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8065,7 +8166,7 @@ mod bsp_stop_storing {
                 ));
 
                 let current_bsps_required: <Test as Config>::ReplicationTargetType =
-                    <Test as Config>::DefaultReplicationTarget::get();
+                    <Test as Config>::StandardReplicationTarget::get();
 
                 // Assert that the storage request bsps_required was incremented
                 assert_eq!(
@@ -8122,7 +8223,7 @@ mod bsp_stop_storing {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8353,6 +8454,7 @@ mod delete_file_and_pending_deletions_tests {
 				));
 
                 // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
@@ -8361,6 +8463,7 @@ mod delete_file_and_pending_deletions_tests {
 							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
@@ -8386,15 +8489,17 @@ mod delete_file_and_pending_deletions_tests {
 					Error::<Test>::MspNotStoringBucket
 				);
 
-                // Assert that the pending file deletion request was not removed from storage
+                // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
                         vec![PendingFileDeletionRequest {
 							file_key,
-							user: owner_account_id,
+							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
@@ -8446,155 +8551,11 @@ mod delete_file_and_pending_deletions_tests {
                 );
             });
         }
-
-        #[test]
-        fn delete_file_expired_pending_file_deletion_request_with_bucket_does_not_exist() {
-            new_test_ext().execute_with(|| {
-                let owner_account_id = Keyring::Alice.to_account_id();
-                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-                let msp = Keyring::Charlie.to_account_id();
-                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 4;
-                let file_content = b"test".to_vec();
-                let fingerprint = BlakeTwo256::hash(&file_content);
-                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
-
-                let file_key = FileSystem::compute_file_key(
-                    owner_account_id.clone(),
-                    bucket_id,
-                    location.clone(),
-                    size,
-                    fingerprint,
-                );
-
-                // Issue storage request
-                assert_ok!(FileSystem::issue_storage_request(
-                    owner_signed.clone(),
-                    bucket_id,
-                    location.clone(),
-                    fingerprint,
-                    size,
-                    msp_id,
-                    peer_ids,
-                    None
-                ));
-
-                // Dispatch MSP confirm storing.
-                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-                    RuntimeOrigin::signed(msp.clone()),
-                    vec![StorageRequestMspBucketResponse {
-                        bucket_id,
-                        accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
-                                file_key,
-                                proof: CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                }
-                            }],
-                            forest_proof: CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            },
-                        }),
-                        reject: vec![],
-                    }],
-                ));
-
-                // Delete file
-                assert_ok!(FileSystem::delete_file(
-					owner_signed.clone(),
-					bucket_id,
-					file_key,
-					location,
-					size,
-					fingerprint,
-					None,
-				));
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::FileDeletionRequest {
-                        user: owner_account_id.clone(),
-                        file_key,
-                        bucket_id,
-                        msp_id: Some(msp_id),
-                        proof_of_inclusion: false,
-                    }
-                        .into(),
-                );
-
-                // Assert that the pending file deletion request was added to storage
-                assert_eq!(
-                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![PendingFileDeletionRequest {
-							file_key,
-							user: owner_account_id.clone(),
-							bucket_id,
-							file_size: size,
-						}]
-                    )
-                        .unwrap()
-                );
-
-                let pending_file_deletion_request_ttl: u32 =
-                    PendingFileDeletionRequestTtl::<Test>::get();
-                let pending_file_deletion_request_ttl: TickNumber<Test> =
-                    pending_file_deletion_request_ttl.into();
-                let expiration_tick = pending_file_deletion_request_ttl + <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
-
-                // Assert that the pending file deletion request was added to storage
-                assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
-                    vec![FileDeletionRequestExpirationItem {
-                        user: owner_account_id.clone(),
-                        file_key,
-                        bucket_id,
-                        file_size: size,
-                    }]
-                );
-
-                // Delete the bucket manually
-                pallet_storage_providers::Buckets::<Test>::remove(bucket_id);
-
-                // Roll past the expiration tick
-                roll_to(pending_file_deletion_request_ttl + 1);
-
-                // Item expiration should be removed
-                assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
-                    vec![]
-                );
-
-                // Assert that the pending file deletion request was removed from storage
-                assert_eq!(
-                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
-                );
-
-                // Assert that the bucket size was not decreased because the bucket was not found
-                System::assert_has_event(Event::FailedToDecreaseBucketSize {
-                    user: owner_account_id.clone(),
-                    bucket_id,
-                    file_key,
-                    file_size: size,
-                    error: pallet_storage_providers::Error::<Test>::BucketNotFound.into(),
-                }.into());
-
-                // Assert that there was no queued priority challenge for file key in proofs dealer pallet
-                assert!(!pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
-                .iter()
-                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }));
-            });
-        }
     }
 
     mod success {
+        use crate::MspsAmountOfPendingFileDeletionRequests;
+
         use super::*;
         #[test]
         fn delete_file_with_proof_of_inclusion_success() {
@@ -8635,7 +8596,7 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Dispatch MSP confirm storing.
@@ -8685,6 +8646,13 @@ mod delete_file_and_pending_deletions_tests {
                         .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),
                 );
 
+				// Assert that the deposit for a file deletion request was NOT held from the user's balance.
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
+				assert_ne!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					file_deletion_request_deposit
+				);
+
 				// Assert that the Bucket root was correctly updated
 				let bucket_info = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap();
 				let bucket_root = bucket_info.root;
@@ -8707,165 +8675,13 @@ mod delete_file_and_pending_deletions_tests {
                     Event::FileDeletionRequest {
                         user: owner_account_id.clone(),
                         file_key,
+                        file_size: size,
                         bucket_id,
-                        msp_id: Some(msp_id),
+                        msp_id,
                         proof_of_inclusion: true,
                     }
                     .into(),
                 );
-            });
-        }
-
-        #[test]
-        fn delete_file_expired_pending_file_deletion_request_success() {
-            new_test_ext().execute_with(|| {
-                let owner_account_id = Keyring::Alice.to_account_id();
-                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
-                let msp = Keyring::Charlie.to_account_id();
-                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 4;
-                let file_content = b"test".to_vec();
-                let fingerprint = BlakeTwo256::hash(&file_content);
-                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
-                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-
-                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
-
-                let file_key = FileSystem::compute_file_key(
-                    owner_account_id.clone(),
-                    bucket_id,
-                    location.clone(),
-                    size,
-                    fingerprint,
-                );
-
-                // Issue storage request
-                assert_ok!(FileSystem::issue_storage_request(
-                    owner_signed.clone(),
-                    bucket_id,
-                    location.clone(),
-                    fingerprint,
-                    size,
-                    msp_id,
-                    peer_ids,
-                    None
-                ));
-
-                // Dispatch MSP confirm storing.
-                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
-                    RuntimeOrigin::signed(msp.clone()),
-                    vec![StorageRequestMspBucketResponse {
-                        bucket_id,
-                        accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
-                                file_key,
-                                proof: CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                }
-                            }],
-                            forest_proof: CompactProof {
-                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                            },
-                        }),
-                        reject: vec![],
-                    }],
-                ));
-
-                // Query providers pallet Buckets storage and MSP's used capacity
-                let bucket_size = Providers::get_bucket_size(&bucket_id).unwrap();
-				let msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
-
-                // Delete file
-                assert_ok!(FileSystem::delete_file(
-					owner_signed.clone(),
-					bucket_id,
-					file_key,
-					location,
-					size,
-					fingerprint,
-					None,
-				));
-
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::FileDeletionRequest {
-                        user: owner_account_id.clone(),
-                        file_key,
-                        bucket_id,
-                        msp_id: Some(msp_id),
-                        proof_of_inclusion: false,
-                    }
-                        .into(),
-                );
-
-                // Assert that the pending file deletion request was added to storage
-                assert_eq!(
-                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
-                        vec![PendingFileDeletionRequest {
-							file_key,
-							user: owner_account_id.clone(),
-							bucket_id,
-							file_size: size,
-						}]
-                    )
-                        .unwrap()
-                );
-
-				// Assert that the MSP was removed from the privileged providers list.
-				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
-
-                let pending_file_deletion_request_ttl: u32 =
-                    PendingFileDeletionRequestTtl::<Test>::get();
-                let pending_file_deletion_request_ttl: TickNumber<Test> =
-                    pending_file_deletion_request_ttl.into();
-                let expiration_tick = pending_file_deletion_request_ttl + <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
-
-                // Assert that the pending file deletion request was added to storage
-                assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
-                    vec![FileDeletionRequestExpirationItem {
-                        user: owner_account_id.clone(),
-                        file_key,
-                        bucket_id,
-                        file_size: size,
-                    }]
-                );
-
-                // Roll past the expiration tick
-                roll_to(pending_file_deletion_request_ttl + 1);
-
-                // Item expiration should be removed
-                assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
-                    vec![]
-                );
-
-                // Asser that the pending file deletion request was removed from storage
-                assert_eq!(
-                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
-                );
-
-                // Check that the bucket_size was reduced by the file size
-                assert_eq!(
-                    Providers::get_bucket_size(&bucket_id).unwrap(),
-                    bucket_size - size
-                );
-
-				// Check that the MSP's used capacity was reduced by the file size
-				assert_eq!(
-					<<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id),
-					msp_used_capacity - size
-				);
-
-                // Assert that there is a queued priority challenge for file key in proofs dealer pallet
-                assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
-                .iter()
-                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),);
             });
         }
 
@@ -8904,16 +8720,16 @@ mod delete_file_and_pending_deletions_tests {
                     size,
                     msp_id,
                     peer_ids,
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 // Dispatch MSP confirm storing.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
-                    bounded_vec![StorageRequestMspBucketResponse {
+                    vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: bounded_vec![FileKeyWithProof {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
                                 file_key,
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
@@ -8923,7 +8739,7 @@ mod delete_file_and_pending_deletions_tests {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
                         }),
-                        reject: bounded_vec![],
+                        reject: vec![],
                     }],
                 ));
 
@@ -8944,6 +8760,7 @@ mod delete_file_and_pending_deletions_tests {
 				));
 
                 // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
@@ -8952,13 +8769,26 @@ mod delete_file_and_pending_deletions_tests {
 							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
                 );
 
-				// Assert that the MSP was removed from the privileged providers list.
+				// Assert that the deposit for a file deletion request was held from the user's balance.
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
+				assert_eq!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					file_deletion_request_deposit
+				);
+
+				// Assert that the MSP was removed from the privileged providers list and that it has one pending file deletion request.
 				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
+
+				// Get the user's free balance and the payment stream deposit before the MSP submits the proof of inclusion.
+				let user_free_balance_before_proof = <<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&owner_account_id, Preservation::Preserve, Fortitude::Force);
+				let user_payment_stream_deposit_before_proof = <<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(), &owner_account_id);
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
@@ -8988,12 +8818,26 @@ mod delete_file_and_pending_deletions_tests {
 				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 				assert_eq!(new_msp_used_capacity, msp_used_capacity - size);
 
-				// Assert that the payment stream rate decrease
+				// Assert that the payment stream rate decreased
 				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
 				assert!(new_payment_stream_rate < initial_payment_stream_rate);
 
-				// Assert that the MSP was added back to the privileged providers list.
+				// Get the new deposit of the payment stream
+				let user_payment_stream_deposit_after_proof = <<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&pallet_payment_streams::HoldReason::PaymentStreamDeposit.into(), &owner_account_id);
+
+				// Assert that the MSP was added back to the privileged providers list since it no longer has any pending file deletion requests.
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 0);
 				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
+				// Assert that the deposit for the file deletion request was returned to the user and that the deposit for the payment stream was updated according to the new rate.
+				assert_eq!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					0
+				);
+				assert_eq!(
+					<<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&owner_account_id, Preservation::Preserve, Fortitude::Force),
+					user_free_balance_before_proof + file_deletion_request_deposit + (user_payment_stream_deposit_before_proof - user_payment_stream_deposit_after_proof)
+				);
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -9001,6 +8845,7 @@ mod delete_file_and_pending_deletions_tests {
                         msp_id,
                         user: owner_account_id.clone(),
                         file_key,
+                        file_size: size,
                         bucket_id,
                         proof_of_inclusion: true,
                     }
@@ -9056,6 +8901,7 @@ mod delete_file_and_pending_deletions_tests {
 				));
 
                 // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
@@ -9064,13 +8910,26 @@ mod delete_file_and_pending_deletions_tests {
 							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
                 );
 
-				// Assert that the MSP was removed from the privileged providers list.
+				// Assert that the deposit for a file deletion request was held from the user's balance.
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
+				assert_eq!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					file_deletion_request_deposit
+				);
+
+				// Assert that the MSP was removed from the privileged providers list and that it has one pending file deletion request.
 				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
+
+				// Get the user's and MSP's free balance before the MSP submits the proof of non-inclusion.
+				let user_free_balance_before_proof = <<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&owner_account_id, Preservation::Preserve, Fortitude::Force);
+				let msp_free_balance_before_proof = <<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&msp, Preservation::Preserve, Fortitude::Force);
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![H256::zero().as_bytes().to_vec()],
@@ -9087,8 +8946,23 @@ mod delete_file_and_pending_deletions_tests {
 					forest_proof
 				));
 
-				// Assert that the MSP was added back to the privileged providers list.
+				// Assert that the MSP was added back to the privileged providers list since it no longer has any pending file deletion requests.
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 0);
 				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
+				// Assert that the deposit for the file deletion request was given to the MSP for their troubles.
+				assert_eq!(
+					<<Test as crate::Config>::Currency as InspectHold<<Test as frame_system::Config>::AccountId>>::balance_on_hold(&crate::HoldReason::FileDeletionRequestHold.into(), &owner_account_id),
+					0
+				);
+				assert_eq!(
+					<<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&owner_account_id, Preservation::Preserve, Fortitude::Force),
+					user_free_balance_before_proof
+				);
+				assert_eq!(
+					<<Test as crate::Config>::Currency as Inspect<<Test as frame_system::Config>::AccountId>>::reducible_balance(&msp, Preservation::Preserve, Fortitude::Force),
+					msp_free_balance_before_proof + file_deletion_request_deposit
+				);
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -9096,6 +8970,7 @@ mod delete_file_and_pending_deletions_tests {
                         msp_id,
                         user: owner_account_id.clone(),
                         file_key,
+                        file_size: size,
                         bucket_id,
                         proof_of_inclusion: false,
                     }
@@ -9118,34 +8993,25 @@ mod delete_file_and_pending_deletions_tests {
         }
 
         #[test]
-        fn delete_file_expired_pending_file_deletion_request_with_insolvent_user() {
+        fn delete_file_pending_file_deletion_request_submit_proof_does_not_add_msp_to_privileged_providers_if_it_has_more_pending_file_deletion_requests(
+        ) {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = 4;
+                let size = 1024 * 1024 * 1024; // One gigabyte
                 let file_content = b"test".to_vec();
                 let fingerprint = BlakeTwo256::hash(&file_content);
-                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+				let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
 
-				let (msp_id, _) = add_msp_to_provider_storage(&msp);
-
-				// Create a new value proposition with a high price per gigabyte per tick so deleting the 4 byte file will
-				// actually make a difference in the rate of the fixed-rate payment stream between the user and the MSP.
-				let value_prop = ValueProposition::<Test>::new(1024 * 1024 * 1024, bounded_vec![], 10000);
-    			let value_prop_id = value_prop.derive_id();
-    			pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::insert(
-        			msp_id,
-        			value_prop_id,
-        			value_prop,
-    			);
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-                let file_key = FileSystem::compute_file_key(
+				let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
                     bucket_id,
                     location.clone(),
@@ -9153,7 +9019,7 @@ mod delete_file_and_pending_deletions_tests {
                     fingerprint,
                 );
 
-                // Issue storage request
+				// Issue storage request
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
                     bucket_id,
@@ -9161,22 +9027,50 @@ mod delete_file_and_pending_deletions_tests {
                     fingerprint,
                     size,
                     msp_id,
-                    peer_ids,
-                    Some(1)
+                    peer_ids.clone(),
+                    ReplicationTarget::Standard
                 ));
 
-                // Dispatch MSP confirm storing.
+				// Issue another storage request
+				let other_fingerprint = BlakeTwo256::hash(&b"other".to_vec());
+				let other_file_key = FileSystem::compute_file_key(
+					owner_account_id.clone(),
+					bucket_id,
+					location.clone(),
+					size,
+					other_fingerprint,
+				);
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    other_fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids,
+                    ReplicationTarget::Custom(1)
+                ));
+
+                // Dispatch the MSP accept storing for both files
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
                     RuntimeOrigin::signed(msp.clone()),
                     vec![StorageRequestMspBucketResponse {
                         bucket_id,
                         accept: Some(StorageRequestMspAcceptedFileKeys {
-                            file_keys_and_proofs: vec![FileKeyWithProof {
-                                file_key,
-                                proof: CompactProof {
-                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
-                                }
-                            }],
+                            file_keys_and_proofs: bounded_vec![
+								FileKeyWithProof {
+                                	file_key,
+                                	proof: CompactProof {
+                                    	encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                	}
+                            	},
+								FileKeyWithProof {
+									file_key: other_file_key,
+									proof: CompactProof {
+										encoded_nodes: vec![H256::default().as_ref().to_vec()],
+									}
+								},
+							],
                             forest_proof: CompactProof {
                                 encoded_nodes: vec![H256::default().as_ref().to_vec()],
                             },
@@ -9185,34 +9079,24 @@ mod delete_file_and_pending_deletions_tests {
                     }],
                 ));
 
-				// Get the bucket's size and MSP's used capacity after the file was stored
-				let bucket_size_after_confirm = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
-				let msp_used_capacity_after_confirm = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+                // Get the initial bucket size, MSP's used capacity and payment stream rate
+				let initial_bucket_size = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
+				let initial_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				let msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
 
-                // Delete file
+                // Request to delete the first file
                 assert_ok!(FileSystem::delete_file(
 					owner_signed.clone(),
 					bucket_id,
 					file_key,
-					location,
+					location.clone(),
 					size,
 					fingerprint,
 					None,
 				));
 
-                // Assert that the correct event was deposited
-                System::assert_last_event(
-                    Event::FileDeletionRequest {
-                        user: owner_account_id.clone(),
-                        file_key,
-                        bucket_id,
-                        msp_id: Some(msp_id),
-                        proof_of_inclusion: false,
-                    }
-                        .into(),
-                );
-
                 // Assert that the pending file deletion request was added to storage
+				let file_deletion_request_deposit = <Test as crate::Config>::FileDeletionRequestDeposit::get();
                 assert_eq!(
                     file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
                     BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::try_from(
@@ -9221,63 +9105,159 @@ mod delete_file_and_pending_deletions_tests {
 							user: owner_account_id.clone(),
 							bucket_id,
 							file_size: size,
+							deposit_paid_for_creation: file_deletion_request_deposit,
 						}]
                     )
                         .unwrap()
                 );
 
-				// Assert that the MSP was removed from the privileged providers list.
+
+				// Assert that the MSP was removed from the privileged providers list and that it has one pending file deletion request.
 				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
 
-                let pending_file_deletion_request_ttl: u32 =
-                    PendingFileDeletionRequestTtl::<Test>::get();
-                let pending_file_deletion_request_ttl: TickNumber<Test> =
-                    pending_file_deletion_request_ttl.into();
-                let expiration_tick = pending_file_deletion_request_ttl + <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+				// Request to delete the second file
+				assert_ok!(FileSystem::delete_file(
+					owner_signed.clone(),
+					bucket_id,
+					other_file_key,
+					location,
+					size,
+					other_fingerprint,
+					None,
+				));
 
-                // Assert that the pending file deletion request was added to storage
-                assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
-                    vec![FileDeletionRequestExpirationItem {
-                        user: owner_account_id.clone(),
-                        file_key,
-                        bucket_id,
-                        file_size: size,
-                    }]
-                );
+				// Assert that the pending file deletion request was added to storage
+				assert!(
+					file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()).iter().any(|x| x.file_key == other_file_key)
+				);
 
-                pallet_payment_streams::UsersWithoutFunds::<Test>::insert(owner_account_id.clone(), System::block_number());
+				// Assert that the MSP is still not in the privileged providers list and that it has two pending file deletion requests.
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 2);
 
-                // Roll past the expiration tick
-                roll_to(pending_file_deletion_request_ttl + 1);
 
-                // Item expiration should be removed
-                assert_eq!(
-                    file_system::FileDeletionRequestExpirations::<Test>::get(expiration_tick),
-                    vec![]
-                );
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
 
-                // Assert that the pending file deletion request was removed from storage
-                assert_eq!(
-                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone()),
-                    BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
-                );
+                let msp_origin = RuntimeOrigin::signed(msp.clone());
+
+				// Submit an inclusion proof for the first file to be deleted
+                assert_ok!(FileSystem::pending_file_deletion_request_submit_proof(
+					msp_origin.clone(),
+					owner_account_id.clone(),
+					file_key,
+					size,
+					bucket_id,
+					forest_proof
+				));
+
+				// Assert that the Bucket root was correctly updated
+				let bucket_info = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap();
+				let bucket_root = bucket_info.root;
+				assert_eq!(bucket_root, file_key); // This is because our mocked apply delta sets the root as the last mutation
 
 				// Assert that the Bucket's size was decreased by the file size
-				let new_bucket_size = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap().size;
-				assert_eq!(new_bucket_size, bucket_size_after_confirm - size);
+				let new_bucket_size = bucket_info.size;
+				assert_eq!(new_bucket_size, initial_bucket_size - size);
 
 				// Assert that the MSP's used capacity was decreased by the file size
 				let new_msp_used_capacity = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
-				assert_eq!(new_msp_used_capacity, msp_used_capacity_after_confirm - size);
+				assert_eq!(new_msp_used_capacity, msp_used_capacity - size);
 
-                // Assert that the payment stream was correctly deleted since the user is without funds
-                assert!(pallet_payment_streams::FixedRatePaymentStreams::<Test>::get(msp_id, owner_account_id.clone()).is_none());
+				// Assert that the payment stream rate decreased
+				let new_payment_stream_rate = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				assert!(new_payment_stream_rate < initial_payment_stream_rate);
+
+				// Assert that the MSP was NOT added back to the privileged providers list since it still has one pending file deletion request.
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 1);
+				assert!(!pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::ProofSubmittedForPendingFileDeletionRequest {
+                        msp_id,
+                        user: owner_account_id.clone(),
+                        file_key,
+						file_size: size,
+                        bucket_id,
+                        proof_of_inclusion: true,
+                    }
+                        .into(),
+                );
 
                 // Assert that there is a queued priority challenge for file key in proofs dealer pallet
                 assert!(pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
                 .iter()
-                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true }),);
+                .any(|x| *x == CustomChallenge { key: file_key, should_remove_key: true } ));
+
+                // Assert that the pending file deletion request was removed from storage
+                assert!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id.clone())
+						.iter()
+						.all(|x| x.file_key != file_key)
+                );
+
+				// Submit an inclusion proof for the second file to be deleted
+				let other_forest_proof = CompactProof {
+					encoded_nodes: vec![other_file_key.as_ref().to_vec()],
+				};
+				assert_ok!(FileSystem::pending_file_deletion_request_submit_proof(
+					msp_origin,
+					owner_account_id.clone(),
+					other_file_key,
+					size,
+					bucket_id,
+					other_forest_proof
+				));
+
+				// Assert that the Bucket root was correctly updated
+				let bucket_info = pallet_storage_providers::Buckets::<Test>::get(bucket_id).unwrap();
+				let bucket_root = bucket_info.root;
+				assert_eq!(bucket_root, other_file_key); // This is because our mocked apply delta sets the root as the last mutation
+
+				// Assert that the Bucket's size was decreased by the file size
+				let new_bucket_size_after_second_deletion = bucket_info.size;
+				assert_eq!(new_bucket_size_after_second_deletion, new_bucket_size - size);
+
+				// Assert that the MSP's used capacity was decreased by the file size
+				let new_msp_used_capacity_after_second_deletion = <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+				assert_eq!(new_msp_used_capacity_after_second_deletion, new_msp_used_capacity - size);
+
+				// Assert that the payment stream rate decreased
+				let new_payment_stream_rate_after_second_deletion = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner_account_id).unwrap();
+				assert!(new_payment_stream_rate_after_second_deletion < new_payment_stream_rate);
+
+				// Assert that the MSP was added back to the privileged providers list since it no longer has any pending file deletion requests.
+				assert_eq!(MspsAmountOfPendingFileDeletionRequests::<Test>::get(&msp_id), 0);
+				assert!(pallet_payment_streams::PrivilegedProviders::<Test>::contains_key(&msp_id));
+
+				// Assert that the correct event was deposited
+				System::assert_last_event(
+					Event::ProofSubmittedForPendingFileDeletionRequest {
+						msp_id,
+						user: owner_account_id.clone(),
+						file_key: other_file_key,
+						file_size: size,
+						bucket_id,
+						proof_of_inclusion: true,
+					}
+						.into(),
+				);
+
+				// Assert that there is a queued priority challenge for file key in proofs dealer pallet
+				assert!(
+					pallet_proofs_dealer::PriorityChallengesQueue::<Test>::get()
+						.iter()
+						.any(|x| *x == CustomChallenge { key: other_file_key, should_remove_key: true }),
+				);
+
+				// Assert that the last pending file deletion request was removed from storage
+				assert_eq!(
+					file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id),
+					BoundedVec::<_, <Test as file_system::Config>::MaxUserPendingDeletionRequests>::default()
+				);
             });
         }
     }
@@ -9319,7 +9299,7 @@ mod compute_threshold {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9337,7 +9317,7 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let tick_number =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
@@ -9347,7 +9327,7 @@ mod compute_threshold {
         }
 
         #[test]
-        fn compute_threshold_to_succeed() {
+        fn compute_request_eligibility_criteria() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let user = RuntimeOrigin::signed(owner_account_id.clone());
@@ -9378,7 +9358,7 @@ mod compute_threshold {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9396,17 +9376,20 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let storage_request = file_system::StorageRequests::<Test>::get(file_key).unwrap();
 
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
-                        .unwrap();
+                let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                    storage_request.requested_at,
+                    <Test as crate::Config>::StandardReplicationTarget::get(),
+                )
+                .unwrap();
 
                 assert!(
-                    threshold_to_succeed > 0
-                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                    eligibility_value > 0
+                        && eligibility_value <= ThresholdType::<Test>::max_value()
                 );
                 assert!(slope > 0);
 
@@ -9421,13 +9404,16 @@ mod compute_threshold {
                 // Simulate there being many BSPs in the network with high reputation weight
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(u32::MAX);
 
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
-                        .unwrap();
+                let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                    storage_request.requested_at,
+                    <Test as crate::Config>::StandardReplicationTarget::get(),
+                )
+                .unwrap();
 
                 assert!(
-                    threshold_to_succeed > 0
-                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                    eligibility_value > 0
+                        && eligibility_value <= ThresholdType::<Test>::max_value()
                 );
                 assert!(slope > 0);
 
@@ -9454,21 +9440,24 @@ mod compute_threshold {
                     }
                 });
 
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, storage_request.requested_at)
-                        .unwrap();
+                let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                    storage_request.requested_at,
+                    <Test as crate::Config>::StandardReplicationTarget::get(),
+                )
+                .unwrap();
 
                 assert!(
-                    threshold_to_succeed > 0
-                        && threshold_to_succeed <= ThresholdType::<Test>::max_value()
+                    eligibility_value > 0
+                        && eligibility_value <= ThresholdType::<Test>::max_value()
                 );
                 assert!(slope > 0);
 
-                let tick_number =
+                let volunteer_tick =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since its reputation weight is so high.
-                assert_eq!(tick_number, <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick());
+                assert_eq!(volunteer_tick, <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick());
             });
         }
 
@@ -9496,6 +9485,7 @@ mod compute_threshold {
                 );
 
                 // Dispatch a signed extrinsic.
+				let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
                 assert_ok!(FileSystem::issue_storage_request(
                     user.clone(),
                     bucket_id,
@@ -9504,7 +9494,7 @@ mod compute_threshold {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9522,7 +9512,7 @@ mod compute_threshold {
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set reputation weight of BSP to max
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -9536,17 +9526,21 @@ mod compute_threshold {
                     }
                 });
 
-                let (threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, 0).unwrap();
+                let (eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                	requested_at,
+                    <Test as crate::Config>::StandardReplicationTarget::get(),
+                )
+                .unwrap();
 
-                assert_eq!(threshold_to_succeed, ThresholdType::<Test>::max_value());
+                assert_eq!(eligibility_value, ThresholdType::<Test>::max_value());
                 assert!(slope > 0);
 
-                let tick_number =
+                let volunteer_tick =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
 
                 // BSP should be able to volunteer immediately for the storage request since the reputation weight is so high.
-                assert_eq!(tick_number, <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick());
+                assert_eq!(volunteer_tick, <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick());
             });
         }
         #[test]
@@ -9557,14 +9551,15 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to zero
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(0);
 
                 let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-                let result = FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at);
+                let result =
+                    FileSystem::compute_request_eligibility_criteria(&bsp_id, requested_at, 1);
 
                 assert_noop!(result, Error::<Test>::NoGlobalReputationWeightSet);
             });
@@ -9578,7 +9573,7 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to 1
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
@@ -9597,8 +9592,12 @@ mod compute_threshold {
 
                 let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-                let (_threshold_to_succeed, slope) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_id, requested_at).unwrap();
+                let (_eligibility_value, slope) = FileSystem::compute_request_eligibility_criteria(
+                    &bsp_id,
+                    requested_at,
+                    <Test as crate::Config>::StandardReplicationTarget::get(),
+                )
+                .unwrap();
 
                 assert_eq!(slope, ThresholdType::<Test>::max_value());
             });
@@ -9612,22 +9611,27 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_bob_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Create another BSP with higher weight
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to the sum of the two BSPs reputation weights
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(10 + 1);
 
                 let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-                let (_threshold_to_succeed, slope_bsp_1) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
+                let (_eligibility_value, slope_bsp_1) =
+                    FileSystem::compute_request_eligibility_criteria(
+                        &bsp_bob_id,
+                        requested_at,
+                        <Test as crate::Config>::StandardReplicationTarget::get(),
+                    )
+                    .unwrap();
 
                 // Set BSP's reputation weight to 10 (10 times higher than the other BSP)
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(
@@ -9642,9 +9646,13 @@ mod compute_threshold {
                     },
                 );
 
-                let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
-                        .unwrap();
+                let (_eligibility_value, slope_bsp_2) =
+                    FileSystem::compute_request_eligibility_criteria(
+                        &bsp_charlie_id,
+                        requested_at,
+                        <Test as crate::Config>::StandardReplicationTarget::get(),
+                    )
+                    .unwrap();
 
                 // BSP with higher weight should have higher slope
                 assert!(slope_bsp_2 > slope_bsp_1);
@@ -9659,25 +9667,34 @@ mod compute_threshold {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_bob_id = Providers::get_provider_id(&bsp_account_id).unwrap();
                 // Create another BSP
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let storage_amount: StorageData<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to the sum of the weights of the BSPs
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1 + 1);
 
                 let requested_at = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 
-                let (_threshold_to_succeed, slope_bsp_1) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_bob_id, requested_at).unwrap();
+                let (_eligibility_value, slope_bsp_1) =
+                    FileSystem::compute_request_eligibility_criteria(
+                        &bsp_bob_id,
+                        requested_at,
+                        <Test as crate::Config>::StandardReplicationTarget::get(),
+                    )
+                    .unwrap();
 
-                let (_threshold_to_succeed, slope_bsp_2) =
-                    FileSystem::compute_threshold_to_succeed(&bsp_charlie_id, requested_at)
-                        .unwrap();
+                let (_eligibility_value, slope_bsp_2) =
+                    FileSystem::compute_request_eligibility_criteria(
+                        &bsp_charlie_id,
+                        requested_at,
+                        <Test as crate::Config>::StandardReplicationTarget::get(),
+                    )
+                    .unwrap();
 
                 // BSPs with equal weight should have equal slope
                 assert_eq!(slope_bsp_2, slope_bsp_1);
@@ -9712,6 +9729,9 @@ mod stop_storing_for_insolvent_user {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+				// Initially set Eve as solvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -9737,7 +9757,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9748,12 +9768,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -9798,7 +9818,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -9877,7 +9897,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the BSP has confirmed storing, we can simulate the user being insolvent
                 // and the BSP stopping storing for the user.
-                // Try to stop storing for the insolvent user.
+				// To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+				// value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_ok!(FileSystem::stop_storing_for_insolvent_user(
                     bsp_signed.clone(),
                     file_key,
@@ -9910,6 +9933,9 @@ mod stop_storing_for_insolvent_user {
                         .capacity_used,
                     0
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
             });
         }
 
@@ -9930,6 +9956,9 @@ mod stop_storing_for_insolvent_user {
                 let storage_amount: StorageData<Test> = 50;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+				// Initially set Eve as solvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
@@ -9956,7 +9985,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -9970,7 +9999,7 @@ mod stop_storing_for_insolvent_user {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10020,13 +10049,6 @@ mod stop_storing_for_insolvent_user {
                     }],
                 ));
 
-                // TODO: Fix the
-                // TODO: Uncommenting this would result in test failing with the error `UserWithoutFunds`
-                // pallet_payment_streams::UsersWithoutFunds::<Test>::insert(
-                //     owner_account_id.clone(),
-                //     System::block_number(),
-                // );
-
                 // Assert that the storage was updated
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
@@ -10039,7 +10061,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, true)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -10064,7 +10086,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the MSP has accepted storing, we can simulate the user being insolvent
                 // and the MSP stopping storing for the user.
-                // Try to stop storing for the insolvent user.
+				// To make the user insolvent, we release the read lock and wait until we can write
+				// the new value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_ok!(FileSystem::stop_storing_for_insolvent_user(
                     msp_signed.clone(),
                     file_key,
@@ -10101,6 +10126,9 @@ mod stop_storing_for_insolvent_user {
                         .capacity_used,
                     0
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
             });
         }
 
@@ -10146,7 +10174,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -10157,12 +10185,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10207,7 +10235,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -10342,11 +10370,17 @@ mod stop_storing_for_insolvent_user {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+                // Initially set Eve as solvent and get the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
 
-                // Try to stop storing for the insolvent user.
+                // Try to stop storing for the insolvent user. To mark Eve as insolvent, drop the read lock and wait to be
+                // able to write the new value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         bsp_signed.clone(),
@@ -10362,6 +10396,9 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::NotASp
                 );
+
+                // Drop the latest acquired read lock.
+                drop(eve_flag_read_lock);
             });
         }
 
@@ -10407,7 +10444,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -10418,12 +10455,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10468,7 +10505,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -10570,6 +10607,9 @@ mod stop_storing_for_insolvent_user {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
                 add_msp_to_provider_storage(&another_msp);
 
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
                     create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
@@ -10583,6 +10623,10 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 // Try to stop storing for the insolvent user using another MSP account.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         RuntimeOrigin::signed(another_msp.clone()),
@@ -10598,6 +10642,9 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::MspNotStoringBucket
                 );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
             });
         }
 
@@ -10617,6 +10664,9 @@ mod stop_storing_for_insolvent_user {
                 let storage_amount: StorageData<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+				// Initially unset Eve as insolvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let bucket_id =
@@ -10643,7 +10693,7 @@ mod stop_storing_for_insolvent_user {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    None
+                    ReplicationTarget::Standard
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -10654,12 +10704,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10704,7 +10754,7 @@ mod stop_storing_for_insolvent_user {
                         size,
                         msp: Some((msp_id, false)),
                         user_peer_ids: peer_ids.clone(),
-                        bsps_required: <Test as Config>::DefaultReplicationTarget::get(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
@@ -10775,6 +10825,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the BSP has confirmed storing, we can simulate the user being insolvent
                 // and the BSP trying to stop storing for that user with an incorrect inclusion proof.
+				// To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+				// value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         bsp_signed.clone(),
@@ -10790,6 +10844,9 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::ExpectedInclusionProof
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
             });
         }
     }
@@ -10969,6 +11026,8 @@ fn add_msp_to_provider_storage(
         owner_account: msp.clone(),
         payment_account: msp.clone(),
         sign_up_block: frame_system::Pallet::<Test>::block_number(),
+        amount_of_buckets: 0,
+        amount_of_value_props: 1,
     };
 
     pallet_storage_providers::MainStorageProviders::<Test>::insert(msp_hash, msp_info);
@@ -11005,7 +11064,7 @@ fn create_bucket(
         msp_id,
         name.clone(),
         false,
-        Some(value_prop_id)
+        value_prop_id
     ));
 
     // Assert bucket was created
@@ -11018,7 +11077,7 @@ fn create_bucket(
             private: false,
             read_access_group_id: None,
             size: 0,
-            value_prop_id: Some(value_prop_id),
+            value_prop_id,
         })
     );
 

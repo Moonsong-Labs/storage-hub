@@ -20,6 +20,7 @@ import type {
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
   PalletFileSystemFileKeyWithProof,
+  PalletFileSystemReplicationTarget,
   PalletFileSystemStorageRequestMspBucketResponse,
   PalletNftsAttributeNamespace,
   PalletNftsCancelAttributesApprovalWitness,
@@ -509,9 +510,9 @@ declare module "@polkadot/api-base/types/submittable" {
           mspId: H256 | string | Uint8Array,
           name: Bytes | string | Uint8Array,
           private: bool | boolean | Uint8Array,
-          valuePropId: Option<H256> | null | Uint8Array | H256 | string
+          valuePropId: H256 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, bool, Option<H256>]
+        [H256, Bytes, bool, H256]
       >;
       /**
        * Dispatchable extrinsic that allows a User to delete any of their buckets if it is currently empty.
@@ -554,9 +555,18 @@ declare module "@polkadot/api-base/types/submittable" {
           size: u64 | AnyNumber | Uint8Array,
           mspId: H256 | string | Uint8Array,
           peerIds: Vec<Bytes> | (Bytes | string | Uint8Array)[],
-          replicationTarget: Option<u32> | null | Uint8Array | u32 | AnyNumber
+          replicationTarget:
+            | PalletFileSystemReplicationTarget
+            | { Basic: any }
+            | { Standard: any }
+            | { HighSecurity: any }
+            | { SuperHighSecurity: any }
+            | { UltraHighSecurity: any }
+            | { Custom: any }
+            | string
+            | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, Bytes, H256, u64, H256, Vec<Bytes>, Option<u32>]
+        [H256, Bytes, H256, u64, H256, Vec<Bytes>, PalletFileSystemReplicationTarget]
       >;
       mspRespondMoveBucketRequest: AugmentedSubmittable<
         (
@@ -611,9 +621,10 @@ declare module "@polkadot/api-base/types/submittable" {
       requestMoveBucket: AugmentedSubmittable<
         (
           bucketId: H256 | string | Uint8Array,
-          newMspId: H256 | string | Uint8Array
+          newMspId: H256 | string | Uint8Array,
+          newValuePropId: H256 | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256]
+        [H256, H256, H256]
       >;
       /**
        * Revoke storage request
@@ -2944,6 +2955,9 @@ declare module "@polkadot/api-base/types/submittable" {
        * to automate the process.
        *
        * Emits `MspDeleted` or `BspDeleted` event when successful.
+       *
+       * This operation is free if successful to encourage the community to delete insolvent providers,
+       * debloating the state.
        **/
       deleteProvider: AugmentedSubmittable<
         (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
@@ -3044,7 +3058,10 @@ declare module "@polkadot/api-base/types/submittable" {
        *
        * Emits `MspSignOffSuccess` event when successful.
        **/
-      mspSignOff: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
+      mspSignOff: AugmentedSubmittable<
+        (mspId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
+        [H256]
+      >;
       /**
        * Dispatchable extrinsic that allows BSPs and MSPs to remove an existing multiaddress from their account.
        *
@@ -3144,7 +3161,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * A Storage Provider is _slashable_ iff it has failed to respond to challenges for providing proofs of storage.
        * In the context of the StorageHub protocol, the proofs-dealer pallet marks a Storage Provider as _slashable_ when it fails to respond to challenges.
        *
-       * This is a free operation.
+       * This is a free operation to incentivise the community to slash misbehaving providers.
        **/
       slash: AugmentedSubmittable<
         (providerId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
@@ -3165,8 +3182,6 @@ declare module "@polkadot/api-base/types/submittable" {
        * Dispatchable extrinsic to top-up the deposit of a Storage Provider.
        *
        * The dispatch origin for this call must be signed.
-       *
-       * This is a free transaction if the user successfully tops up their deposit.
        **/
       topUpDeposit: AugmentedSubmittable<() => SubmittableExtrinsic<ApiType>, []>;
       /**

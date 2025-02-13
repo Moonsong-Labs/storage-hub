@@ -99,6 +99,7 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+				ValuePropId = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::ValuePropId,
             > + shp_traits::MutateBucketsInterface<
                 AccountId = Self::AccountId,
                 BucketId = <Self::Providers as shp_traits::ReadBucketsInterface>::BucketId,
@@ -106,6 +107,7 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 ReadAccessGroupId = CollectionIdFor<Self>,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
+				ValuePropId = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::ValuePropId,
             > + shp_traits::SystemMetricsInterface<
                 ProvidedUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
             >;
@@ -191,6 +193,7 @@ pub mod pallet {
             + CheckedAdd
             + CheckedSub
             + PartialOrd
+            + Ord
             + Bounded
             + One
             + Zero;
@@ -248,6 +251,15 @@ pub mod pallet {
         #[pallet::constant]
         type BspStopStoringFilePenalty: Get<BalanceOf<Self>>;
 
+        /// The deposit paid by a user to create a new file deletion request.
+        ///
+        /// This deposit gets returned to the user when the MSP submits an inclusion proof of the file to
+        /// confirm its deletion, but gets sent to the MSP if the MSP did not actually had the file and
+        /// sends a non-inclusion proof instead. This is done to prevent users being able to spam MSPs
+        /// with malicious file deletion requests.
+        #[pallet::constant]
+        type FileDeletionRequestDeposit: Get<BalanceOf<Self>>;
+
         /// Maximum batch of storage requests that can be confirmed at once when calling `bsp_confirm_storing`.
         #[pallet::constant]
         type MaxBatchConfirmStorageRequests: Get<u32>;
@@ -276,10 +288,6 @@ pub mod pallet {
         #[pallet::constant]
         type StorageRequestTtl: Get<u32>;
 
-        /// Time-to-live for a pending file deletion request, after which a priority challenge is sent out to enforce the deletion.
-        #[pallet::constant]
-        type PendingFileDeletionRequestTtl: Get<u32>;
-
         /// Time-to-live for a move bucket request, after which the request is considered expired.
         #[pallet::constant]
         type MoveBucketRequestTtl: Get<u32>;
@@ -300,9 +308,50 @@ pub mod pallet {
         #[pallet::constant]
         type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
 
-        /// Default replication target
+        /// Basic security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~1% chance of their file
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
         #[pallet::constant]
-        type DefaultReplicationTarget: Get<ReplicationTargetType<Self>>;
+        type BasicReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// Standard security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~0.1% chance of their file
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
+        #[pallet::constant]
+        type StandardReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// High security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~0.01% chance of their file
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
+        #[pallet::constant]
+        type HighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// Super high security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~0.001% chance of their file
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
+        #[pallet::constant]
+        type SuperHighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// Ultra high security replication target for a new storage request.
+        ///
+        /// This should be high enough so that it gives users a ~0.0001% chance of their file
+        /// being controlled by a single malicious entity under certain network conditions.
+        ///
+        /// For more details, see [crate::types::ReplicationTarget].
+        #[pallet::constant]
+        type UltraHighSecurityReplicationTarget: Get<ReplicationTargetType<Self>>;
 
         /// Maximum replication target that a user can select for a new storage request.
         #[pallet::constant]
@@ -360,16 +409,6 @@ pub mod pallet {
         ValueQuery,
     >;
 
-    /// A map of ticks to expired file deletion requests.
-    #[pallet::storage]
-    pub type FileDeletionRequestExpirations<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        TickNumber<T>,
-        BoundedVec<FileDeletionRequestExpirationItem<T>, T::MaxExpiredItemsInTick>,
-        ValueQuery,
-    >;
-
     /// A map of ticks to expired move bucket requests.
     #[pallet::storage]
     pub type MoveBucketRequestExpirations<T: Config> = StorageMap<
@@ -385,13 +424,6 @@ pub mod pallet {
     /// This should always be greater or equal than current tick + [`Config::StorageRequestTtl`].
     #[pallet::storage]
     pub type NextAvailableStorageRequestExpirationTick<T: Config> =
-        StorageValue<_, TickNumber<T>, ValueQuery>;
-
-    /// A pointer to the earliest available tick to insert a new file deletion request expiration.
-    ///
-    /// This should always be greater or equal than current tick + [`Config::PendingFileDeletionRequestTtl`].
-    #[pallet::storage]
-    pub type NextAvailableFileDeletionRequestExpirationTick<T: Config> =
         StorageValue<_, TickNumber<T>, ValueQuery>;
 
     /// A pointer to the earliest available tick to insert a new move bucket request expiration.
@@ -411,7 +443,7 @@ pub mod pallet {
 
     /// Pending file deletion requests.
     ///
-    /// A mapping from a user Account ID to a list of pending file deletion requests, holding a tuple of the file key, file size and Bucket ID.
+    /// A mapping from a user Account ID to a list of pending file deletion requests (which have the file information).
     #[pallet::storage]
     pub type PendingFileDeletionRequests<T: Config> = StorageMap<
         _,
@@ -420,6 +452,15 @@ pub mod pallet {
         BoundedVec<PendingFileDeletionRequest<T>, T::MaxUserPendingDeletionRequests>,
         ValueQuery,
     >;
+
+    /// Mapping from MSPs to the amount of pending file deletion requests they have.
+    ///
+    /// This is used to keep track of the amount of pending file deletion requests each MSP has, so that MSPs are removed
+    /// from the privileged providers list if they have at least one, and are added back if they have none.
+    /// This is to ensure that MSPs are correctly incentivised to submit the required proofs for file deletions.
+    #[pallet::storage]
+    pub type MspsAmountOfPendingFileDeletionRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, ProviderIdFor<T>, u32, ValueQuery>;
 
     /// Pending file stop storing requests.
     ///
@@ -469,7 +510,7 @@ pub mod pallet {
             root: MerkleHash<T>,
             collection_id: Option<CollectionIdFor<T>>,
             private: bool,
-            value_prop_id: Option<ValuePropId<T>>,
+            value_prop_id: ValuePropId<T>,
         },
         /// Notifies that an empty bucket has been deleted.
         BucketDeleted {
@@ -482,6 +523,7 @@ pub mod pallet {
             who: T::AccountId,
             bucket_id: BucketIdFor<T>,
             new_msp_id: ProviderIdFor<T>,
+            new_value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a bucket's privacy has been updated.
         BucketPrivacyUpdated {
@@ -592,16 +634,18 @@ pub mod pallet {
         FileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
-            msp_id: Option<ProviderIdFor<T>>,
+            msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a proof has been submitted for a pending file deletion request.
         ProofSubmittedForPendingFileDeletionRequest {
-            msp_id: ProviderIdFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
+            file_size: StorageData<T>,
             bucket_id: BucketIdFor<T>,
+            msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
         },
         /// Notifies that a BSP's challenge cycle has been initialised, adding the first file
@@ -615,10 +659,11 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
         },
-        /// Notifies that a bucket has been moved to a new MSP.
+        /// Notifies that a bucket has been moved to a new MSP under a new value proposition.
         MoveBucketAccepted {
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
+            value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a bucket move request has been rejected by the MSP.
         MoveBucketRejected {
@@ -630,14 +675,6 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             owner: T::AccountId,
             bucket_id: BucketIdFor<T>,
-        },
-        /// Failed to decrease bucket size for expired file deletion request
-        FailedToDecreaseBucketSize {
-            user: T::AccountId,
-            bucket_id: BucketIdFor<T>,
-            file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
-            error: DispatchError,
         },
         /// Failed to get the MSP owner of the bucket for an expired file deletion request
         /// This is different from the bucket not having a MSP, which is allowed and won't error
@@ -737,6 +774,8 @@ pub mod pallet {
         BucketNotEmpty,
         /// Operation failed because the account is not the owner of the bucket.
         NotBucketOwner,
+        /// The selected value proposition is not available in the MSP.
+        ValuePropositionNotAvailable,
         /// Collection ID was not found.
         CollectionNotFound,
         /// Root of the provider not found.
@@ -763,6 +802,8 @@ pub mod pallet {
         FileSizeCannotBeZero,
         /// No global reputation weight set.
         NoGlobalReputationWeightSet,
+        /// No BSP reputation weight set.
+        NoBspReputationWeightSet,
         /// Maximum threshold cannot be zero.
         MaximumThresholdCannotBeZero,
         /// Tick range to maximum threshold cannot be zero.
@@ -773,6 +814,8 @@ pub mod pallet {
         MinWaitForStopStoringNotReached,
         /// Pending stop storing request already exists.
         PendingStopStoringRequestAlreadyExists,
+        /// Certain operations (such as issuing new storage requests) are not allowed when interacting with insolvent users.
+        OperationNotAllowedWithInsolventUser,
         /// A SP tried to stop storing files from a user that was supposedly insolvent, but the user is not insolvent.
         UserNotInsolvent,
         /// The MSP is trying to confirm to store a file from a storage request is not the one selected to store it.
@@ -811,6 +854,8 @@ pub mod pallet {
         FailedToQueryEarliestFileVolunteerTick,
         /// Failed to get owner account of ID of provider
         FailedToGetOwnerAccount,
+        /// Failed to get the payment account of the provider.
+        FailedToGetPaymentAccount,
         /// No file keys to confirm storing
         NoFileKeysToConfirm,
         /// Root was not updated after applying delta
@@ -831,6 +876,8 @@ pub mod pallet {
     pub enum HoldReason {
         /// Deposit that a user has to pay to create a new storage request
         StorageRequestCreationHold,
+        /// Deposit that a user has to pay to create a new file deletion request
+        FileDeletionRequestHold,
         // Only for testing, another unrelated hold reason
         #[cfg(test)]
         AnotherUnrelatedHold,
@@ -845,7 +892,7 @@ pub mod pallet {
             msp_id: ProviderIdFor<T>,
             name: BucketNameFor<T>,
             private: bool,
-            value_prop_id: Option<ValuePropId<T>>,
+            value_prop_id: ValuePropId<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
@@ -872,15 +919,17 @@ pub mod pallet {
             origin: OriginFor<T>,
             bucket_id: BucketIdFor<T>,
             new_msp_id: ProviderIdFor<T>,
+            new_value_prop_id: ValuePropId<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            Self::do_request_move_bucket(who.clone(), bucket_id, new_msp_id)?;
+            Self::do_request_move_bucket(who.clone(), bucket_id, new_msp_id, new_value_prop_id)?;
 
             Self::deposit_event(Event::MoveBucketRequested {
                 who,
                 bucket_id,
                 new_msp_id,
+                new_value_prop_id,
             });
 
             Ok(())
@@ -895,12 +944,16 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let msp_id =
+            let (msp_id, value_prop_id) =
                 Self::do_msp_respond_move_bucket_request(who.clone(), bucket_id, response.clone())?;
 
             match response {
                 BucketMoveRequestResponse::Accepted => {
-                    Self::deposit_event(Event::MoveBucketAccepted { bucket_id, msp_id });
+                    Self::deposit_event(Event::MoveBucketAccepted {
+                        bucket_id,
+                        msp_id,
+                        value_prop_id,
+                    });
                 }
                 BucketMoveRequestResponse::Rejected => {
                     Self::deposit_event(Event::MoveBucketRejected { bucket_id, msp_id });
@@ -990,7 +1043,7 @@ pub mod pallet {
             size: StorageData<T>,
             msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
-            replication_target: Option<ReplicationTargetType<T>>,
+            replication_target: ReplicationTarget<T>,
         ) -> DispatchResult {
             // Check that the extrinsic was signed and get the signer
             let who = ensure_signed(origin)?;
@@ -1287,6 +1340,7 @@ pub mod pallet {
             Self::deposit_event(Event::FileDeletionRequest {
                 user: who,
                 file_key,
+                file_size: size,
                 bucket_id,
                 msp_id,
                 proof_of_inclusion,
@@ -1317,10 +1371,11 @@ pub mod pallet {
             )?;
 
             Self::deposit_event(Event::ProofSubmittedForPendingFileDeletionRequest {
-                msp_id,
                 user,
                 file_key,
+                file_size,
                 bucket_id,
+                msp_id,
                 proof_of_inclusion,
             });
 
@@ -1350,7 +1405,13 @@ pub mod pallet {
         /// of crate::construct_runtime's expansion.
         /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
-            let default_replication_target = T::DefaultReplicationTarget::get();
+            let low_security_replication_target = T::BasicReplicationTarget::get();
+            let medium_security_replication_target = T::StandardReplicationTarget::get();
+            let high_security_replication_target = T::HighSecurityReplicationTarget::get();
+            let super_high_security_replication_target =
+                T::SuperHighSecurityReplicationTarget::get();
+            let ultra_high_security_replication_target =
+                T::UltraHighSecurityReplicationTarget::get();
             let max_replication_target = T::MaxReplicationTarget::get();
             let storage_request_ttl = T::StorageRequestTtl::get();
             let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
@@ -1359,13 +1420,28 @@ pub mod pallet {
                 <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::get_checkpoint_challenge_period();
 
             assert!(
-                default_replication_target > T::ReplicationTargetType::zero(),
-                "Default replication target cannot be zero."
+                low_security_replication_target > T::ReplicationTargetType::zero(),
+                "Basic security replication target cannot be zero."
             );
-
             assert!(
-                max_replication_target >= default_replication_target,
-                "Max replication target cannot be smaller than default replication target."
+				medium_security_replication_target >= low_security_replication_target,
+				"Standard security replication target cannot be smaller than basic security replication target."
+			);
+            assert!(
+				high_security_replication_target >= medium_security_replication_target,
+				"High security replication target cannot be smaller than standard security replication target."
+			);
+            assert!(
+				super_high_security_replication_target >= high_security_replication_target,
+				"Super high security replication target cannot be smaller than high security replication target."
+			);
+            assert!(
+				ultra_high_security_replication_target >= super_high_security_replication_target,
+				"Ultra high security replication target cannot be smaller than super high security replication target."
+			);
+            assert!(
+                max_replication_target >= ultra_high_security_replication_target,
+                "Max replication target cannot be smaller than the most secure replication target."
             );
 
             assert!(tick_range_to_max_threshold < storage_request_ttl.into(), "Storage request TTL must be greater than the tick range to maximum threshold so storage requests get to their maximum threshold before expiring.");

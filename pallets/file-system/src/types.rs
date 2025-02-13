@@ -14,8 +14,7 @@ use sp_runtime::{traits::CheckedAdd, DispatchError};
 use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
-    Config, Error, FileDeletionRequestExpirations, MoveBucketRequestExpirations,
-    NextAvailableFileDeletionRequestExpirationTick, NextAvailableMoveBucketRequestExpirationTick,
+    Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationTick,
     NextAvailableStorageRequestExpirationTick, StorageRequestExpirations,
 };
 
@@ -94,6 +93,65 @@ impl<T: Config> StorageRequestMetadata<T> {
             location: self.location.to_vec(),
             file_size: self.size.into() as u64,
             fingerprint: self.fingerprint.as_ref().into(),
+        }
+    }
+}
+
+/// The enum which holds different options for the replication target of a storage request.
+///
+/// When a user wants to issue a storage request, it can select between any of these options as
+/// the replication target for it. There's a tradeoff between the security level of the data and
+/// both the time it takes for the storage request to be fulfilled and the price paid per byte
+/// during the file's lifetime in StorageHub.
+/// Each option has a different security level, which represents the resiliency that the data will
+/// have against a malicious actor controlling 1/3 of the total BSPs of the network.
+/// All the following percentages assume that all the BSPs of the network have the same reputation
+/// weight, which on average is a realistic scenario since both good and bad BSPs are expected to
+/// have low and high reputations.
+///
+/// The options are:
+/// - Basic: the data will be stored by enough BSPs so the probability that a malicious
+/// actor can hold the file hostage by controlling all its BSPs is ~1%.
+/// - Standard: the data will be stored by enough BSPs so the probability that a malicious
+/// actor can hold the file hostage by controlling all its BSPs is ~0.1%.
+/// - HighSecurity: the data will be stored by enough BSPs so the probability that a malicious
+/// actor can hold the file hostage by controlling all its BSPs is ~0.01%.
+/// - SuperHighSecurity: the data will be stored by enough BSPs so the probability that a malicious
+/// actor can hold the file hostage by controlling all its BSPs is ~0.001%.
+/// - UltraHighSecurity: the data will be stored by enough BSPs so the probability that a malicious
+/// actor can hold the file hostage by controlling all its BSPs is ~0.0001%.
+/// - Custom: the user can select the number of BSPs that will store the data. This allows the user to
+/// select the security level of the data manually.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub enum ReplicationTarget<T: Config> {
+    Basic,
+    Standard,
+    HighSecurity,
+    SuperHighSecurity,
+    UltraHighSecurity,
+    Custom(ReplicationTargetType<T>),
+}
+
+impl<T: Config> Debug for ReplicationTarget<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            ReplicationTarget::Basic => write!(f, "ReplicationTarget::Basic"),
+            ReplicationTarget::Standard => write!(f, "ReplicationTarget::Standard"),
+            ReplicationTarget::HighSecurity => write!(f, "ReplicationTarget::HighSecurity"),
+            ReplicationTarget::SuperHighSecurity => {
+                write!(f, "ReplicationTarget::SuperHighSecurity")
+            }
+            ReplicationTarget::UltraHighSecurity => {
+                write!(f, "ReplicationTarget::UltraHighSecurity")
+            }
+            ReplicationTarget::Custom(target) => {
+                write!(
+                    f,
+                    "ReplicationTarget::Custom({})",
+                    <<T as crate::Config>::ReplicationTargetType as Into<u64>>::into(*target)
+                )
+            }
         }
     }
 }
@@ -218,6 +276,7 @@ pub struct PendingFileDeletionRequest<T: Config> {
     pub file_key: MerkleHash<T>,
     pub bucket_id: BucketIdFor<T>,
     pub file_size: StorageData<T>,
+    pub deposit_paid_for_creation: BalanceOf<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -232,7 +291,6 @@ pub struct PendingStopStoringRequest<T: Config> {
 #[scale_info(skip_type_params(T))]
 pub enum ExpirationItem<T: Config> {
     StorageRequest(MerkleHash<T>),
-    PendingFileDeletionRequests(PendingFileDeletionRequest<T>),
     MoveBucketRequest((ProviderIdFor<T>, BucketIdFor<T>)),
 }
 
@@ -240,9 +298,6 @@ impl<T: Config> ExpirationItem<T> {
     pub(crate) fn get_ttl(&self) -> TickNumber<T> {
         match self {
             ExpirationItem::StorageRequest(_) => T::StorageRequestTtl::get().into(),
-            ExpirationItem::PendingFileDeletionRequests(_) => {
-                T::PendingFileDeletionRequestTtl::get().into()
-            }
             ExpirationItem::MoveBucketRequest(_) => T::MoveBucketRequestTtl::get().into(),
         }
     }
@@ -255,9 +310,6 @@ impl<T: Config> ExpirationItem<T> {
         let next_available_tick = match self {
             ExpirationItem::StorageRequest(_) => {
                 NextAvailableStorageRequestExpirationTick::<T>::get()
-            }
-            ExpirationItem::PendingFileDeletionRequests(_) => {
-                NextAvailableFileDeletionRequestExpirationTick::<T>::get()
             }
             ExpirationItem::MoveBucketRequest(_) => {
                 NextAvailableMoveBucketRequestExpirationTick::<T>::get()
@@ -276,12 +328,6 @@ impl<T: Config> ExpirationItem<T> {
             ExpirationItem::StorageRequest(storage_request) => {
                 <StorageRequestExpirations<T>>::try_append(next_expiration_tick, *storage_request)
             }
-            ExpirationItem::PendingFileDeletionRequests(pending_file_deletion_requests) => {
-                <FileDeletionRequestExpirations<T>>::try_append(
-                    next_expiration_tick,
-                    pending_file_deletion_requests.clone(),
-                )
-            }
             ExpirationItem::MoveBucketRequest(msp_bucket_id) => {
                 <MoveBucketRequestExpirations<T>>::try_append(next_expiration_tick, *msp_bucket_id)
             }
@@ -298,9 +344,6 @@ impl<T: Config> ExpirationItem<T> {
         match self {
             ExpirationItem::StorageRequest(_) => {
                 NextAvailableStorageRequestExpirationTick::<T>::set(next_expiration_tick);
-            }
-            ExpirationItem::PendingFileDeletionRequests(_) => {
-                NextAvailableFileDeletionRequestExpirationTick::<T>::set(next_expiration_tick);
             }
             ExpirationItem::MoveBucketRequest(_) => {
                 NextAvailableMoveBucketRequestExpirationTick::<T>::set(next_expiration_tick);
@@ -322,6 +365,8 @@ pub enum BucketMoveRequestResponse {
 pub struct MoveBucketRequestMetadata<T: Config> {
     /// The user who requested to move the bucket.
     pub requester: T::AccountId,
+    /// The new value proposition that this bucket will have after it has been moved.
+    pub new_value_prop_id: ValuePropId<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
@@ -378,9 +423,6 @@ pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
 
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;
-
-/// Alias for the `PendingFileDeletionRequestTtl` type used in the FileSystem pallet.
-pub type PendingFileDeletionRequestTtl<T> = <T as crate::Config>::PendingFileDeletionRequestTtl;
 
 /// Byte array representing the file path.
 pub type FileLocation<T> = BoundedVec<u8, MaxFilePathSize<T>>;

@@ -466,7 +466,7 @@ pub mod pallet {
             Self::do_create_fixed_rate_payment_stream(&provider_id, &user_account, rate)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::FixedRatePaymentStreamCreated {
+            Self::deposit_event(Event::FixedRatePaymentStreamCreated {
                 user_account,
                 provider_id: provider_id,
                 rate,
@@ -507,7 +507,7 @@ pub mod pallet {
             Self::do_update_fixed_rate_payment_stream(&provider_id, &user_account, new_rate)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::FixedRatePaymentStreamUpdated {
+            Self::deposit_event(Event::FixedRatePaymentStreamUpdated {
                 user_account,
                 provider_id: provider_id,
                 new_rate,
@@ -546,7 +546,7 @@ pub mod pallet {
             Self::do_delete_fixed_rate_payment_stream(&provider_id, &user_account)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::FixedRatePaymentStreamDeleted {
+            Self::deposit_event(Event::FixedRatePaymentStreamDeleted {
                 user_account,
                 provider_id: provider_id,
             });
@@ -592,7 +592,7 @@ pub mod pallet {
             )?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamCreated {
+            Self::deposit_event(Event::DynamicRatePaymentStreamCreated {
                 user_account,
                 provider_id: provider_id,
                 amount_provided,
@@ -637,7 +637,7 @@ pub mod pallet {
             )?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamUpdated {
+            Self::deposit_event(Event::DynamicRatePaymentStreamUpdated {
                 user_account,
                 provider_id,
                 new_amount_provided,
@@ -676,7 +676,7 @@ pub mod pallet {
             Self::do_delete_dynamic_rate_payment_stream(&provider_id, &user_account)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::DynamicRatePaymentStreamDeleted {
+            Self::deposit_event(Event::DynamicRatePaymentStreamDeleted {
                 user_account,
                 provider_id,
             });
@@ -724,7 +724,7 @@ pub mod pallet {
 
             // Get the Provider ID of the signer
             let provider_id =
-                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(provider_account)
+                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(&provider_account)
                     .ok_or(Error::<T>::NotAProvider)?;
 
             // Execute checks and logic, update storage
@@ -735,7 +735,7 @@ pub mod pallet {
             let charged_at_tick = Self::get_current_tick();
 
             // Emit the corresponding event (we always emit it even if the charged amount was 0)
-            Self::deposit_event(Event::<T>::PaymentStreamCharged {
+            Self::deposit_event(Event::PaymentStreamCharged {
                 user_account,
                 provider_id: provider_id,
                 amount: amount_charged,
@@ -788,7 +788,7 @@ pub mod pallet {
 
             // Get the Provider ID of the signer
             let provider_id =
-                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(provider_account)
+                <T::ProvidersPallet as ReadProvidersInterface>::get_provider_id(&provider_account)
                     .ok_or(Error::<T>::NotAProvider)?;
 
             // Execute checks and logic, update storage
@@ -798,7 +798,7 @@ pub mod pallet {
             let charged_at_tick = Self::get_current_tick();
 
             // Emit the corresponding event (we always emit it even if the charged amount was 0)
-            Self::deposit_event(Event::<T>::UsersCharged {
+            Self::deposit_event(Event::UsersCharged {
                 user_accounts,
                 provider_id,
                 charged_at_tick,
@@ -843,9 +843,9 @@ pub mod pallet {
 
             // Emit the corresponding event
             if fully_paid {
-                Self::deposit_event(Event::<T>::UserPaidAllDebts { who: user_account });
+                Self::deposit_event(Event::UserPaidAllDebts { who: user_account });
             } else {
-                Self::deposit_event(Event::<T>::UserPaidSomeDebts { who: user_account });
+                Self::deposit_event(Event::UserPaidSomeDebts { who: user_account });
             }
 
             // Return a successful DispatchResultWithPostInfo
@@ -876,7 +876,7 @@ pub mod pallet {
             Self::do_clear_insolvent_flag(&user_account)?;
 
             // Emit the corresponding event
-            Self::deposit_event(Event::<T>::UserSolvent { who: user_account });
+            Self::deposit_event(Event::UserSolvent { who: user_account });
 
             // Return a successful DispatchResultWithPostInfo
             Ok(().into())
