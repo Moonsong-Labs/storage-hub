@@ -605,7 +605,7 @@ impl crate::Config for Test {
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
-    type ReplicationTargetType = u32;
+    type ReplicationTargetType = ReplicationTargetType;
     type ThresholdType = ThresholdType;
     type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
