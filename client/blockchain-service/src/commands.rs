@@ -27,15 +27,13 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
-use crate::{transaction::WatchTransactionError, types::SendExtrinsicOptions};
-
-use super::{
+use crate::{
     handler::BlockchainService,
-    transaction::SubmittedTransaction,
+    transaction::{SubmittedTransaction, WatchTransactionError},
     types::{
         ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
-        RespondStorageRequest, RetryStrategy, StopStoringForInsolventUserRequest,
-        SubmitProofRequest,
+        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions,
+        StopStoringForInsolventUserRequest, SubmitProofRequest,
     },
 };
 
