@@ -45,7 +45,6 @@ use shc_common::{
     },
 };
 use shp_file_metadata::FileKey;
-use std::collections::HashMap;
 use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
