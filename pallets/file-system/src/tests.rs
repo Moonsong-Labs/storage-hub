@@ -10,7 +10,7 @@ use crate::{
     },
     weights::WeightInfo,
     Config, Error, Event, MspsAmountOfPendingFileDeletionRequests,
-    NextAvailableStorageRequestExpirationTick, PendingBucketsToMove, PendingMoveBucketRequests,
+    NextAvailableStorageRequestExpirationTick, PendingMoveBucketRequests,
     PendingStopStoringRequests, StorageRequestExpirations, StorageRequests,
 };
 use frame_support::{
@@ -977,17 +977,15 @@ mod request_move_bucket {
                     dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
+                        new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
                 );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -1138,17 +1136,15 @@ mod request_move_bucket {
                     dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
+                        new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
                 );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -1188,11 +1184,7 @@ mod request_move_bucket {
                 );
 
                 // Check pending bucket storages are cleared
-                assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
-                    &msp_dave_id,
-                    bucket_id
-                ));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(bucket_id));
             });
         }
 
@@ -1226,17 +1218,15 @@ mod request_move_bucket {
                     dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
+                        new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
                 );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -1272,11 +1262,7 @@ mod request_move_bucket {
                 ));
 
                 // Check pending bucket storages are cleared
-                assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
-                    &msp_dave_id,
-                    bucket_id
-                ));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(bucket_id));
             });
         }
 
@@ -1309,17 +1295,15 @@ mod request_move_bucket {
 					dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
-						new_value_prop_id: dave_value_prop_id
+                        new_msp_id: msp_dave_id,
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -1340,11 +1324,7 @@ mod request_move_bucket {
                 // Move tick number to expiration
                 roll_to(expiration);
 
-                assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
-                    &msp_dave_id,
-                    bucket_id
-                ));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(bucket_id));
             });
         }
     }
@@ -1868,12 +1848,12 @@ mod request_storage {
                     dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
+                        new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
                 );

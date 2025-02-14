@@ -119,13 +119,15 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the PendingMoveBucketRequests storage has the created request
-        let pending_move_bucket_request =
-            PendingMoveBucketRequests::<T>::get(&new_msp_id, &bucket_id);
+        let pending_move_bucket_request = PendingMoveBucketRequests::<T>::get(&bucket_id);
         assert!(pending_move_bucket_request.is_some());
-        assert_eq!(pending_move_bucket_request.unwrap().requester, user.clone());
-
-        // Ensure the PendingBucketsToMove storage has the bucket
-        assert!(PendingBucketsToMove::<T>::contains_key(&bucket_id));
+        let pending_move_bucket_request = pending_move_bucket_request.unwrap();
+        assert_eq!(pending_move_bucket_request.requester, user.clone());
+        assert_eq!(pending_move_bucket_request.new_msp_id, new_msp_id);
+        assert_eq!(
+            pending_move_bucket_request.new_value_prop_id,
+            new_value_prop_id
+        );
 
         // Ensure the expected event was emitted.
         let expected_event =
@@ -2623,13 +2625,12 @@ mod benchmarks {
             value_prop_id,
         )?;
 
-        // Add the bucket to the PendingBucketsToMove storage and to the PendingMoveBucketRequests storage
-        PendingBucketsToMove::<T>::insert(&bucket_id, ());
+        // Add the bucket to the PendingMoveBucketRequests storage
         PendingMoveBucketRequests::<T>::insert(
-            &msp_id,
             &bucket_id,
             MoveBucketRequestMetadata {
                 requester: user.clone(),
+                new_msp_id: msp_id,
                 new_value_prop_id: value_prop_id,
             },
         );
@@ -2637,29 +2638,19 @@ mod benchmarks {
         /*********** Call the function to benchmark: ***********/
         #[block]
         {
-            Pallet::<T>::process_expired_move_bucket_request(
-                msp_id,
-                bucket_id,
-                &mut WeightMeter::new(),
-            );
+            Pallet::<T>::process_expired_move_bucket_request(bucket_id, &mut WeightMeter::new());
         }
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketRequestExpired {
-                msp_id,
                 bucket_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
-        // Ensure the bucket was removed from the PendingBucketsToMove storage
-        assert!(!PendingBucketsToMove::<T>::contains_key(&bucket_id));
-
         // Ensure the bucket was removed from the PendingMoveBucketRequests storage
-        assert!(!PendingMoveBucketRequests::<T>::contains_key(
-            &msp_id, &bucket_id
-        ));
+        assert!(!PendingMoveBucketRequests::<T>::contains_key(&bucket_id));
 
         Ok(())
     }

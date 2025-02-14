@@ -10,7 +10,7 @@ use shc_blockchain_service::{
         AcceptedBspVolunteer, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
         FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
         LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForNewMsp, MultipleNewChallengeSeeds,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
         NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
@@ -260,7 +260,7 @@ where
         let msp_move_bucket_task = MspMoveBucketTask::new(self.clone());
         // Subscribing to MoveBucketRequestedForNewMsp event from the FileTransferService.
         let move_bucket_requested_for_new_msp_event_bus_listener: EventBusListener<
-            MoveBucketRequestedForNewMsp,
+            MoveBucketRequestedForMsp,
             _,
         > = msp_move_bucket_task
             .clone()

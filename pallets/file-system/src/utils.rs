@@ -49,8 +49,8 @@ use crate::{
     },
     weights::WeightInfo,
     BucketsWithStorageRequests, Error, Event, HoldReason, MspsAmountOfPendingFileDeletionRequests,
-    Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+    Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
+    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -493,18 +493,21 @@ where
             Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
+        // Get the current MSP that is storing the bucket, if any.
+        let maybe_previous_msp_id =
+            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
+
         // Check if the bucket is already stored by the new MSP.
-        ensure!(
-            !<T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
-                &new_msp_id,
-                &bucket_id
-            ),
-            Error::<T>::MspAlreadyStoringBucket
-        );
+        if let Some(previous_msp_id) = maybe_previous_msp_id {
+            ensure!(
+                previous_msp_id != new_msp_id,
+                Error::<T>::MspAlreadyStoringBucket
+            );
+        }
 
         // Check that the bucket is not being moved.
         ensure!(
-            !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            !<PendingMoveBucketRequests<T>>::contains_key(&bucket_id),
             Error::<T>::BucketIsBeingMoved
         );
 
@@ -519,16 +522,15 @@ where
 
         // Register the move bucket request.
         <PendingMoveBucketRequests<T>>::insert(
-            &new_msp_id,
             bucket_id,
             MoveBucketRequestMetadata {
                 requester: sender.clone(),
+                new_msp_id,
                 new_value_prop_id,
             },
         );
-        <PendingBucketsToMove<T>>::insert(&bucket_id, ());
 
-        let expiration_item = ExpirationItem::MoveBucketRequest((new_msp_id, bucket_id));
+        let expiration_item = ExpirationItem::MoveBucketRequest(bucket_id);
         Self::enqueue_expiration_item(expiration_item)?;
 
         Ok(())
@@ -556,9 +558,15 @@ where
 
         // Check if the move bucket request exists for the MSP and bucket, removing it from storage if it does.
         let move_bucket_request_metadata = expect_or_err!(
-            <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id),
+            <PendingMoveBucketRequests<T>>::take(bucket_id),
             "Move bucket request should exist",
             Error::<T>::MoveBucketRequestNotFound
+        );
+
+        // Ensure the new MSP that the user selected to store the bucket matches the one responding the request.
+        ensure!(
+            msp_id == move_bucket_request_metadata.new_msp_id,
+            Error::<T>::NotSelectedMsp
         );
 
         // If the new MSP accepted storing the bucket...
@@ -567,13 +575,13 @@ where
             let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
 
             // Get the previous MSP that was storing the bucket, if any.
-            let previous_msp_id =
+            let maybe_previous_msp_id =
                 <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
             // If another MSP was previously storing the bucket, update its used capacity to reflect the removal of the bucket.
-            if let Some(msp_id) = previous_msp_id {
+            if let Some(previous_msp_id) = maybe_previous_msp_id {
                 <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-                    &msp_id,
+                    &previous_msp_id,
                     bucket_size,
                 )?;
             }
@@ -598,9 +606,6 @@ where
                 bucket_size,
             )?;
         }
-
-        // Remove the bucket from the pending buckets to move.
-        <PendingBucketsToMove<T>>::remove(&bucket_id);
 
         Ok((msp_id, move_bucket_request_metadata.new_value_prop_id))
     }
@@ -784,7 +789,7 @@ where
         // Check that the bucket is not being moved.
         // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
         ensure!(
-            !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            !<PendingMoveBucketRequests<T>>::contains_key(&bucket_id),
             Error::<T>::BucketIsBeingMoved
         );
 
@@ -2690,11 +2695,11 @@ mod hooks {
     use crate::{
         pallet,
         types::{MerkleHash, RejectedStorageRequestReason, ReplicationTargetType, TickNumber},
-        utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
+        utils::{BucketIdFor, EitherAccountIdOrMspId},
         weights::WeightInfo,
         BucketsWithStorageRequests, Event, HoldReason, MoveBucketRequestExpirations,
-        NextStartingTickToCleanUp, Pallet, PendingBucketsToMove, PendingMoveBucketRequests,
-        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        NextStartingTickToCleanUp, Pallet, PendingMoveBucketRequests, StorageRequestBsps,
+        StorageRequestExpirations, StorageRequests,
     };
     use frame_support::traits::{fungible::MutateHold, tokens::Precision};
     use sp_runtime::{
@@ -2833,17 +2838,17 @@ mod hooks {
                     T::WeightInfo::process_expired_move_bucket_request();
 
                 // While there's enough weight to process an expired move bucket request AND re-insert the remaining move bucket requests to storage, continue.
-                while let Some((msp_id, bucket_id)) = expired_move_bucket_requests.pop() {
+                while let Some(bucket_id) = expired_move_bucket_requests.pop() {
                     if meter.can_consume(
                         required_weight_processing_expired_move_bucket_request
                             .saturating_add(db_weight.writes(1)),
                     ) {
                         // Process an expired move bucket request. This internally consumes the used weight from the meter.
-                        Self::process_expired_move_bucket_request(msp_id, bucket_id, meter);
+                        Self::process_expired_move_bucket_request(bucket_id, meter);
                     } else {
                         // Push back the expired move bucket request into the move bucket requests queue to be able to re-insert it.
                         // This should never fail since this element was just taken from the bounded vector, so there must be space for it.
-                        let _ = expired_move_bucket_requests.try_push((msp_id, bucket_id));
+                        let _ = expired_move_bucket_requests.try_push(bucket_id);
                         ran_out_of_weight = true;
                         break;
                     }
@@ -2981,16 +2986,14 @@ mod hooks {
         }
 
         pub(crate) fn process_expired_move_bucket_request(
-            msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
             meter: &mut WeightMeter,
         ) {
             // Remove from storage the pending move bucket request.
-            PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
-            PendingBucketsToMove::<T>::remove(&bucket_id);
+            PendingMoveBucketRequests::<T>::remove(&bucket_id);
 
             // Deposit the event of the expired move bucket request.
-            Self::deposit_event(Event::MoveBucketRequestExpired { msp_id, bucket_id });
+            Self::deposit_event(Event::MoveBucketRequestExpired { bucket_id });
 
             // Consume the weight used by this function.
             meter.consume(T::WeightInfo::process_expired_move_bucket_request());
