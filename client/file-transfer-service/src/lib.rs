@@ -8,7 +8,9 @@ use sc_network::request_responses::IncomingRequest;
 use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
 use sc_service::Configuration;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::types::{BlockHash, OpaqueBlock, ParachainClient};
+use shc_common::types::{
+    BlockHash, OpaqueBlock, ParachainClient, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+};
 
 pub use self::handler::FileTransferService;
 
@@ -21,16 +23,24 @@ pub mod handler;
 /// For defining the provider requests protocol schema.
 pub mod schema;
 
-// TODO determine ideal max request/response sizes (we could technically specify here usize::MAX)
-/// Max size of request packet. (1GB)
-const MAX_REQUEST_PACKET_SIZE_BYTES: u64 = 1 * 1024 * 1024 * 1024;
+/// Maximum memory usage target for queued requests (8GB)
+const MAX_QUEUED_REQUESTS_MEMORY_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
-// TODO determine ideal max request/response sizes (we could technically specify here usize::MAX)
-/// Max size of response packet. (1GB)
-const MAX_RESPONSE_PACKET_SIZE_BYTES: u64 = 1 * 1024 * 1024 * 1024;
+/// Max size of request packet. Calculated based on batch chunk size plus overhead
+const MAX_REQUEST_PACKET_SIZE_BYTES: u64 = {
+    // Add 1KB for message overhead/metadata
+    let overhead = 1024;
+    (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64) + overhead
+};
 
-/// Max number of queued requests.
-const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = 500;
+/// Max size of response packet. Using same size as request for simplicity
+const MAX_RESPONSE_PACKET_SIZE_BYTES: u64 = MAX_REQUEST_PACKET_SIZE_BYTES;
+
+/// Max number of queued requests. Calculated to limit total memory usage
+const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = {
+    let max_requests = MAX_QUEUED_REQUESTS_MEMORY_BYTES / MAX_REQUEST_PACKET_SIZE_BYTES;
+    max_requests as usize
+};
 
 /// Updates the network configuration with the file transfer request response protocol.
 /// Returns the protocol name and the channel receiver to be used for reading requests.
