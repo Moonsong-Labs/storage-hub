@@ -42,15 +42,14 @@ message RemoteUploadDataResponse {
 message RemoteDownloadDataRequest {
 	// Data locations to read from.
 	bytes file_key = 1;
-	// File chunk ID to be sent.
-	uint64 file_chunk_id = 2;
+	// Replace single chunk id with batched chunk ids
+	repeated uint64 file_chunk_ids = 2;
 	// Bucket ID is only required to pass the allow list check for Bucket operations.
 	optional bytes bucket_id = 3;
 }
 
 // Remote data download response.
 message RemoteDownloadDataResponse {
-	// Read data stored in provider. No data means that the provider
-	// couldn't retrieve the data at the requested locations.
+	// Return a file key proof that may include multiple chunk proofs in one proof
 	bytes file_key_proof = 1;
 }

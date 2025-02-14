@@ -31,7 +31,7 @@ impl EventBusMessage for RemoteUploadRequest {}
 #[derive(Clone)]
 pub struct RemoteDownloadRequest {
     pub file_key: FileKey,
-    pub chunk_id: ChunkId,
+    pub chunk_ids: Vec<ChunkId>,
     pub bucket_id: Option<BucketId>,
     pub request_id: DownloadRequestId,
 }

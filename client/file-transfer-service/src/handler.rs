@@ -231,19 +231,26 @@ impl Actor for FileTransferService {
                 FileTransferServiceCommand::DownloadRequest {
                     peer_id,
                     file_key,
-                    chunk_id,
+                    chunk_ids,
                     bucket_id,
                     callback,
                 } => {
+                    const MAX_BATCH_CHUNK_IDS: usize = 100;
+                    if chunk_ids.len() > MAX_BATCH_CHUNK_IDS {
+                        warn!(target: LOG_TARGET, "Requested batch size {} exceeds maximum allowed {}.", chunk_ids.len(), MAX_BATCH_CHUNK_IDS);
+                    }
+
+                    let chunk_ids_u64: Vec<u64> =
+                        chunk_ids.iter().map(|chunk_id| chunk_id.as_u64()).collect();
+
                     let request = schema::v1::provider::request::Request::RemoteDownloadDataRequest(
                         schema::v1::provider::RemoteDownloadDataRequest {
                             file_key: file_key.encode(),
-                            file_chunk_id: chunk_id.as_u64(),
+                            file_chunk_ids: chunk_ids_u64,
                             bucket_id: bucket_id.map(|id| id.encode()),
                         },
                     );
 
-                    // Serialize the request
                     let mut request_data = Vec::new();
                     request.encode(&mut request_data);
 
@@ -259,13 +266,11 @@ impl Actor for FileTransferService {
 
                     match callback.send(rx) {
                         Ok(()) => {}
-                        Err(_) => error!(
-                            target: LOG_TARGET,
-                            "Failed to send the response back. Looks like the requester task is gone."
-                        ),
+                        Err(_) => {
+                            error!(target: LOG_TARGET, "Failed to send the response back. Looks like the requester task is gone.")
+                        }
                     }
                 }
-
                 FileTransferServiceCommand::DownloadResponse {
                     request_id,
                     file_key_proof,
@@ -325,7 +330,6 @@ impl Actor for FileTransferService {
                         ),
                     };
                 }
-
                 FileTransferServiceCommand::AddKnownAddress {
                     peer_id,
                     multiaddress,
@@ -672,14 +676,18 @@ impl FileTransferService {
                     return;
                 }
 
-                let chunk_id = ChunkId::new(r.file_chunk_id);
+                let chunk_ids = r
+                    .file_chunk_ids
+                    .iter()
+                    .map(|id| ChunkId::new(*id))
+                    .collect();
                 let request_id = self.download_pending_response_nonce.next();
                 self.download_pending_responses
                     .insert(request_id.clone(), pending_response);
 
                 self.emit(RemoteDownloadRequest {
                     file_key,
-                    chunk_id,
+                    chunk_ids,
                     request_id,
                     bucket_id,
                 });

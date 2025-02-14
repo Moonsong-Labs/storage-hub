@@ -34,6 +34,7 @@ const LOG_TARGET: &str = "msp-move-bucket-task";
 const DOWNLOAD_REQUEST_RETRY_COUNT: usize = 30;
 const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
 const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
+const MAX_CHUNKS_PER_REQUEST: usize = 10;
 
 /// [`MspMoveBucketTask`] handles bucket move requests between MSPs.
 ///
@@ -222,12 +223,10 @@ where
                 let task = self.clone();
 
                 tokio::spawn(async move {
-                    let _permit = semaphore.acquire().await.map_err(|e| {
-                        anyhow!(
-                            "Failed to acquire semaphore: semaphore was closed - {:?}",
-                            e
-                        )
-                    })?;
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
 
                     match task.download_file(&file, &bucket_id).await {
                         Ok(_) => Ok(()),
@@ -505,7 +504,8 @@ where
         let chunk_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHUNKS_PER_FILE));
 
         let chunk_tasks: Vec<_> = (0..chunks_count)
-            .map(|chunk| {
+            .step_by(MAX_CHUNKS_PER_REQUEST)
+            .map(|chunk_start| {
                 let semaphore = Arc::clone(&chunk_semaphore);
                 let bsp_peer_ids = Arc::clone(&bsp_peer_ids);
                 let storage_hub_handler = self.storage_hub_handler.clone();
@@ -522,29 +522,30 @@ where
                     let mut last_error = None;
                     let mut bsp_peer_ids_iter = bsp_peer_ids.iter().cycle();
 
+                    // Create a batch of chunk IDs to request together
+                    let chunk_start = chunk_start as u64;
+                    let chunk_end = std::cmp::min(chunk_start + (MAX_CHUNKS_PER_REQUEST as u64), chunks_count);
+                    let chunk_batch: std::collections::HashSet<ChunkId> = (chunk_start..chunk_end)
+                        .map(ChunkId::new)
+                        .collect();
+
                     for _ in 0..DOWNLOAD_REQUEST_RETRY_COUNT {
+                        // Note: the bsp_peer_ids_iter is checked to be non-empty before accepting the bucket move
                         let peer_id = bsp_peer_ids_iter
                             .next()
                             .expect("Iterator will never be empty due to .cycle()");
 
                         match storage_hub_handler
                             .file_transfer
-                            .download_request(
-                                *peer_id,
-                                file_key.into(),
-                                ChunkId::new(chunk),
-                                Some(bucket),
-                            )
+                            .download_request(*peer_id, file_key.into(), chunk_batch.clone(), Some(bucket))
                             .await
                         {
                             Ok(download_request) => {
-                                match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref())
-                                {
+                                match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
                                     Ok(file_key_proof) => {
                                         // Verify fingerprint
                                         let expected_fingerprint = file_metadata.fingerprint;
-                                        if file_key_proof.file_metadata.fingerprint != expected_fingerprint
-                                        {
+                                        if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
                                             last_error = Some(anyhow!(
                                                 "Fingerprint mismatch. Expected: {:?}, got: {:?}",
                                                 expected_fingerprint,
@@ -555,57 +556,60 @@ where
 
                                         match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
                                             Ok(proven) => {
-                                                if proven.len() != 1 {
+                                                if proven.len() != chunk_batch.len() {
                                                     last_error = Some(anyhow!(
-                                                        "Expected exactly one proven chunk but got {}",
+                                                        "Expected {} proven chunks but got {}",
+                                                        chunk_batch.len(),
                                                         proven.len()
                                                     ));
                                                     continue;
                                                 }
 
-                                                let chunk_data = proven[0].data.clone();
-                                                let chunk_id = ChunkId::new(chunk);
+                                                // Process each proven chunk
+                                                for proven_chunk in proven {
+                                                    let chunk_id = proven_chunk.key;
+                                                    let chunk_data = proven_chunk.data;
 
-                                                if chunk_id != proven[0].key {
-                                                    last_error = Some(anyhow!(
-                                                        "Expected chunk id {:?} but got {:?}",
-                                                        chunk,
-                                                        proven[0].key
-                                                    ));
-                                                    continue;
-                                                }
+                                                    // Validate chunk size
+                                                    let chunk_idx = chunk_id.as_u64();
+                                                    let expected_chunk_size = if chunk_idx == chunks_count - 1 {
+                                                        (file_metadata.file_size % FILE_CHUNK_SIZE as u64)
+                                                            as usize
+                                                    } else {
+                                                        FILE_CHUNK_SIZE as usize
+                                                    };
 
-                                                // Validate chunk size
-                                                let expected_chunk_size = if chunk == file_metadata.chunks_count() - 1 {
-                                                    (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
-                                                } else {
-                                                    FILE_CHUNK_SIZE as usize
-                                                };
+                                                    if chunk_data.len() != expected_chunk_size {
+                                                        last_error = Some(anyhow!(
+                                                            "Invalid chunk size for chunk {}: Expected: {}, got: {}",
+                                                            chunk_idx,
+                                                            expected_chunk_size,
+                                                            chunk_data.len()
+                                                        ));
+                                                        continue;
+                                                    }
 
-                                                if chunk_data.len() != expected_chunk_size {
-                                                    last_error = Some(anyhow!(
-                                                        "Invalid chunk size. Expected: {}, got: {}",
-                                                        expected_chunk_size,
-                                                        chunk_data.len()
-                                                    ));
-                                                    continue;
-                                                }
-
-                                                if let Err(error) = storage_hub_handler
-                                                    .file_storage
-                                                    .write()
-                                                    .await
-                                                    .write_chunk(&file_key, &chunk_id, &chunk_data)
-                                                {
-                                                    last_error = Some(anyhow!("Failed to write chunk: {:?}", error));
-                                                    continue;
+                                                    if let Err(error) = storage_hub_handler
+                                                        .file_storage
+                                                        .write()
+                                                        .await
+                                                        .write_chunk(&file_key, &chunk_id, &chunk_data)
+                                                    {
+                                                        last_error = Some(anyhow!(
+                                                            "Failed to write chunk {}: {:?}",
+                                                            chunk_idx,
+                                                            error
+                                                        ));
+                                                        continue;
+                                                    }
                                                 }
 
                                                 downloaded = true;
                                                 break;
                                             }
                                             Err(e) => {
-                                                last_error = Some(anyhow!("Failed to get proven data: {:?}", e));
+                                                last_error =
+                                                    Some(anyhow!("Failed to get proven data: {:?}", e));
                                                 continue;
                                             }
                                         }
@@ -625,7 +629,7 @@ where
 
                     if !downloaded {
                         Err(last_error.unwrap_or_else(|| {
-                            anyhow!("Failed to download chunk {} after all retries", chunk)
+                            anyhow!("Failed to download chunk {} after all retries", chunk_start)
                         }))
                     } else {
                         Ok(())
@@ -634,62 +638,47 @@ where
             })
             .collect();
 
-        // Wait for all chunk downloads to complete
+        // Wait for all download tasks to complete and collect results
         let results = join_all(chunk_tasks).await;
 
-        // Process results and handle errors
-        let mut failed_chunks = 0;
-        for (chunk_idx, result) in results.into_iter().enumerate() {
+        // Process results and count failures
+        let mut failed_downloads = 0;
+        for result in results {
             match result {
-                Ok(chunk_result) => {
-                    if let Err(e) = chunk_result {
+                Ok(download_result) => {
+                    if let Err(e) = download_result {
                         error!(
                             target: LOG_TARGET,
-                            "Failed to download chunk {} of file {:?}: {:?}",
-                            chunk_idx,
-                            file_key,
-                            e
+                            "File download task failed: {:?}", e
                         );
-                        failed_chunks += 1;
+                        failed_downloads += 1;
                     }
                 }
                 Err(e) => {
                     error!(
                         target: LOG_TARGET,
-                        "Chunk download task {} panicked for file {:?}: {:?}",
-                        chunk_idx,
-                        file_key,
-                        e
+                        "File download task panicked: {:?}", e
                     );
-                    failed_chunks += 1;
+                    failed_downloads += 1;
                 }
             }
         }
 
-        // If too many chunks failed, consider the entire file download failed
-        let failure_threshold = chunks_count / 2; // 50% failure threshold
-        if failed_chunks > failure_threshold {
-            Err(anyhow!(
-                "Too many chunks failed to download ({} out of {})",
-                failed_chunks,
-                chunks_count
-            ))
-        } else if failed_chunks > 0 {
+        // Log summary of download results
+        if failed_downloads > 0 {
             warn!(
                 target: LOG_TARGET,
-                "File {:?} downloaded with {} failed chunks",
-                file_key,
-                failed_chunks
+                "Completed bucket move with {} failed file downloads",
+                failed_downloads
             );
-            Ok(())
         } else {
             info!(
                 target: LOG_TARGET,
-                "Successfully downloaded file {:?}",
-                file_key
+                "Successfully completed bucket move with all files downloaded"
             );
-            Ok(())
         }
+
+        Ok(())
     }
 
     async fn check_and_increase_capacity(

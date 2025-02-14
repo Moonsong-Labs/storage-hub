@@ -51,8 +51,8 @@ pub enum FileTransferServiceCommand {
         peer_id: PeerId,
         /// File key of the file to download.
         file_key: FileKey,
-        /// Chunk ID of the chunk to download.
-        chunk_id: ChunkId,
+        /// A set of chunk IDs for batched download requests.
+        chunk_ids: std::collections::HashSet<ChunkId>,
         /// Bucket ID is only required for Bucket operations.
         /// Since the FileTransferService is not aware of which files are in which buckets,
         /// it needs to be provided by the caller to pass the allow list check.
@@ -153,7 +153,7 @@ pub trait FileTransferServiceInterface {
         &self,
         peer_id: PeerId,
         file_key: FileKey,
-        chunk_id: ChunkId,
+        chunk_ids: std::collections::HashSet<ChunkId>,
         bucket_id: Option<BucketId>,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError>;
 
@@ -271,14 +271,14 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
         &self,
         peer_id: PeerId,
         file_key: FileKey,
-        chunk_id: ChunkId,
+        chunk_ids: std::collections::HashSet<ChunkId>,
         bucket_id: Option<BucketId>,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::DownloadRequest {
             peer_id,
             file_key,
-            chunk_id,
+            chunk_ids,
             bucket_id,
             callback,
         };
