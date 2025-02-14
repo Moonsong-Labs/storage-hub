@@ -179,6 +179,22 @@ pub mod dynamic_params {
         ///  This can be interpreted as "a Provider with 10k UNITs of stake would get the minimum seed period".
         pub static StakeToSeedPeriod: Balance =
             10_000 * UNIT * Into::<u128>::into(MinSeedPeriod::get());
+
+        #[codec(index = 29)]
+        #[allow(non_upper_case_globals)]
+        /// The amount of ticks to charge a user upfront when it tries to issue a new storage request.
+        /// This is done as a deterrent to avoid users spamming the network with huge files but never
+        /// actually planning to store them longterm.
+        ///
+        /// 72k ticks = 5 days with 6 seconds per tick.
+        /// This means that a user must pay for 5 days of storage upfront, which gets transferred to the
+        /// treasury. Governance can then decide what to do with the accumulated funds.
+        ///
+        /// With a stable price (defined as `MostlyStablePrice` in this file) of 50 NANOUNITs per gigabyte
+        /// per tick and a standard replication target (`StandardReplicationTarget`) of 12 BSPs, the upfront
+        /// cost for the user to issue a storage request for a 1 GB file would be:
+        /// 50 NANOUNITs per gigabyte per tick * 12 BSPs * 72k ticks * 1 GB = 0.0432 UNITs
+        pub static UpfrontTicksToPay: BlockNumber = 72_000;
     }
 }
 

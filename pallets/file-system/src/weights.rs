@@ -129,6 +129,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::NextAvailableMoveBucketRequestExpirationTick` (r:1 w:1)
 	/// Proof: `FileSystem::NextAvailableMoveBucketRequestExpirationTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
+	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::NextAvailableMoveBucketRequestExpirationTick` (r:1 w:1)
+	/// Proof: `FileSystem::NextAvailableMoveBucketRequestExpirationTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::MoveBucketRequestExpirations` (r:1 w:1)
 	/// Proof: `FileSystem::MoveBucketRequestExpirations` (`max_values`: None, `max_size`: Some(3222), added: 5697, mode: `MaxEncodedLen`)
 	fn request_move_bucket() -> Weight {
@@ -177,6 +181,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `Providers::UsedBspsCapacity` (r:1 w:0)
 	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -275,6 +280,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `Nfts::Collection` (r:1 w:1)
@@ -314,12 +320,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
 	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
 	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:5 w:0)
 	/// Storage: `Parameters::Parameters` (r:5 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
@@ -342,9 +350,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().writes(6_u64))
 	}
 	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
-	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1231), added: 3706, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::PriorityChallengesQueue` (r:1 w:1)
 	/// Proof: `ProofsDealer::PriorityChallengesQueue` (`max_values`: Some(1), `max_size`: Some(3302), added: 3797, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::StorageRequestBsps` (r:40 w:39)
 	/// Storage: `FileSystem::StorageRequestBsps` (r:40 w:39)
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequestExpirations` (r:1 w:1)
@@ -353,8 +362,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:1)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 39]`.
 	/// The range of component `n` is `[1, 39]`.
 	fn revoke_storage_request(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
@@ -406,6 +417,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviderIdsToBuckets` (r:0 w:1)
@@ -434,7 +446,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
 	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:200 w:200)
-	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1231), added: 3706, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
@@ -445,8 +457,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequestExpirations` (r:1 w:1)
 	/// Proof: `FileSystem::StorageRequestExpirations` (`max_values`: None, `max_size`: Some(3222), added: 5697, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::StorageRequestBsps` (r:200 w:0)
+	/// Storage: `FileSystem::StorageRequestBsps` (r:4100 w:3900)
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
@@ -498,8 +512,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Providers::GlobalBspsReputationWeight` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `Parameters::Parameters` (r:1 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:1 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:2 w:2)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	fn bsp_volunteer() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `2162`
@@ -563,8 +583,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 			.saturating_add(T::DbWeight::get().reads(26_u64))
 			.saturating_add(T::DbWeight::get().reads((3_u64).saturating_mul(n.into())))
 			.saturating_add(T::DbWeight::get().writes(6_u64))
-			.saturating_add(T::DbWeight::get().writes((3_u64).saturating_mul(n.into())))
-			.saturating_add(Weight::from_parts(0, 5144).saturating_mul(n.into()))
+			.saturating_add(T::DbWeight::get().writes((42_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 105452).saturating_mul(n.into()))
 	}
 	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -573,13 +593,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
 	/// Storage: `Parameters::Parameters` (r:6 w:0)
+	/// Storage: `Parameters::Parameters` (r:6 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:3 w:3)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingStopStoringRequests` (r:1 w:1)
 	/// Proof: `FileSystem::PendingStopStoringRequests` (`max_values`: None, `max_size`: Some(140), added: 2615, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
-	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1231), added: 3706, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::Buckets` (r:1 w:0)
 	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingMoveBucketRequests` (r:1 w:0)
@@ -588,8 +609,11 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::NextAvailableStorageRequestExpirationTick` (r:1 w:1)
+	/// Proof: `FileSystem::NextAvailableStorageRequestExpirationTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::NextAvailableStorageRequestExpirationTick` (r:1 w:1)
 	/// Proof: `FileSystem::NextAvailableStorageRequestExpirationTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequestExpirations` (r:1 w:1)
@@ -643,6 +667,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	fn bsp_confirm_stop_storing() -> Weight {
@@ -683,6 +708,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `System::Account` (r:3 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -732,6 +758,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Storage: `System::Account` (r:3 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -819,6 +846,15 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::PrivilegedProviders` (r:0 w:1)
 	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::PendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(1249), added: 3724, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (r:1 w:1)
+	/// Proof: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:0 w:1)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	fn delete_file_without_inclusion_proof() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1893`
@@ -861,6 +897,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingFileDeletionRequests` (r:1 w:1)
 	/// Proof: `FileSystem::PendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(1249), added: 3724, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::PendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(1249), added: 3724, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
@@ -871,6 +908,14 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::PriorityChallengesQueue` (r:1 w:1)
 	/// Proof: `ProofsDealer::PriorityChallengesQueue` (`max_values`: Some(1), `max_size`: Some(3302), added: 3797, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (r:1 w:1)
+	/// Proof: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:0 w:1)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
@@ -902,6 +947,8 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		//  Estimated: `13545`
 		// Minimum execution time: 17_000_000 picoseconds.
 		Weight::from_parts(18_000_000, 13545)
+		// Minimum execution time: 17_000_000 picoseconds.
+		Weight::from_parts(18_000_000, 13545)
 			.saturating_add(T::DbWeight::get().reads(8_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -913,8 +960,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:1)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[0, 39]`.
 	/// The range of component `n` is `[0, 39]`.
 	fn process_expired_storage_request_msp_accepted_or_no_msp(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
@@ -940,8 +989,10 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:1)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[0, 39]`.
 	/// The range of component `n` is `[0, 39]`.
 	fn process_expired_storage_request_msp_rejected(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
@@ -1038,6 +1089,10 @@ impl WeightInfo for () {
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::NextAvailableMoveBucketRequestExpirationTick` (r:1 w:1)
 	/// Proof: `FileSystem::NextAvailableMoveBucketRequestExpirationTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
+	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::NextAvailableMoveBucketRequestExpirationTick` (r:1 w:1)
+	/// Proof: `FileSystem::NextAvailableMoveBucketRequestExpirationTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::MoveBucketRequestExpirations` (r:1 w:1)
 	/// Proof: `FileSystem::MoveBucketRequestExpirations` (`max_values`: None, `max_size`: Some(3222), added: 5697, mode: `MaxEncodedLen`)
 	fn request_move_bucket() -> Weight {
@@ -1086,6 +1141,7 @@ impl WeightInfo for () {
 	/// Storage: `Providers::UsedBspsCapacity` (r:1 w:0)
 	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -1184,6 +1240,7 @@ impl WeightInfo for () {
 	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `Nfts::Collection` (r:1 w:1)
@@ -1223,12 +1280,14 @@ impl WeightInfo for () {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::MainStorageProviders` (`max_values`: None, `max_size`: Some(667), added: 3142, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::InsolventProviders` (r:2 w:0)
 	/// Proof: `Providers::InsolventProviders` (`max_values`: None, `max_size`: Some(49), added: 2524, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
 	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:5 w:0)
 	/// Storage: `Parameters::Parameters` (r:5 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
@@ -1251,9 +1310,10 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().writes(6_u64))
 	}
 	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
-	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1231), added: 3706, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::PriorityChallengesQueue` (r:1 w:1)
 	/// Proof: `ProofsDealer::PriorityChallengesQueue` (`max_values`: Some(1), `max_size`: Some(3302), added: 3797, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::StorageRequestBsps` (r:40 w:39)
 	/// Storage: `FileSystem::StorageRequestBsps` (r:40 w:39)
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequestExpirations` (r:1 w:1)
@@ -1262,8 +1322,10 @@ impl WeightInfo for () {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:1)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[1, 39]`.
 	/// The range of component `n` is `[1, 39]`.
 	fn revoke_storage_request(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
@@ -1315,6 +1377,7 @@ impl WeightInfo for () {
 	/// Proof: `Providers::UsedBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::MainStorageProviderIdsToBuckets` (r:0 w:1)
@@ -1343,7 +1406,7 @@ impl WeightInfo for () {
 	/// Storage: `Providers::AwaitingTopUpFromProviders` (r:2 w:0)
 	/// Proof: `Providers::AwaitingTopUpFromProviders` (`max_values`: None, `max_size`: Some(57), added: 2532, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:200 w:200)
-	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1231), added: 3706, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
@@ -1354,8 +1417,10 @@ impl WeightInfo for () {
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequestExpirations` (r:1 w:1)
 	/// Proof: `FileSystem::StorageRequestExpirations` (`max_values`: None, `max_size`: Some(3222), added: 5697, mode: `MaxEncodedLen`)
-	/// Storage: `FileSystem::StorageRequestBsps` (r:200 w:0)
+	/// Storage: `FileSystem::StorageRequestBsps` (r:4100 w:3900)
 	/// Proof: `FileSystem::StorageRequestBsps` (`max_values`: None, `max_size`: Some(97), added: 2572, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
@@ -1407,8 +1472,14 @@ impl WeightInfo for () {
 	/// Proof: `Providers::GlobalBspsReputationWeight` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `Parameters::Parameters` (r:1 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
+	/// Storage: `Parameters::Parameters` (r:1 w:0)
+	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:2 w:2)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	fn bsp_volunteer() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `2162`
@@ -1472,8 +1543,8 @@ impl WeightInfo for () {
 			.saturating_add(RocksDbWeight::get().reads(26_u64))
 			.saturating_add(RocksDbWeight::get().reads((3_u64).saturating_mul(n.into())))
 			.saturating_add(RocksDbWeight::get().writes(6_u64))
-			.saturating_add(RocksDbWeight::get().writes((3_u64).saturating_mul(n.into())))
-			.saturating_add(Weight::from_parts(0, 5144).saturating_mul(n.into()))
+			.saturating_add(RocksDbWeight::get().writes((42_u64).saturating_mul(n.into())))
+			.saturating_add(Weight::from_parts(0, 105452).saturating_mul(n.into()))
 	}
 	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -1482,13 +1553,14 @@ impl WeightInfo for () {
 	/// Storage: `Providers::BackupStorageProviders` (r:1 w:0)
 	/// Proof: `Providers::BackupStorageProviders` (`max_values`: None, `max_size`: Some(683), added: 3158, mode: `MaxEncodedLen`)
 	/// Storage: `Parameters::Parameters` (r:6 w:0)
+	/// Storage: `Parameters::Parameters` (r:6 w:0)
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:3 w:3)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingStopStoringRequests` (r:1 w:1)
 	/// Proof: `FileSystem::PendingStopStoringRequests` (`max_values`: None, `max_size`: Some(140), added: 2615, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequests` (r:1 w:1)
-	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1231), added: 3706, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::StorageRequests` (`max_values`: None, `max_size`: Some(1247), added: 3722, mode: `MaxEncodedLen`)
 	/// Storage: `Providers::Buckets` (r:1 w:0)
 	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingMoveBucketRequests` (r:1 w:0)
@@ -1497,8 +1569,11 @@ impl WeightInfo for () {
 	/// Proof: `PaymentStreams::FixedRatePaymentStreams` (`max_values`: None, `max_size`: Some(137), added: 2612, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::ChallengesTicker` (r:1 w:0)
 	/// Proof: `ProofsDealer::ChallengesTicker` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::NextAvailableStorageRequestExpirationTick` (r:1 w:1)
+	/// Proof: `FileSystem::NextAvailableStorageRequestExpirationTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::NextAvailableStorageRequestExpirationTick` (r:1 w:1)
 	/// Proof: `FileSystem::NextAvailableStorageRequestExpirationTick` (`max_values`: Some(1), `max_size`: Some(4), added: 499, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::StorageRequestExpirations` (r:1 w:1)
@@ -1552,6 +1627,7 @@ impl WeightInfo for () {
 	/// Proof: `Providers::TotalBspsCapacity` (`max_values`: Some(1), `max_size`: Some(8), added: 503, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	fn bsp_confirm_stop_storing() -> Weight {
@@ -1592,6 +1668,7 @@ impl WeightInfo for () {
 	/// Storage: `System::Account` (r:3 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -1641,6 +1718,7 @@ impl WeightInfo for () {
 	/// Storage: `System::Account` (r:3 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::RegisteredUsers` (r:1 w:1)
 	/// Proof: `PaymentStreams::RegisteredUsers` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
@@ -1728,6 +1806,15 @@ impl WeightInfo for () {
 	/// Proof: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::PrivilegedProviders` (r:0 w:1)
 	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::PendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(1249), added: 3724, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (r:1 w:1)
+	/// Proof: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:0 w:1)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	fn delete_file_without_inclusion_proof() -> Weight {
 		// Proof Size summary in bytes:
 		//  Measured:  `1893`
@@ -1770,6 +1857,7 @@ impl WeightInfo for () {
 	/// Proof: `Providers::Buckets` (`max_values`: None, `max_size`: Some(191), added: 2666, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::PendingFileDeletionRequests` (r:1 w:1)
 	/// Proof: `FileSystem::PendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(1249), added: 3724, mode: `MaxEncodedLen`)
+	/// Proof: `FileSystem::PendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(1249), added: 3724, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::UsersWithoutFunds` (r:1 w:0)
 	/// Proof: `PaymentStreams::UsersWithoutFunds` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
 	/// Storage: `PaymentStreams::FixedRatePaymentStreams` (r:1 w:0)
@@ -1780,6 +1868,14 @@ impl WeightInfo for () {
 	/// Proof: `Parameters::Parameters` (`max_values`: None, `max_size`: Some(36), added: 2511, mode: `MaxEncodedLen`)
 	/// Storage: `ProofsDealer::PriorityChallengesQueue` (r:1 w:1)
 	/// Proof: `ProofsDealer::PriorityChallengesQueue` (`max_values`: Some(1), `max_size`: Some(3302), added: 3797, mode: `MaxEncodedLen`)
+	/// Storage: `System::Account` (r:1 w:1)
+	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
+	/// Storage: `Balances::Holds` (r:1 w:1)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Storage: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (r:1 w:1)
+	/// Proof: `FileSystem::MspsAmountOfPendingFileDeletionRequests` (`max_values`: None, `max_size`: Some(52), added: 2527, mode: `MaxEncodedLen`)
+	/// Storage: `PaymentStreams::PrivilegedProviders` (r:0 w:1)
+	/// Proof: `PaymentStreams::PrivilegedProviders` (`max_values`: None, `max_size`: Some(48), added: 2523, mode: `MaxEncodedLen`)
 	/// Storage: `System::Account` (r:1 w:1)
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
@@ -1811,6 +1907,8 @@ impl WeightInfo for () {
 		//  Estimated: `13545`
 		// Minimum execution time: 17_000_000 picoseconds.
 		Weight::from_parts(18_000_000, 13545)
+		// Minimum execution time: 17_000_000 picoseconds.
+		Weight::from_parts(18_000_000, 13545)
 			.saturating_add(RocksDbWeight::get().reads(8_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
@@ -1822,8 +1920,10 @@ impl WeightInfo for () {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:1)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[0, 39]`.
 	/// The range of component `n` is `[0, 39]`.
 	fn process_expired_storage_request_msp_accepted_or_no_msp(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:
@@ -1849,8 +1949,10 @@ impl WeightInfo for () {
 	/// Proof: `System::Account` (`max_values`: None, `max_size`: Some(128), added: 2603, mode: `MaxEncodedLen`)
 	/// Storage: `Balances::Holds` (r:1 w:1)
 	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
+	/// Proof: `Balances::Holds` (`max_values`: None, `max_size`: Some(193), added: 2668, mode: `MaxEncodedLen`)
 	/// Storage: `FileSystem::BucketsWithStorageRequests` (r:0 w:1)
 	/// Proof: `FileSystem::BucketsWithStorageRequests` (`max_values`: None, `max_size`: Some(96), added: 2571, mode: `MaxEncodedLen`)
+	/// The range of component `n` is `[0, 39]`.
 	/// The range of component `n` is `[0, 39]`.
 	fn process_expired_storage_request_msp_rejected(n: u32, ) -> Weight {
 		// Proof Size summary in bytes:

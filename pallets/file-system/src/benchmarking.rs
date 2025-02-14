@@ -421,7 +421,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -486,7 +486,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -650,7 +650,7 @@ mod benchmarks {
                 let fingerprint = <<T as frame_system::Config>::Hashing as Hasher>::hash(
                     b"benchmark_fingerprint",
                 );
-                let size: StorageData<T> = 100;
+                let size: StorageDataUnit<T> = 100;
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
@@ -665,6 +665,7 @@ mod benchmarks {
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
+					deposit_paid: Default::default(),
                 };
                 let file_key = Pallet::<T>::compute_file_key(
                     user_account.clone(),
@@ -738,10 +739,25 @@ mod benchmarks {
                     user_peer_ids: Default::default(),
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
-                    bsps_volunteered: ReplicationTargetType::<T>::zero(),
+                    bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+					deposit_paid: Default::default(),
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_keys_to_accept[j], ());
+                // Add the volunteered BSPs to the StorageRequestBsps storage for this file key
+                for i in 0u64..T::MaxReplicationTarget::get().into() {
+                    let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
+                    mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                    let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
+                    StorageRequestBsps::<T>::insert(
+                        file_keys_to_accept[j],
+                        bsp_id,
+                        StorageRequestBspsMetadata::<T> {
+                            confirmed: false,
+                            _phantom: Default::default(),
+                        },
+                    );
+                }
 
                 // Create the FileKeyWithProof object
                 let file_key_with_proof = FileKeyWithProof {
@@ -827,7 +843,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -1050,10 +1066,25 @@ mod benchmarks {
 				user_peer_ids: Default::default(),
 				bsps_required: T::StandardReplicationTarget::get(),
 				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
-				bsps_volunteered: ReplicationTargetType::<T>::zero(),
+				bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+				deposit_paid: Default::default(),
 			};
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
+            // Add the volunteered BSPs to the StorageRequestBsps storage for this file key
+            for i in 0u64..T::MaxReplicationTarget::get().into() {
+                let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
+                mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
+                StorageRequestBsps::<T>::insert(
+                    file_key,
+                    bsp_id,
+                    StorageRequestBspsMetadata::<T> {
+                        confirmed: false,
+                        _phantom: Default::default(),
+                    },
+                );
+            }
 
             // Create the FileKeyWithProof object
             let file_key_with_proof = FileKeyWithProof {
@@ -1968,7 +1999,8 @@ mod benchmarks {
                     file_key: Default::default(),
                     bucket_id: Default::default(),
                     file_size: i.into(),
-					deposit_paid_for_creation: file_deletion_request_deposit,
+                    deposit_paid_for_creation: file_deletion_request_deposit,
+                    queue_priority_challenge: true
                 })
                 .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
         }
@@ -2272,7 +2304,8 @@ mod benchmarks {
                     file_key: Default::default(),
                     bucket_id: Default::default(),
                     file_size: i.into(),
-					deposit_paid_for_creation: file_deletion_request_deposit,
+           					deposit_paid_for_creation: file_deletion_request_deposit,
+           					queue_priority_challenge: true
                 })
                 .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
         }
@@ -2390,7 +2423,7 @@ mod benchmarks {
         // Set the total used capacity of the network to be the same as the total capacity of the network,
         // since this makes the price updater use the second order Taylor series approximation, which
         // is the most computationally expensive.
-        let total_capacity: StorageData<T> = 1024 * 1024 * 1024;
+        let total_capacity: StorageDataUnit<T> = 1024 * 1024 * 1024;
         pallet_storage_providers::UsedBspsCapacity::<T>::put(total_capacity);
         pallet_storage_providers::TotalBspsCapacity::<T>::put(total_capacity);
 
@@ -2462,7 +2495,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -2578,7 +2611,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -2772,8 +2805,8 @@ mod benchmarks {
             T::Hashing::hash_of(&msp)
         };
 
-        let capacity: StorageData<T> = 1024 * 1024 * 1024;
-        let capacity_used: StorageData<T> = 0;
+        let capacity: StorageDataUnit<T> = 1024 * 1024 * 1024;
+        let capacity_used: StorageDataUnit<T> = 0;
 
         let msp_info = pallet_storage_providers::types::MainStorageProvider {
             capacity,
@@ -2802,7 +2835,7 @@ mod benchmarks {
         .try_into()
         .unwrap();
 
-        let bucket_data_limit: StorageData<T> = capacity;
+        let bucket_data_limit: StorageDataUnit<T> = capacity;
         // Use One::one() or a conversion that matches the expected balance type:
         let value_prop = ValueProposition::<T>::new(One::one(), commitment, bucket_data_limit);
         let value_prop_id = value_prop.derive_id();

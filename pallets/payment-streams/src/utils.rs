@@ -13,7 +13,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_payment_streams_runtime_api::GetUsersWithDebtOverThresholdError;
 use shp_constants::GIGAUNIT;
 use shp_traits::{
-    MutatePricePerGigaUnitPerTickInterface, PaymentStreamsInterface, ProofSubmittersInterface,
+    PaymentStreamsInterface, PricePerGigaUnitPerTickInterface, ProofSubmittersInterface,
     ReadProvidersInterface, ReadUserSolvencyInterface, SystemMetricsInterface,
     TreasuryCutCalculator,
 };
@@ -1675,7 +1675,7 @@ impl<T: pallet::Config> ReadUserSolvencyInterface for pallet::Pallet<T> {
     }
 }
 
-impl<T: pallet::Config> MutatePricePerGigaUnitPerTickInterface for pallet::Pallet<T> {
+impl<T: pallet::Config> PricePerGigaUnitPerTickInterface for pallet::Pallet<T> {
     type PricePerGigaUnitPerTick = BalanceOf<T>;
 
     fn get_price_per_giga_unit_per_tick() -> Self::PricePerGigaUnitPerTick {

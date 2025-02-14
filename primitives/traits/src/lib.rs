@@ -1123,14 +1123,14 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
-/// A trait to mutate the price per giga-unit per tick.
+/// A trait to get and set the price per giga-unit per tick of the network.
 ///
-/// This is used by the Payment Streams pallet to expose the function to update the price per giga-unit per tick,
-/// which governs the amount to charge for dynamic-rate payment streams.
+/// This is used by the Payment Streams pallet to expose the function to get and update the price
+/// per giga-unit per tick, which governs the amount to charge for dynamic-rate payment streams.
 ///
 /// The use of giga-units instead of units is to avoid issues with decimal places, since the Balance type
 /// might not granular enough to represent the price per unit.
-pub trait MutatePricePerGigaUnitPerTickInterface {
+pub trait PricePerGigaUnitPerTickInterface {
     /// The type which represents a price per unit per tick.
     type PricePerGigaUnitPerTick: NumericalParam;
 
