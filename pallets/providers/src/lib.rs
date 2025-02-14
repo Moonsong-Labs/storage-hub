@@ -23,10 +23,7 @@ mod tests;
 
 pub use pallet::*;
 pub use scale_info::Type;
-use types::{
-    BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, MainStorageProviderId,
-    MerklePatriciaRoot, SignUpRequest, StorageDataUnit,
-};
+use types::{BackupStorageProviderId, MainStorageProviderId, SignUpRequest, StorageDataUnit};
 
 #[frame_support::pallet]
 pub mod pallet {
