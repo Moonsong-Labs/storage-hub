@@ -20,9 +20,9 @@ mod tests;
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::weights::WeightInfo;
     use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
     use frame_system::pallet_prelude::*;
-    use pallet_nfts::WeightInfo;
     #[cfg(feature = "runtime-benchmarks")]
     use sp_core::H256;
 
@@ -45,6 +45,9 @@ pub mod pallet {
     pub trait Config: frame_system::Config + pallet_nfts::Config {
         /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+
+        /// Weight information for extrinsics in this pallet.
+        type WeightInfo: crate::weights::WeightInfo;
 
         /// The trait for reading storage bucket data.
         type Buckets: shp_traits::ReadBucketsInterface<
@@ -101,7 +104,7 @@ pub mod pallet {
         ///
         /// The `read_access_regex` parameter is optional and when set to `None` it means that the recipient will be denied access for any read request within the bucket.
         #[pallet::call_index(0)]
-        #[pallet::weight(T::WeightInfo::mint() + T::WeightInfo::set_metadata())]
+        #[pallet::weight(<T as Config>::WeightInfo::share_access())]
         pub fn share_access(
             origin: OriginFor<T>,
             recipient: AccountIdLookupSourceOf<T>,
@@ -124,7 +127,7 @@ pub mod pallet {
 
         /// Update read access for an item.
         #[pallet::call_index(1)]
-        #[pallet::weight(T::WeightInfo::set_metadata())]
+        #[pallet::weight(<T as Config>::WeightInfo::update_read_access())]
         pub fn update_read_access(
             origin: OriginFor<T>,
             bucket: BucketIdFor<T>,
