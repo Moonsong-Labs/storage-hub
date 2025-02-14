@@ -10,7 +10,7 @@ use crate::{
     },
     weights::WeightInfo,
     Config, Error, Event, MspsAmountOfPendingFileDeletionRequests,
-    NextAvailableStorageRequestExpirationTick, PendingBucketsToMove, PendingMoveBucketRequests,
+    NextAvailableStorageRequestExpirationTick, PendingMoveBucketRequests,
     PendingStopStoringRequests, StorageRequestExpirations, StorageRequests,
 };
 use frame_support::{
