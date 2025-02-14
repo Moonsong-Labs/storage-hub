@@ -293,16 +293,16 @@ pub struct MoveBucketRequested {
 }
 impl EventBusMessage for MoveBucketRequested {}
 
-/// A user has requested to move one of its bucket to a new MSP which matches a currently managed MSP.
+/// A user has requested to move one of its buckets to a new MSP which matches a currently managed MSP.
 ///
 /// This event is emitted so the MSP can verify if it can download all files of the bucket from BSPs,
 /// respond to the user accepting the request, download the bucket's files and insert the bucket into their forest.
 #[derive(Debug, Clone)]
-pub struct MoveBucketRequestedForNewMsp {
+pub struct MoveBucketRequestedForMsp {
     pub bucket_id: BucketId,
     pub value_prop_id: ValuePropId,
 }
-impl EventBusMessage for MoveBucketRequestedForNewMsp {}
+impl EventBusMessage for MoveBucketRequestedForMsp {}
 
 /// The new MSP that the user chose to store a bucket has rejected the move request.
 ///
@@ -457,7 +457,7 @@ pub struct BlockchainServiceEventBusProvider {
     move_bucket_rejected_event_bus: EventBus<MoveBucketRejected>,
     move_bucket_accepted_event_bus: EventBus<MoveBucketAccepted>,
     move_bucket_expired_event_bus: EventBus<MoveBucketExpired>,
-    move_bucket_requested_for_new_msp_event_bus: EventBus<MoveBucketRequestedForNewMsp>,
+    move_bucket_requested_for_new_msp_event_bus: EventBus<MoveBucketRequestedForMsp>,
     bsp_stop_storing_event_bus: EventBus<BspConfirmStoppedStoring>,
     finalised_bsp_stop_storing_event_bus: EventBus<FinalisedBspConfirmStoppedStoring>,
     notify_period_event_bus: EventBus<NotifyPeriod>,
@@ -631,8 +631,8 @@ impl ProvidesEventBus<MoveBucketExpired> for BlockchainServiceEventBusProvider {
     }
 }
 
-impl ProvidesEventBus<MoveBucketRequestedForNewMsp> for BlockchainServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<MoveBucketRequestedForNewMsp> {
+impl ProvidesEventBus<MoveBucketRequestedForMsp> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MoveBucketRequestedForMsp> {
         &self.move_bucket_requested_for_new_msp_event_bus
     }
 }

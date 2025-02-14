@@ -3,7 +3,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::anyhow;
 use log::{debug, error, info, warn};
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::StorageHubEventsVec;
@@ -33,22 +32,30 @@ pub struct SubmittedTransaction {
     hash: ExtrinsicHash,
     /// The maximum amount of time to wait for the transaction to either be successful or fail.
     timeout: Option<Duration>,
+    /// The nonce of the transaction.
+    nonce: u32,
 }
 
 const NO_TIMEOUT_INTERVAL_WARNING: Duration = Duration::from_secs(60);
 
 impl SubmittedTransaction {
-    pub fn new(watcher: Receiver<String>, hash: H256) -> Self {
+    pub fn new(watcher: Receiver<String>, hash: H256, nonce: u32) -> Self {
         Self {
             watcher,
             hash,
             timeout: None,
+            nonce,
         }
     }
 
     /// Getter for the transaction hash.
     pub fn hash(&self) -> ExtrinsicHash {
         self.hash
+    }
+
+    /// Getter for the transaction nonce.
+    pub fn nonce(&self) -> u32 {
+        self.nonce
     }
 
     /// Sets the timeout for the transaction.
@@ -68,7 +75,7 @@ impl SubmittedTransaction {
     pub async fn watch_for_success<FSH>(
         &mut self,
         blockchain: &ActorHandle<BlockchainService<FSH>>,
-    ) -> anyhow::Result<()>
+    ) -> Result<(), WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
     {
@@ -76,7 +83,11 @@ impl SubmittedTransaction {
 
         // Check if the extrinsic was successful.
         let extrinsic_result = ActorHandle::<BlockchainService<FSH>>::extrinsic_result(extrinsic_in_block.clone())
-            .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
+            .map_err(|_| {
+              let err_msg = "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed";
+              error!(target: LOG_TARGET, "{}", err_msg);
+              WatchTransactionError::Internal(err_msg.to_string())
+            })?;
         match extrinsic_result {
             ExtrinsicResult::Success { dispatch_info } => {
                 info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
@@ -86,7 +97,10 @@ impl SubmittedTransaction {
                 dispatch_info,
             } => {
                 error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
-                return Err(anyhow::anyhow!("Extrinsic failed"));
+                return Err(WatchTransactionError::TransactionFailed {
+                    dispatch_info: format!("{:?}", dispatch_info),
+                    dispatch_error: format!("{:?}", dispatch_error),
+                });
             }
         }
 
@@ -105,7 +119,7 @@ impl SubmittedTransaction {
     pub async fn watch_for_success_with_events<FSH>(
         &mut self,
         blockchain: &ActorHandle<BlockchainService<FSH>>,
-    ) -> anyhow::Result<StorageHubEventsVec>
+    ) -> Result<StorageHubEventsVec, WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
     {
@@ -113,7 +127,12 @@ impl SubmittedTransaction {
 
         // Check if the extrinsic was successful.
         let extrinsic_result = ActorHandle::<BlockchainService<FSH>>::extrinsic_result(extrinsic_in_block.clone())
-            .map_err(|_| anyhow!("Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed"))?;
+            .map_err(|_| {
+              let err_msg = "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed";
+              error!(target: LOG_TARGET, "{}", err_msg);
+              WatchTransactionError::Internal(err_msg.to_string())
+            })?;
+
         match extrinsic_result {
             ExtrinsicResult::Success { dispatch_info } => {
                 info!(target: LOG_TARGET, "Extrinsic successful with dispatch info: {:?}", dispatch_info);
@@ -123,7 +142,10 @@ impl SubmittedTransaction {
                 dispatch_info,
             } => {
                 error!(target: LOG_TARGET, "Extrinsic failed with dispatch error: {:?}, dispatch info: {:?}", dispatch_error, dispatch_info);
-                return Err(anyhow::anyhow!("Extrinsic failed"));
+                return Err(WatchTransactionError::TransactionFailed {
+                    dispatch_info: format!("{:?}", dispatch_info),
+                    dispatch_error: format!("{:?}", dispatch_error),
+                });
             }
         }
 
@@ -135,7 +157,7 @@ impl SubmittedTransaction {
     async fn watch_transaction<FSH>(
         &mut self,
         blockchain: &ActorHandle<BlockchainService<FSH>>,
-    ) -> Result<Extrinsic, anyhow::Error>
+    ) -> Result<Extrinsic, WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
     {
@@ -149,10 +171,8 @@ impl SubmittedTransaction {
                 Some(timeout) => {
                     // Check if the timeout has been reached.
                     if elapsed > timeout {
-                        return Err(anyhow!(format!(
-                            "Timeout waiting for transaction {} to be included in a block",
-                            self.hash
-                        )));
+                        error!(target: LOG_TARGET, "Timeout waiting for transaction {} to be included in a block", self.hash);
+                        return Err(WatchTransactionError::Timeout);
                     }
 
                     timeout - elapsed
@@ -165,16 +185,16 @@ impl SubmittedTransaction {
                 Ok(result) => match result {
                     Some(result) => result,
                     None => {
-                        return Err(anyhow!("Transaction watcher channel closed"));
+                        error!(target: LOG_TARGET, "Transaction watcher channel closed");
+                        return Err(WatchTransactionError::WatcherChannelClosed);
                     }
                 },
                 Err(_) => {
                     // Timeout reached, exit the loop.
                     match self.timeout {
                         Some(_) => {
-                            return Err(anyhow!(
-                                "Timeout waiting for transaction to be included in a block"
-                            ));
+                            error!(target: LOG_TARGET, "Timeout waiting for transaction to be included in a block");
+                            return Err(WatchTransactionError::Timeout);
                         }
                         None => {
                             // No timeout set, continue waiting.
@@ -187,7 +207,12 @@ impl SubmittedTransaction {
             };
             // Parse the JSONRPC string. The strings sent by the RPC wacher should be valid JSONRPC strings.
             let json: serde_json::Value = serde_json::from_str(&result).map_err(|_| {
-                anyhow!("The result, if not an error, can only be a JSONRPC string; qed")
+                let err_msg = format!(
+                    "The result, if not an error, can only be a JSONRPC string: {:?}",
+                    result
+                );
+                error!(target: LOG_TARGET, "{}", err_msg);
+                WatchTransactionError::Internal(err_msg)
             })?;
 
             debug!(target: LOG_TARGET, "Transaction information: {:?}", json);
@@ -196,15 +221,26 @@ impl SubmittedTransaction {
             // TODO: Consider if we might want to wait for "finalized".
             // TODO: Handle other lifetime extrinsic edge cases. See https://github.com/paritytech/polkadot-sdk/blob/master/substrate/client/transaction-pool/api/src/lib.rs#L131
             if let Some(in_block) = json["params"]["result"]["inBlock"].as_str() {
-                block_hash = Some(H256::from_str(in_block)?);
-                let subscription_id = json["params"]["subscription"]
-                    .as_number()
-                    .ok_or_else(|| anyhow!("Subscription should exist and be a number; qed"))?;
+                block_hash = Some(H256::from_str(in_block).map_err(|_| {
+                    error!(target: LOG_TARGET, "Block hash should be a valid H256; qed");
+                    WatchTransactionError::Internal("Block hash should be a valid H256".to_string())
+                })?);
+                let subscription_id =
+                    json["params"]["subscription"].as_number().ok_or_else(|| {
+                        let err_msg = "Subscription should exist and be a number; qed";
+                        error!(target: LOG_TARGET, "{}", err_msg);
+                        WatchTransactionError::Internal(err_msg.to_string())
+                    })?;
 
                 // Unwatch extrinsic to release tx_watcher.
                 blockchain
                     .unwatch_extrinsic(subscription_id.to_owned())
-                    .await?;
+                    .await
+                    .map_err(|e| {
+                        let err_msg = format!("Error unwatching extrinsic: {:?}", e);
+                        error!(target: LOG_TARGET, "{}", err_msg);
+                        WatchTransactionError::Internal(err_msg)
+                    })?;
 
                 // Breaking while loop.
                 // Even though we unwatch the transaction, and the loop should break, we still break manually
@@ -216,11 +252,34 @@ impl SubmittedTransaction {
 
         // Get the extrinsic from the block, with its events.
         let block_hash = block_hash.ok_or_else(
-            || anyhow!("Block hash should exist after waiting for extrinsic to be included in a block; qed")
-        )?;
+            || {
+                let err_msg = "Block hash should exist after waiting for extrinsic to be included in a block; qed";
+                error!(target: LOG_TARGET, "{}", err_msg);
+                WatchTransactionError::Internal(err_msg.to_string())
+            })?;
         let extrinsic_in_block = blockchain
             .get_extrinsic_from_block(block_hash, self.hash)
-            .await?;
+            .await
+            .map_err(|e| {
+                let err_msg = format!("Error getting extrinsic from block: {:?}", e);
+                error!(target: LOG_TARGET, "{}", err_msg);
+                WatchTransactionError::Internal(err_msg)
+            })?;
         Ok(extrinsic_in_block)
     }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum WatchTransactionError {
+    #[error("Timeout waiting for transaction to be included in a block")]
+    Timeout,
+    #[error("Transaction watcher channel closed")]
+    WatcherChannelClosed,
+    #[error("Transaction failed. DispatchError: {dispatch_error}, DispatchInfo: {dispatch_info}")]
+    TransactionFailed {
+        dispatch_error: String,
+        dispatch_info: String,
+    },
+    #[error("Unexpected error: {0}")]
+    Internal(String),
 }

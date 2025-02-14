@@ -1,4 +1,4 @@
-use std::{sync::Arc, vec};
+use std::{cmp::max, sync::Arc, vec};
 
 use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
@@ -51,7 +51,7 @@ use crate::{
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{Extrinsic, MinimalBlockInfo, NewBlockNotificationKind, Tip},
+    types::{Extrinsic, MinimalBlockInfo, NewBlockNotificationKind, SendExtrinsicOptions, Tip},
     BlockchainService,
 };
 
@@ -260,16 +260,20 @@ where
         }
     }
 
-    /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
-    ///
-    /// If the nonce is higher, the account nonce is updated in the [`BlockchainService`].
-    pub(crate) fn check_nonce(&mut self, block_hash: &H256) {
+    /// Get the current account nonce on-chain.
+    pub(crate) fn account_nonce(&mut self, block_hash: &H256) -> u32 {
         let pub_key = Self::caller_pub_key(self.keystore.clone());
-        let latest_nonce = self
-            .client
+        self.client
             .runtime_api()
             .account_nonce(*block_hash, pub_key.into())
-            .expect("Fetching account nonce works; qed");
+            .expect("Fetching account nonce works; qed")
+    }
+
+    /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
+    ///
+    /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
+    pub(crate) fn sync_nonce(&mut self, block_hash: &H256) {
+        let latest_nonce = self.account_nonce(block_hash);
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
         }
@@ -324,19 +328,28 @@ where
     }
 
     /// Send an extrinsic to this node using an RPC call.
+    ///
+    /// Passing a specific `nonce` will be used to construct the extrinsic if it is higher than the current on-chain nonce.
+    /// Otherwise, the current on-chain nonce will be used.
+    /// Passing `None` for the `nonce` will use the [`nonce_counter`](BlockchainService::nonce_counter) as the nonce while still
+    /// checking that the on-chain nonce is not lower.
     pub(crate) async fn send_extrinsic(
         &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-        tip: Tip,
+        options: SendExtrinsicOptions,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
-        // Get the nonce for the caller and increment it for the next transaction.
-        // TODO: Handle nonce overflow.
-        let nonce = self.nonce_counter;
+        let block_hash = self.client.info().best_hash;
+
+        // Use the highest valid nonce.
+        let nonce = max(
+            options.nonce().unwrap_or(self.nonce_counter),
+            self.account_nonce(&block_hash),
+        );
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, tip);
+        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, options.tip());
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -369,14 +382,16 @@ where
             return Err(anyhow::anyhow!("Error in RPC call: {}", error.to_string()));
         }
 
+        // TODO: Handle nonce overflow.
         // Only update nonce after we are sure no errors
         // occurred submitting the extrinsic.
-        self.nonce_counter += 1;
+        self.nonce_counter = nonce + 1;
 
         Ok(RpcExtrinsicOutput {
             hash: id_hash,
             result,
             receiver: rx,
+            nonce,
         })
     }
 
@@ -1348,11 +1363,13 @@ where
     }
 }
 
-/// The output of an RPC transaction.
+/// The output of an RPC extrinsic.
 pub struct RpcExtrinsicOutput {
     /// Hash of the extrinsic.
     pub hash: H256,
-    /// The output string of the transaction if any.
+    /// The nonce of the extrinsic.
+    pub nonce: u32,
+    /// The output string of the extrinsic if any.
     pub result: String,
     /// An async receiver if data will be returned via a callback.
     pub receiver: tokio::sync::mpsc::Receiver<String>,

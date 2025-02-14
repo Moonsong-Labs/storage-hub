@@ -345,6 +345,9 @@ impl IndexerService {
             pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
+            pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
