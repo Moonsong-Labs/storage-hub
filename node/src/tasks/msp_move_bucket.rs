@@ -761,11 +761,11 @@ where
                             }
 
                             let start_time = std::time::Instant::now();
-                            
+
                             match storage_hub_handler
                                 .file_transfer
                                 .download_request(peer_id, file_key.into(), chunk_batch.clone(), Some(bucket.clone()))
-                                .await 
+                                .await
                             {
                                 Ok(download_request) => {
                                     match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
@@ -779,7 +779,7 @@ where
                                                     file_key_proof.file_metadata.fingerprint
                                                 );
                                                 last_error = Some(error);
-                                                
+
                                                 let mut peer_manager = peer_manager.write().await;
                                                 peer_manager.record_failure(peer_id);
                                                 continue 'retry;
@@ -794,7 +794,7 @@ where
                                                             proven.len()
                                                         );
                                                         last_error = Some(error);
-                                                        
+
                                                         let mut peer_manager = peer_manager.write().await;
                                                         peer_manager.record_failure(peer_id);
                                                         continue 'retry;
