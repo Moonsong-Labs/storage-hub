@@ -383,8 +383,8 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending move bucket requests.
        *
-       * A double mapping from MSP IDs to a list of bucket IDs which they can accept or decline to take over.
-       * The value is the user who requested the move.
+       * A mapping from Bucket ID to their move bucket request metadata, which includes the new MSP
+       * and value propositions that this bucket would take if accepted.
        **/
       pendingMoveBucketRequests: AugmentedQuery<
         ApiType,
