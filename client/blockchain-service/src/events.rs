@@ -260,6 +260,29 @@ pub struct SpStopStoringInsolventUser {
 }
 impl EventBusMessage for SpStopStoringInsolventUser {}
 
+/// MSP stopped storing a bucket for an insolvent user event.
+///
+/// This event is emitted when a MSP has correctly stopped storing a bucket for an insolvent user.
+#[derive(Debug, Clone)]
+pub struct MspStopStoringBucketInsolventUser {
+    pub msp_id: ProviderId,
+    pub bucket_id: BucketId,
+    pub owner: AccountId32,
+}
+impl EventBusMessage for MspStopStoringBucketInsolventUser {}
+
+/// A MSP stopped storing a bucket for an insolvent user event was finalised.
+///
+/// This event is emitted when the relay chain block to which a block in which a MSP stopped storing a bucket
+/// for an insolvent user event is anchored has been finalised.
+#[derive(Debug, Clone)]
+pub struct FinalisedMspStopStoringBucketInsolventUser {
+    pub msp_id: ProofsDealerProviderId,
+    pub bucket_id: BucketId,
+}
+
+impl EventBusMessage for FinalisedMspStopStoringBucketInsolventUser {}
+
 /// A user has requested to move one of its bucket to a new MSP.
 ///
 /// This event is emitted so the BSP can allow the new MSP to download the files from the bucket.
@@ -426,6 +449,9 @@ pub struct BlockchainServiceEventBusProvider {
     last_chargeable_info_updated_event_bus: EventBus<LastChargeableInfoUpdated>,
     user_without_funds_event_bus: EventBus<UserWithoutFunds>,
     sp_stop_storing_insolvent_user_event_bus: EventBus<SpStopStoringInsolventUser>,
+    msp_stop_storing_bucket_insolvent_user_event_bus: EventBus<MspStopStoringBucketInsolventUser>,
+    finalised_msp_stop_storing_bucket_insolvent_user_event_bus:
+        EventBus<FinalisedMspStopStoringBucketInsolventUser>,
     finalised_msp_stopped_storing_bucket_event_bus: EventBus<FinalisedMspStoppedStoringBucket>,
     move_bucket_requested_event_bus: EventBus<MoveBucketRequested>,
     move_bucket_rejected_event_bus: EventBus<MoveBucketRejected>,
@@ -458,6 +484,8 @@ impl BlockchainServiceEventBusProvider {
             last_chargeable_info_updated_event_bus: EventBus::new(),
             user_without_funds_event_bus: EventBus::new(),
             sp_stop_storing_insolvent_user_event_bus: EventBus::new(),
+            msp_stop_storing_bucket_insolvent_user_event_bus: EventBus::new(),
+            finalised_msp_stop_storing_bucket_insolvent_user_event_bus: EventBus::new(),
             finalised_msp_stopped_storing_bucket_event_bus: EventBus::new(),
             move_bucket_requested_event_bus: EventBus::new(),
             move_bucket_rejected_event_bus: EventBus::new(),
@@ -556,6 +584,20 @@ impl ProvidesEventBus<UserWithoutFunds> for BlockchainServiceEventBusProvider {
 impl ProvidesEventBus<SpStopStoringInsolventUser> for BlockchainServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<SpStopStoringInsolventUser> {
         &self.sp_stop_storing_insolvent_user_event_bus
+    }
+}
+
+impl ProvidesEventBus<MspStopStoringBucketInsolventUser> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<MspStopStoringBucketInsolventUser> {
+        &self.msp_stop_storing_bucket_insolvent_user_event_bus
+    }
+}
+
+impl ProvidesEventBus<FinalisedMspStopStoringBucketInsolventUser>
+    for BlockchainServiceEventBusProvider
+{
+    fn event_bus(&self) -> &EventBus<FinalisedMspStopStoringBucketInsolventUser> {
+        &self.finalised_msp_stop_storing_bucket_insolvent_user_event_bus
     }
 }
 
