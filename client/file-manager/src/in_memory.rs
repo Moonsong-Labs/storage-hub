@@ -31,16 +31,6 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         &self.root
     }
 
-    fn stored_chunks_count(&self) -> Result<u64, FileStorageError> {
-        let trie = TrieDBBuilder::<T>::new(&self.memdb, &self.root).build();
-        let trie_iter = trie
-            .iter()
-            .map_err(|_| FileStorageError::FailedToConstructTrieIter)?;
-        let stored_chunks = trie_iter.count() as u64;
-
-        Ok(stored_chunks)
-    }
-
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
         let recorder: Recorder<T::Hash> = Recorder::default();
 
@@ -152,6 +142,7 @@ where
     pub file_data: HashMap<HasherOutT<T>, InMemoryFileDataTrie<T>>,
     pub bucket_prefix_map: HashSet<[u8; 64]>,
     pub exclude_list: HashMap<ExcludeType, HashSet<HasherOutT<T>>>,
+    pub chunk_counts: HashMap<HasherOutT<T>, u64>,
 }
 
 impl<T: TrieLayout> InMemoryFileStorage<T>
@@ -172,6 +163,7 @@ where
             file_data: HashMap::new(),
             bucket_prefix_map: HashSet::new(),
             exclude_list,
+            chunk_counts: HashMap::new(),
         }
     }
 }
@@ -204,7 +196,7 @@ where
             .as_str(),
         );
 
-        let stored_chunks = file_data.stored_chunks_count()?;
+        let stored_chunks = self.stored_chunks_count(file_key)?;
         if metadata.chunks_count() != stored_chunks {
             return Err(FileStorageError::IncompleteFile);
         }
@@ -224,9 +216,17 @@ where
             .to_file_key_proof(metadata.clone()))
     }
 
+    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
+        self.chunk_counts
+            .get(key)
+            .copied()
+            .ok_or(FileStorageError::FileDoesNotExist)
+    }
+
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError> {
         self.metadata.remove(key);
         self.file_data.remove(key);
+        self.chunk_counts.remove(key);
 
         Ok(())
     }
@@ -252,22 +252,11 @@ where
             .as_str(),
         );
 
-        let stored_chunks = file_data.stored_chunks_count()?;
-        if metadata.chunks_count() != stored_chunks {
+        if metadata.fingerprint != file_data.get_root().as_ref().into() {
             return Ok(false);
         }
 
-        if metadata.fingerprint
-            != file_data
-                .get_root()
-                .as_ref()
-                .try_into()
-                .expect("Hasher output mismatch!")
-        {
-            return Ok(false);
-        }
-
-        Ok(true)
+        Ok(metadata.chunks_count() == self.stored_chunks_count(key)?)
     }
 
     fn insert_file(
@@ -286,6 +275,9 @@ where
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
 
+        // Initialize chunk count to 0
+        self.chunk_counts.insert(key, 0);
+
         let full_key = [metadata.bucket_id.as_slice(), key.as_ref()].concat();
         self.bucket_prefix_map.insert(full_key.try_into().unwrap());
 
@@ -303,6 +295,15 @@ where
         }
         self.metadata.insert(key, metadata.clone());
 
+        // Count all chunks in the file trie
+        let trie = TrieDBBuilder::<T>::new(&file_data.memdb, &file_data.get_root()).build();
+        let chunk_count = trie
+            .iter()
+            .map_err(|_| FileStorageError::FailedToConstructTrieIter)?
+            .count();
+
+        self.chunk_counts.insert(key, chunk_count as u64);
+
         let previous = self.file_data.insert(key, file_data);
         if previous.is_some() {
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
@@ -312,13 +313,6 @@ where
         self.bucket_prefix_map.insert(full_key.try_into().unwrap());
 
         Ok(())
-    }
-
-    fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
-        let file_data = self.file_data.get(key);
-        let file_data = file_data.ok_or(FileStorageError::FileDoesNotExist)?;
-
-        file_data.stored_chunks_count()
     }
 
     fn get_chunk(
@@ -352,11 +346,18 @@ where
             .as_str(),
         );
 
-        // Check if we have all the chunks for the file.
-        let stored_chunks = file_data
-            .stored_chunks_count()
-            .map_err(|_| FileStorageWriteError::FailedToConstructTrieIter)?;
-        if metadata.chunks_count() != stored_chunks {
+        // Increment chunk count
+        let current_count = self
+            .chunk_counts
+            .get(file_key)
+            .ok_or(FileStorageWriteError::FailedToGetStoredChunksCount)?;
+        let new_count = current_count
+            .checked_add(1)
+            .ok_or(FileStorageWriteError::ChunkCountOverflow)?;
+        self.chunk_counts.insert(*file_key, new_count);
+
+        // Check if we have all the chunks for the file using the count
+        if metadata.chunks_count() != new_count {
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
@@ -393,6 +394,7 @@ where
         for key in keys_to_delete {
             self.metadata.remove(&key);
             self.file_data.remove(&key);
+            self.chunk_counts.remove(&key);
         }
 
         Ok(())
@@ -451,6 +453,19 @@ mod tests {
     use sp_runtime::AccountId32;
     use sp_trie::LayoutV1;
 
+    fn stored_chunks_count(
+        file_trie: &InMemoryFileDataTrie<LayoutV1<BlakeTwo256>>,
+    ) -> Result<u64, FileStorageError> {
+        let trie =
+            TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&file_trie.memdb, &file_trie.root).build();
+        let trie_iter = trie
+            .iter()
+            .map_err(|_| FileStorageError::FailedToConstructTrieIter)?;
+        let stored_chunks = trie_iter.count() as u64;
+
+        Ok(stored_chunks)
+    }
+
     #[test]
     fn file_trie_create_empty_works() {
         let file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
@@ -501,11 +516,11 @@ mod tests {
         let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
     }
 
@@ -522,15 +537,15 @@ mod tests {
         let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_proof = file_trie.generate_proof(&chunk_ids).unwrap();
@@ -554,15 +569,15 @@ mod tests {
         let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         file_trie.delete().unwrap();
@@ -570,7 +585,7 @@ mod tests {
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_err());
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_err());
 
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 0);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 0);
     }
 
     #[test]
@@ -590,15 +605,15 @@ mod tests {
         let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
 
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_metadata = FileMetadata {
@@ -637,15 +652,15 @@ mod tests {
 
         let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_metadata = FileMetadata {
@@ -690,15 +705,15 @@ mod tests {
 
         let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 1);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 1);
         assert!(file_trie.get_chunk(&chunk_ids[0]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[1], &chunks[1]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 2);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 2);
         assert!(file_trie.get_chunk(&chunk_ids[1]).is_ok());
 
         file_trie.write_chunk(&chunk_ids[2], &chunks[2]).unwrap();
-        assert_eq!(file_trie.stored_chunks_count().unwrap(), 3);
+        assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
         let file_metadata = FileMetadata {

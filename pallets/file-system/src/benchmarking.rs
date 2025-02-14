@@ -686,7 +686,7 @@ mod benchmarks {
                 .map(|file_key| {
                     let reject_reason = RejectedStorageRequestReason::ReachedMaximumCapacity;
                     RejectedStorageRequest {
-                        file_key: file_key.clone(),
+                        file_key: *file_key,
                         reason: reject_reason,
                     }
                 })
@@ -2545,7 +2545,7 @@ mod benchmarks {
         /*********** Call the function to benchmark: ***********/
         #[block]
         {
-            Pallet::<T>::process_expired_storage_request(file_key.clone(), &mut WeightMeter::new());
+            Pallet::<T>::process_expired_storage_request(file_key, &mut WeightMeter::new());
         }
 
         /*********** Post-benchmark checks: ***********/
@@ -2667,7 +2667,7 @@ mod benchmarks {
         /*********** Call the function to benchmark: ***********/
         #[block]
         {
-            Pallet::<T>::process_expired_storage_request(file_key.clone(), &mut WeightMeter::new());
+            Pallet::<T>::process_expired_storage_request(file_key, &mut WeightMeter::new());
         }
 
         /*********** Post-benchmark checks: ***********/
@@ -2799,8 +2799,8 @@ mod benchmarks {
             ValuePropId = <T as pallet_storage_providers::Config>::ValuePropId,
         >,
     {
-        let msp_hash = if msp_id.is_some() {
-            msp_id.unwrap()
+        let msp_hash = if let Some(msp_id) = msp_id {
+            msp_id
         } else {
             T::Hashing::hash_of(&msp)
         };
@@ -2862,8 +2862,8 @@ mod benchmarks {
         T: crate::Config<Providers = pallet_storage_providers::Pallet<T>>,
     {
         // Derive the BSP ID from the hash of its account
-        let bsp_id = if bsp_id.is_some() {
-            bsp_id.unwrap()
+        let bsp_id = if let Some(bsp_id) = bsp_id {
+            bsp_id
         } else {
             T::Hashing::hash_of(&bsp_account)
         };
