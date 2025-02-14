@@ -2049,7 +2049,7 @@ impl<T: pallet::Config> MutateBucketsInterface for pallet::Pallet<T> {
     ) -> DispatchResult {
         let bucket = Buckets::<T>::get(bucket_id).ok_or(Error::<T>::BucketNotFound)?;
 
-        // This operation can only be performed by a consecuence of some MSP's action, so the bucket
+        // This operation can only be performed by a consequence of some MSP's action, so the bucket
         // must be stored by the MSP.
         ensure!(bucket.msp_id == Some(*msp_id), Error::<T>::MspOnlyOperation);
 
