@@ -10,7 +10,7 @@ use shc_blockchain_service::{
         FinalisedMspStopStoringBucketInsolventUser, MspStopStoringBucketInsolventUser,
         ProcessStopStoringForInsolventUserRequest, UserWithoutFunds,
     },
-    types::{StopStoringForInsolventUserRequest, Tip},
+    types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
 use shc_common::types::StorageProviderId;
 use shc_file_manager::traits::FileStorage;
@@ -363,7 +363,10 @@ where
         // Send the transaction and wait for it to be included in the block, continue only if it is successful.
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(stop_storing_bucket_for_insolvent_user_call, Tip::from(0))
+            .send_extrinsic(
+                stop_storing_bucket_for_insolvent_user_call,
+                SendExtrinsicOptions::default(),
+            )
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler

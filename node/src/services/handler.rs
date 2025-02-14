@@ -276,9 +276,11 @@ where
         // Subscribing to UserInsolvent event from the BlockchainService to be able to initiate the process
         // of deleting all the buckets belonging to the insolvent user.
         let user_without_funds_event_bus_listener: EventBusListener<UserWithoutFunds, _> =
-            msp_stop_storing_insolvent_user
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain);
+            msp_stop_storing_insolvent_user.clone().subscribe_to(
+                &self.task_spawner,
+                &self.blockchain,
+                true,
+            );
         user_without_funds_event_bus_listener.start();
 
         // Subscribing to MspStopStoringBucketInsolvent user to continue deletion process for stored buckets owned by a
@@ -286,9 +288,11 @@ where
         let msp_stop_storing_bucket_insolvent_user_event_bus_listener: EventBusListener<
             MspStopStoringBucketInsolventUser,
             _,
-        > = msp_stop_storing_insolvent_user
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
+        > = msp_stop_storing_insolvent_user.clone().subscribe_to(
+            &self.task_spawner,
+            &self.blockchain,
+            true,
+        );
         msp_stop_storing_bucket_insolvent_user_event_bus_listener.start();
 
         // Subscribing to ProcessStopStoringForInsolventUserRequest event from the BlockchainService
@@ -296,58 +300,22 @@ where
         let process_stop_storing_for_insolvent_user_request_event_bus_listener: EventBusListener<
             ProcessStopStoringForInsolventUserRequest,
             _,
-        > = msp_stop_storing_insolvent_user
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
+        > = msp_stop_storing_insolvent_user.clone().subscribe_to(
+            &self.task_spawner,
+            &self.blockchain,
+            true,
+        );
         process_stop_storing_for_insolvent_user_request_event_bus_listener.start();
 
         // Subscribing to FinalisedMspStopStoringBucketInsolventUser event from the BlockchainService.
         let finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener: EventBusListener<
             FinalisedMspStopStoringBucketInsolventUser,
             _,
-        > = msp_stop_storing_insolvent_user
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
-        finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener.start();
-
-        // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
-        let msp_stop_storing_insolvent_user = MspStopStoringInsolventUserTask::new(self.clone());
-
-        // Subscribing to UserInsolvent event from the BlockchainService to be able to initiate the process
-        // of deleting all the buckets belonging to the insolvent user.
-        let user_without_funds_event_bus_listener: EventBusListener<UserWithoutFunds, _> =
-            msp_stop_storing_insolvent_user
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain);
-        user_without_funds_event_bus_listener.start();
-
-        // Subscribing to MspStopStoringBucketInsolvent user to continue deletion process for stored buckets owned by a
-        // user that has been declared as without funds.
-        let msp_stop_storing_bucket_insolvent_user_event_bus_listener: EventBusListener<
-            MspStopStoringBucketInsolventUser,
-            _,
-        > = msp_stop_storing_insolvent_user
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
-        msp_stop_storing_bucket_insolvent_user_event_bus_listener.start();
-
-        // Subscribing to ProcessStopStoringForInsolventUserRequest event from the BlockchainService
-        // to execute one loop of the process of deleting all the buckets belonging to the insolvent user.
-        let process_stop_storing_for_insolvent_user_request_event_bus_listener: EventBusListener<
-            ProcessStopStoringForInsolventUserRequest,
-            _,
-        > = msp_stop_storing_insolvent_user
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
-        process_stop_storing_for_insolvent_user_request_event_bus_listener.start();
-
-        // Subscribing to FinalisedMspStopStoringBucketInsolventUser event from the BlockchainService.
-        let finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener: EventBusListener<
-            FinalisedMspStopStoringBucketInsolventUser,
-            _,
-        > = msp_stop_storing_insolvent_user
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain);
+        > = msp_stop_storing_insolvent_user.clone().subscribe_to(
+            &self.task_spawner,
+            &self.blockchain,
+            true,
+        );
         finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener.start();
 
         // Subscribing to NotifyPeriod event from the BlockchainService.
