@@ -1,12 +1,17 @@
 use anyhow::anyhow;
 use codec::Decode;
 use futures::future::join_all;
-use rand::seq::SliceRandom;
+use priority_queue::PriorityQueue;
+use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::{cmp::max, time::Duration};
 use tokio::sync::Semaphore;
+use std::sync::Mutex;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
@@ -30,11 +35,200 @@ use crate::services::{
     types::{MspForestStorageHandlerT, ShNodeType},
 };
 
+lazy_static::lazy_static! {
+    static ref GLOBAL_RNG: Mutex<StdRng> = Mutex::new(StdRng::from_entropy());
+}
+
 const LOG_TARGET: &str = "msp-move-bucket-task";
-const DOWNLOAD_REQUEST_RETRY_COUNT: usize = 30;
 const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
 const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
 const MAX_CHUNKS_PER_REQUEST: usize = 10;
+const PEER_RETRY_ATTEMPTS: usize = 5;  // Number of peers to try
+const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;  // Number of retries per peer
+
+/// Tracks performance metrics for a BSP peer
+/// 
+/// This struct is used to track the performance metrics for a BSP peer.
+/// It is used to select the best performing peers for a given file.
+/// 
+/// # Fields
+/// * `peer_id` - The ID of the peer
+/// * `successful_downloads` - The number of successful downloads for the peer
+/// * `failed_downloads` - The number of failed downloads for the peer
+/// * `total_bytes_downloaded` - The total number of bytes downloaded for the peer
+/// * `total_download_time_ms` - The total download time for the peer
+/// * `last_success_time` - The time of the last successful download for the peer
+/// * `file_keys` - The set of file keys that the peer is responsible for
+#[derive(Debug, Clone)]
+struct BspPeerStats {
+    pub successful_downloads: u64,
+    pub failed_downloads: u64,
+    pub total_bytes_downloaded: u64,
+    pub total_download_time_ms: u64,
+    pub last_success_time: Option<std::time::Instant>,
+    pub file_keys: std::collections::HashSet<H256>,
+}
+
+impl BspPeerStats {
+    fn new() -> Self {
+        Self {
+            successful_downloads: 0,
+            failed_downloads: 0,
+            total_bytes_downloaded: 0,
+            total_download_time_ms: 0,
+            last_success_time: None,
+            file_keys: std::collections::HashSet::new(),
+        }
+    }
+
+    fn record_success(&mut self, bytes_downloaded: u64, download_time_ms: u64) {
+        self.successful_downloads += 1;
+        self.total_bytes_downloaded += bytes_downloaded;
+        self.total_download_time_ms += download_time_ms;
+        self.last_success_time = Some(std::time::Instant::now());
+    }
+
+    fn record_failure(&mut self) {
+        self.failed_downloads += 1;
+    }
+
+    fn get_success_rate(&self) -> f64 {
+        let total = self.successful_downloads + self.failed_downloads;
+        if total == 0 {
+            return 0.0;
+        }
+        self.successful_downloads as f64 / total as f64
+    }
+
+    fn get_average_speed_bytes_per_sec(&self) -> f64 {
+        if self.total_download_time_ms == 0 {
+            return 0.0;
+        }
+        (self.total_bytes_downloaded as f64 * 1000.0) / self.total_download_time_ms as f64
+    }
+
+    fn get_score(&self) -> f64 {
+        // Combine success rate and speed into a single score
+        // Weight success rate more heavily (70%) compared to speed (30%)
+        let success_weight = 0.7;
+        let speed_weight = 0.3;
+
+        let success_score = self.get_success_rate();
+        let speed_score = if self.successful_downloads == 0 {
+            0.0
+        } else {
+            // Normalize speed score between 0 and 1
+            // Using 10MB/s as a reference for max speed
+            let max_speed = 10.0 * 1024.0 * 1024.0; // 10MB/s in bytes/s
+            (self.get_average_speed_bytes_per_sec() / max_speed).min(1.0)
+        };
+
+        (success_score * success_weight) + (speed_score * speed_weight)
+    }
+
+    fn add_file_key(&mut self, file_key: H256) {
+        self.file_keys.insert(file_key);
+    }
+}
+
+/// Manages BSP peer selection and performance tracking
+#[derive(Debug)]
+struct BspPeerManager {
+    peers: HashMap<PeerId, BspPeerStats>,
+    // Map from file_key to a priority queue of peers sorted by score
+    peer_queues: HashMap<H256, PriorityQueue<PeerId, OrderedFloat>>,
+}
+
+// Wrapper to make f64 work with Ord
+#[derive(PartialEq, PartialOrd, Debug, Clone, Copy)]
+struct OrderedFloat(f64);
+
+impl Eq for OrderedFloat {}
+
+impl Ord for OrderedFloat {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap_or(std::cmp::Ordering::Equal)
+    }
+}
+
+impl BspPeerManager {
+    fn new() -> Self {
+        Self {
+            peers: HashMap::new(),
+            peer_queues: HashMap::new(),
+        }
+    }
+
+    fn add_peer(&mut self, peer_id: PeerId, file_key: H256) {
+        let stats = self.peers
+            .entry(peer_id)
+            .or_insert_with(|| BspPeerStats::new());
+        stats.add_file_key(file_key.clone());
+
+        // Add to the priority queue for this file key
+        let queue = self.peer_queues.entry(file_key).or_insert_with(PriorityQueue::new);
+        queue.push(peer_id, OrderedFloat(stats.get_score()));
+    }
+
+    fn record_success(&mut self, peer_id: PeerId, bytes_downloaded: u64, download_time_ms: u64) {
+        if let Some(stats) = self.peers.get_mut(&peer_id) {
+            stats.record_success(bytes_downloaded, download_time_ms);
+            let new_score = stats.get_score();
+            
+            // Update scores in all queues containing this peer
+            for file_key in stats.file_keys.iter() {
+                if let Some(queue) = self.peer_queues.get_mut(file_key) {
+                    queue.change_priority(&peer_id, OrderedFloat(new_score));
+                }
+            }
+        }
+    }
+
+    fn record_failure(&mut self, peer_id: PeerId) {
+        if let Some(stats) = self.peers.get_mut(&peer_id) {
+            stats.record_failure();
+            let new_score = stats.get_score();
+            
+            // Update scores in all queues containing this peer
+            for file_key in stats.file_keys.iter() {
+                if let Some(queue) = self.peer_queues.get_mut(file_key) {
+                    queue.change_priority(&peer_id, OrderedFloat(new_score));
+                }
+            }
+        }
+    }
+
+    fn select_peers(&self, count_best: usize, count_random: usize, file_key: &H256) -> Vec<PeerId> {
+        let queue = match self.peer_queues.get(file_key) {
+            Some(queue) => queue,
+            None => return Vec::new(),
+        };
+
+        let mut selected_peers = Vec::with_capacity(count_best + count_random);
+        let mut queue_clone = queue.clone();
+
+        // Extract top count_best peers - O(S*logP)
+        let actual_best_count = count_best.min(queue_clone.len());
+        for _ in 0..actual_best_count {
+            if let Some((peer_id, _)) = queue_clone.pop() {
+                selected_peers.push(peer_id);
+            }
+        }
+
+        // For random selection from remaining peers - O(R)
+        if count_random > 0 && !queue_clone.is_empty() {
+            use rand::seq::SliceRandom;
+            let remaining_peers: Vec<_> = queue_clone.into_iter().map(|(peer_id, _)| peer_id).collect();
+            let mut remaining_peers = remaining_peers;
+            remaining_peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
+            
+            let actual_random_count = count_random.min(remaining_peers.len());
+            selected_peers.extend(remaining_peers.iter().take(actual_random_count));
+        }
+
+        selected_peers
+    }
+}
 
 /// [`MspMoveBucketTask`] handles bucket move requests between MSPs.
 ///
@@ -75,6 +269,7 @@ where
     storage_hub_handler: StorageHubHandler<NT>,
     file_storage_inserted_file_keys: Vec<H256>,
     pending_bucket_id: Option<BucketId>,
+    bsp_peer_manager: Arc<tokio::sync::RwLock<BspPeerManager>>,
 }
 
 impl<NT> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<NT>
@@ -298,6 +493,7 @@ where
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
             pending_bucket_id: self.pending_bucket_id.clone(),
+            bsp_peer_manager: self.bsp_peer_manager.clone(),
         }
     }
 }
@@ -312,6 +508,7 @@ where
             storage_hub_handler,
             file_storage_inserted_file_keys: Vec::new(),
             pending_bucket_id: None,
+            bsp_peer_manager: Arc::new(tokio::sync::RwLock::new(BspPeerManager::new())), // Minimum 3 peers per request
         }
     }
 
@@ -480,11 +677,11 @@ where
 
         info!(
             target: LOG_TARGET,
-            "MSP: downloading file {:?}",
-            file_key,
+            "MSP: downloading file {:?}", file_key,
         );
 
-        let mut bsp_peer_ids = file
+        // Get BSP peer IDs and initialize them in the peer manager
+        let bsp_peer_ids = file
             .get_bsp_peer_ids(
                 &mut self
                     .storage_hub_handler
@@ -496,22 +693,26 @@ where
             )
             .await?;
 
-        // Shuffle BSP peer IDs to distribute load randomly across BSPs
-        bsp_peer_ids.shuffle(&mut rand::thread_rng());
-        let bsp_peer_ids = Arc::new(bsp_peer_ids);
+        {
+            let mut peer_manager = self.bsp_peer_manager.write().await;
+            for &peer_id in &bsp_peer_ids {
+                peer_manager.add_peer(peer_id, file_key.clone());
+            }
+        }
 
         let chunks_count = file_metadata.chunks_count();
         let chunk_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHUNKS_PER_FILE));
+        let peer_manager = Arc::clone(&self.bsp_peer_manager);
 
         let chunk_tasks: Vec<_> = (0..chunks_count)
             .step_by(MAX_CHUNKS_PER_REQUEST)
             .map(|chunk_start| {
                 let semaphore = Arc::clone(&chunk_semaphore);
-                let bsp_peer_ids = Arc::clone(&bsp_peer_ids);
                 let storage_hub_handler = self.storage_hub_handler.clone();
                 let file_metadata = file_metadata.clone();
                 let file_key = file_key.clone();
                 let bucket = bucket.clone();
+                let peer_manager = Arc::clone(&peer_manager);
 
                 tokio::spawn(async move {
                     let _permit = semaphore.acquire().await.map_err(|e| {
@@ -520,7 +721,6 @@ where
 
                     let mut downloaded = false;
                     let mut last_error = None;
-                    let mut bsp_peer_ids_iter = bsp_peer_ids.iter().cycle();
 
                     // Create a batch of chunk IDs to request together
                     let chunk_start = chunk_start as u64;
@@ -529,100 +729,161 @@ where
                         .map(ChunkId::new)
                         .collect();
 
-                    for _ in 0..DOWNLOAD_REQUEST_RETRY_COUNT {
-                        // Note: the bsp_peer_ids_iter is checked to be non-empty before accepting the bucket move
-                        let peer_id = bsp_peer_ids_iter
-                            .next()
-                            .expect("Iterator will never be empty due to .cycle()");
+                    let batch_size_bytes = chunk_batch.len() as u64 * FILE_CHUNK_SIZE as u64;
 
-                        match storage_hub_handler
-                            .file_transfer
-                            .download_request(*peer_id, file_key.into(), chunk_batch.clone(), Some(bucket))
-                            .await
-                        {
-                            Ok(download_request) => {
-                                match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
-                                    Ok(file_key_proof) => {
-                                        // Verify fingerprint
-                                        let expected_fingerprint = file_metadata.fingerprint;
-                                        if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
-                                            last_error = Some(anyhow!(
-                                                "Fingerprint mismatch. Expected: {:?}, got: {:?}",
-                                                expected_fingerprint,
-                                                file_key_proof.file_metadata.fingerprint
-                                            ));
-                                            continue;
-                                        }
+                    // Get the best performing peers for this request and shuffle them
+                    let selected_peers = {
+                        let peer_manager = peer_manager.read().await;
+                        let mut peers = peer_manager.select_peers(2, PEER_RETRY_ATTEMPTS - 2, &file_key);
+                        use rand::seq::SliceRandom;
+                        peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
+                        peers
+                    };
 
-                                        match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
-                                            Ok(proven) => {
-                                                if proven.len() != chunk_batch.len() {
-                                                    last_error = Some(anyhow!(
-                                                        "Expected {} proven chunks but got {}",
-                                                        chunk_batch.len(),
-                                                        proven.len()
-                                                    ));
-                                                    continue;
-                                                }
+                    // Try each selected peer with retries
+                    for peer_id in selected_peers {
+                        'retry: for attempt in 0..=DOWNLOAD_RETRY_ATTEMPTS {
+                            if attempt > 0 {
+                                warn!(
+                                    target: LOG_TARGET,
+                                    "Retrying download with peer {:?} (attempt {}/{})",
+                                    peer_id,
+                                    attempt + 1,
+                                    DOWNLOAD_RETRY_ATTEMPTS + 1
+                                );
+                            }
 
-                                                // Process each proven chunk
-                                                for proven_chunk in proven {
-                                                    let chunk_id = proven_chunk.key;
-                                                    let chunk_data = proven_chunk.data;
+                            let start_time = std::time::Instant::now();
+                            
+                            match storage_hub_handler
+                                .file_transfer
+                                .download_request(peer_id, file_key.into(), chunk_batch.clone(), Some(bucket.clone()))
+                                .await 
+                            {
+                                Ok(download_request) => {
+                                    match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
+                                        Ok(file_key_proof) => {
+                                            // Verify fingerprint
+                                            let expected_fingerprint = file_metadata.fingerprint;
+                                            if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+                                                let error = anyhow!(
+                                                    "Fingerprint mismatch. Expected: {:?}, got: {:?}",
+                                                    expected_fingerprint,
+                                                    file_key_proof.file_metadata.fingerprint
+                                                );
+                                                last_error = Some(error);
+                                                
+                                                let mut peer_manager = peer_manager.write().await;
+                                                peer_manager.record_failure(peer_id);
+                                                continue 'retry;
+                                            }
 
-                                                    // Validate chunk size
-                                                    let chunk_idx = chunk_id.as_u64();
-                                                    let expected_chunk_size = if chunk_idx == chunks_count - 1 {
-                                                        (file_metadata.file_size % FILE_CHUNK_SIZE as u64)
-                                                            as usize
+                                            match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
+                                                Ok(proven) => {
+                                                    if proven.len() != chunk_batch.len() {
+                                                        let error = anyhow!(
+                                                            "Expected {} proven chunks but got {}",
+                                                            chunk_batch.len(),
+                                                            proven.len()
+                                                        );
+                                                        last_error = Some(error);
+                                                        
+                                                        let mut peer_manager = peer_manager.write().await;
+                                                        peer_manager.record_failure(peer_id);
+                                                        continue 'retry;
+                                                    }
+
+                                                    let mut success = true;
+                                                    // Process each proven chunk
+                                                    for proven_chunk in proven {
+                                                        let chunk_id = proven_chunk.key;
+                                                        let chunk_data = proven_chunk.data;
+
+                                                        // Validate chunk size
+                                                        let chunk_idx = chunk_id.as_u64();
+                                                        let expected_chunk_size = if chunk_idx == chunks_count - 1 {
+                                                            (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
+                                                        } else {
+                                                            FILE_CHUNK_SIZE as usize
+                                                        };
+
+                                                        if chunk_data.len() != expected_chunk_size {
+                                                            let error = anyhow!(
+                                                                "Invalid chunk size for chunk {}: Expected: {}, got: {}",
+                                                                chunk_idx,
+                                                                expected_chunk_size,
+                                                                chunk_data.len()
+                                                            );
+                                                            last_error = Some(error);
+                                                            success = false;
+                                                            break;
+                                                        }
+
+                                                        if let Err(error) = storage_hub_handler
+                                                            .file_storage
+                                                            .write()
+                                                            .await
+                                                            .write_chunk(&file_key, &chunk_id, &chunk_data)
+                                                        {
+                                                            last_error = Some(anyhow!(
+                                                                "Failed to write chunk {}: {:?}",
+                                                                chunk_idx,
+                                                                error
+                                                            ));
+                                                            success = false;
+                                                            break;
+                                                        }
+                                                    }
+
+                                                    if success {
+                                                        let download_time = start_time.elapsed();
+                                                        let mut peer_manager = peer_manager.write().await;
+                                                        peer_manager.record_success(
+                                                            peer_id,
+                                                            batch_size_bytes,
+                                                            download_time.as_millis() as u64,
+                                                        );
+                                                        downloaded = true;
+                                                        break 'retry;
                                                     } else {
-                                                        FILE_CHUNK_SIZE as usize
-                                                    };
-
-                                                    if chunk_data.len() != expected_chunk_size {
-                                                        last_error = Some(anyhow!(
-                                                            "Invalid chunk size for chunk {}: Expected: {}, got: {}",
-                                                            chunk_idx,
-                                                            expected_chunk_size,
-                                                            chunk_data.len()
-                                                        ));
-                                                        continue;
-                                                    }
-
-                                                    if let Err(error) = storage_hub_handler
-                                                        .file_storage
-                                                        .write()
-                                                        .await
-                                                        .write_chunk(&file_key, &chunk_id, &chunk_data)
-                                                    {
-                                                        last_error = Some(anyhow!(
-                                                            "Failed to write chunk {}: {:?}",
-                                                            chunk_idx,
-                                                            error
-                                                        ));
-                                                        continue;
+                                                        let mut peer_manager = peer_manager.write().await;
+                                                        peer_manager.record_failure(peer_id);
                                                     }
                                                 }
-
-                                                downloaded = true;
-                                                break;
-                                            }
-                                            Err(e) => {
-                                                last_error =
-                                                    Some(anyhow!("Failed to get proven data: {:?}", e));
-                                                continue;
+                                                Err(e) => {
+                                                    last_error = Some(anyhow!("Failed to get proven data: {:?}", e));
+                                                    let mut peer_manager = peer_manager.write().await;
+                                                    peer_manager.record_failure(peer_id);
+                                                    continue 'retry;
+                                                }
                                             }
                                         }
-                                    }
-                                    Err(e) => {
-                                        last_error = Some(anyhow!("Failed to decode file key proof: {:?}", e));
-                                        continue;
+                                        Err(e) => {
+                                            last_error = Some(anyhow!("Failed to decode file key proof: {:?}", e));
+                                            let mut peer_manager = peer_manager.write().await;
+                                            peer_manager.record_failure(peer_id);
+                                            continue 'retry;
+                                        }
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                last_error = Some(anyhow!("Download request failed: {:?}", e));
-                                continue;
+                                Err(e) if attempt < DOWNLOAD_RETRY_ATTEMPTS => {
+                                    warn!(
+                                        target: LOG_TARGET,
+                                        "Download attempt {} failed for peer {:?}: {:?}",
+                                        attempt + 1,
+                                        peer_id,
+                                        e
+                                    );
+                                    continue 'retry;
+                                }
+                                Err(e) => {
+                                    // Final attempt failed
+                                    last_error = Some(anyhow!("Download request failed after {} attempts: {:?}", 
+                                        DOWNLOAD_RETRY_ATTEMPTS + 1, e));
+                                    let mut peer_manager = peer_manager.write().await;
+                                    peer_manager.record_failure(peer_id);
+                                    break 'retry;
+                                }
                             }
                         }
                     }
