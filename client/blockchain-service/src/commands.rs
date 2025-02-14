@@ -27,13 +27,13 @@ use shc_common::types::{
 };
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
-use super::{
+use crate::{
     handler::BlockchainService,
-    transaction::SubmittedTransaction,
+    transaction::{SubmittedTransaction, WatchTransactionError},
     types::{
         ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
-        RespondStorageRequest, RetryStrategy, StopStoringForInsolventUserRequest,
-        SubmitProofRequest, Tip,
+        RespondStorageRequest, RetryStrategy, SendExtrinsicOptions,
+        StopStoringForInsolventUserRequest, SubmitProofRequest,
     },
 };
 
@@ -43,7 +43,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 pub enum BlockchainServiceCommand {
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
-        tip: Tip,
+        options: SendExtrinsicOptions,
         callback: tokio::sync::oneshot::Sender<Result<SubmittedTransaction>>,
     },
     GetExtrinsicFromBlock {
@@ -210,7 +210,7 @@ pub trait BlockchainServiceInterface {
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
-        tip: Tip,
+        options: SendExtrinsicOptions,
     ) -> Result<SubmittedTransaction>;
 
     /// Get an extrinsic from a block.
@@ -406,13 +406,13 @@ where
     async fn send_extrinsic(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
-        tip: Tip,
+        options: SendExtrinsicOptions,
     ) -> Result<SubmittedTransaction> {
         let (callback, rx) = tokio::sync::oneshot::channel();
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::SendExtrinsic {
             call: call.into(),
-            tip,
+            options,
             callback,
         };
         self.send(message).await;
@@ -818,17 +818,23 @@ where
     ) -> Result<Option<StorageHubEventsVec>> {
         let call = call.into();
 
-        for retry_count in 0..=retry_strategy.max_retries {
-            let tip = retry_strategy.compute_tip(retry_count);
+        // Execute the extrinsic without any tip or specific nonce the first time around.
+        let mut tip = retry_strategy.compute_tip(0);
+        let mut nonce = None;
 
+        for retry_count in 0..=retry_strategy.max_retries {
             debug!(target: LOG_TARGET, "Submitting transaction {:?} with tip {}", call, tip);
 
+            let extrinsic_options = SendExtrinsicOptions::new()
+                .with_tip(tip as u128)
+                .with_nonce(nonce);
+
             let mut transaction = self
-                .send_extrinsic(call.clone(), Tip::from(tip as u128))
+                .send_extrinsic(call.clone(), extrinsic_options)
                 .await?
                 .with_timeout(retry_strategy.timeout);
 
-            let result: Result<Option<StorageHubEventsVec>> = if with_events {
+            let result: Result<Option<StorageHubEventsVec>, _> = if with_events {
                 transaction
                     .watch_for_success_with_events(&self)
                     .await
@@ -852,6 +858,19 @@ where
                     }
 
                     warn!(target: LOG_TARGET, "Failed to submit transaction with hash {:?}, attempt #{}", transaction.hash(), retry_count + 1);
+
+                    // TODO: Add pending transaction pool implementation to be able to resubmit transactions with nonces lower than the current one to avoid this transaction from being stuck.
+                    if let WatchTransactionError::Timeout = err {
+                        // Increase the tip to incentivise the collators to include the transaction in a block with priority
+                        tip = retry_strategy.compute_tip(retry_count + 1);
+                        // Reuse the same nonce since the transaction was not included in a block.
+                        nonce = Some(transaction.nonce());
+
+                        // Log warning if this is not the last retry.
+                        if retry_count < retry_strategy.max_retries {
+                            warn!(target: LOG_TARGET, "Retrying with increased tip {} and nonce {}", tip, transaction.nonce());
+                        }
+                    }
                 }
             }
         }
