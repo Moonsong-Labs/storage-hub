@@ -469,21 +469,6 @@ where
 
                 let file_key_proof =
                     match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
-                        Ok(proof) => proof,
-                        Err(error) => {
-                            error!(
-                                target: LOG_TARGET,
-<<<<<<< HEAD
-                                "Failed to download chunk {:?} of file {:?} from peer {:?}: {:?}",
-                                chunk, file_key, peer_id, error
-                            );
-                            continue;
-                        }
-                    };
-
-                    let file_key_proof = match FileKeyProof::decode(
-                        &mut download_request.file_key_proof.as_ref(),
-                    ) {
                         Ok(file_key_proof) => file_key_proof,
                         Err(error) => {
                             error!(
@@ -495,31 +480,16 @@ where
                         }
                     };
 
-                    // Verify that the fingerprint in the proof matches the expected file fingerprint
-                    let expected_fingerprint = file_metadata.fingerprint;
-                    if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
-                        error!(
-                            target: LOG_TARGET,
-                            "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
-                            file_key, expected_fingerprint, file_key_proof.file_metadata.fingerprint
-                        );
-                        continue;
-                    }
-
-                    let proven = match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
-                        Ok(chunk_data) => chunk_data,
-                        Err(error) => {
-                            error!(
-                                target: LOG_TARGET,
-                                "Failed to get proven data for file key proof: {:?}",
-=======
-                                "Failed to decode file key proof: {:?}",
->>>>>>> main
-                                error
-                            );
-                            continue;
-                        }
-                    };
+                // Verify that the fingerprint in the proof matches the expected file fingerprint
+                let expected_fingerprint = file_metadata.fingerprint;
+                if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+                    error!(
+                        target: LOG_TARGET,
+                        "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                        file_key, expected_fingerprint, file_key_proof.file_metadata.fingerprint
+                    );
+                    continue;
+                }
 
                 let proven = match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
                     Ok(data) => data,
