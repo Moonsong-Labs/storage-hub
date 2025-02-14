@@ -2,16 +2,16 @@ use anyhow::anyhow;
 use codec::Decode;
 use futures::future::join_all;
 use priority_queue::PriorityQueue;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::{cmp::max, time::Duration};
 use tokio::sync::Semaphore;
-use std::sync::Mutex;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
@@ -43,14 +43,14 @@ const LOG_TARGET: &str = "msp-move-bucket-task";
 const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
 const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
 const MAX_CHUNKS_PER_REQUEST: usize = 10;
-const PEER_RETRY_ATTEMPTS: usize = 5;  // Number of peers to try
-const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;  // Number of retries per peer
+const PEER_RETRY_ATTEMPTS: usize = 5; // Number of peers to try
+const DOWNLOAD_RETRY_ATTEMPTS: usize = 2; // Number of retries per peer
 
 /// Tracks performance metrics for a BSP peer
-/// 
+///
 /// This struct is used to track the performance metrics for a BSP peer.
 /// It is used to select the best performing peers for a given file.
-/// 
+///
 /// # Fields
 /// * `peer_id` - The ID of the peer
 /// * `successful_downloads` - The number of successful downloads for the peer
@@ -160,13 +160,17 @@ impl BspPeerManager {
     }
 
     fn add_peer(&mut self, peer_id: PeerId, file_key: H256) {
-        let stats = self.peers
+        let stats = self
+            .peers
             .entry(peer_id)
             .or_insert_with(|| BspPeerStats::new());
         stats.add_file_key(file_key.clone());
 
         // Add to the priority queue for this file key
-        let queue = self.peer_queues.entry(file_key).or_insert_with(PriorityQueue::new);
+        let queue = self
+            .peer_queues
+            .entry(file_key)
+            .or_insert_with(PriorityQueue::new);
         queue.push(peer_id, OrderedFloat(stats.get_score()));
     }
 
@@ -174,7 +178,7 @@ impl BspPeerManager {
         if let Some(stats) = self.peers.get_mut(&peer_id) {
             stats.record_success(bytes_downloaded, download_time_ms);
             let new_score = stats.get_score();
-            
+
             // Update scores in all queues containing this peer
             for file_key in stats.file_keys.iter() {
                 if let Some(queue) = self.peer_queues.get_mut(file_key) {
@@ -188,7 +192,7 @@ impl BspPeerManager {
         if let Some(stats) = self.peers.get_mut(&peer_id) {
             stats.record_failure();
             let new_score = stats.get_score();
-            
+
             // Update scores in all queues containing this peer
             for file_key in stats.file_keys.iter() {
                 if let Some(queue) = self.peer_queues.get_mut(file_key) {
@@ -218,10 +222,13 @@ impl BspPeerManager {
         // For random selection from remaining peers - O(R)
         if count_random > 0 && !queue_clone.is_empty() {
             use rand::seq::SliceRandom;
-            let remaining_peers: Vec<_> = queue_clone.into_iter().map(|(peer_id, _)| peer_id).collect();
+            let remaining_peers: Vec<_> = queue_clone
+                .into_iter()
+                .map(|(peer_id, _)| peer_id)
+                .collect();
             let mut remaining_peers = remaining_peers;
             remaining_peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
-            
+
             let actual_random_count = count_random.min(remaining_peers.len());
             selected_peers.extend(remaining_peers.iter().take(actual_random_count));
         }
