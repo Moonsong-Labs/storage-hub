@@ -831,31 +831,6 @@ where
             Error::<T>::CannotHoldDeposit
         );
 
-        // If a specific MSP ID is provided, check that it is a valid MSP and that it has enough available capacity to store the file.
-        let msp = if let Some(ref msp_id) = msp_id {
-            // Check that the received Provider ID corresponds to a valid MSP.
-            ensure!(
-                <T::Providers as ReadStorageProvidersInterface>::is_msp(msp_id),
-                Error::<T>::NotAMsp
-            );
-
-            // Check that it matches the one storing the bucket.
-            ensure!(
-                msp_id == &msp_id_storing_bucket,
-                Error::<T>::MspNotStoringBucket
-            );
-
-            // Check if the MSP is insolvent
-            ensure!(
-                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
-                Error::<T>::OperationNotAllowedForInsolventProvider
-            );
-
-            Some((*msp_id, false))
-        } else {
-            None
-        };
-
         // Get the chosen replication target.
         let replication_target = match replication_target {
             ReplicationTarget::Basic => T::BasicReplicationTarget::get(),
@@ -878,21 +853,6 @@ where
             Error::<T>::ReplicationTargetExceedsMaximum
         );
 
-        // Compute the file key used throughout this file's lifespan.
-        let file_key = Self::compute_file_key(
-            sender.clone(),
-            bucket_id,
-            location.clone(),
-            size,
-            fingerprint,
-        );
-
-        // Check a storage request does not already exist for this file key.
-        ensure!(
-            !<StorageRequests<T>>::contains_key(&file_key),
-            Error::<T>::StorageRequestAlreadyRegistered
-        );
-
         // If a MSP ID is provided, this storage request came from a user.
         let msp = if let Some(ref msp_id) = msp_id {
             // Check that the received Provider ID corresponds to a valid MSP.
@@ -901,16 +861,16 @@ where
                 Error::<T>::NotAMsp
             );
 
-            // Check if the selected MSP is insolvent.
+            // Check that it matches the one storing the bucket.
+            ensure!(
+                msp_id == &msp_id_storing_bucket,
+                Error::<T>::MspNotStoringBucket
+            );
+
+            // Check if the MSP is insolvent
             ensure!(
                 !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
                 Error::<T>::OperationNotAllowedForInsolventProvider
-            );
-
-            // Check that the selected MSP is the one storing the selected bucket.
-            ensure!(
-                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(msp_id, &bucket_id),
-                Error::<T>::MspNotStoringBucket
             );
 
             // Since this request came from a user, it has to pay an amount upfront to cover the effects that
@@ -934,6 +894,21 @@ where
         } else {
             None
         };
+
+        // Compute the file key used throughout this file's lifespan.
+        let file_key = Self::compute_file_key(
+            sender.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        );
+
+        // Check a storage request does not already exist for this file key.
+        ensure!(
+            !<StorageRequests<T>>::contains_key(&file_key),
+            Error::<T>::StorageRequestAlreadyRegistered
+        );
 
         // Enqueue an expiration item for the storage request to clean it up if it expires without being fulfilled or cancelled.
         let expiration_item = ExpirationItem::StorageRequest(file_key);
