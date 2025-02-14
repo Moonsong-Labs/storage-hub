@@ -4347,6 +4347,7 @@ declare const _default: {
     bucketId: string;
     fileSize: string;
     depositPaidForCreation: string;
+    queuePriorityChallenge: string;
   };
   /**
    * Lookup466: pallet_file_system::types::PendingStopStoringRequest<T>

@@ -1440,6 +1440,7 @@ mod users {
                 file_size: size,
                 bucket_id: bucket_id.clone(),
                 deposit_paid_for_creation: file_deletion_request_deposit,
+                queue_priority_challenge: true,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(
@@ -1846,6 +1847,7 @@ mod users {
                 file_size: size,
                 bucket_id: bucket_id.clone(),
                 deposit_paid_for_creation: file_deletion_request_deposit,
+                queue_priority_challenge: true,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(

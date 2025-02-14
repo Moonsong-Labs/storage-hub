@@ -1817,6 +1817,21 @@ where
             });
         }
 
+        if let Some((_, true)) = storage_request_metadata.msp {
+            // Create deletion request without queuing a priority challenge to avoid doing this twice.
+            // Doing this will force the MSP to delete the file.
+            Self::do_delete_file(
+                storage_request_metadata.owner.clone(),
+                storage_request_metadata.bucket_id,
+                file_key,
+                storage_request_metadata.location.clone(),
+                storage_request_metadata.fingerprint,
+                storage_request_metadata.size,
+                None,
+                false,
+            )?;
+        }
+
         // Remove storage request bsps
         let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key)
             .fold(0, |acc, _| acc.saturating_add(One::one()));
@@ -2324,6 +2339,12 @@ where
         Ok((sp_id, new_root))
     }
 
+    /// Queue a pending file deletion request.
+    ///
+    /// This involves
+    ///
+    /// `queue_priority_challenge` should be set to `false` to avoid sending a priority challenge to the BSPs. This flag was introduced to
+    /// to target and ensure the MSP deletes the file key from its forest.
     pub(crate) fn do_delete_file(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
@@ -2332,6 +2353,7 @@ where
         fingerprint: Fingerprint<T>,
         size: StorageDataUnit<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
+        queue_priority_challenge: bool,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
         // Check that the user that's sending the deletion request is not currently insolvent.
         // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
@@ -2401,6 +2423,7 @@ where
                     bucket_id,
                     file_size: size,
                     deposit_paid_for_creation: file_deletion_request_deposit,
+                    queue_priority_challenge,
                 };
 
                 // Add the file key to the pending deletion requests.
@@ -2462,16 +2485,18 @@ where
                     &msp_id, size,
                 )?;
 
-                // Initiate the priority challenge to remove the file key from all the providers.
-                <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key, true,
-                )?;
+                if queue_priority_challenge {
+                    // Initiate the priority challenge to remove the file key from all the providers.
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                        &file_key, true,
+                    )?;
 
-                // Emit event.
-                Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                    issuer: EitherAccountIdOrMspId::<T>::AccountId(sender.clone()),
-                    file_key,
-                });
+                    // Emit event.
+                    Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                        issuer: EitherAccountIdOrMspId::<T>::AccountId(sender.clone()),
+                        file_key,
+                    });
+                }
 
                 true
             }
@@ -2553,9 +2578,17 @@ where
             )?;
 
             // Initiate the priority challenge to remove the file key from all the providers.
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key, true,
-            )?;
+            if pending_file_deletion_request.queue_priority_challenge {
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                    &file_key, true,
+                )?;
+
+                // Emit event.
+                Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                    issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
+                    file_key,
+                });
+            }
 
             // Return the file deletion request deposit to the user owner of the file.
             T::Currency::release(
@@ -2564,12 +2597,6 @@ where
                 pending_file_deletion_request.deposit_paid_for_creation,
                 Precision::Exact,
             )?;
-
-            // Emit event.
-            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
-                file_key,
-            });
         } else {
             // If the file key was not a part of the forest, give the file deletion request deposit to the MSP for their troubles:
 
