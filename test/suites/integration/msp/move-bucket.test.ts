@@ -321,7 +321,8 @@ describeMspNet(
             valuePropId
           )
         ],
-        signer: shUser
+        signer: shUser,
+        finaliseBlock: true
       });
 
       assertEventPresent(
