@@ -179,12 +179,12 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
     }
 }
 
-/// A bundle of file keys that have been accepted by an MSP, alongside the proofs required to  
-/// add these file keys into the corresponding bucket.  
-///  
-/// This struct includes a list of file keys and their corresponding key proofs (i.e. the  
-/// proofs for the file chunks) and a non-inclusion forest proof. The latter is required to  
-/// verify that the file keys were not part of the bucket's Merkle Patricia Forest before,  
+/// A bundle of file keys that have been accepted by an MSP, alongside the proofs required to
+/// add these file keys into the corresponding bucket.
+///
+/// This struct includes a list of file keys and their corresponding key proofs (i.e. the
+/// proofs for the file chunks) and a non-inclusion forest proof. The latter is required to
+/// verify that the file keys were not part of the bucket's Merkle Patricia Forest before,
 /// and add them now. One single non-inclusion forest proof for all the file keys is sufficient.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
@@ -283,6 +283,8 @@ pub struct PendingFileDeletionRequest<T: Config> {
     pub bucket_id: BucketIdFor<T>,
     pub file_size: StorageDataUnit<T>,
     pub deposit_paid_for_creation: BalanceOf<T>,
+    /// Flag to indicate if a priority challenge should be queued for this file deletion request.
+    pub queue_priority_challenge: bool,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
