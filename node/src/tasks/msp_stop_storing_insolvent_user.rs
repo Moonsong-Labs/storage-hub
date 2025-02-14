@@ -35,11 +35,11 @@ const LOG_TARGET: &str = "msp-stop-storing-bucket-insolvent-user-task";
 /// gets finalised.
 ///
 /// The flow of each handler is as follows:
-/// - Reacting to [`UserWithoutFunds`] and [`SpStopStoringInsolventUser`] event from the runtime:
+/// - Reacting to [`UserWithoutFunds`] and [`MspStopStoringBucketInsolventUser`] event from the runtime:
 /// 	- Queues a request to stop storing a bucket for the insolvent user.
 ///
 /// - Reacting to [`ProcessStopStoringForInsolventUserRequest`] event from the BlockchainService:
-/// 	- Calls `msp_stop_storing_bucket_for_insolvent_user` extrinsic from [`pallet_file_system`] for a bucket
+/// 	- Calls [`pallet_file_system::Pallet::msp_stop_storing_bucket_for_insolvent_user`] extrinsic for a bucket
 /// 	  that the user is storing with this MSP to be able to stop storing it without paying a penalty.
 ///
 /// - Reacting to [`FinalisedMspStopStoringBucketInsolventUser`] event from the BlockchainService:
