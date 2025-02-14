@@ -25,6 +25,7 @@ use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::types::ShNodeType;
 use crate::services::{handler::StorageHubHandler, types::MspForestStorageHandlerT};
+use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -754,6 +755,35 @@ where
 
         // Process each proven chunk in the batch
         for chunk in proven {
+            // TODO: Add a batched write chunk method to the file storage.
+
+            // Validate chunk size
+            let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
+                // Last chunk
+                (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
+            } else {
+                // All other chunks
+                FILE_CHUNK_SIZE as usize
+            };
+
+            if chunk.data.len() != expected_chunk_size {
+                error!(
+                    target: LOG_TARGET,
+                    "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
+                    chunk.key,
+                    file_key,
+                    expected_chunk_size,
+                    chunk.data.len()
+                );
+                self.handle_rejected_storage_request(
+                    &file_key,
+                    bucket_id,
+                    RejectedStorageRequestReason::ReceivedInvalidProof,
+                )
+                .await?;
+                return Err(anyhow!("Invalid chunk size"));
+            }
+
             let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);
 
             match write_result {
