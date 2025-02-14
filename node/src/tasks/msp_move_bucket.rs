@@ -18,6 +18,7 @@ use shc_common::types::{
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
 use storage_hub_runtime::StorageDataUnit;
 
@@ -520,6 +521,27 @@ where
                         target: LOG_TARGET,
                         "Expected chunk id {:?} but got {:?}",
                         chunk, proven[0].key
+                    );
+                    continue;
+                }
+
+                // Validate chunk size
+                let expected_chunk_size = if chunk == file_metadata.chunks_count() - 1 {
+                    // Last chunk
+                    (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
+                } else {
+                    // All other chunks
+                    FILE_CHUNK_SIZE as usize
+                };
+
+                if chunk_data.len() != expected_chunk_size {
+                    error!(
+                        target: LOG_TARGET,
+                        "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
+                        chunk_id,
+                        file_key,
+                        expected_chunk_size,
+                        chunk_data.len()
                     );
                     continue;
                 }

@@ -32,6 +32,7 @@ use crate::services::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
+use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -890,7 +891,7 @@ where
         let proven = match proven {
             Ok(proven) => proven,
             Err(e) => {
-                error!(target: LOG_TARGET, "{}", e);
+                error!(target: LOG_TARGET, "Failed to verify and get proven file key chunks: {}", e);
                 return Err(e);
             }
         };
@@ -900,6 +901,32 @@ where
         // Process each proven chunk in the batch
         for chunk in proven {
             // TODO: Add a batched write chunk method to the file storage.
+
+            // Validate chunk size
+            let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
+                // Last chunk
+                (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
+            } else {
+                // All other chunks
+                FILE_CHUNK_SIZE as usize
+            };
+
+            if chunk.data.len() != expected_chunk_size {
+                error!(
+                    target: LOG_TARGET,
+                    "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
+                    chunk.key,
+                    file_key,
+                    expected_chunk_size,
+                    chunk.data.len()
+                );
+                return Err(anyhow!(
+                    "Invalid chunk size. Expected {}, got {}",
+                    expected_chunk_size,
+                    chunk.data.len()
+                ));
+            }
+
             let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);
 
             match write_result {
