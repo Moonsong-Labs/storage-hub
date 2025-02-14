@@ -54,7 +54,7 @@ use crate::{
         FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
         FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
         LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForNewMsp, NewStorageRequest, SlashableProvider,
+        MoveBucketRequested, MoveBucketRequestedForMsp, NewStorageRequest, SlashableProvider,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
@@ -1420,7 +1420,7 @@ where
                                 Some(StorageProviderId::MainStorageProvider(msp_id))
                                     if msp_id == new_msp_id =>
                                 {
-                                    self.emit(MoveBucketRequestedForNewMsp {
+                                    self.emit(MoveBucketRequestedForMsp {
                                         bucket_id,
                                         value_prop_id: new_value_prop_id,
                                     });
