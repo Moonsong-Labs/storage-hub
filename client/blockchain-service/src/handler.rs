@@ -1401,35 +1401,6 @@ where
                             }
                         }
                         RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::MoveBucketRequested {
-                                who: _,
-                                bucket_id,
-                                new_msp_id,
-                                new_value_prop_id,
-                            },
-                        ) => {
-                            match self.provider_id {
-                                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
-                                Some(StorageProviderId::BackupStorageProvider(_)) => {
-                                    self.emit(MoveBucketRequested {
-                                        bucket_id,
-                                        new_msp_id,
-                                    });
-                                }
-                                // As an MSP, this node is interested in the event only if this node is the new MSP.
-                                Some(StorageProviderId::MainStorageProvider(msp_id))
-                                    if msp_id == new_msp_id =>
-                                {
-                                    self.emit(MoveBucketRequestedForMsp {
-                                        bucket_id,
-                                        value_prop_id: new_value_prop_id,
-                                    });
-                                }
-                                // Otherwise, ignore the event.
-                                _ => {}
-                            }
-                        }
-                        RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketRejected { bucket_id, msp_id },
                         ) => {
                             // This event is relevant in case the Provider managed is a BSP.
@@ -1671,6 +1642,35 @@ where
                                         proof_of_inclusion,
                                     });
                                 }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequested {
+                                who: _,
+                                bucket_id,
+                                new_msp_id,
+                                new_value_prop_id,
+                            },
+                        ) => {
+                            match self.provider_id {
+                                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                                Some(StorageProviderId::BackupStorageProvider(_)) => {
+                                    self.emit(MoveBucketRequested {
+                                        bucket_id,
+                                        new_msp_id,
+                                    });
+                                }
+                                // As an MSP, this node is interested in the event only if this node is the new MSP.
+                                Some(StorageProviderId::MainStorageProvider(msp_id))
+                                    if msp_id == new_msp_id =>
+                                {
+                                    self.emit(MoveBucketRequestedForMsp {
+                                        bucket_id,
+                                        value_prop_id: new_value_prop_id,
+                                    });
+                                }
+                                // Otherwise, ignore the event.
+                                _ => {}
                             }
                         }
                         // Ignore all other events.
