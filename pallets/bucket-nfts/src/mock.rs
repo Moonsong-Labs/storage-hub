@@ -519,6 +519,7 @@ impl Get<AccountId> for TreasuryAccount {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();

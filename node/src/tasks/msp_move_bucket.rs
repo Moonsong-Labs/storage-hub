@@ -469,16 +469,27 @@ where
 
                 let file_key_proof =
                     match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
-                        Ok(proof) => proof,
+                        Ok(file_key_proof) => file_key_proof,
                         Err(error) => {
                             error!(
                                 target: LOG_TARGET,
-                                "Failed to decode file key proof: {:?}",
-                                error
+                                "Failed to decode file key proof for chunk {:?} of file {:?}: {:?}",
+                                chunk, file_key, error
                             );
                             continue;
                         }
                     };
+
+                // Verify that the fingerprint in the proof matches the expected file fingerprint
+                let expected_fingerprint = file_metadata.fingerprint;
+                if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+                    error!(
+                        target: LOG_TARGET,
+                        "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                        file_key, expected_fingerprint, file_key_proof.file_metadata.fingerprint
+                    );
+                    continue;
+                }
 
                 let proven = match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
                     Ok(data) => data,

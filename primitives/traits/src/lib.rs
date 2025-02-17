@@ -334,6 +334,12 @@ pub trait MutateBucketsInterface {
     /// Remove a root from a bucket of a MSP, removing the whole bucket from storage.
     fn delete_bucket(bucket_id: Self::BucketId) -> DispatchResult;
 
+    // Delete a bucket without checking whether it's empty or its root is the default one.
+    // Useful for cases when the runtime has to delete a bucket no matter its current status,
+    // for example for an insolvent user.
+    fn force_delete_bucket(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId)
+        -> DispatchResult;
+
     /// Increase the size of a bucket.
     fn increase_bucket_size(
         bucket_id: &Self::BucketId,

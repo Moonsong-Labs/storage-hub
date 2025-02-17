@@ -1011,6 +1011,7 @@ impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
 
 impl pallet_bucket_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_bucket_nfts::weights::SubstrateWeight<Runtime>;
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();

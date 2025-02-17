@@ -2009,6 +2009,12 @@ declare module "@polkadot/types/lookup" {
       readonly location: Bytes;
       readonly newRoot: H256;
     } & Struct;
+    readonly isMspStopStoringBucketInsolventUser: boolean;
+    readonly asMspStopStoringBucketInsolventUser: {
+      readonly mspId: H256;
+      readonly owner: AccountId32;
+      readonly bucketId: H256;
+    } & Struct;
     readonly isFailedToQueuePriorityChallenge: boolean;
     readonly asFailedToQueuePriorityChallenge: {
       readonly fileKey: H256;
@@ -2108,6 +2114,7 @@ declare module "@polkadot/types/lookup" {
       | "BspConfirmStoppedStoring"
       | "PriorityChallengeForFileDeletionQueued"
       | "SpStopStoringInsolventUser"
+      | "MspStopStoringBucketInsolventUser"
       | "FailedToQueuePriorityChallenge"
       | "FileDeletionRequest"
       | "ProofSubmittedForPendingFileDeletionRequest"
@@ -4382,6 +4389,10 @@ declare module "@polkadot/types/lookup" {
       readonly size_: u64;
       readonly inclusionForestProof: SpTrieStorageProofCompactProof;
     } & Struct;
+    readonly isMspStopStoringBucketForInsolventUser: boolean;
+    readonly asMspStopStoringBucketForInsolventUser: {
+      readonly bucketId: H256;
+    } & Struct;
     readonly isDeleteFile: boolean;
     readonly asDeleteFile: {
       readonly bucketId: H256;
@@ -4415,6 +4426,7 @@ declare module "@polkadot/types/lookup" {
       | "BspRequestStopStoring"
       | "BspConfirmStopStoring"
       | "StopStoringForInsolventUser"
+      | "MspStopStoringBucketForInsolventUser"
       | "DeleteFile"
       | "PendingFileDeletionRequestSubmitProof";
   }
