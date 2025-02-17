@@ -332,6 +332,13 @@ describeMspNet(
         requestMoveBucketResult.events
       );
 
+      // Finalising the block in the BSP node as well, to trigger the reorg in the BSP node too.
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+
+      // Wait for BSP node to have imported the finalised block built by the user node.
+      await msp2Api.wait.blockImported(finalisedBlockHash.toString());
+      await msp2Api.block.finaliseBlock(finalisedBlockHash.toString());
+
       await userApi.wait.waitForTxInPool({
         module: "fileSystem",
         method: "mspRespondMoveBucketRequest"
