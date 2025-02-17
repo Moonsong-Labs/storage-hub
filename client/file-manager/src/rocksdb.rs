@@ -1218,8 +1218,6 @@ mod tests {
         let mut file_trie =
             RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
 
-        let fingerprint = Fingerprint::from(file_trie.get_root().as_ref());
-
         for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
             file_trie.write_chunk(chunk_id, chunk).unwrap();
         }
