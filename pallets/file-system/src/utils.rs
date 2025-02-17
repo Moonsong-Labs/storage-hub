@@ -26,11 +26,13 @@ use pallet_file_system_runtime_api::{
     QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
+use shp_constants::GIGAUNIT;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
     CommitRevealRandomnessInterface, MutateBucketsInterface, MutateStorageProvidersInterface,
-    PaymentStreamsInterface, ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
-    ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
+    PaymentStreamsInterface, PricePerGigaUnitPerTickInterface, ProofsDealerInterface,
+    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 
 use crate::{
@@ -41,13 +43,14 @@ use crate::{
         FileLocation, Fingerprint, ForestProof, MerkleHash, MoveBucketRequestMetadata,
         MultiAddresses, PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest,
         ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
-        StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
+    weights::WeightInfo,
     BucketsWithStorageRequests, Error, Event, HoldReason, MspsAmountOfPendingFileDeletionRequests,
-    Pallet, PendingBucketsToMove, PendingFileDeletionRequests, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+    Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
+    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -490,18 +493,21 @@ where
             Error::<T>::OperationNotAllowedForInsolventProvider
         );
 
+        // Get the current MSP that is storing the bucket, if any.
+        let maybe_previous_msp_id =
+            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
+
         // Check if the bucket is already stored by the new MSP.
-        ensure!(
-            !<T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
-                &new_msp_id,
-                &bucket_id
-            ),
-            Error::<T>::MspAlreadyStoringBucket
-        );
+        if let Some(previous_msp_id) = maybe_previous_msp_id {
+            ensure!(
+                previous_msp_id != new_msp_id,
+                Error::<T>::MspAlreadyStoringBucket
+            );
+        }
 
         // Check that the bucket is not being moved.
         ensure!(
-            !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            !<PendingMoveBucketRequests<T>>::contains_key(&bucket_id),
             Error::<T>::BucketIsBeingMoved
         );
 
@@ -516,16 +522,15 @@ where
 
         // Register the move bucket request.
         <PendingMoveBucketRequests<T>>::insert(
-            &new_msp_id,
             bucket_id,
             MoveBucketRequestMetadata {
                 requester: sender.clone(),
+                new_msp_id,
                 new_value_prop_id,
             },
         );
-        <PendingBucketsToMove<T>>::insert(&bucket_id, ());
 
-        let expiration_item = ExpirationItem::MoveBucketRequest((new_msp_id, bucket_id));
+        let expiration_item = ExpirationItem::MoveBucketRequest(bucket_id);
         Self::enqueue_expiration_item(expiration_item)?;
 
         Ok(())
@@ -553,9 +558,15 @@ where
 
         // Check if the move bucket request exists for the MSP and bucket, removing it from storage if it does.
         let move_bucket_request_metadata = expect_or_err!(
-            <PendingMoveBucketRequests<T>>::take(&msp_id, bucket_id),
+            <PendingMoveBucketRequests<T>>::take(bucket_id),
             "Move bucket request should exist",
             Error::<T>::MoveBucketRequestNotFound
+        );
+
+        // Ensure the new MSP that the user selected to store the bucket matches the one responding the request.
+        ensure!(
+            msp_id == move_bucket_request_metadata.new_msp_id,
+            Error::<T>::NotSelectedMsp
         );
 
         // If the new MSP accepted storing the bucket...
@@ -564,13 +575,13 @@ where
             let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
 
             // Get the previous MSP that was storing the bucket, if any.
-            let previous_msp_id =
+            let maybe_previous_msp_id =
                 <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
             // If another MSP was previously storing the bucket, update its used capacity to reflect the removal of the bucket.
-            if let Some(msp_id) = previous_msp_id {
+            if let Some(previous_msp_id) = maybe_previous_msp_id {
                 <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-                    &msp_id,
+                    &previous_msp_id,
                     bucket_size,
                 )?;
             }
@@ -595,9 +606,6 @@ where
                 bucket_size,
             )?;
         }
-
-        // Remove the bucket from the pending buckets to move.
-        <PendingBucketsToMove<T>>::remove(&bucket_id);
 
         Ok((msp_id, move_bucket_request_metadata.new_value_prop_id))
     }
@@ -744,7 +752,6 @@ where
         }
 
         // Return the collection ID associated with the bucket, if any.
-        // TODO: Check if the MSP is deleting the bucket from its local storage as well.
         Ok(maybe_collection_id)
     }
 
@@ -758,7 +765,7 @@ where
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         msp_id: Option<ProviderIdFor<T>>,
         replication_target: ReplicationTarget<T>,
         user_peer_ids: Option<PeerIds<T>>,
@@ -781,12 +788,40 @@ where
         // Check that the bucket is not being moved.
         // Do not allow any storage requests and move bucket requests to coexist for the same bucket.
         ensure!(
-            !<PendingBucketsToMove<T>>::contains_key(&bucket_id),
+            !<PendingMoveBucketRequests<T>>::contains_key(&bucket_id),
             Error::<T>::BucketIsBeingMoved
         );
 
-        // Check if we can hold the storage request creation deposit from the user
-        let deposit = T::StorageRequestCreationDeposit::get();
+        // Get the MSP that's currently storing the bucket. It should exist since the bucket is not currently being moved.
+        let msp_id_storing_bucket = expect_or_err!(
+            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)
+                .expect("Bucket was checked to exist previously. qed"),
+            "MSP should exist for bucket",
+            Error::<T>::MspNotStoringBucket
+        );
+
+        // Ensure a payment stream between the MSP and the user exists. This is to avoid storage requests
+        // being issued for buckets that belonged to an insolvent user (that's no longer insolvent) and
+        // the MSP did not delete.
+        ensure!(
+            <T::PaymentStreams as PaymentStreamsInterface>::has_active_payment_stream_with_user(
+                &msp_id_storing_bucket,
+                &sender
+            ),
+            Error::<T>::FixedRatePaymentStreamNotFound
+        );
+
+        // Check if we can hold the storage request creation deposit from the user.
+        // The storage request creation deposit should be enough to cover the weight of the `bsp_volunteer`
+        // extrinsic for ALL BSPs of the network.
+        let number_of_bsps = <T::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+        let number_of_bsps_balance_typed =
+            <T as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+        let deposit = <T::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+            &T::WeightInfo::bsp_volunteer(),
+        )
+        .saturating_mul(number_of_bsps_balance_typed)
+        .saturating_add(T::BaseStorageRequestCreationDeposit::get());
         ensure!(
             T::Currency::can_hold(
                 &HoldReason::StorageRequestCreationHold.into(),
@@ -796,31 +831,7 @@ where
             Error::<T>::CannotHoldDeposit
         );
 
-        // If a specific MSP ID is provided, check that it is a valid MSP and that it has enough available capacity to store the file.
-        let msp = if let Some(ref msp_id) = msp_id {
-            // Check that the received Provider ID corresponds to a valid MSP.
-            ensure!(
-                <T::Providers as ReadStorageProvidersInterface>::is_msp(msp_id),
-                Error::<T>::NotAMsp
-            );
-
-            // Check if the MSP is insolvent
-            ensure!(
-                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
-                Error::<T>::OperationNotAllowedForInsolventProvider
-            );
-
-            // Check that the MSP received is the one storing the bucket.
-            ensure!(
-                <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(msp_id, &bucket_id),
-                Error::<T>::MspNotStoringBucket
-            );
-
-            Some((*msp_id, false))
-        } else {
-            None
-        };
-
+        // Get the chosen replication target.
         let replication_target = match replication_target {
             ReplicationTarget::Basic => T::BasicReplicationTarget::get(),
             ReplicationTarget::Standard => T::StandardReplicationTarget::get(),
@@ -830,16 +841,59 @@ where
             ReplicationTarget::Custom(replication_target) => replication_target,
         };
 
-        if replication_target.is_zero() {
-            return Err(Error::<T>::ReplicationTargetCannotBeZero)?;
-        }
+        // Ensure that the chosen replication target is not zero.
+        ensure!(
+            !replication_target.is_zero(),
+            Error::<T>::ReplicationTargetCannotBeZero
+        );
 
-        if replication_target > T::MaxReplicationTarget::get() {
-            return Err(Error::<T>::ReplicationTargetExceedsMaximum)?;
-        }
+        // Ensure that the chosen replication target is not greater than the maximum allowed replication target.
+        ensure!(
+            replication_target <= T::MaxReplicationTarget::get(),
+            Error::<T>::ReplicationTargetExceedsMaximum
+        );
 
-        let current_tick =
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+        // If a MSP ID is provided, this storage request came from a user.
+        let msp = if let Some(ref msp_id) = msp_id {
+            // Check that the received Provider ID corresponds to a valid MSP.
+            ensure!(
+                <T::Providers as ReadStorageProvidersInterface>::is_msp(msp_id),
+                Error::<T>::NotAMsp
+            );
+
+            // Check that it matches the one storing the bucket.
+            ensure!(
+                msp_id == &msp_id_storing_bucket,
+                Error::<T>::MspNotStoringBucket
+            );
+
+            // Check if the MSP is insolvent
+            ensure!(
+                !<T::Providers as ReadProvidersInterface>::is_provider_insolvent(*msp_id),
+                Error::<T>::OperationNotAllowedForInsolventProvider
+            );
+
+            // Since this request came from a user, it has to pay an amount upfront to cover the effects that
+            // file retrieval will have on the network's availability.
+            // This amount is paid to the treasury. Governance can then decide what to do with the accumulated
+            // funds (such as splitting them among the BSPs).
+            let amount_to_pay_upfront = <T::PaymentStreams as PricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick()
+				.saturating_mul(T::TickNumberToBalance::convert(T::UpfrontTicksToPay::get()))
+				.saturating_mul(T::ReplicationTargetToBalance::convert(replication_target))
+				.saturating_mul(T::StorageDataUnitToBalance::convert(size))
+				.checked_div(&GIGAUNIT.into())
+				.unwrap_or_default();
+            T::Currency::transfer(
+                &sender,
+                &T::TreasuryAccount::get(),
+                amount_to_pay_upfront,
+                Preservation::Preserve,
+            )?;
+
+            Some((*msp_id, false))
+        } else {
+            None
+        };
 
         // Compute the file key used throughout this file's lifespan.
         let file_key = Self::compute_file_key(
@@ -860,6 +914,10 @@ where
         let expiration_item = ExpirationItem::StorageRequest(file_key);
         let expiration_tick = Self::enqueue_expiration_item(expiration_item)?;
 
+        // Get the current tick.
+        let current_tick =
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+
         // Create the storage request's metadata.
         let zero = ReplicationTargetType::<T>::zero();
         let storage_request_metadata = StorageRequestMetadata::<T> {
@@ -875,21 +933,21 @@ where
             bsps_confirmed: zero,
             bsps_volunteered: zero,
             expires_at: expiration_tick,
+            deposit_paid: deposit,
         };
 
-        // Hold the deposit from the user
+        // Hold the required deposit from the user.
         T::Currency::hold(
             &HoldReason::StorageRequestCreationHold.into(),
             &sender,
             deposit,
         )?;
 
-        // Register storage request.
+        // Register the storage request and add it to the bucket's storage requests.
         <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
-
         <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
 
-        // BSPs listen to this event and volunteer to store the file
+        // Emit the `NewStorageRequest` event.
         Self::deposit_event(Event::NewStorageRequest {
             who: sender,
             file_key,
@@ -989,6 +1047,86 @@ where
 
         // Remove the MSP from the bucket.
         <T::Providers as MutateBucketsInterface>::unassign_msp_from_bucket(&bucket_id)?;
+
+        Ok((msp_id, bucket_owner))
+    }
+
+    /// Deletes a bucket from a user marked as insolvent and all its associated data.
+    /// This can be used by MSPs that detect that they are storing a bucket for an insolvent user.
+    /// This way, the MSP can remove the bucket and stop storing it, receiving from the user's deposit
+    /// the amount it's owed and deleting the payment stream between them in the process.
+    pub(crate) fn do_msp_stop_storing_bucket_for_insolvent_user(
+        sender: T::AccountId,
+        bucket_id: BucketIdFor<T>,
+    ) -> Result<(ProviderIdFor<T>, T::AccountId), DispatchError> {
+        // Ensure the sender is a registered MSP.
+        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
+            .ok_or(Error::<T>::NotAMsp)?;
+        ensure!(
+            <T::Providers as shp_traits::ReadStorageProvidersInterface>::is_msp(&msp_id),
+            Error::<T>::NotAMsp
+        );
+
+        // Ensure the bucket exists.
+        ensure!(
+            <T::Providers as shp_traits::ReadBucketsInterface>::bucket_exists(&bucket_id),
+            Error::<T>::BucketNotFound
+        );
+
+        // Ensure the bucket is stored by the MSP.
+        ensure!(
+            <T::Providers as shp_traits::ReadBucketsInterface>::is_bucket_stored_by_msp(
+                &msp_id, &bucket_id
+            ),
+            Error::<T>::MspNotStoringBucket
+        );
+
+        // Get the owner of the bucket.
+        let bucket_owner =
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_bucket_owner(&bucket_id)?;
+
+        // Get the size of the bucket.
+        let bucket_size =
+            <T::Providers as shp_traits::ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
+
+        // To allow the MSP to completely delete the bucket, either the user account is currently insolvent
+        // or no payment stream exists between the user and the MSP.
+        let is_user_insolvent =
+            <T::UserSolvency as shp_traits::ReadUserSolvencyInterface>::is_user_insolvent(
+                &bucket_owner,
+            );
+        let payment_stream_exists =
+            <T::PaymentStreams as shp_traits::PaymentStreamsInterface>::has_active_payment_stream_with_user(
+                &msp_id,
+                &bucket_owner,
+            );
+        ensure!(
+            is_user_insolvent || !payment_stream_exists,
+            Error::<T>::UserNotInsolvent
+        );
+
+        // Retrieve the collection ID associated with the bucket, if any.
+        let maybe_collection_id: Option<CollectionIdFor<T>> =
+            <T::Providers as ReadBucketsInterface>::get_read_access_group_id_of_bucket(&bucket_id)?;
+
+        // Delete the collection associated with the bucket if it existed.
+        if let Some(collection_id) = maybe_collection_id.clone() {
+            let destroy_witness = expect_or_err!(
+                T::Nfts::get_destroy_witness(&collection_id),
+                "Failed to get destroy witness for collection, when it was already checked to exist",
+                Error::<T>::CollectionNotFound
+            );
+            T::Nfts::destroy(collection_id, destroy_witness, Some(bucket_owner.clone()))?;
+        }
+
+        // Delete the bucket from the system.
+        <T::Providers as MutateBucketsInterface>::force_delete_bucket(&msp_id, &bucket_id)?;
+
+        // Decrease the used capacity of the MSP.
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &msp_id,
+            bucket_size,
+        )?;
 
         Ok((msp_id, bucket_owner))
     }
@@ -1167,7 +1305,7 @@ where
                 T::Currency::release(
                     &HoldReason::StorageRequestCreationHold.into(),
                     &storage_request_metadata.owner,
-                    T::StorageRequestCreationDeposit::get(),
+                    storage_request_metadata.deposit_paid,
                     Precision::BestEffort,
                 )?;
 
@@ -1339,6 +1477,32 @@ where
             }
         }
 
+        // Get the payment account of the BSP.
+        let bsp_payment_account =
+            <T::Providers as shp_traits::ReadProvidersInterface>::get_payment_account(bsp_id)
+                .ok_or(Error::<T>::FailedToGetPaymentAccount)?;
+
+        // Calculate how much the BSP should be reimbursed for this extrinsic from the user's deposit.
+        let amount_to_pay = <T::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+            &T::WeightInfo::bsp_volunteer(),
+        );
+
+        // Transfer the funds to the BSP.
+        let amount_transferred = T::Currency::transfer_on_hold(
+            &HoldReason::StorageRequestCreationHold.into(),
+            &storage_request_metadata.owner,
+            &bsp_payment_account,
+            amount_to_pay,
+            Precision::BestEffort,
+            Restriction::Free,
+            Fortitude::Force,
+        )?;
+
+        // If the transfer was successful, substract the amount from the deposit paid by the user.
+        storage_request_metadata.deposit_paid = storage_request_metadata
+            .deposit_paid
+            .saturating_sub(amount_transferred);
+
         // Update storage request metadata.
         <StorageRequests<T>>::set(&file_key, Some(storage_request_metadata.clone()));
 
@@ -1445,6 +1609,15 @@ where
                 );
                 continue;
             }
+
+            // Check that the bucket of the file key still exists. This is done since if the user was previously insolvent the bucket
+            // of the storage request might have been deleted by the MSP.
+            ensure!(
+                <T::Providers as ReadBucketsInterface>::bucket_exists(
+                    &storage_request_metadata.bucket_id
+                ),
+                Error::<T>::BucketNotFound
+            );
 
             // Check that the BSP has volunteered for the storage request.
             ensure!(
@@ -1597,7 +1770,7 @@ where
                 T::Currency::release(
                     &HoldReason::StorageRequestCreationHold.into(),
                     &storage_request_metadata.owner,
-                    T::StorageRequestCreationDeposit::get(),
+                    storage_request_metadata.deposit_paid,
                     Precision::BestEffort,
                 )?;
 
@@ -1756,6 +1929,21 @@ where
             });
         }
 
+        if let Some((_, true)) = storage_request_metadata.msp {
+            // Create deletion request without queuing a priority challenge to avoid doing this twice.
+            // Doing this will force the MSP to delete the file.
+            Self::do_delete_file(
+                storage_request_metadata.owner.clone(),
+                storage_request_metadata.bucket_id,
+                file_key,
+                storage_request_metadata.location.clone(),
+                storage_request_metadata.fingerprint,
+                storage_request_metadata.size,
+                None,
+                false,
+            )?;
+        }
+
         // Remove storage request bsps
         let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key)
             .fold(0, |acc, _| acc.saturating_add(One::one()));
@@ -1781,7 +1969,7 @@ where
         T::Currency::release(
             &HoldReason::StorageRequestCreationHold.into(),
             &storage_request_metadata.owner,
-            T::StorageRequestCreationDeposit::get(),
+            storage_request_metadata.deposit_paid,
             Precision::BestEffort,
         )?;
 
@@ -1828,7 +2016,7 @@ where
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         can_serve: bool,
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<ProviderIdFor<T>, DispatchError> {
@@ -2097,7 +2285,7 @@ where
         location: FileLocation<T>,
         owner: T::AccountId,
         fingerprint: Fingerprint<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         inclusion_forest_proof: ForestProof<T>,
     ) -> Result<(ProviderIdFor<T>, MerkleHash<T>), DispatchError> {
         // Get the SP ID
@@ -2263,14 +2451,21 @@ where
         Ok((sp_id, new_root))
     }
 
+    /// Queue a pending file deletion request.
+    ///
+    /// This involves
+    ///
+    /// `queue_priority_challenge` should be set to `false` to avoid sending a priority challenge to the BSPs. This flag was introduced to
+    /// to target and ensure the MSP deletes the file key from its forest.
     pub(crate) fn do_delete_file(
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         file_key: MerkleHash<T>,
         location: FileLocation<T>,
         fingerprint: Fingerprint<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         maybe_inclusion_forest_proof: Option<ForestProof<T>>,
+        queue_priority_challenge: bool,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
         // Check that the user that's sending the deletion request is not currently insolvent.
         // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
@@ -2340,6 +2535,7 @@ where
                     bucket_id,
                     file_size: size,
                     deposit_paid_for_creation: file_deletion_request_deposit,
+                    queue_priority_challenge,
                 };
 
                 // Add the file key to the pending deletion requests.
@@ -2401,16 +2597,18 @@ where
                     &msp_id, size,
                 )?;
 
-                // Initiate the priority challenge to remove the file key from all the providers.
-                <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key, true,
-                )?;
+                if queue_priority_challenge {
+                    // Initiate the priority challenge to remove the file key from all the providers.
+                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                        &file_key, true,
+                    )?;
 
-                // Emit event.
-                Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                    issuer: EitherAccountIdOrMspId::<T>::AccountId(sender.clone()),
-                    file_key,
-                });
+                    // Emit event.
+                    Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                        issuer: EitherAccountIdOrMspId::<T>::AccountId(sender.clone()),
+                        file_key,
+                    });
+                }
 
                 true
             }
@@ -2423,7 +2621,7 @@ where
         sender: T::AccountId,
         user: T::AccountId,
         file_key: MerkleHash<T>,
-        file_size: StorageData<T>,
+        file_size: StorageDataUnit<T>,
         bucket_id: BucketIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
@@ -2492,9 +2690,17 @@ where
             )?;
 
             // Initiate the priority challenge to remove the file key from all the providers.
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key, true,
-            )?;
+            if pending_file_deletion_request.queue_priority_challenge {
+                <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
+                    &file_key, true,
+                )?;
+
+                // Emit event.
+                Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
+                    issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
+                    file_key,
+                });
+            }
 
             // Return the file deletion request deposit to the user owner of the file.
             T::Currency::release(
@@ -2503,12 +2709,6 @@ where
                 pending_file_deletion_request.deposit_paid_for_creation,
                 Precision::Exact,
             )?;
-
-            // Emit event.
-            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
-                file_key,
-            });
         } else {
             // If the file key was not a part of the forest, give the file deletion request deposit to the MSP for their troubles:
 
@@ -2580,7 +2780,7 @@ where
         owner: T::AccountId,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
-        size: StorageData<T>,
+        size: StorageDataUnit<T>,
         fingerprint: Fingerprint<T>,
     ) -> MerkleHash<T> {
         shp_file_metadata::FileMetadata::<
@@ -2602,11 +2802,11 @@ mod hooks {
     use crate::{
         pallet,
         types::{MerkleHash, RejectedStorageRequestReason, ReplicationTargetType, TickNumber},
-        utils::{BucketIdFor, EitherAccountIdOrMspId, ProviderIdFor},
+        utils::{BucketIdFor, EitherAccountIdOrMspId},
         weights::WeightInfo,
         BucketsWithStorageRequests, Event, HoldReason, MoveBucketRequestExpirations,
-        NextStartingTickToCleanUp, Pallet, PendingBucketsToMove, PendingMoveBucketRequests,
-        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+        NextStartingTickToCleanUp, Pallet, PendingMoveBucketRequests, StorageRequestBsps,
+        StorageRequestExpirations, StorageRequests,
     };
     use frame_support::traits::{fungible::MutateHold, tokens::Precision};
     use sp_runtime::{
@@ -2618,7 +2818,7 @@ mod hooks {
     impl<T: pallet::Config> Pallet<T> {
         pub(crate) fn do_on_poll(weight: &mut WeightMeter) {
             let current_data_price_per_giga_unit =
-                <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
+                <T::PaymentStreams as shp_traits::PricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick();
 
             let new_data_price_per_giga_unit =
                 <T::UpdateStoragePrice as shp_traits::UpdateStoragePrice>::update_storage_price(
@@ -2628,7 +2828,7 @@ mod hooks {
                 );
 
             if new_data_price_per_giga_unit != current_data_price_per_giga_unit {
-                <T::PaymentStreams as shp_traits::MutatePricePerGigaUnitPerTickInterface>::set_price_per_giga_unit_per_tick(
+                <T::PaymentStreams as shp_traits::PricePerGigaUnitPerTickInterface>::set_price_per_giga_unit_per_tick(
                     new_data_price_per_giga_unit,
                 );
             }
@@ -2745,17 +2945,17 @@ mod hooks {
                     T::WeightInfo::process_expired_move_bucket_request();
 
                 // While there's enough weight to process an expired move bucket request AND re-insert the remaining move bucket requests to storage, continue.
-                while let Some((msp_id, bucket_id)) = expired_move_bucket_requests.pop() {
+                while let Some(bucket_id) = expired_move_bucket_requests.pop() {
                     if meter.can_consume(
                         required_weight_processing_expired_move_bucket_request
                             .saturating_add(db_weight.writes(1)),
                     ) {
                         // Process an expired move bucket request. This internally consumes the used weight from the meter.
-                        Self::process_expired_move_bucket_request(msp_id, bucket_id, meter);
+                        Self::process_expired_move_bucket_request(bucket_id, meter);
                     } else {
                         // Push back the expired move bucket request into the move bucket requests queue to be able to re-insert it.
                         // This should never fail since this element was just taken from the bounded vector, so there must be space for it.
-                        let _ = expired_move_bucket_requests.try_push((msp_id, bucket_id));
+                        let _ = expired_move_bucket_requests.try_push(bucket_id);
                         ran_out_of_weight = true;
                         break;
                     }
@@ -2784,16 +2984,15 @@ mod hooks {
                 Some(storage_request_metadata) => match storage_request_metadata.msp {
                     None | Some((_, true)) => {
                         // If the request was originated by a request to stop storing from a BSP for a file that had no
-                        // storage request open, or if the MSP has already accepted storing the file, treat the storage request
-                        // as fulfilled with whatever amount of BSPs got to volunteer and confirm the file. For that:
+                        // storage request open, or if the MSP has already accepted storing the file (and the bucket and
+                        // payment stream with the user still exists), treat the storage request as fulfilled with whatever
+                        // amount of BSPs got to volunteer and confirm the file. For that:
                         // Return the storage request creation deposit to the user, emitting an error event if it fails
                         // but continuing execution.
-                        let storage_request_creation_deposit =
-                            T::StorageRequestCreationDeposit::get();
                         let _ = T::Currency::release(
                             &HoldReason::StorageRequestCreationHold.into(),
                             &storage_request_metadata.owner,
-                            storage_request_creation_deposit,
+                            storage_request_metadata.deposit_paid,
                             Precision::BestEffort,
                         )
                         .map_err(|e| {
@@ -2801,7 +3000,7 @@ mod hooks {
                                 Event::FailedToReleaseStorageRequestCreationDeposit {
                                     file_key,
                                     owner: storage_request_metadata.owner.clone(),
-                                    amount_to_return: storage_request_creation_deposit,
+                                    amount_to_return: storage_request_metadata.deposit_paid,
                                     error: e,
                                 },
                             );
@@ -2851,12 +3050,10 @@ mod hooks {
 
                         // Return the storage request creation deposit to the user, emitting an error event if it fails
                         // but continuing execution.
-                        let storage_request_creation_deposit =
-                            T::StorageRequestCreationDeposit::get();
                         let _ = T::Currency::release(
                             &HoldReason::StorageRequestCreationHold.into(),
                             &storage_request_metadata.owner,
-                            storage_request_creation_deposit,
+                            storage_request_metadata.deposit_paid,
                             Precision::BestEffort,
                         )
                         .map_err(|e| {
@@ -2864,7 +3061,7 @@ mod hooks {
                                 Event::FailedToReleaseStorageRequestCreationDeposit {
                                     file_key,
                                     owner: storage_request_metadata.owner.clone(),
-                                    amount_to_return: storage_request_creation_deposit,
+                                    amount_to_return: storage_request_metadata.deposit_paid,
                                     error: e,
                                 },
                             );
@@ -2897,16 +3094,14 @@ mod hooks {
         }
 
         pub(crate) fn process_expired_move_bucket_request(
-            msp_id: ProviderIdFor<T>,
             bucket_id: BucketIdFor<T>,
             meter: &mut WeightMeter,
         ) {
             // Remove from storage the pending move bucket request.
-            PendingMoveBucketRequests::<T>::remove(&msp_id, &bucket_id);
-            PendingBucketsToMove::<T>::remove(&bucket_id);
+            PendingMoveBucketRequests::<T>::remove(&bucket_id);
 
             // Deposit the event of the expired move bucket request.
-            Self::deposit_event(Event::MoveBucketRequestExpired { msp_id, bucket_id });
+            Self::deposit_event(Event::MoveBucketRequestExpired { bucket_id });
 
             // Consume the weight used by this function.
             meter.consume(T::WeightInfo::process_expired_move_bucket_request());

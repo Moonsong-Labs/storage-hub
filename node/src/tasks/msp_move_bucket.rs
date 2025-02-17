@@ -9,8 +9,8 @@ use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::MoveBucketRequestedForNewMsp,
-    types::{RetryStrategy, Tip},
+    events::MoveBucketRequestedForMsp,
+    types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
     BucketId, FileKeyProof, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -71,12 +71,12 @@ where
     pending_bucket_id: Option<BucketId>,
 }
 
-impl<NT> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<NT>
+impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
-    async fn handle_event(&mut self, event: MoveBucketRequestedForNewMsp) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketRequestedForMsp) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: user requested to move bucket {:?} to us",
@@ -106,7 +106,7 @@ where
     /// If it returns an error, the caller (handle_event) will reject the bucket move request.
     async fn handle_move_bucket_request(
         &mut self,
-        event: MoveBucketRequestedForNewMsp,
+        event: MoveBucketRequestedForMsp,
     ) -> anyhow::Result<()> {
         let indexer_db_pool = if let Some(indexer_db_pool) =
             self.storage_hub_handler.indexer_db_pool.clone()
@@ -657,7 +657,7 @@ where
 
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Tip::from(0))
+                .send_extrinsic(call, SendExtrinsicOptions::default())
                 .await?
                 .with_timeout(Duration::from_secs(60))
                 .watch_for_success(&self.storage_hub_handler.blockchain)

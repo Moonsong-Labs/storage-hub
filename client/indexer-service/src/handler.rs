@@ -309,6 +309,9 @@ impl IndexerService {
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => {
+                // TODO: Index this
+            }
             pallet_file_system::Event::SpStopStoringInsolventUser {
                 sp_id,
                 file_key,
@@ -340,6 +343,9 @@ impl IndexerService {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
             pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
+            pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
             pallet_file_system::Event::__Ignore(_, _) => {}

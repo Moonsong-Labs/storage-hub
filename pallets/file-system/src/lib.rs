@@ -89,6 +89,7 @@ pub mod pallet {
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             > + shp_traits::ReadStorageProvidersInterface<
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
+				SpCount = ReplicationTargetType<Self>
             > + shp_traits::MutateStorageProvidersInterface<
                 ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
                 StorageDataUnit = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
@@ -124,7 +125,7 @@ pub mod pallet {
             ProviderId = <Self::Providers as shp_traits::ReadProvidersInterface>::ProviderId,
             Units = <Self::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit,
         >
-        + shp_traits::MutatePricePerGigaUnitPerTickInterface<PricePerGigaUnitPerTick = BalanceOf<Self>>;
+        + shp_traits::PricePerGigaUnitPerTickInterface<PricePerGigaUnitPerTick = BalanceOf<Self>>;
 
         /// The trait to initialise a Provider's randomness commit-reveal cycle.
         type CrRandomness: shp_traits::CommitRevealRandomnessInterface<
@@ -243,6 +244,18 @@ pub mod pallet {
             CollectionId = CollectionIdFor<Self>,
         >;
 
+        /// Converter from the Weight type to the corresponding fee.
+        type WeightToFee: sp_weights::WeightToFee<Balance = BalanceOf<Self>>;
+
+        /// Converter from the ReplicationTarget type to the Balance type.
+        type ReplicationTargetToBalance: Convert<ReplicationTargetType<Self>, BalanceOf<Self>>;
+
+        /// Converter from the TickNumber type to the Balance type.
+        type TickNumberToBalance: Convert<TickNumber<Self>, BalanceOf<Self>>;
+
+        /// Converter from the StorageDataUnit type to the Balance type.
+        type StorageDataUnitToBalance: Convert<StorageDataUnit<Self>, BalanceOf<Self>>;
+
         /// The treasury account of the runtime, where a fraction of each payment goes.
         #[pallet::constant]
         type TreasuryAccount: Get<Self::AccountId>;
@@ -304,9 +317,10 @@ pub mod pallet {
         #[pallet::constant]
         type MinWaitForStopStoring: Get<TickNumber<Self>>;
 
-        /// Deposit held from the User when creating a new storage request
+        /// Base deposit held from the User when creating a new storage request. The actual deposit held is this amount
+        /// plus the amount required to pay for all BSP's `bsp_volunteer` extrinsic.
         #[pallet::constant]
-        type StorageRequestCreationDeposit: Get<BalanceOf<Self>>;
+        type BaseStorageRequestCreationDeposit: Get<BalanceOf<Self>>;
 
         /// Basic security replication target for a new storage request.
         ///
@@ -356,6 +370,21 @@ pub mod pallet {
         /// Maximum replication target that a user can select for a new storage request.
         #[pallet::constant]
         type MaxReplicationTarget: Get<ReplicationTargetType<Self>>;
+
+        /// The amount of ticks that the user has to pay upfront when issuing a storage request.
+        ///
+        /// This is to compensate the system load that the process of file retrieval will have on the network.
+        /// If this did not exist, a malicious user could spam the network with huge files, making BSPs change
+        /// their capacity and download a lot of data while the user might not even have the balance to
+        /// store and pay those BSPs in the long term.
+        ///
+        /// It initially exists as a deterrent, since these funds will be transferred to the treasury and not to the BSPs
+        /// of the network. Governance can then decide what to do with these funds.
+        ///
+        /// The amount that the user is going to have to pay is calculated as follows:
+        /// `Replication Target Chosen * PricePerGigaUnitPerTick * File Size in Gigabytes * UpfrontTicksToPay`
+        #[pallet::constant]
+        type UpfrontTicksToPay: Get<TickNumber<Self>>;
 
         /// The amount of ticks that have to pass for the threshold to volunteer for a specific storage request
         /// to arrive at its maximum value.
@@ -415,7 +444,7 @@ pub mod pallet {
         _,
         Blake2_128Concat,
         TickNumber<T>,
-        BoundedVec<(ProviderIdFor<T>, BucketIdFor<T>), T::MaxExpiredItemsInTick>,
+        BoundedVec<BucketIdFor<T>, T::MaxExpiredItemsInTick>,
         ValueQuery,
     >;
 
@@ -481,22 +510,11 @@ pub mod pallet {
 
     /// Pending move bucket requests.
     ///
-    /// A double mapping from MSP IDs to a list of bucket IDs which they can accept or decline to take over.
-    /// The value is the user who requested the move.
+    /// A mapping from Bucket ID to their move bucket request metadata, which includes the new MSP
+    /// and value propositions that this bucket would take if accepted.
     #[pallet::storage]
-    pub type PendingMoveBucketRequests<T: Config> = StorageDoubleMap<
-        _,
-        Blake2_128Concat,
-        ProviderIdFor<T>,
-        Blake2_128Concat,
-        BucketIdFor<T>,
-        MoveBucketRequestMetadata<T>,
-    >;
-
-    /// Bookkeeping of buckets that are pending to be moved to a new MSP.
-    #[pallet::storage]
-    pub type PendingBucketsToMove<T: Config> =
-        StorageMap<_, Blake2_128Concat, BucketIdFor<T>, (), ValueQuery>;
+    pub type PendingMoveBucketRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, BucketIdFor<T>, MoveBucketRequestMetadata<T>>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -545,7 +563,7 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             peer_ids: PeerIds<T>,
             expires_at: TickNumber<T>,
         },
@@ -567,7 +585,7 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
             multiaddresses: MultiAddresses<T>,
             owner: T::AccountId,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
         },
         /// Notifies that a BSP confirmed storing a file(s).
         BspConfirmedStoring {
@@ -623,6 +641,12 @@ pub mod pallet {
             location: FileLocation<T>,
             new_root: MerkleHash<T>,
         },
+        /// Notifies that a MSP has stopped storing a bucket because its owner has become insolvent.
+        MspStopStoringBucketInsolventUser {
+            msp_id: ProviderIdFor<T>,
+            owner: T::AccountId,
+            bucket_id: BucketIdFor<T>,
+        },
         /// Notifies that a priority challenge with a trie remove mutation failed to be queued in the `on_idle` hook.
         /// This can happen if the priority challenge queue is full, and the failed challenge should be manually
         /// queued at a later time.
@@ -634,7 +658,7 @@ pub mod pallet {
         FileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
+            file_size: StorageDataUnit<T>,
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
@@ -643,7 +667,7 @@ pub mod pallet {
         ProofSubmittedForPendingFileDeletionRequest {
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
+            file_size: StorageDataUnit<T>,
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
             proof_of_inclusion: bool,
@@ -655,10 +679,7 @@ pub mod pallet {
             bsp_id: ProviderIdFor<T>,
         },
         /// Notifies that a move bucket request has expired.
-        MoveBucketRequestExpired {
-            msp_id: ProviderIdFor<T>,
-            bucket_id: BucketIdFor<T>,
-        },
+        MoveBucketRequestExpired { bucket_id: BucketIdFor<T> },
         /// Notifies that a bucket has been moved to a new MSP under a new value proposition.
         MoveBucketAccepted {
             bucket_id: BucketIdFor<T>,
@@ -687,12 +708,12 @@ pub mod pallet {
             user: T::AccountId,
             msp_id: ProviderIdFor<T>,
             file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
+            file_size: StorageDataUnit<T>,
             error: DispatchError,
         },
         /// Event to notify of incoherencies in used capacity.
         UsedCapacityShouldBeZero {
-            actual_used_capacity: StorageData<T>,
+            actual_used_capacity: StorageDataUnit<T>,
         },
         /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
         /// the return of that storage request's deposit to the user failed.
@@ -700,6 +721,15 @@ pub mod pallet {
             file_key: MerkleHash<T>,
             owner: T::AccountId,
             amount_to_return: BalanceOf<T>,
+            error: DispatchError,
+        },
+        /// Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+        /// the transfer of a part of that storage request's deposit to one of the volunteered BSPs failed.
+        FailedToTransferDepositFundsToBsp {
+            file_key: MerkleHash<T>,
+            owner: T::AccountId,
+            bsp_id: ProviderIdFor<T>,
+            amount_to_transfer: BalanceOf<T>,
             error: DispatchError,
         },
     }
@@ -1040,7 +1070,7 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             fingerprint: Fingerprint<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             msp_id: ProviderIdFor<T>,
             peer_ids: PeerIds<T>,
             replication_target: ReplicationTarget<T>,
@@ -1207,7 +1237,7 @@ pub mod pallet {
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             can_serve: bool,
             inclusion_forest_proof: ForestProof<T>,
         ) -> DispatchResult {
@@ -1280,7 +1310,7 @@ pub mod pallet {
             location: FileLocation<T>,
             owner: T::AccountId,
             fingerprint: Fingerprint<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             inclusion_forest_proof: ForestProof<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
@@ -1309,7 +1339,43 @@ pub mod pallet {
             Ok(())
         }
 
+        /// Executed by a MSP to stop storing a bucket from an insolvent user.
+        ///
+        /// This is used when a user has become insolvent and the MSP needs to stop storing the buckets of that user, since
+        /// it won't be getting paid for them anymore.
+        /// It validates that:
+        /// - The sender is the MSP that's currently storing the bucket, and the bucket exists.
+        /// - That the user is currently insolvent OR
+        /// - That the payment stream between the MSP and user doesn't exist (which would occur as a consequence of the MSP previously
+        /// having deleted another bucket it was storing for this user through this extrinsic).
+        /// And then completely removes the bucket from the system.
+        ///
+        /// If there was a storage request pending for the bucket, it will eventually expire without being fulfilled (because the MSP can't
+        /// accept storage requests for insolvent users and BSPs can't volunteer nor confirm them either) and afterwards any BSPs that
+        /// had confirmed the file can just call `sp_stop_storing_for_insolvent_user` to get rid of it.
         #[pallet::call_index(15)]
+        #[pallet::weight(T::WeightInfo::msp_stop_storing_bucket_for_insolvent_user())]
+        pub fn msp_stop_storing_bucket_for_insolvent_user(
+            origin: OriginFor<T>,
+            bucket_id: BucketIdFor<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            // Perform validations and stop storing the file.
+            let (msp_id, owner) =
+                Self::do_msp_stop_storing_bucket_for_insolvent_user(who.clone(), bucket_id)?;
+
+            // Emit event.
+            Self::deposit_event(Event::MspStopStoringBucketInsolventUser {
+                msp_id,
+                owner,
+                bucket_id,
+            });
+
+            Ok(())
+        }
+
+        #[pallet::call_index(16)]
         #[pallet::weight({
 			match maybe_inclusion_forest_proof {
 				Some(_) => T::WeightInfo::delete_file_with_inclusion_proof(),
@@ -1321,7 +1387,7 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             file_key: MerkleHash<T>,
             location: FileLocation<T>,
-            size: StorageData<T>,
+            size: StorageDataUnit<T>,
             fingerprint: Fingerprint<T>,
             maybe_inclusion_forest_proof: Option<ForestProof<T>>,
         ) -> DispatchResult {
@@ -1335,6 +1401,7 @@ pub mod pallet {
                 fingerprint,
                 size,
                 maybe_inclusion_forest_proof,
+                true,
             )?;
 
             Self::deposit_event(Event::FileDeletionRequest {
@@ -1349,13 +1416,13 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::call_index(16)]
+        #[pallet::call_index(17)]
         #[pallet::weight(T::WeightInfo::pending_file_deletion_request_submit_proof())]
         pub fn pending_file_deletion_request_submit_proof(
             origin: OriginFor<T>,
             user: T::AccountId,
             file_key: MerkleHash<T>,
-            file_size: StorageData<T>,
+            file_size: StorageDataUnit<T>,
             bucket_id: BucketIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
@@ -1405,8 +1472,8 @@ pub mod pallet {
         /// of crate::construct_runtime's expansion.
         /// Look for a test case with a name along the lines of: __construct_runtime_integrity_test.
         fn integrity_test() {
-            let low_security_replication_target = T::BasicReplicationTarget::get();
-            let medium_security_replication_target = T::StandardReplicationTarget::get();
+            let basic_replication_target = T::BasicReplicationTarget::get();
+            let standard_replication_target = T::StandardReplicationTarget::get();
             let high_security_replication_target = T::HighSecurityReplicationTarget::get();
             let super_high_security_replication_target =
                 T::SuperHighSecurityReplicationTarget::get();
@@ -1418,17 +1485,21 @@ pub mod pallet {
             let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();
             let checkpoint_challenge_period =
                 <<T as crate::Config>::ProofDealer as ProofsDealerInterface>::get_checkpoint_challenge_period();
+            let base_storage_request_creation_deposit = T::BaseStorageRequestCreationDeposit::get();
+            let bsp_volunteer_fee = <T::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+                &T::WeightInfo::bsp_volunteer(),
+            );
 
             assert!(
-                low_security_replication_target > T::ReplicationTargetType::zero(),
+                basic_replication_target > T::ReplicationTargetType::zero(),
                 "Basic security replication target cannot be zero."
             );
             assert!(
-				medium_security_replication_target >= low_security_replication_target,
+				standard_replication_target >= basic_replication_target,
 				"Standard security replication target cannot be smaller than basic security replication target."
 			);
             assert!(
-				high_security_replication_target >= medium_security_replication_target,
+				high_security_replication_target >= standard_replication_target,
 				"High security replication target cannot be smaller than standard security replication target."
 			);
             assert!(
@@ -1450,6 +1521,9 @@ pub mod pallet {
             // so by ensuring the minimum wait for stop storing is greater than the checkpoint challenge period, we ensure that
             // the BSP cannot immediately stop storing a file it has lost when receiving a challenge for it.
             assert!(min_wait_for_stop_storing > checkpoint_challenge_period, "Minimum amount of blocks between the stop storing request opening and being able to confirm it cannot be smaller than the checkpoint challenge period.");
+
+            // The base deposit for a storage request creation should be enough to cover the fees to volunteer for at least `basic_replication_target` BSPs.
+            assert!(base_storage_request_creation_deposit >= bsp_volunteer_fee.saturating_mul(T::ReplicationTargetToBalance::convert(basic_replication_target)), "Base storage request creation deposit should be enough to cover the fees to volunteer for at least `basic_replication_target` BSPs.");
         }
     }
 }

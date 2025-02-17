@@ -4,7 +4,9 @@ use anyhow::anyhow;
 use pallet_file_system::types::RejectedStorageRequest;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest, Tip};
+use shc_blockchain_service::types::{
+    MspRespondStorageRequest, RespondStorageRequest, SendExtrinsicOptions,
+};
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
@@ -319,7 +321,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
+            .send_extrinsic(call, SendExtrinsicOptions::default())
             .await?
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -551,7 +553,7 @@ where
 
                 self.storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, Tip::from(0))
+                    .send_extrinsic(call, SendExtrinsicOptions::default())
                     .await?
                     .with_timeout(Duration::from_secs(60))
                     .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -599,7 +601,7 @@ where
 
                     self.storage_hub_handler
                         .blockchain
-                        .send_extrinsic(call, Tip::from(0))
+                        .send_extrinsic(call, SendExtrinsicOptions::default())
                         .await?
                         .with_timeout(Duration::from_secs(60))
                         .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -911,7 +913,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
+            .send_extrinsic(call, SendExtrinsicOptions::default())
             .await?
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)

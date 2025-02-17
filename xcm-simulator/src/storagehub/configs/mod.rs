@@ -848,8 +848,8 @@ pub type ReplicationTargetType = u32;
 
 parameter_types! {
     pub const MaxBatchConfirmStorageRequests: u32 = 10;
-    pub const StorageRequestCreationDeposit: Balance = 10;
-    pub const FileDeletionRequestCreationDeposit: Balance = 10;
+    pub const BaseStorageRequestCreationDeposit: Balance = 1 * UNIT;
+    pub const FileDeletionRequestCreationDeposit: Balance = 1 * UNIT;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
 
@@ -866,7 +866,7 @@ impl pallet_file_system::Config for Runtime {
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = PaymentStreams;
     type Fingerprint = Hash;
-    type ReplicationTargetType = u32;
+    type ReplicationTargetType = ReplicationTargetType;
     type ThresholdType = ThresholdType;
     type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
@@ -890,7 +890,12 @@ impl pallet_file_system::Config for Runtime {
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring =
         runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring;
-    type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type BaseStorageRequestCreationDeposit = BaseStorageRequestCreationDeposit;
+    type UpfrontTicksToPay = runtime_params::dynamic_params::runtime_config::UpfrontTicksToPay;
+    type WeightToFee = WeightToFee;
+    type ReplicationTargetToBalance = ReplicationTargetToBalance;
+    type TickNumberToBalance = TickNumberToBalance;
+    type StorageDataUnitToBalance = StorageDataUnitToBalance;
     type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
     type BasicReplicationTarget =
         runtime_params::dynamic_params::runtime_config::BasicReplicationTarget;
@@ -979,8 +984,34 @@ impl Convert<ChunkId, H256> for ChunkIdToMerkleHashConverter {
     }
 }
 
+// Converter from the ReplicationTargetType type to the Balance type.
+pub struct ReplicationTargetToBalance;
+impl Convert<ReplicationTargetType, Balance> for ReplicationTargetToBalance {
+    fn convert(replication_target: ReplicationTargetType) -> Balance {
+        replication_target.into()
+    }
+}
+
+// Converter from the TickNumber type to the Balance type.
+pub type TickNumber = BlockNumber;
+pub struct TickNumberToBalance;
+impl Convert<TickNumber, Balance> for TickNumberToBalance {
+    fn convert(tick_number: TickNumber) -> Balance {
+        tick_number.into()
+    }
+}
+
+// Converter from the StorageDataUnit type to the Balance type.
+pub struct StorageDataUnitToBalance;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
+    fn convert(storage_data_unit: StorageDataUnit) -> Balance {
+        storage_data_unit.into()
+    }
+}
+
 impl pallet_bucket_nfts::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = pallet_bucket_nfts::weights::SubstrateWeight<Runtime>;
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
