@@ -12,7 +12,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    types::{ConfirmStoringRequest, RetryStrategy, Tip},
+    types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
@@ -638,7 +638,7 @@ where
 
                 self.storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, Tip::from(0))
+                    .send_extrinsic(call, SendExtrinsicOptions::default())
                     .await?
                     .with_timeout(Duration::from_secs(
                         self.storage_hub_handler
@@ -776,7 +776,7 @@ where
         let result = self
             .storage_hub_handler
             .blockchain
-            .send_extrinsic(call.clone(), Tip::from(0))
+            .send_extrinsic(call.clone(), SendExtrinsicOptions::default())
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler
@@ -805,7 +805,7 @@ where
             let result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Tip::from(0))
+                .send_extrinsic(call, SendExtrinsicOptions::default())
                 .await?
                 .with_timeout(Duration::from_secs(
                     self.storage_hub_handler
@@ -903,9 +903,11 @@ where
             // TODO: Add a batched write chunk method to the file storage.
 
             // Validate chunk size
+            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
+            // one which can be smaller
             let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
                 // Last chunk
-                (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
+                (file_metadata.file_size % FILE_CHUNK_SIZE) as usize
             } else {
                 // All other chunks
                 FILE_CHUNK_SIZE as usize

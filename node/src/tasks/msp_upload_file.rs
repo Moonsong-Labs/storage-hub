@@ -4,7 +4,9 @@ use anyhow::anyhow;
 use pallet_file_system::types::RejectedStorageRequest;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest, Tip};
+use shc_blockchain_service::types::{
+    MspRespondStorageRequest, RespondStorageRequest, SendExtrinsicOptions,
+};
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
@@ -319,7 +321,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
+            .send_extrinsic(call, SendExtrinsicOptions::default())
             .await?
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -551,7 +553,7 @@ where
 
                 self.storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, Tip::from(0))
+                    .send_extrinsic(call, SendExtrinsicOptions::default())
                     .await?
                     .with_timeout(Duration::from_secs(60))
                     .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -599,7 +601,7 @@ where
 
                     self.storage_hub_handler
                         .blockchain
-                        .send_extrinsic(call, Tip::from(0))
+                        .send_extrinsic(call, SendExtrinsicOptions::default())
                         .await?
                         .with_timeout(Duration::from_secs(60))
                         .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -758,6 +760,8 @@ where
             // TODO: Add a batched write chunk method to the file storage.
 
             // Validate chunk size
+            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
+            // one which can be smaller
             let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
                 // Last chunk
                 (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
@@ -911,7 +915,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Tip::from(0))
+            .send_extrinsic(call, SendExtrinsicOptions::default())
             .await?
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)

@@ -49,7 +49,7 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// SPs will use this to determine if they have enough space to store the data.
     /// This is also used to verify that the data sent by the user matches the size specified here.
-    pub size: StorageData<T>,
+    pub size: StorageDataUnit<T>,
 
     /// MSP who is requested to store the data, and if it has already confirmed that it is storing it.
     ///
@@ -77,6 +77,12 @@ pub struct StorageRequestMetadata<T: Config> {
     ///
     /// There can be more than `bsps_required` volunteers, but it is essentially a race for BSPs to confirm that they are storing the data.
     pub bsps_volunteered: ReplicationTargetType<T>,
+
+    /// Deposit paid by the user to open this storage request.
+    ///
+    /// This is used to pay for the cost of the BSPs volunteering for the storage request in case it either expires
+    /// or gets revoked by the user. If the storage request is fulfilled, the deposit will be refunded to the user.
+    pub deposit_paid: BalanceOf<T>,
 }
 
 impl<T: Config> StorageRequestMetadata<T> {
@@ -173,12 +179,12 @@ impl<T: Config> Debug for FileKeyWithProof<T> {
     }
 }
 
-/// A bundle of file keys that have been accepted by an MSP, alongside the proofs required to  
-/// add these file keys into the corresponding bucket.  
-///  
-/// This struct includes a list of file keys and their corresponding key proofs (i.e. the  
-/// proofs for the file chunks) and a non-inclusion forest proof. The latter is required to  
-/// verify that the file keys were not part of the bucket's Merkle Patricia Forest before,  
+/// A bundle of file keys that have been accepted by an MSP, alongside the proofs required to
+/// add these file keys into the corresponding bucket.
+///
+/// This struct includes a list of file keys and their corresponding key proofs (i.e. the
+/// proofs for the file chunks) and a non-inclusion forest proof. The latter is required to
+/// verify that the file keys were not part of the bucket's Merkle Patricia Forest before,
 /// and add them now. One single non-inclusion forest proof for all the file keys is sufficient.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
@@ -275,8 +281,10 @@ pub struct PendingFileDeletionRequest<T: Config> {
     pub user: T::AccountId,
     pub file_key: MerkleHash<T>,
     pub bucket_id: BucketIdFor<T>,
-    pub file_size: StorageData<T>,
+    pub file_size: StorageDataUnit<T>,
     pub deposit_paid_for_creation: BalanceOf<T>,
+    /// Flag to indicate if a priority challenge should be queued for this file deletion request.
+    pub queue_priority_challenge: bool,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -284,14 +292,14 @@ pub struct PendingFileDeletionRequest<T: Config> {
 pub struct PendingStopStoringRequest<T: Config> {
     pub tick_when_requested: TickNumber<T>,
     pub file_owner: T::AccountId,
-    pub file_size: StorageData<T>,
+    pub file_size: StorageDataUnit<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub enum ExpirationItem<T: Config> {
     StorageRequest(MerkleHash<T>),
-    MoveBucketRequest((ProviderIdFor<T>, BucketIdFor<T>)),
+    MoveBucketRequest(BucketIdFor<T>),
 }
 
 impl<T: Config> ExpirationItem<T> {
@@ -365,7 +373,10 @@ pub enum BucketMoveRequestResponse {
 pub struct MoveBucketRequestMetadata<T: Config> {
     /// The user who requested to move the bucket.
     pub requester: T::AccountId,
+    /// The MSP ID of the new MSP that the user requested to store the bucket.
+    pub new_msp_id: ProviderIdFor<T>,
     /// The new value proposition that this bucket will have after it has been moved.
+    /// It must be a valid value proposition that the new MSP supports.
     pub new_value_prop_id: ValuePropId<T>,
 }
 
@@ -385,6 +396,22 @@ impl<T: Config> Debug for EitherAccountIdOrMspId<T> {
             EitherAccountIdOrMspId::MspId(provider_id) => {
                 write!(f, "MspId({:?})", provider_id)
             }
+        }
+    }
+}
+
+impl<T: Config> EitherAccountIdOrMspId<T> {
+    pub fn is_account_id(&self) -> bool {
+        match self {
+            EitherAccountIdOrMspId::AccountId(_) => true,
+            EitherAccountIdOrMspId::MspId(_) => false,
+        }
+    }
+
+    pub fn is_msp_id(&self) -> bool {
+        match self {
+            EitherAccountIdOrMspId::AccountId(_) => false,
+            EitherAccountIdOrMspId::MspId(_) => true,
         }
     }
 }
@@ -414,8 +441,8 @@ pub type MaxFilePathSize<T> = <T as crate::Config>::MaxFilePathSize;
 /// Alias for the `Fingerprint` type used in the FileSystem pallet.
 pub type Fingerprint<T> = <T as crate::Config>::Fingerprint;
 
-/// Alias for the `StorageData` type used in the MutateProvidersInterface.
-pub type StorageData<T> =
+/// Alias for the `StorageDataUnit` type used in the MutateProvidersInterface.
+pub type StorageDataUnit<T> =
     <<T as crate::Config>::Providers as shp_traits::MutateStorageProvidersInterface>::StorageDataUnit;
 
 /// Alias for the `ReplicationTargetType` type used in the FileSystem pallet.
