@@ -661,6 +661,22 @@ where
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
+        let current_fingerprint = file_trie.get_root().as_ref().try_into().map_err(|_| {
+            error!(target: LOG_TARGET, "Failed to convert root to fingerprint");
+            FileStorageWriteError::FailedToParseFingerprint
+        })?;
+
+        // Verify that the final root matches the expected fingerprint
+        if metadata.fingerprint != current_fingerprint {
+            error!(
+                target: LOG_TARGET,
+                "Fingerprint mismatch. Expected: {:?}, got: {:?}",
+                metadata.fingerprint,
+                file_trie.get_root()
+            );
+            return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
+        }
+
         Ok(FileStorageWriteOutcome::FileComplete)
     }
 
@@ -1003,7 +1019,7 @@ where
 mod tests {
     use super::*;
     use kvdb_memorydb::InMemory;
-    use shc_common::types::Fingerprint;
+    use shc_common::types::{Fingerprint, FILE_CHUNK_SIZE};
     use sp_core::H256;
     use sp_runtime::traits::BlakeTwo256;
     use sp_runtime::AccountId32;
@@ -1182,9 +1198,9 @@ mod tests {
     #[test]
     fn file_storage_write_chunk_works() {
         let chunks = vec![
-            Chunk::from([5u8; 32]),
-            Chunk::from([6u8; 32]),
-            Chunk::from([7u8; 32]),
+            Chunk::from([5u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([6u8; FILE_CHUNK_SIZE as usize]),
+            Chunk::from([7u8; FILE_CHUNK_SIZE as usize]),
         ];
 
         let storage = StorageDb {
@@ -1192,55 +1208,45 @@ mod tests {
             _marker: Default::default(),
         };
 
-        let user_storage = StorageDb {
-            db: Arc::new(kvdb_memorydb::create(NUMBER_OF_COLUMNS)),
-            _marker: Default::default(),
-        };
-
-        let mut user_file_trie =
-            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(user_storage.clone());
-
-        for (id, chunk) in chunks.iter().enumerate() {
-            user_file_trie
-                .write_chunk(&ChunkId::new(id as u64), chunk)
-                .unwrap();
-        }
-
-        let fingerprint = Fingerprint::from(user_file_trie.get_root().as_ref());
-
         let chunk_ids: Vec<ChunkId> = chunks
             .iter()
             .enumerate()
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
+        // Create a file trie to get the expected fingerprint
+        let mut file_trie =
+            RocksDbFileDataTrie::<LayoutV1<BlakeTwo256>, InMemory>::new(storage.clone());
+
+        let fingerprint = Fingerprint::from(file_trie.get_root().as_ref());
+
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            file_trie.write_chunk(chunk_id, chunk).unwrap();
+        }
+
         let file_metadata = FileMetadata {
-            file_size: 32u64 * chunks.len() as u64,
-            fingerprint,
+            file_size: FILE_CHUNK_SIZE * chunks.len() as u64,
+            fingerprint: file_trie.get_root().as_ref().into(),
             owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
             location: "location".to_string().into_bytes(),
             bucket_id: [1u8; 32].to_vec(),
         };
-        let key = file_metadata.file_key::<BlakeTwo256>();
 
+        let key = file_metadata.file_key::<BlakeTwo256>();
         let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
+
+        // Insert file metadata first
         file_storage.insert_file(key, file_metadata).unwrap();
 
-        file_storage
-            .write_chunk(&key, &chunk_ids[0], &chunks[0])
-            .unwrap();
-        assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_ok());
+        // Write chunks one by one and verify
+        for (chunk_id, chunk) in chunk_ids.iter().zip(chunks.iter()) {
+            let result = file_storage.write_chunk(&key, chunk_id, chunk);
+            assert!(result.is_ok());
+            assert!(file_storage.get_chunk(&key, chunk_id).is_ok());
+        }
 
-        file_storage
-            .write_chunk(&key, &chunk_ids[1], &chunks[1])
-            .unwrap();
-        assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_ok());
-
-        file_storage
-            .write_chunk(&key, &chunk_ids[2], &chunks[2])
-            .unwrap();
-        assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_ok());
-
+        // Verify final state
+        assert!(file_storage.get_metadata(&key).is_ok());
         assert!(file_storage.get_chunk(&key, &chunk_ids[0]).is_ok());
         assert!(file_storage.get_chunk(&key, &chunk_ids[1]).is_ok());
         assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_ok());

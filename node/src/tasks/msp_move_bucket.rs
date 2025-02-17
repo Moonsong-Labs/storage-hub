@@ -9,7 +9,7 @@ use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::MoveBucketRequestedForNewMsp,
+    events::MoveBucketRequestedForMsp,
     types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
@@ -70,12 +70,12 @@ where
     pending_bucket_id: Option<BucketId>,
 }
 
-impl<NT> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<NT>
+impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
-    async fn handle_event(&mut self, event: MoveBucketRequestedForNewMsp) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketRequestedForMsp) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: user requested to move bucket {:?} to us",
@@ -105,7 +105,7 @@ where
     /// If it returns an error, the caller (handle_event) will reject the bucket move request.
     async fn handle_move_bucket_request(
         &mut self,
-        event: MoveBucketRequestedForNewMsp,
+        event: MoveBucketRequestedForMsp,
     ) -> anyhow::Result<()> {
         let indexer_db_pool = if let Some(indexer_db_pool) =
             self.storage_hub_handler.indexer_db_pool.clone()
@@ -469,16 +469,27 @@ where
 
                 let file_key_proof =
                     match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
-                        Ok(proof) => proof,
+                        Ok(file_key_proof) => file_key_proof,
                         Err(error) => {
                             error!(
                                 target: LOG_TARGET,
-                                "Failed to decode file key proof: {:?}",
-                                error
+                                "Failed to decode file key proof for chunk {:?} of file {:?}: {:?}",
+                                chunk, file_key, error
                             );
                             continue;
                         }
                     };
+
+                // Verify that the fingerprint in the proof matches the expected file fingerprint
+                let expected_fingerprint = file_metadata.fingerprint;
+                if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+                    error!(
+                        target: LOG_TARGET,
+                        "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                        file_key, expected_fingerprint, file_key_proof.file_metadata.fingerprint
+                    );
+                    continue;
+                }
 
                 let proven = match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
                     Ok(data) => data,

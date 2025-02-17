@@ -170,9 +170,8 @@ where
     async fn handle_event(&mut self, event: MoveBucketExpired) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "MoveBucketExpired: BSP will no longer accept download requests for files in bucket {:?} from MSP {:?}",
+            "MoveBucketExpired: BSP will no longer accept download requests for files in bucket {:?}",
             event.bucket_id,
-            event.msp_id
         );
 
         self.storage_hub_handler

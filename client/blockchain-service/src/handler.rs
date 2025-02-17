@@ -54,7 +54,7 @@ use crate::{
         FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
         FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
         LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForNewMsp, NewStorageRequest, SlashableProvider,
+        MoveBucketRequested, MoveBucketRequestedForMsp, NewStorageRequest, SlashableProvider,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
@@ -1420,7 +1420,7 @@ where
                                 Some(StorageProviderId::MainStorageProvider(msp_id))
                                     if msp_id == new_msp_id =>
                                 {
-                                    self.emit(MoveBucketRequestedForNewMsp {
+                                    self.emit(MoveBucketRequestedForMsp {
                                         bucket_id,
                                         value_prop_id: new_value_prop_id,
                                     });
@@ -1454,16 +1454,13 @@ where
                             }
                         }
                         RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::MoveBucketRequestExpired {
-                                bucket_id,
-                                msp_id,
-                            },
+                            pallet_file_system::Event::MoveBucketRequestExpired { bucket_id },
                         ) => {
                             // This event is relevant in case the Provider managed is a BSP.
                             if let Some(StorageProviderId::BackupStorageProvider(_)) =
                                 &self.provider_id
                             {
-                                self.emit(MoveBucketExpired { bucket_id, msp_id });
+                                self.emit(MoveBucketExpired { bucket_id });
                             }
                         }
                         RuntimeEvent::FileSystem(

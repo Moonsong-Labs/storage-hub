@@ -839,6 +839,23 @@ where
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
 
+        // Get the file metadata to verify the fingerprint
+        let file_metadata = write_file_storage
+            .get_metadata(&file_key)
+            .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
+            .ok_or_else(|| anyhow!("File metadata not found"))?;
+
+        // Verify that the fingerprint in the proof matches the expected file fingerprint
+        let expected_fingerprint = file_metadata.fingerprint;
+        if event.file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+            error!(
+                target: LOG_TARGET,
+                "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint
+            );
+            return Err(anyhow!("Fingerprint mismatch"));
+        }
+
         // Verify and extract chunks from proof
         let proven = match event
             .file_key_proof

@@ -316,6 +316,7 @@ mod benches {
         [pallet_storage_providers, Providers]
         [pallet_randomness, Randomness]
         [pallet_file_system, FileSystem]
+        [pallet_bucket_nfts, BucketNfts]
     );
 }
 

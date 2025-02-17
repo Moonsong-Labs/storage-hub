@@ -119,13 +119,15 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the PendingMoveBucketRequests storage has the created request
-        let pending_move_bucket_request =
-            PendingMoveBucketRequests::<T>::get(&new_msp_id, &bucket_id);
+        let pending_move_bucket_request = PendingMoveBucketRequests::<T>::get(&bucket_id);
         assert!(pending_move_bucket_request.is_some());
-        assert_eq!(pending_move_bucket_request.unwrap().requester, user.clone());
-
-        // Ensure the PendingBucketsToMove storage has the bucket
-        assert!(PendingBucketsToMove::<T>::contains_key(&bucket_id));
+        let pending_move_bucket_request = pending_move_bucket_request.unwrap();
+        assert_eq!(pending_move_bucket_request.requester, user.clone());
+        assert_eq!(pending_move_bucket_request.new_msp_id, new_msp_id);
+        assert_eq!(
+            pending_move_bucket_request.new_value_prop_id,
+            new_value_prop_id
+        );
 
         // Ensure the expected event was emitted.
         let expected_event =
@@ -899,8 +901,11 @@ mod benchmarks {
             Ok(earliest_volunteer_tick) => earliest_volunteer_tick,
         };
 
-        // Advance the block number to the earliest tick where the BSP can volunteer
-        run_to_block::<T>(tick_to_advance_to);
+        // Advance the block number to the earliest tick where the BSP can volunteer, only if
+        // it's bigger than the current block number
+        if tick_to_advance_to > frame_system::Pallet::<T>::block_number() {
+            run_to_block::<T>(tick_to_advance_to);
+        }
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
@@ -1811,6 +1816,96 @@ mod benchmarks {
     }
 
     #[benchmark]
+    fn msp_stop_storing_bucket_for_insolvent_user() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get a user account and mint some tokens into it.
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        // Set up parameters for the bucket to use.
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+
+        // Register a MSP with a value proposition.
+        let msp: T::AccountId = account("MSP", 0, 0);
+        let signed_msp_origin = RawOrigin::Signed(msp.clone());
+        mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp, None);
+
+        // Create the bucket as private, creating the collection so it has to be deleted as well.
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            msp_id,
+            name,
+            true,
+            value_prop_id,
+        )?;
+
+        // Get the collection ID of the bucket.
+        let collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket_id)?.unwrap();
+
+        // Increase the used capacity of the bucket and the MSP, to simulate it currently being used.
+        let bucket_size = 100;
+        pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.size += bucket_size;
+        });
+        let previous_msp_capacity_used =
+            pallet_storage_providers::MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+                let msp = msp.as_mut().expect("MSP should exist.");
+                msp.capacity_used += bucket_size;
+                msp.capacity_used
+            });
+
+        // Flag the owner of the file as insolvent.
+        pallet_payment_streams::UsersWithoutFunds::<T>::insert(
+            &user,
+            frame_system::Pallet::<T>::block_number(),
+        );
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(signed_msp_origin, bucket_id);
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspStopStoringBucketInsolventUser {
+                msp_id,
+                owner: user.clone(),
+                bucket_id,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // The bucket should have been deleted.
+        assert!(!T::Providers::bucket_exists(&bucket_id));
+
+        // And the collection should have been deleted as well.
+        assert!(!pallet_nfts::Collection::<T>::contains_key(collection_id));
+
+        // Ensure the payment stream between the user and the MSP has been deleted.
+        assert!(
+            !pallet_payment_streams::FixedRatePaymentStreams::<T>::contains_key(&msp_id, &user)
+        );
+
+        // Ensure the used capacity of the MSP has been updated.
+        assert_eq!(
+            pallet_storage_providers::MainStorageProviders::<T>::get(&msp_id)
+                .unwrap()
+                .capacity_used,
+            previous_msp_capacity_used - bucket_size,
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
     fn delete_file_without_inclusion_proof() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         // Get the user account for the generated proofs and load it up with some balance.
@@ -2623,13 +2718,12 @@ mod benchmarks {
             value_prop_id,
         )?;
 
-        // Add the bucket to the PendingBucketsToMove storage and to the PendingMoveBucketRequests storage
-        PendingBucketsToMove::<T>::insert(&bucket_id, ());
+        // Add the bucket to the PendingMoveBucketRequests storage
         PendingMoveBucketRequests::<T>::insert(
-            &msp_id,
             &bucket_id,
             MoveBucketRequestMetadata {
                 requester: user.clone(),
+                new_msp_id: msp_id,
                 new_value_prop_id: value_prop_id,
             },
         );
@@ -2637,29 +2731,19 @@ mod benchmarks {
         /*********** Call the function to benchmark: ***********/
         #[block]
         {
-            Pallet::<T>::process_expired_move_bucket_request(
-                msp_id,
-                bucket_id,
-                &mut WeightMeter::new(),
-            );
+            Pallet::<T>::process_expired_move_bucket_request(bucket_id, &mut WeightMeter::new());
         }
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketRequestExpired {
-                msp_id,
                 bucket_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
-        // Ensure the bucket was removed from the PendingBucketsToMove storage
-        assert!(!PendingBucketsToMove::<T>::contains_key(&bucket_id));
-
         // Ensure the bucket was removed from the PendingMoveBucketRequests storage
-        assert!(!PendingMoveBucketRequests::<T>::contains_key(
-            &msp_id, &bucket_id
-        ));
+        assert!(!PendingMoveBucketRequests::<T>::contains_key(&bucket_id));
 
         Ok(())
     }
@@ -2671,10 +2755,7 @@ mod benchmarks {
             return;
         }
 
-        assert!(
-            n > frame_system::Pallet::<T>::block_number(),
-            "Cannot go back in time"
-        );
+        assert!(n > current_block, "Cannot go back in time");
 
         while current_block < n {
             pallet_proofs_dealer::Pallet::<T>::on_finalize(current_block);
