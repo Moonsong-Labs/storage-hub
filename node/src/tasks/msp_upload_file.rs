@@ -760,6 +760,8 @@ where
             // TODO: Add a batched write chunk method to the file storage.
 
             // Validate chunk size
+            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
+            // one which can be smaller
             let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
                 // Last chunk
                 (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
