@@ -155,6 +155,12 @@ export interface QueryBspConfirmChunksToProveForFileError extends Enum {
   readonly isInternalError: boolean;
   readonly type: "StorageRequestNotFound" | "ConfirmChunks" | "InternalError";
 }
+/** @name QueryBucketsForInsolventUserError */
+export interface QueryBucketsForInsolventUserError extends Enum {
+  readonly isNotAnMsp: boolean;
+  readonly isInternalError: boolean;
+  readonly type: "NotAnMsp" | "InternalError";
+}
 /** @name QueryConfirmChunksToProveForFileError */
 export interface QueryConfirmChunksToProveForFileError extends Enum {
   readonly isChallengedChunkToChunkIdError: boolean;

@@ -32,6 +32,7 @@ sp_api::decl_runtime_apis! {
         fn query_value_propositions_for_msp(who: &ProviderId) -> sp_runtime::Vec<ValuePropositionWithId>;
         fn get_bsp_stake(bsp_id: &BspId) -> Result<Balance, GetStakeError>;
         fn can_delete_provider(provider_id: &ProviderId) -> bool;
+        fn query_buckets_for_insolvent_user(msp_id: &ProviderId, user: &AccountId) -> Result<sp_runtime::Vec<BucketId>, QueryBucketsForInsolventUserError>;
     }
 }
 
@@ -81,5 +82,12 @@ pub enum QueryProviderMultiaddressesError {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum GetStakeError {
     ProviderNotRegistered,
+    InternalError,
+}
+
+/// Error type for the `query_buckets_for_insolvent_user` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum QueryBucketsForInsolventUserError {
+    NotAnMsp,
     InternalError,
 }

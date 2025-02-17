@@ -32,9 +32,9 @@ use pallet_proofs_dealer_runtime_api::{
     ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
-    StorageProvidersApi,
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsForInsolventUserError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
@@ -986,6 +986,29 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryBucketsForInsolventUser {
+                    msp_id,
+                    user,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let buckets = self
+                        .client
+                        .runtime_api()
+                        .query_buckets_for_insolvent_user(current_block_hash, &msp_id, &user)
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
+                            Err(QueryBucketsForInsolventUserError::InternalError)
+                        });
+
+                    match callback.send(buckets) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back buckets: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,
                     callback,
@@ -1007,7 +1030,7 @@ where
                     match callback.send(forest_root_write_result) {
                         Ok(_) => {}
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send back forest root write result: {:?}", e);
                         }
                     }
                 }

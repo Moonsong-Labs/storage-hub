@@ -189,5 +189,11 @@ export const ALL_TYPES: RegistryTypes = {
       BucketNotFound: null,
       InternalApiError: null
     }
+  },
+  QueryBucketsForInsolventUserError: {
+    _enum: {
+      NotAnMsp: null,
+      InternalError: null
+    }
   }
 };

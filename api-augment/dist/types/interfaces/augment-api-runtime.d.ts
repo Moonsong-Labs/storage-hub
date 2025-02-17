@@ -62,6 +62,7 @@ import type {
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryBucketsForInsolventUserError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
   QueryMspConfirmChunksToProveForFileError,
@@ -657,6 +658,16 @@ declare module "@polkadot/api-base/types/calls" {
         (
           providerId: ProviderId | string | Uint8Array
         ) => Observable<Result<StorageDataUnit, QueryAvailableStorageCapacityError>>
+      >;
+      /**
+       * Query the buckets for an insolvent user.
+       **/
+      queryBucketsForInsolventUser: AugmentedCall<
+        ApiType,
+        (
+          mspId: ProviderId | string | Uint8Array,
+          user: AccountId | string | Uint8Array
+        ) => Observable<Result<Vec<H256>, QueryBucketsForInsolventUserError>>
       >;
       /**
        * Query the earliest block number that a BSP can change its capacity.

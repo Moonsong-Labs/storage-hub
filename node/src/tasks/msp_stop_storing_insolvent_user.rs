@@ -99,25 +99,6 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.who;
 
-        // Get the indexer database pool. If this MSP is not keeping an indexer, it won't be able to check if it has any buckets for
-        // this user and as such wont be able to stop storing them.
-        let indexer_db_pool = if let Some(indexer_db_pool) =
-            self.storage_hub_handler.indexer_db_pool.clone()
-        {
-            indexer_db_pool
-        } else {
-            error!(
-                target: LOG_TARGET,
-                "Indexer is disabled but a insolvent user event was received. Please provide a database URL (and enable indexer) for it to use this feature."
-            );
-
-            return Err(anyhow!("Indexer is disabled but a insolvent user event was received. Please provide a database URL (and enable indexer) for it to use this feature."));
-        };
-
-        // Try to connect to the indexer. It's needed to check if there are any buckets for
-        // this user that this MSP is storing.
-        let mut indexer_connection = indexer_db_pool.get().await?;
-
         // Get this MSP's on-chain ID.
         let own_provider_id = self
             .storage_hub_handler
@@ -131,23 +112,15 @@ where
                 _ => return Err(anyhow!("Invalid MSP ID")),
             };
 
-        // Get the ID of this MSP in the MSP indexer table.
-        let msp = shc_indexer_db::models::Msp::get_by_onchain_msp_id(
-            &mut indexer_connection,
-            msp_on_chain_id.to_string(),
-        )
-        .await?;
-        let msp_id = msp.id;
+        // Get all buckets stored by this MSP for the insolvent user directly from the runtime
+        let stored_buckets = self
+            .storage_hub_handler
+            .blockchain
+            .query_buckets_for_insolvent_user(msp_on_chain_id, insolvent_user.clone())
+            .await
+            .map_err(|e| anyhow!("Failed to query buckets: {:?}", e))?;
 
-        // Get all the buckets this MSP is currently storing for the user.
-        let stored_buckets = shc_indexer_db::models::Bucket::get_by_msp_id_and_owner(
-            &mut indexer_connection,
-            msp_id,
-            insolvent_user.to_string(),
-        )
-        .await?;
-
-        // If we are, queue up a bucket deletion request for that user.
+        // If we are storing any buckets, queue up a bucket deletion request for that user.
         if !stored_buckets.is_empty() {
             info!(target: LOG_TARGET, "Buckets found for user {:?}, queueing up bucket stop storing", insolvent_user);
             // Queue a request to stop storing a bucket from the insolvent user.
@@ -181,42 +154,15 @@ where
         // Get the insolvent user from the event.
         let insolvent_user = event.owner;
 
-        // Get the indexer database pool. If this MSP is not keeping an indexer, it won't be able to check if it has any buckets for
-        // this user and as such wont be able to stop storing them.
-        let indexer_db_pool = if let Some(indexer_db_pool) =
-            self.storage_hub_handler.indexer_db_pool.clone()
-        {
-            indexer_db_pool
-        } else {
-            error!(
-                target: LOG_TARGET,
-                "Indexer is disabled but a insolvent user event was received. Please provide a database URL (and enable indexer) for it to use this feature."
-            );
+        // Get all buckets stored by this MSP for the insolvent user directly from the runtime
+        let stored_buckets = self
+            .storage_hub_handler
+            .blockchain
+            .query_buckets_for_insolvent_user(event.msp_id, insolvent_user.clone())
+            .await
+            .map_err(|e| anyhow!("Failed to query buckets: {:?}", e))?;
 
-            return Err(anyhow!("Indexer is disabled but a insolvent user event was received. Please provide a database URL (and enable indexer) for it to use this feature."));
-        };
-
-        // Try to connect to the indexer. It's needed to check if there are any buckets for
-        // this user that this MSP is storing.
-        let mut indexer_connection = indexer_db_pool.get().await?;
-
-        // Get the ID of this MSP in the MSP indexer table.
-        let msp = shc_indexer_db::models::Msp::get_by_onchain_msp_id(
-            &mut indexer_connection,
-            event.msp_id.to_string(),
-        )
-        .await?;
-        let msp_id = msp.id;
-
-        // Get all the buckets this MSP is currently storing for the user.
-        let stored_buckets = shc_indexer_db::models::Bucket::get_by_msp_id_and_owner(
-            &mut indexer_connection,
-            msp_id,
-            insolvent_user.to_string(),
-        )
-        .await?;
-
-        // If we are, queue up a bucket deletion request for that user.
+        // If we are storing any buckets, queue up a bucket deletion request for that user.
         if !stored_buckets.is_empty() {
             info!(target: LOG_TARGET, "Buckets found for user {:?}, queueing up bucket stop storing", insolvent_user);
             // Queue a request to stop storing a bucket from the insolvent user.
@@ -269,25 +215,6 @@ where
             }
         };
 
-        // Get the indexer database pool. If this MSP is not keeping an indexer, it won't be able to check if it has any buckets for
-        // this user and as such wont be able to stop storing them.
-        let indexer_db_pool = if let Some(indexer_db_pool) =
-            self.storage_hub_handler.indexer_db_pool.clone()
-        {
-            indexer_db_pool
-        } else {
-            error!(
-                target: LOG_TARGET,
-                "Indexer is disabled but a insolvent user event was received. Please provide a database URL (and enable indexer) for it to use this feature."
-            );
-
-            return Err(anyhow!("Indexer is disabled but a insolvent user event was received. Please provide a database URL (and enable indexer) for it to use this feature."));
-        };
-
-        // Try to connect to the indexer. It's needed to check if there are any buckets for
-        // this user that this MSP is storing.
-        let mut indexer_connection = indexer_db_pool.get().await?;
-
         // Get this MSP's on-chain ID.
         let own_provider_id = self
             .storage_hub_handler
@@ -301,38 +228,27 @@ where
                 _ => return Err(anyhow!("Invalid MSP ID")),
             };
 
-        // Get the ID of this MSP in the MSP indexer table.
-        let msp = shc_indexer_db::models::Msp::get_by_onchain_msp_id(
-            &mut indexer_connection,
-            msp_on_chain_id.to_string(),
-        )
-        .await?;
-        let msp_id = msp.id;
-
-        // Get all the buckets this MSP is currently storing for the user.
-        let stored_buckets = shc_indexer_db::models::Bucket::get_by_msp_id_and_owner(
-            &mut indexer_connection,
-            msp_id,
-            insolvent_user.to_string(),
-        )
-        .await?;
+        // Get all buckets stored by this MSP for the insolvent user directly from the runtime
+        let stored_buckets = self
+            .storage_hub_handler
+            .blockchain
+            .query_buckets_for_insolvent_user(msp_on_chain_id, insolvent_user)
+            .await
+            .map_err(|e| anyhow!("Failed to query buckets: {:?}", e))?;
 
         // Try to get the forest storage for a bucket from the list that hasn't yet been stopped storing.
-        // Return the bucket ID of the first one that succeeds, or exit early if none are found. This is done because the indexed buckets
-        // could have already been deleted from the forest storage but not from the indexer yet if finality has not been reached.
+        // Return the bucket ID of the first one that succeeds, or exit early if none are found.
         let bucket_id = {
             let mut bucket_id_found = None;
-            for bucket in stored_buckets {
+            for bucket_id in stored_buckets {
                 // Try to get the forest storage for the bucket.
-                let bucket_id = bucket.onchain_bucket_id.clone();
                 let storage_result = self
                     .storage_hub_handler
                     .forest_storage_handler
-                    .get(&bucket_id)
+                    .get(&bucket_id.as_bytes().to_vec())
                     .await;
 
                 // If there's a forest storage under the bucket ID and this bucket hasn't been stopped storing yet, stop storing it.
-                let bucket_id = H256::from_slice(&bucket_id);
                 if storage_result.is_some()
                     && !self
                         .buckets_stopped_storing
