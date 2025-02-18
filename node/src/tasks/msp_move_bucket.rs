@@ -9,7 +9,7 @@ use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::MoveBucketRequestedForMsp,
+    events::{DownloadRequest, MoveBucketRequestedForMsp},
     types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
@@ -91,6 +91,66 @@ where
             );
             return self.reject_bucket_move(event.bucket_id).await;
         }
+
+        Ok(())
+    }
+}
+
+/// Handles the [`DownloadRequest`] event.
+///
+/// This event is triggered by the MSP who is trying to get back in sync and answer a storage request for which
+/// the user is not online or sharing the file. So we try to get it from the BSP instead to complete the request.
+impl<NT> EventHandler<DownloadRequest> for MspMoveBucketTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    async fn handle_event(&mut self, event: DownloadRequest) -> anyhow::Result<()> {
+        trace!(target: LOG_TARGET, "Trying to download file {:?} to complete MSP storage request process", event.file_key);
+
+        let indexer_db_pool = if let Some(indexer_db_pool) =
+            self.storage_hub_handler.indexer_db_pool.clone()
+        {
+            indexer_db_pool
+        } else {
+            return Err(anyhow!("Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."));
+        };
+
+        let mut indexer_connection = indexer_db_pool.get().await.map_err(|error| {
+            anyhow!(
+                "CRITICAL ❗️❗️❗️: Failed to get indexer connection after timeout: {:?}",
+                error
+            )
+        })?;
+        let bucket = event.bucket_id.as_ref().to_vec();
+
+        let forest_storage = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get_or_create(&bucket)
+            .await;
+
+        let file =
+            shc_indexer_db::models::File::get_by_file_key(&mut indexer_connection, event.file_key)
+                .await?;
+
+        let own_provider_id = self
+            .storage_hub_handler
+            .blockchain
+            .query_storage_provider_id(None)
+            .await?;
+
+        let own_msp_id = match own_provider_id {
+            Some(StorageProviderId::MainStorageProvider(id)) => id,
+            Some(StorageProviderId::BackupStorageProvider(_)) => {
+                return Err(anyhow!("CRITICAL ❗️❗️❗️: Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."));
+            }
+            None => {
+                return Err(anyhow!("CRITICAL ❗️❗️❗️: Failed to get own MSP ID."));
+            }
+        };
+
+        self.download_file(&file, &event.bucket_id).await?;
 
         Ok(())
     }

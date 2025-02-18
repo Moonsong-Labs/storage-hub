@@ -404,6 +404,14 @@ pub struct FinalisedProofSubmittedForPendingFileDeletionRequest {
 
 impl EventBusMessage for FinalisedProofSubmittedForPendingFileDeletionRequest {}
 
+#[derive(Clone)]
+pub struct DownloadRequest {
+    pub file_key: FileKey,
+    pub bucket_id: BucketId,
+}
+
+impl EventBusMessage for DownloadRequest {}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
@@ -438,6 +446,7 @@ pub struct BlockchainServiceEventBusProvider {
     file_deletion_request_event_bus: EventBus<FileDeletionRequest>,
     finalised_file_deletion_request_event_bus:
         EventBus<FinalisedProofSubmittedForPendingFileDeletionRequest>,
+    download_request_event_bus: EventBus<DownloadRequest>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -469,6 +478,7 @@ impl BlockchainServiceEventBusProvider {
             notify_period_event_bus: EventBus::new(),
             file_deletion_request_event_bus: EventBus::new(),
             finalised_file_deletion_request_event_bus: EventBus::new(),
+            download_request_event_bus: EventBus::new(),
         }
     }
 }
@@ -630,5 +640,11 @@ impl ProvidesEventBus<FinalisedProofSubmittedForPendingFileDeletionRequest>
 {
     fn event_bus(&self) -> &EventBus<FinalisedProofSubmittedForPendingFileDeletionRequest> {
         &self.finalised_file_deletion_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<DownloadRequest> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<DownloadRequest> {
+        &self.download_request_event_bus
     }
 }
