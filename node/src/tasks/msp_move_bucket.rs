@@ -122,13 +122,6 @@ where
                 error
             )
         })?;
-        let bucket = event.bucket_id.as_ref().to_vec();
-
-        let forest_storage = self
-            .storage_hub_handler
-            .forest_storage_handler
-            .get_or_create(&bucket)
-            .await;
 
         let file =
             shc_indexer_db::models::File::get_by_file_key(&mut indexer_connection, event.file_key)
@@ -140,7 +133,7 @@ where
             .query_storage_provider_id(None)
             .await?;
 
-        let own_msp_id = match own_provider_id {
+        match own_provider_id {
             Some(StorageProviderId::MainStorageProvider(id)) => id,
             Some(StorageProviderId::BackupStorageProvider(_)) => {
                 return Err(anyhow!("CRITICAL ❗️❗️❗️: Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."));
