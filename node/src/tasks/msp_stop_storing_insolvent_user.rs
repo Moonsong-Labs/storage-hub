@@ -1,6 +1,6 @@
 use anyhow::anyhow;
-use std::{collections::HashSet, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use sp_runtime::AccountId32;
+use std::time::Duration;
 
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
@@ -8,14 +8,13 @@ use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{
         FinalisedMspStopStoringBucketInsolventUser, MspStopStoringBucketInsolventUser,
-        ProcessStopStoringForInsolventUserRequest, UserWithoutFunds,
+        UserWithoutFunds,
     },
-    types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
+    types::SendExtrinsicOptions,
 };
-use shc_common::types::StorageProviderId;
+use shc_common::types::{ProviderId, StorageProviderId};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
-use sp_core::H256;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -26,36 +25,25 @@ const LOG_TARGET: &str = "msp-stop-storing-bucket-insolvent-user-task";
 
 /// MSP Stop Storing Bucket for Insolvent User Task: Handles stopping storing all buckets that belong to an insolvent user.
 ///
-/// The task has four handlers:
+/// The task has three handlers:
 /// - [`UserWithoutFunds`] and [`MspStopStoringBucketInsolventUser`]: React to the events emitted by the runtime when a user has no funds to pay
 /// for their payment streams or when this provider has correctly deleted a bucket from a user without funds.
-/// - [`ProcessStopStoringForInsolventUserRequest`]: Reacts to the event emitted by the state when a write-lock can be acquired to process a
-/// `StopStoringForInsolventUserRequest`.
 /// - [`FinalisedMspStopStoringBucketInsolventUser`]: Reacts to the event emitted by the state when the on-chain event `MspStopStoringBucketInsolventUser`
 /// gets finalised.
 ///
 /// The flow of each handler is as follows:
 /// - Reacting to [`UserWithoutFunds`] and [`MspStopStoringBucketInsolventUser`] event from the runtime:
-/// 	- Queues a request to stop storing a bucket for the insolvent user.
-///
-/// - Reacting to [`ProcessStopStoringForInsolventUserRequest`] event from the BlockchainService:
-/// 	- Calls [`pallet_file_system::Pallet::msp_stop_storing_bucket_for_insolvent_user`] extrinsic for a bucket
-/// 	  that the user is storing with this MSP to be able to stop storing it without paying a penalty.
+/// 	- Sends extrinsics to stop storing each bucket for the insolvent user.
 ///
 /// - Reacting to [`FinalisedMspStopStoringBucketInsolventUser`] event from the BlockchainService:
 /// 	- Deletes the bucket from the MSP's storage.
 /// 	- Deletes all the files in the bucket.
-///
-/// This flow works because the result of correctly deleting a bucket in the handler of the [`ProcessStopStoringForInsolventUserRequest`]
-/// is the runtime event [`MspStopStoringBucketInsolventUser`], which triggers the handler of the [`MspStopStoringBucketInsolventUser`] event
-/// and continues the bucket deletion flow until no more buckets from that user are stored.
 pub struct MspStopStoringInsolventUserTask<NT>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
-    buckets_stopped_storing: Arc<Mutex<HashSet<H256>>>,
 }
 
 impl<NT> Clone for MspStopStoringInsolventUserTask<NT>
@@ -66,7 +54,6 @@ where
     fn clone(&self) -> MspStopStoringInsolventUserTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
-            buckets_stopped_storing: self.buckets_stopped_storing.clone(),
         }
     }
 }
@@ -79,7 +66,6 @@ where
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
             storage_hub_handler,
-            buckets_stopped_storing: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 }
@@ -96,10 +82,7 @@ where
             event.who
         );
 
-        // Get the insolvent user from the event.
-        let insolvent_user = event.who;
-
-        // Get this MSP's on-chain ID.
+        // Get this MSP's on-chain ID
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
@@ -112,27 +95,8 @@ where
                 _ => return Err(anyhow!("Invalid MSP ID")),
             };
 
-        // Get all buckets stored by this MSP for the insolvent user directly from the runtime
-        let stored_buckets = self
-            .storage_hub_handler
-            .blockchain
-            .query_buckets_for_insolvent_user(msp_on_chain_id, insolvent_user.clone())
+        self.handle_insolvent_user_buckets(event.who, msp_on_chain_id)
             .await
-            .map_err(|e| anyhow!("Failed to query buckets: {:?}", e))?;
-
-        // If we are storing any buckets, queue up a bucket deletion request for that user.
-        if !stored_buckets.is_empty() {
-            info!(target: LOG_TARGET, "Buckets found for user {:?}, queueing up bucket stop storing", insolvent_user);
-            // Queue a request to stop storing a bucket from the insolvent user.
-            self.storage_hub_handler
-                .blockchain
-                .queue_stop_storing_for_insolvent_user_request(
-                    StopStoringForInsolventUserRequest::new(insolvent_user),
-                )
-                .await?;
-        }
-
-        Ok(())
     }
 }
 
@@ -151,159 +115,7 @@ where
             event.owner
         );
 
-        // Get the insolvent user from the event.
-        let insolvent_user = event.owner;
-
-        // Get all buckets stored by this MSP for the insolvent user directly from the runtime
-        let stored_buckets = self
-            .storage_hub_handler
-            .blockchain
-            .query_buckets_for_insolvent_user(event.msp_id, insolvent_user.clone())
-            .await
-            .map_err(|e| anyhow!("Failed to query buckets: {:?}", e))?;
-
-        // If we are storing any buckets, queue up a bucket deletion request for that user.
-        if !stored_buckets.is_empty() {
-            info!(target: LOG_TARGET, "Buckets found for user {:?}, queueing up bucket stop storing", insolvent_user);
-            // Queue a request to stop storing a bucket from the insolvent user.
-            self.storage_hub_handler
-                .blockchain
-                .queue_stop_storing_for_insolvent_user_request(
-                    StopStoringForInsolventUserRequest::new(insolvent_user),
-                )
-                .await?;
-        }
-
-        Ok(())
-    }
-}
-
-/// Handles the `ProcessStopStoringForInsolventUserRequest` event.
-///
-/// This event is triggered whenever a Forest write-lock can be acquired to process a `StopStoringForInsolventUserRequest`
-/// after receiving either a `UserWithoutFunds` or `MspStopStoringBucketInsolventUser` event from the runtime.\
-/// This task will:
-/// - Stop storing the bucket for the insolvent user.
-/// - Delete the bucket from the forest storage.
-impl<NT> EventHandler<ProcessStopStoringForInsolventUserRequest>
-    for MspStopStoringInsolventUserTask<NT>
-where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-{
-    async fn handle_event(
-        &mut self,
-        event: ProcessStopStoringForInsolventUserRequest,
-    ) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Processing StopStoringForInsolventUserRequest for user: {:?}",
-            event.data.who,
-        );
-
-        // Get the insolvent user from the event.
-        let insolvent_user = event.data.who;
-
-        // Get a write-lock on the forest root since we are going to be modifying it by removing a user's bucket.
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.");
-                return Err(anyhow!(
-                    "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken!"
-                ));
-            }
-        };
-
-        // Get this MSP's on-chain ID.
-        let own_provider_id = self
-            .storage_hub_handler
-            .blockchain
-            .query_storage_provider_id(None)
-            .await?;
-
-        let msp_on_chain_id =
-            match own_provider_id.ok_or_else(|| anyhow!("Failed to get own provider ID"))? {
-                StorageProviderId::MainStorageProvider(msp_id) => msp_id,
-                _ => return Err(anyhow!("Invalid MSP ID")),
-            };
-
-        // Get all buckets stored by this MSP for the insolvent user directly from the runtime
-        let stored_buckets = self
-            .storage_hub_handler
-            .blockchain
-            .query_buckets_for_insolvent_user(msp_on_chain_id, insolvent_user)
-            .await
-            .map_err(|e| anyhow!("Failed to query buckets: {:?}", e))?;
-
-        // Try to get the forest storage for a bucket from the list that hasn't yet been stopped storing.
-        // Return the bucket ID of the first one that succeeds, or exit early if none are found.
-        let bucket_id = {
-            let mut bucket_id_found = None;
-            for bucket_id in stored_buckets {
-                // Try to get the forest storage for the bucket.
-                let storage_result = self
-                    .storage_hub_handler
-                    .forest_storage_handler
-                    .get(&bucket_id.as_bytes().to_vec())
-                    .await;
-
-                // If there's a forest storage under the bucket ID and this bucket hasn't been stopped storing yet, stop storing it.
-                if storage_result.is_some()
-                    && !self
-                        .buckets_stopped_storing
-                        .lock()
-                        .await
-                        .contains(&bucket_id)
-                {
-                    bucket_id_found = Some(bucket_id);
-                    break;
-                }
-            }
-
-            // If there was at least one bucket that's still in the forest storage and hasn't been processed yet, return its ID.
-            if let Some(bucket_id) = bucket_id_found {
-                bucket_id
-            } else {
-                info!(target: LOG_TARGET, "No valid forest storage found for any indexed bucket. Exiting task.");
-                return Ok(());
-            }
-        };
-
-        // Build the extrinsic to stop storing the bucket of the insolvent user.
-        let stop_storing_bucket_for_insolvent_user_call =
-            storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user { bucket_id },
-            );
-
-        // Send the transaction and wait for it to be included in the block, continue only if it is successful.
-        self.storage_hub_handler
-            .blockchain
-            .send_extrinsic(
-                stop_storing_bucket_for_insolvent_user_call,
-                SendExtrinsicOptions::default(),
-            )
-            .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .extrinsic_retry_timeout,
-            ))
-            .watch_for_success(&self.storage_hub_handler.blockchain)
-            .await?;
-
-        trace!(target: LOG_TARGET, "Stop storing bucket for insolvent user submitted successfully");
-
-        // Add this bucket to the hashset of buckets that this MSP has already stopped storing for this insolvent user.
-        self.buckets_stopped_storing
-            .lock()
-            .await
-            .insert(bucket_id.clone());
-
-        // Release the forest root write "lock" since the on-chain bucket root has been deleted, and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
+        self.handle_insolvent_user_buckets(event.owner, event.msp_id)
             .await
     }
 }
@@ -359,12 +171,76 @@ where
             .remove_forest_storage(&event.bucket_id.as_bytes().to_vec())
             .await;
 
-        // Remove this bucket from the hashset of buckets that this MSP has already stopped storing for this insolvent user.
-        // This is because this bucket has already been processed so it won't be picked up by the task again.
-        self.buckets_stopped_storing
-            .lock()
+        Ok(())
+    }
+}
+
+impl<NT> MspStopStoringInsolventUserTask<NT>
+where
+    NT: ShNodeType,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    /// Common function to handle querying and sending extrinsics for each bucket of an insolvent user
+    async fn handle_insolvent_user_buckets(
+        &self,
+        insolvent_user: AccountId32,
+        msp_id: ProviderId,
+    ) -> anyhow::Result<()> {
+        // Get all buckets stored by this MSP for the insolvent user directly from the runtime
+        let stored_buckets = self
+            .storage_hub_handler
+            .blockchain
+            .query_buckets_for_insolvent_user(msp_id, insolvent_user.clone())
             .await
-            .remove(&event.bucket_id);
+            .map_err(|e| anyhow!("Failed to query buckets: {:?}", e))?;
+
+        if !stored_buckets.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "Found {} buckets for insolvent user {:?}, sending stop storing extrinsics",
+                stored_buckets.len(),
+                insolvent_user
+            );
+
+            for bucket_id in stored_buckets {
+                // Build the extrinsic to stop storing the bucket of the insolvent user
+                let stop_storing_bucket_for_insolvent_user_call =
+                    storage_hub_runtime::RuntimeCall::FileSystem(
+                        pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
+                            bucket_id: bucket_id.clone(),
+                        },
+                    );
+
+                // Send the transaction and wait for it to be included in the block
+                if let Err(e) = self
+                    .storage_hub_handler
+                    .blockchain
+                    .send_extrinsic(
+                        stop_storing_bucket_for_insolvent_user_call,
+                        SendExtrinsicOptions::default(),
+                    )
+                    .await?
+                    .with_timeout(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .extrinsic_retry_timeout,
+                    ))
+                    .watch_for_success(&self.storage_hub_handler.blockchain)
+                    .await
+                {
+                    // TODO: Export a list of failed buckets to a file for manual intervention by the operator.
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to stop storing bucket {:?}. Continuing with next bucket. Error: {:?}",
+                        bucket_id,
+                        e
+                    );
+                    continue;
+                }
+
+                trace!(target: LOG_TARGET, "Stop storing bucket {:?} for insolvent user submitted successfully", bucket_id);
+            }
+        }
 
         Ok(())
     }
