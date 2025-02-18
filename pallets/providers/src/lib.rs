@@ -23,10 +23,7 @@ mod tests;
 
 pub use pallet::*;
 pub use scale_info::Type;
-use types::{
-    BackupStorageProvider, BackupStorageProviderId, BalanceOf, BucketId, MainStorageProviderId,
-    MerklePatriciaRoot, SignUpRequest, StorageDataUnit,
-};
+use types::{BackupStorageProviderId, MainStorageProviderId, SignUpRequest, StorageDataUnit};
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -1467,7 +1464,7 @@ pub mod pallet {
         ///
         /// This is a free operation to incentivise the community to slash misbehaving providers.
         #[pallet::call_index(13)]
-        #[pallet::weight(T::WeightInfo::slash())]
+        #[pallet::weight(T::WeightInfo::slash_without_awaiting_top_up().max(T::WeightInfo::slash_with_awaiting_top_up()))]
         pub fn slash(
             origin: OriginFor<T>,
             provider_id: ProviderIdFor<T>,

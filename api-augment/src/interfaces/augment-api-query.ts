@@ -319,7 +319,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       moveBucketRequestExpirations: AugmentedQuery<
         ApiType,
-        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<ITuple<[H256, H256]>>>,
+        (arg: u32 | AnyNumber | Uint8Array) => Observable<Vec<H256>>,
         [u32]
       > &
         QueryableStorageEntry<ApiType, [u32]>;
@@ -368,15 +368,6 @@ declare module "@polkadot/api-base/types/storage" {
       nextStartingTickToCleanUp: AugmentedQuery<ApiType, () => Observable<u32>, []> &
         QueryableStorageEntry<ApiType, []>;
       /**
-       * Bookkeeping of buckets that are pending to be moved to a new MSP.
-       **/
-      pendingBucketsToMove: AugmentedQuery<
-        ApiType,
-        (arg: H256 | string | Uint8Array) => Observable<Null>,
-        [H256]
-      > &
-        QueryableStorageEntry<ApiType, [H256]>;
-      /**
        * Pending file deletion requests.
        *
        * A mapping from a user Account ID to a list of pending file deletion requests (which have the file information).
@@ -392,18 +383,17 @@ declare module "@polkadot/api-base/types/storage" {
       /**
        * Pending move bucket requests.
        *
-       * A double mapping from MSP IDs to a list of bucket IDs which they can accept or decline to take over.
-       * The value is the user who requested the move.
+       * A mapping from Bucket ID to their move bucket request metadata, which includes the new MSP
+       * and value propositions that this bucket would take if accepted.
        **/
       pendingMoveBucketRequests: AugmentedQuery<
         ApiType,
         (
-          arg1: H256 | string | Uint8Array,
-          arg2: H256 | string | Uint8Array
+          arg: H256 | string | Uint8Array
         ) => Observable<Option<PalletFileSystemMoveBucketRequestMetadata>>,
-        [H256, H256]
+        [H256]
       > &
-        QueryableStorageEntry<ApiType, [H256, H256]>;
+        QueryableStorageEntry<ApiType, [H256]>;
       /**
        * Pending file stop storing requests.
        *

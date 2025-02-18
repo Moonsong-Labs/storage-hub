@@ -49,34 +49,31 @@ impl<T: Config> ExpirationItem<T> {
             .checked_add(&self.get_ttl())
             .ok_or(ArithmeticError::Overflow)?;
 
-        let next_available_block: StorageHubTickNumber<T> = match self {
+        let next_available_tick: StorageHubTickNumber<T> = match self {
             ExpirationItem::ProviderTopUp(_) => {
                 NextAvailableProviderTopUpExpirationShTick::<T>::get()
             }
         };
 
-        Ok(max(next_available_block, current_global_tick_with_ttl))
+        Ok(max(next_available_tick, current_global_tick_with_ttl))
     }
 
     pub(crate) fn try_append(
         &self,
-        expiration_block: StorageHubTickNumber<T>,
+        at_tick: StorageHubTickNumber<T>,
     ) -> Result<StorageHubTickNumber<T>, DispatchError> {
-        let mut next_expiration_block = expiration_block;
+        let mut appended_at_tick = at_tick;
         while let Err(_) = match self {
             ExpirationItem::ProviderTopUp(provider_id) => {
-                <ProviderTopUpExpirations<T>>::try_append(
-                    next_expiration_block,
-                    provider_id.clone(),
-                )
+                <ProviderTopUpExpirations<T>>::try_append(appended_at_tick, provider_id.clone())
             }
         } {
-            next_expiration_block = next_expiration_block
+            appended_at_tick = appended_at_tick
                 .checked_add(&1u8.into())
                 .ok_or(Error::<T>::MaxBlockNumberReached)?;
         }
 
-        Ok(next_expiration_block)
+        Ok(appended_at_tick)
     }
 
     pub(crate) fn set_next_expiration_tick(

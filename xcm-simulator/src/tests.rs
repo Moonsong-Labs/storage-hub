@@ -467,7 +467,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -551,7 +551,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -664,7 +664,7 @@ mod providers {
         StorageHub::execute_with(|| {
             // We check that the parachain is now a provider in StorageHub.
             let parachain_provider_id =
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .unwrap();
             assert!(storagehub::Providers::is_provider(parachain_provider_id),);
         });
@@ -681,7 +681,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -805,7 +805,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -919,7 +919,7 @@ mod providers {
         StorageHub::execute_with(|| {
             // We check that the parachain is now a provider in StorageHub.
             let parachain_provider_id =
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .unwrap();
             assert!(storagehub::Providers::is_provider(parachain_provider_id),);
 
@@ -969,7 +969,7 @@ mod providers {
         StorageHub::execute_with(|| {
             // We check that the parachain is no longer a provider in StorageHub and has been returned its deposit.
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert!(
@@ -991,7 +991,7 @@ mod providers {
         // We check that the parachain is not a provider in the StorageHub and it has some balance
         StorageHub::execute_with(|| {
             assert!(
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .is_none()
             );
             assert_eq!(
@@ -1104,7 +1104,7 @@ mod providers {
         StorageHub::execute_with(|| {
             // We check that the parachain is now a provider in StorageHub.
             let parachain_provider_id =
-                storagehub::Providers::get_provider_id(sh_sibling_account_id(NON_SYS_PARA_ID))
+                storagehub::Providers::get_provider_id(&sh_sibling_account_id(NON_SYS_PARA_ID))
                     .unwrap();
             assert!(storagehub::Providers::is_provider(parachain_provider_id),);
 
@@ -1440,6 +1440,7 @@ mod users {
                 file_size: size,
                 bucket_id: bucket_id.clone(),
                 deposit_paid_for_creation: file_deletion_request_deposit,
+                queue_priority_challenge: true,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(
@@ -1846,6 +1847,7 @@ mod users {
                 file_size: size,
                 bucket_id: bucket_id.clone(),
                 deposit_paid_for_creation: file_deletion_request_deposit,
+                queue_priority_challenge: true,
             };
             file_deletion_requests_vec.force_push(pending_file_deletion_request);
             assert_eq!(

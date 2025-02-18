@@ -32,7 +32,7 @@ mod benchmarks {
         assert_ok,
         traits::{
             fungible::{Mutate, MutateHold},
-            Get, OnPoll,
+            Get, OnFinalize, OnPoll,
         },
         weights::WeightMeter,
         BoundedVec,
@@ -119,13 +119,15 @@ mod benchmarks {
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the PendingMoveBucketRequests storage has the created request
-        let pending_move_bucket_request =
-            PendingMoveBucketRequests::<T>::get(&new_msp_id, &bucket_id);
+        let pending_move_bucket_request = PendingMoveBucketRequests::<T>::get(&bucket_id);
         assert!(pending_move_bucket_request.is_some());
-        assert_eq!(pending_move_bucket_request.unwrap().requester, user.clone());
-
-        // Ensure the PendingBucketsToMove storage has the bucket
-        assert!(PendingBucketsToMove::<T>::contains_key(&bucket_id));
+        let pending_move_bucket_request = pending_move_bucket_request.unwrap();
+        assert_eq!(pending_move_bucket_request.requester, user.clone());
+        assert_eq!(pending_move_bucket_request.new_msp_id, new_msp_id);
+        assert_eq!(
+            pending_move_bucket_request.new_value_prop_id,
+            new_value_prop_id
+        );
 
         // Ensure the expected event was emitted.
         let expected_event =
@@ -419,7 +421,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -484,7 +486,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -648,7 +650,7 @@ mod benchmarks {
                 let fingerprint = <<T as frame_system::Config>::Hashing as Hasher>::hash(
                     b"benchmark_fingerprint",
                 );
-                let size: StorageData<T> = 100;
+                let size: StorageDataUnit<T> = 100;
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
@@ -663,6 +665,7 @@ mod benchmarks {
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: ReplicationTargetType::<T>::one(), // One BSP confirmed means the logic to enqueue a priority challenge is executed
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
+					deposit_paid: Default::default(),
                 };
                 let file_key = Pallet::<T>::compute_file_key(
                     user_account.clone(),
@@ -736,10 +739,25 @@ mod benchmarks {
                     user_peer_ids: Default::default(),
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
-                    bsps_volunteered: ReplicationTargetType::<T>::zero(),
+                    bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+					deposit_paid: Default::default(),
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_keys_to_accept[j], ());
+                // Add the volunteered BSPs to the StorageRequestBsps storage for this file key
+                for i in 0u64..T::MaxReplicationTarget::get().into() {
+                    let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
+                    mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                    let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
+                    StorageRequestBsps::<T>::insert(
+                        file_keys_to_accept[j],
+                        bsp_id,
+                        StorageRequestBspsMetadata::<T> {
+                            confirmed: false,
+                            _phantom: Default::default(),
+                        },
+                    );
+                }
 
                 // Create the FileKeyWithProof object
                 let file_key_with_proof = FileKeyWithProof {
@@ -825,7 +843,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -883,8 +901,11 @@ mod benchmarks {
             Ok(earliest_volunteer_tick) => earliest_volunteer_tick,
         };
 
-        // Advance the block number to the earliest tick where the BSP can volunteer
-        run_to_block::<T>(tick_to_advance_to);
+        // Advance the block number to the earliest tick where the BSP can volunteer, only if
+        // it's bigger than the current block number
+        if tick_to_advance_to > frame_system::Pallet::<T>::block_number() {
+            run_to_block::<T>(tick_to_advance_to);
+        }
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
@@ -1045,10 +1066,25 @@ mod benchmarks {
 				user_peer_ids: Default::default(),
 				bsps_required: T::StandardReplicationTarget::get(),
 				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
-				bsps_volunteered: ReplicationTargetType::<T>::zero(),
+				bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+				deposit_paid: Default::default(),
 			};
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
+            // Add the volunteered BSPs to the StorageRequestBsps storage for this file key
+            for i in 0u64..T::MaxReplicationTarget::get().into() {
+                let bsp_user: T::AccountId = account("bsp_volunteered", i as u32, i as u32);
+                mint_into_account::<T>(bsp_user.clone(), 1_000_000_000_000_000)?;
+                let bsp_id = add_bsp_to_provider_storage::<T>(&bsp_user.clone(), None);
+                StorageRequestBsps::<T>::insert(
+                    file_key,
+                    bsp_id,
+                    StorageRequestBspsMetadata::<T> {
+                        confirmed: false,
+                        _phantom: Default::default(),
+                    },
+                );
+            }
 
             // Create the FileKeyWithProof object
             let file_key_with_proof = FileKeyWithProof {
@@ -1780,6 +1816,96 @@ mod benchmarks {
     }
 
     #[benchmark]
+    fn msp_stop_storing_bucket_for_insolvent_user() -> Result<(), BenchmarkError> {
+        /***********  Setup initial conditions: ***********/
+        // Get a user account and mint some tokens into it.
+        let user: T::AccountId = account("Alice", 0, 0);
+        let signed_origin = RawOrigin::Signed(user.clone());
+        mint_into_account::<T>(user.clone(), 1_000_000_000_000_000)?;
+
+        // Set up parameters for the bucket to use.
+        let name: BucketNameFor<T> = vec![1; BucketNameLimitFor::<T>::get().try_into().unwrap()]
+            .try_into()
+            .unwrap();
+        let bucket_id = <<T as crate::Config>::Providers as ReadBucketsInterface>::derive_bucket_id(
+            &user,
+            name.clone(),
+        );
+
+        // Register a MSP with a value proposition.
+        let msp: T::AccountId = account("MSP", 0, 0);
+        let signed_msp_origin = RawOrigin::Signed(msp.clone());
+        mint_into_account::<T>(msp.clone(), 1_000_000_000_000_000)?;
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage::<T>(&msp, None);
+
+        // Create the bucket as private, creating the collection so it has to be deleted as well.
+        Pallet::<T>::create_bucket(
+            signed_origin.clone().into(),
+            msp_id,
+            name,
+            true,
+            value_prop_id,
+        )?;
+
+        // Get the collection ID of the bucket.
+        let collection_id = T::Providers::get_read_access_group_id_of_bucket(&bucket_id)?.unwrap();
+
+        // Increase the used capacity of the bucket and the MSP, to simulate it currently being used.
+        let bucket_size = 100;
+        pallet_storage_providers::Buckets::<T>::mutate(&bucket_id, |bucket| {
+            let bucket = bucket.as_mut().expect("Bucket should exist.");
+            bucket.size += bucket_size;
+        });
+        let previous_msp_capacity_used =
+            pallet_storage_providers::MainStorageProviders::<T>::mutate(&msp_id, |msp| {
+                let msp = msp.as_mut().expect("MSP should exist.");
+                msp.capacity_used += bucket_size;
+                msp.capacity_used
+            });
+
+        // Flag the owner of the file as insolvent.
+        pallet_payment_streams::UsersWithoutFunds::<T>::insert(
+            &user,
+            frame_system::Pallet::<T>::block_number(),
+        );
+
+        /*********** Call the extrinsic to benchmark: ***********/
+        #[extrinsic_call]
+        _(signed_msp_origin, bucket_id);
+
+        /*********** Post-benchmark checks: ***********/
+        // Ensure the expected event was emitted.
+        let expected_event =
+            <T as pallet::Config>::RuntimeEvent::from(Event::MspStopStoringBucketInsolventUser {
+                msp_id,
+                owner: user.clone(),
+                bucket_id,
+            });
+        frame_system::Pallet::<T>::assert_last_event(expected_event.into());
+
+        // The bucket should have been deleted.
+        assert!(!T::Providers::bucket_exists(&bucket_id));
+
+        // And the collection should have been deleted as well.
+        assert!(!pallet_nfts::Collection::<T>::contains_key(collection_id));
+
+        // Ensure the payment stream between the user and the MSP has been deleted.
+        assert!(
+            !pallet_payment_streams::FixedRatePaymentStreams::<T>::contains_key(&msp_id, &user)
+        );
+
+        // Ensure the used capacity of the MSP has been updated.
+        assert_eq!(
+            pallet_storage_providers::MainStorageProviders::<T>::get(&msp_id)
+                .unwrap()
+                .capacity_used,
+            previous_msp_capacity_used - bucket_size,
+        );
+
+        Ok(())
+    }
+
+    #[benchmark]
     fn delete_file_without_inclusion_proof() -> Result<(), BenchmarkError> {
         /***********  Setup initial conditions: ***********/
         // Get the user account for the generated proofs and load it up with some balance.
@@ -1873,7 +1999,8 @@ mod benchmarks {
                     file_key: Default::default(),
                     bucket_id: Default::default(),
                     file_size: i.into(),
-					deposit_paid_for_creation: file_deletion_request_deposit,
+                    deposit_paid_for_creation: file_deletion_request_deposit,
+                    queue_priority_challenge: true
                 })
                 .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
         }
@@ -2177,7 +2304,8 @@ mod benchmarks {
                     file_key: Default::default(),
                     bucket_id: Default::default(),
                     file_size: i.into(),
-					deposit_paid_for_creation: file_deletion_request_deposit,
+           					deposit_paid_for_creation: file_deletion_request_deposit,
+           					queue_priority_challenge: true
                 })
                 .unwrap_or_else(|_| panic!("Should be able to push to the BoundedVec since range is smaller than its size"));
         }
@@ -2295,7 +2423,7 @@ mod benchmarks {
         // Set the total used capacity of the network to be the same as the total capacity of the network,
         // since this makes the price updater use the second order Taylor series approximation, which
         // is the most computationally expensive.
-        let total_capacity: StorageData<T> = 1024 * 1024 * 1024;
+        let total_capacity: StorageDataUnit<T> = 1024 * 1024 * 1024;
         pallet_storage_providers::UsedBspsCapacity::<T>::put(total_capacity);
         pallet_storage_providers::TotalBspsCapacity::<T>::put(total_capacity);
 
@@ -2367,7 +2495,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -2483,7 +2611,7 @@ mod benchmarks {
             .unwrap();
         let fingerprint =
             <<T as frame_system::Config>::Hashing as Hasher>::hash(b"benchmark_fingerprint");
-        let size: StorageData<T> = 100;
+        let size: StorageDataUnit<T> = 100;
         let peer_id: PeerId<T> = vec![1; MaxPeerIdSize::<T>::get().try_into().unwrap()]
             .try_into()
             .unwrap();
@@ -2590,13 +2718,12 @@ mod benchmarks {
             value_prop_id,
         )?;
 
-        // Add the bucket to the PendingBucketsToMove storage and to the PendingMoveBucketRequests storage
-        PendingBucketsToMove::<T>::insert(&bucket_id, ());
+        // Add the bucket to the PendingMoveBucketRequests storage
         PendingMoveBucketRequests::<T>::insert(
-            &msp_id,
             &bucket_id,
             MoveBucketRequestMetadata {
                 requester: user.clone(),
+                new_msp_id: msp_id,
                 new_value_prop_id: value_prop_id,
             },
         );
@@ -2604,51 +2731,40 @@ mod benchmarks {
         /*********** Call the function to benchmark: ***********/
         #[block]
         {
-            Pallet::<T>::process_expired_move_bucket_request(
-                msp_id,
-                bucket_id,
-                &mut WeightMeter::new(),
-            );
+            Pallet::<T>::process_expired_move_bucket_request(bucket_id, &mut WeightMeter::new());
         }
 
         /*********** Post-benchmark checks: ***********/
         // Ensure the expected event was emitted
         let expected_event =
             <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketRequestExpired {
-                msp_id,
                 bucket_id,
             });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
 
-        // Ensure the bucket was removed from the PendingBucketsToMove storage
-        assert!(!PendingBucketsToMove::<T>::contains_key(&bucket_id));
-
         // Ensure the bucket was removed from the PendingMoveBucketRequests storage
-        assert!(!PendingMoveBucketRequests::<T>::contains_key(
-            &msp_id, &bucket_id
-        ));
+        assert!(!PendingMoveBucketRequests::<T>::contains_key(&bucket_id));
 
         Ok(())
     }
 
     fn run_to_block<T: crate::Config + pallet_proofs_dealer::Config>(n: BlockNumberFor<T>) {
-        assert!(
-            n > frame_system::Pallet::<T>::block_number(),
-            "Cannot go back in time"
-        );
+        let mut current_block = frame_system::Pallet::<T>::block_number();
 
-        while frame_system::Pallet::<T>::block_number() < n {
-            frame_system::Pallet::<T>::set_block_number(
-                frame_system::Pallet::<T>::block_number() + One::one(),
-            );
-            pallet_proofs_dealer::Pallet::<T>::on_poll(
-                frame_system::Pallet::<T>::block_number(),
-                &mut WeightMeter::new(),
-            );
-            Pallet::<T>::on_poll(
-                frame_system::Pallet::<T>::block_number(),
-                &mut WeightMeter::new(),
-            );
+        if n == current_block {
+            return;
+        }
+
+        assert!(n > current_block, "Cannot go back in time");
+
+        while current_block < n {
+            pallet_proofs_dealer::Pallet::<T>::on_finalize(current_block);
+
+            frame_system::Pallet::<T>::set_block_number(current_block + One::one());
+            current_block = frame_system::Pallet::<T>::block_number();
+
+            pallet_proofs_dealer::Pallet::<T>::on_poll(current_block, &mut WeightMeter::new());
+            Pallet::<T>::on_poll(current_block, &mut WeightMeter::new());
         }
     }
 
@@ -2689,8 +2805,8 @@ mod benchmarks {
             T::Hashing::hash_of(&msp)
         };
 
-        let capacity: StorageData<T> = 1024 * 1024 * 1024;
-        let capacity_used: StorageData<T> = 0;
+        let capacity: StorageDataUnit<T> = 1024 * 1024 * 1024;
+        let capacity_used: StorageDataUnit<T> = 0;
 
         let msp_info = pallet_storage_providers::types::MainStorageProvider {
             capacity,
@@ -2719,7 +2835,7 @@ mod benchmarks {
         .try_into()
         .unwrap();
 
-        let bucket_data_limit: StorageData<T> = capacity;
+        let bucket_data_limit: StorageDataUnit<T> = capacity;
         // Use One::one() or a conversion that matches the expected balance type:
         let value_prop = ValueProposition::<T>::new(One::one(), commitment, bucket_data_limit);
         let value_prop_id = value_prop.derive_id();

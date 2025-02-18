@@ -24,6 +24,9 @@ frame-benchmarking = { workspace = true, optional = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 
+pallet-balances = { workspace = true, optional = true }
+pallet-file-system = { workspace = true, optional = true }
+pallet-storage-providers = { workspace = true, optional = true }
 pallet-nfts = { workspace = true }
 sp-keyring = { workspace = true }
 sp-core = { workspace = true }
@@ -55,42 +58,43 @@ pallet-balances = { workspace = true, features = ["std"] }
 [features]
 default = ["std"]
 runtime-benchmarks = [
-	"frame-benchmarking/runtime-benchmarks",
-	"frame-support/runtime-benchmarks",
-	"frame-system/runtime-benchmarks",
-	"pallet-file-system/runtime-benchmarks",
-	"pallet-storage-providers/runtime-benchmarks",
-	"shp-file-metadata/runtime-benchmarks",
-	"shp-traits/runtime-benchmarks",
-	"shp-treasury-funding/runtime-benchmarks",
-	"sp-runtime/runtime-benchmarks",
+    "frame-benchmarking/runtime-benchmarks",
+    "frame-support/runtime-benchmarks",
+    "frame-system/runtime-benchmarks",
+    "pallet-balances/runtime-benchmarks",
+    "pallet-file-system/runtime-benchmarks",
+    "pallet-storage-providers/runtime-benchmarks",
+    "shp-file-metadata/runtime-benchmarks",
+    "shp-traits/runtime-benchmarks",
+    "shp-treasury-funding/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
 ]
 std = [
-	"codec/std",
-	"frame-benchmarking?/std",
-	"frame-support/std",
-	"frame-system/std",
-	"pallet-balances/std",
-	"pallet-file-system/std",
-	"pallet-nfts/std",
-	"pallet-storage-providers/std",
-	"pallet-payment-streams/std",
-	"scale-info/std",
-	"shp-file-metadata/std",
-	"shp-traits/std",
-	"shp-treasury-funding/std",
-	"sp-core/std",
-	"sp-io/std",
-	"sp-keyring/std",
-	"sp-runtime/std",
+    "codec/std",
+    "frame-benchmarking?/std",
+    "frame-support/std",
+    "frame-system/std",
+    "pallet-balances/std",
+    "pallet-file-system/std",
+    "pallet-nfts/std",
+    "pallet-storage-providers/std",
+    "pallet-payment-streams/std",
+    "scale-info/std",
+    "shp-file-metadata/std",
+    "shp-traits/std",
+    "shp-treasury-funding/std",
+    "sp-core/std",
+    "sp-io/std",
+    "sp-keyring/std",
+    "sp-runtime/std",
 ]
 try-runtime = [
-	"frame-support/try-runtime",
-	"frame-system/try-runtime",
-	"pallet-file-system/try-runtime",
-	"pallet-storage-providers/try-runtime",
-	"shp-file-metadata/try-runtime",
-	"shp-traits/try-runtime",
-	"shp-treasury-funding/try-runtime",
-	"sp-runtime/try-runtime",
+    "frame-support/try-runtime",
+    "frame-system/try-runtime",
+    "pallet-file-system/try-runtime",
+    "pallet-storage-providers/try-runtime",
+    "shp-file-metadata/try-runtime",
+    "shp-traits/try-runtime",
+    "shp-treasury-funding/try-runtime",
+    "sp-runtime/try-runtime",
 ]

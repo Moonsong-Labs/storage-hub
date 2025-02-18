@@ -2,15 +2,16 @@ use crate::{
     self as file_system,
     mock::*,
     types::{
-        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, FileKeyWithProof, FileLocation,
-        MoveBucketRequestMetadata, PeerIds, PendingFileDeletionRequest, ProviderIdFor,
-        ReplicationTarget, StorageData, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
-        ThresholdType, TickNumber, ValuePropId,
+        BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
+        FileKeyWithProof, FileLocation, MoveBucketRequestMetadata, PeerIds,
+        PendingFileDeletionRequest, ProviderIdFor, ReplicationTarget, StorageDataUnit,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
+        StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
     },
-    Config, Error, Event, NextAvailableStorageRequestExpirationTick, PendingBucketsToMove,
-    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestExpirations,
-    StorageRequests,
+    weights::WeightInfo,
+    Config, Error, Event, MspsAmountOfPendingFileDeletionRequests,
+    NextAvailableStorageRequestExpirationTick, PendingMoveBucketRequests,
+    PendingStopStoringRequests, StorageRequestExpirations, StorageRequests,
 };
 use frame_support::{
     assert_noop, assert_ok,
@@ -28,13 +29,14 @@ use pallet_proofs_dealer::{PriorityChallengesQueue, ProviderToProofSubmissionRec
 use pallet_storage_providers::types::{Bucket, StorageProviderId, ValueProposition};
 use shp_traits::{
     MutateBucketsInterface, MutateStorageProvidersInterface, PaymentStreamsInterface,
-    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
+    PricePerGigaUnitPerTickInterface, ReadBucketsInterface, ReadProvidersInterface,
+    ReadStorageProvidersInterface,
 };
 use sp_core::{ByteArray, Hasher, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     bounded_vec,
-    traits::{BlakeTwo256, Get},
+    traits::{BlakeTwo256, Convert, Get},
     BoundedVec,
 };
 use sp_std::cmp::max;
@@ -44,7 +46,6 @@ mod create_bucket_tests {
     use super::*;
 
     mod failure {
-        use crate::types::ValuePropId;
 
         use super::*;
 
@@ -123,7 +124,7 @@ mod create_bucket_tests {
                 let owner_initial_balance = <Test as Config>::Currency::free_balance(&owner);
                 let bucket_creation_deposit =
                     <Test as pallet_storage_providers::Config>::BucketDeposit::get();
-                let nft_collection_deposit: crate::types::BalanceOf<Test> =
+                let nft_collection_deposit: BalanceOf<Test> =
                     <Test as pallet_nfts::Config>::CollectionDeposit::get();
                 let origin = RuntimeOrigin::signed(owner.clone());
                 let msp = Keyring::Charlie.to_account_id();
@@ -705,8 +706,13 @@ mod request_move_bucket {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -751,8 +757,13 @@ mod request_move_bucket {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -790,7 +801,8 @@ mod request_move_bucket {
                 let (msp_charlie_id, value_prop_id) = add_msp_to_provider_storage(&msp_charlie);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id, false);
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -823,7 +835,8 @@ mod request_move_bucket {
                     <<Test as frame_system::Config>::Hashing as Hasher>::hash(&msp_dave.as_slice());
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner, name.clone(), msp_charlie_id, value_prop_id, false);
 
                 assert_noop!(
                     FileSystem::request_move_bucket(origin, bucket_id, msp_dave_id, value_prop_id),
@@ -846,8 +859,13 @@ mod request_move_bucket {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 assert_noop!(
                     FileSystem::request_move_bucket(
@@ -874,8 +892,13 @@ mod request_move_bucket {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Issue storage request with a big file size
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
@@ -976,17 +999,15 @@ mod request_move_bucket {
                     dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
+                        new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
                 );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -1034,8 +1055,13 @@ mod request_move_bucket {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1077,8 +1103,13 @@ mod request_move_bucket {
 
                 // Create a bucket with Charlie as the MSP.
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Make sure bucket is stored by Charlie after creation.
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1120,8 +1151,13 @@ mod request_move_bucket {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1137,17 +1173,15 @@ mod request_move_bucket {
                     dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
+                        new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
                 );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -1187,11 +1221,7 @@ mod request_move_bucket {
                 );
 
                 // Check pending bucket storages are cleared
-                assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
-                    &msp_dave_id,
-                    bucket_id
-                ));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(bucket_id));
             });
         }
 
@@ -1208,8 +1238,13 @@ mod request_move_bucket {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1225,17 +1260,15 @@ mod request_move_bucket {
                     dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
+                        new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
                 );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -1271,11 +1304,7 @@ mod request_move_bucket {
                 ));
 
                 // Check pending bucket storages are cleared
-                assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
-                    &msp_dave_id,
-                    bucket_id
-                ));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(bucket_id));
             });
         }
 
@@ -1292,7 +1321,13 @@ mod request_move_bucket {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1308,17 +1343,15 @@ mod request_move_bucket {
 					dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
-						new_value_prop_id: dave_value_prop_id
+                        new_msp_id: msp_dave_id,
+                        new_value_prop_id: dave_value_prop_id
                     })
                 );
-
-                assert!(PendingBucketsToMove::<Test>::contains_key(&bucket_id));
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -1339,11 +1372,7 @@ mod request_move_bucket {
                 // Move tick number to expiration
                 roll_to(expiration);
 
-                assert!(!PendingBucketsToMove::<Test>::contains_key(&bucket_id));
-                assert!(!PendingMoveBucketRequests::<Test>::contains_key(
-                    &msp_dave_id,
-                    bucket_id
-                ));
+                assert!(!PendingMoveBucketRequests::<Test>::contains_key(bucket_id));
             });
         }
     }
@@ -1814,7 +1843,8 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner, name.clone(), msp_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner, name.clone(), msp_id, value_prop_id, false);
 
                 assert_noop!(
                     FileSystem::issue_storage_request(
@@ -1850,8 +1880,13 @@ mod request_storage {
                 let (msp_dave_id, dave_value_prop_id) = add_msp_to_provider_storage(&msp_dave);
 
                 let name: BucketNameFor<Test> = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner, name.clone(), msp_charlie_id, charlie_value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner,
+                    name.clone(),
+                    msp_charlie_id,
+                    charlie_value_prop_id,
+                    false,
+                );
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1867,12 +1902,12 @@ mod request_storage {
                     dave_value_prop_id
                 ));
 
-                let pending_move_bucket =
-                    PendingMoveBucketRequests::<Test>::get(&msp_dave_id, bucket_id);
+                let pending_move_bucket = PendingMoveBucketRequests::<Test>::get(&bucket_id);
                 assert_eq!(
                     pending_move_bucket,
                     Some(MoveBucketRequestMetadata {
                         requester: owner.clone(),
+                        new_msp_id: msp_dave_id,
                         new_value_prop_id: dave_value_prop_id
                     })
                 );
@@ -1913,9 +1948,9 @@ mod request_storage {
                     <Test as pallet_payment_streams::Config>::NewStreamDeposit::get();
                 let base_stream_deposit: u128 =
                     <Test as pallet_payment_streams::Config>::BaseDeposit::get();
-                let balance_to_mint: crate::types::BalanceOf<Test> =
+                let balance_to_mint: BalanceOf<Test> =
                     <<Test as pallet_storage_providers::Config>::BucketDeposit as Get<
-                        crate::types::BalanceOf<Test>,
+                        BalanceOf<Test>,
                     >>::get()
                     .saturating_add(new_stream_deposit as u128)
                     .saturating_add(base_stream_deposit)
@@ -1926,11 +1961,12 @@ mod request_storage {
                 )
                 .unwrap();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_without_funds.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_without_funds,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -1977,11 +2013,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_without_funds.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_without_funds,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2017,11 +2054,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_without_funds.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_without_funds,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2059,11 +2097,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Simulate insolvent provider
@@ -2099,8 +2138,6 @@ mod request_storage {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let user = RuntimeOrigin::signed(owner_account_id.clone());
-                let storage_request_deposit =
-                    <Test as file_system::Config>::StorageRequestCreationDeposit::get();
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
@@ -2108,16 +2145,26 @@ mod request_storage {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+				let replication_target = ReplicationTarget::Standard;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+					false
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
+
+				// Calculate the upfront amount that the user is going to have to pay to the treasury to issue this storage request and
+				// get the treasury's balance before issuing the request.
+				let upfront_amount_to_pay = calculate_upfront_amount_to_pay(replication_target.clone(), size);
+				let treasury_balance_before = <Test as file_system::Config>::Currency::free_balance(&<Test as crate::Config>::TreasuryAccount::get());
 
                 let owner_initial_balance =
                     <Test as file_system::Config>::Currency::free_balance(&owner_account_id);
@@ -2140,7 +2187,7 @@ mod request_storage {
                     size,
                     msp_id,
                     peer_ids.clone(),
-                    ReplicationTarget::Standard
+                    replication_target
                 ));
 
                 let file_key = FileSystem::compute_file_key(
@@ -2166,24 +2213,33 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_tick_storage_request
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
-                // Check that the deposit was held from the owner's balance
-                assert_eq!(
-                    <Test as Config>::Currency::balance_on_hold(
-                        &RuntimeHoldReason::FileSystem(
-                            file_system::HoldReason::StorageRequestCreationHold
-                        ),
-                        &owner_account_id
-                    ),
-                    storage_request_deposit
-                );
-                assert_eq!(
-                    <Test as Config>::Currency::free_balance(&owner_account_id),
-                    owner_initial_balance - storage_request_deposit
-                );
+				// Check that the owner paid upfront to cover the retrieval costs and the corresponding
+				// deposit was held from the owner's balance.
+				assert_eq!(
+					<Test as Config>::Currency::balance_on_hold(
+						&RuntimeHoldReason::FileSystem(
+							file_system::HoldReason::StorageRequestCreationHold
+						),
+						&owner_account_id
+					),
+					storage_request_deposit
+				);
+				assert_eq!(
+					<Test as Config>::Currency::free_balance(&owner_account_id),
+					owner_initial_balance - storage_request_deposit - upfront_amount_to_pay
+				);
+
+				// Check that the treasury received the correct amount of funds.
+				assert_eq!(
+					<Test as file_system::Config>::Currency::free_balance(&<Test as crate::Config>::TreasuryAccount::get()),
+					treasury_balance_before + upfront_amount_to_pay
+				);
+
 
                 // Assert that the correct event was deposited
                 System::assert_last_event(
@@ -2218,11 +2274,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_without_funds.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_without_funds,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2256,11 +2313,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
@@ -2271,6 +2329,9 @@ mod request_storage {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2307,7 +2368,8 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_tick_storage_request
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -2346,7 +2408,8 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_tick_storage_request
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -2383,11 +2446,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2423,11 +2487,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
@@ -2438,6 +2503,9 @@ mod request_storage {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch a signed extrinsic.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -2474,7 +2542,8 @@ mod request_storage {
                         bsps_required: <Test as Config>::StandardReplicationTarget::get(),
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
-                        expires_at: next_expiration_tick_storage_request
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -2527,11 +2596,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 let file_key = FileSystem::compute_file_key(
@@ -2604,11 +2674,12 @@ mod request_storage {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
+                let (bucket_id, _) = create_bucket(
                     &owner_account_id.clone(),
                     name.clone(),
                     msp_id,
                     value_prop_id,
+					false
                 );
 
                 // Append storage request expiration to the list at `StorageRequestTtl`
@@ -2726,11 +2797,12 @@ mod revoke_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2777,11 +2849,12 @@ mod revoke_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -2817,6 +2890,78 @@ mod revoke_storage_request {
                 assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
 
                 System::assert_last_event(Event::StorageRequestRevoked { file_key }.into());
+
+				// Ensure a file deletion request was not created
+                assert!(
+                    !file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id).iter().any(|r| r.file_key == file_key)
+                )
+            });
+        }
+
+        #[test]
+        fn revoke_request_storage_with_confirmed_msp_success() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner = RuntimeOrigin::signed(owner_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let file_content = b"test".to_vec();
+                let fingerprint = BlakeTwo256::hash(&file_content);
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id.clone(),
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+					false
+                );
+
+                // Dispatch a signed extrinsic.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    Default::default(),
+                    ReplicationTarget::Standard
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    4,
+                    fingerprint,
+                );
+
+                // Set storage request MSP to confirmed
+                StorageRequests::<Test>::mutate(file_key, |metadata| {
+                    metadata.as_mut().unwrap().msp = Some((msp_id, true));
+                });
+
+                let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+                let storage_request_ttl: TickNumber<Test> = storage_request_ttl.into();
+                let expiration_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick() + storage_request_ttl;
+
+                // Assert that the storage request expiration was appended to the list at `StorageRequestTtl`
+                assert_eq!(
+                    file_system::StorageRequestExpirations::<Test>::get(expiration_tick),
+                    vec![file_key]
+                );
+
+                assert_ok!(FileSystem::revoke_storage_request(owner.clone(), file_key));
+
+                System::assert_last_event(Event::StorageRequestRevoked { file_key }.into());
+
+                // Ensure a file deletion request was created
+                assert!(
+                    file_system::PendingFileDeletionRequests::<Test>::get(owner_account_id).iter().any(|r| r.file_key == file_key)
+                )
             });
         }
 
@@ -2835,13 +2980,13 @@ mod revoke_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account.clone(), name.clone(), msp_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner_account, name.clone(), msp_id, value_prop_id, false);
 
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -2856,7 +3001,7 @@ mod revoke_storage_request {
                     ReplicationTarget::Standard
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account.clone(),
@@ -2869,7 +3014,7 @@ mod revoke_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -2916,13 +3061,13 @@ mod revoke_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account.clone(), name.clone(), msp_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner_account, name.clone(), msp_id, value_prop_id, false);
 
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -2949,7 +3094,7 @@ mod revoke_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -3018,8 +3163,13 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3149,8 +3299,13 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold both files.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Compute the file key for the first file.
                 let first_file_key = FileSystem::compute_file_key(
@@ -3267,16 +3422,22 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
-                let first_bucket_id =
-                    create_bucket(&owner_account_id.clone(), first_name, msp_id, value_prop_id);
+                let (first_bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    first_name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Create the bucket that will hold the second file.
                 let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
-                let second_bucket_id = create_bucket(
-                    &owner_account_id.clone(),
-                    second_name,
+                let (second_bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    second_name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Compute the file key for the first file.
@@ -3410,20 +3571,22 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold the first file.
                 let first_name = BoundedVec::try_from(b"first bucket".to_vec()).unwrap();
-                let first_bucket_id = create_bucket(
+                let (first_bucket_id, _) = create_bucket(
                     &first_owner_account_id.clone(),
                     first_name,
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Create the bucket that will hold the second file.
                 let second_name = BoundedVec::try_from(b"second bucket".to_vec()).unwrap();
-                let second_bucket_id = create_bucket(
+                let (second_bucket_id, _) = create_bucket(
                     &second_owner_account_id.clone(),
                     second_name,
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Compute the file key for the first file.
@@ -3546,13 +3709,18 @@ mod msp_respond_storage_request {
 
                 // Create the bucket that will hold the file.
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
@@ -3595,7 +3763,7 @@ mod msp_respond_storage_request {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -3676,8 +3844,13 @@ mod msp_respond_storage_request {
                 // create bucket
                 let owner_account_id = Keyring::Alice.to_account_id();
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id.clone(),
+                    name,
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = H256::zero();
 
@@ -3720,8 +3893,13 @@ mod msp_respond_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3788,8 +3966,13 @@ mod msp_respond_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -3853,8 +4036,13 @@ mod msp_respond_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -3880,6 +4068,7 @@ mod msp_respond_storage_request {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
+						deposit_paid: 0,
                     },
                 );
 
@@ -3922,8 +4111,13 @@ mod msp_respond_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -3949,6 +4143,7 @@ mod msp_respond_storage_request {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
+						deposit_paid: 0,
                     },
                 );
 
@@ -4000,11 +4195,12 @@ mod msp_respond_storage_request {
                 let _caller_msp_id = add_msp_to_provider_storage(&caller_msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
-                    name,
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
                     expected_msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a storage request.
@@ -4068,8 +4264,13 @@ mod msp_respond_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch a storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4153,8 +4354,13 @@ mod msp_respond_storage_request {
                 let (other_msp_id, value_prop_id) = add_msp_to_provider_storage(&other_msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, other_msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    other_msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -4182,6 +4388,7 @@ mod msp_respond_storage_request {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
+						deposit_paid: 0,
                     },
                 );
 
@@ -4225,8 +4432,13 @@ mod msp_respond_storage_request {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -4255,6 +4467,7 @@ mod msp_respond_storage_request {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: 100,
+						deposit_paid: 0,
                     },
                 );
 
@@ -4308,8 +4521,13 @@ mod bsp_volunteer {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4377,13 +4595,18 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
@@ -4411,7 +4634,7 @@ mod bsp_volunteer {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -4447,13 +4670,18 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
@@ -4478,7 +4706,7 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
@@ -4507,13 +4735,18 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
@@ -4563,19 +4796,24 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 // Get BSP ID.
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4632,12 +4870,13 @@ mod bsp_volunteer {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner, name.clone(), msp_id, value_prop_id, false);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4654,7 +4893,7 @@ mod bsp_volunteer {
                     ReplicationTarget::Standard
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(bsp_id, |bsp| {
                     assert!(bsp.is_some());
@@ -4692,16 +4931,17 @@ mod bsp_volunteer {
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-                let size = StorageData::<Test>::try_from(4).unwrap();
+                let size = StorageDataUnit::<Test>::try_from(4).unwrap();
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner.clone(), name.clone(), msp_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner, name.clone(), msp_id, value_prop_id, false);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -4726,12 +4966,12 @@ mod bsp_volunteer {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -4773,6 +5013,131 @@ mod bsp_volunteer {
         }
 
         #[test]
+        fn bsp_volunteer_is_correctly_paid_from_user_deposit() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let origin = RuntimeOrigin::signed(owner.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = StorageDataUnit::<Test>::try_from(4).unwrap();
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageDataUnit<Test> = 100;
+
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, _) =
+                    create_bucket(&owner, name.clone(), msp_id, value_prop_id, false);
+
+                // Sign up account as a Backup Storage Provider
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
+
+                // Dispatch storage request.
+                assert_ok!(FileSystem::issue_storage_request(
+                    origin,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    4,
+                    msp_id,
+                    peer_ids.clone(),
+                    ReplicationTarget::Standard
+                ));
+
+                let file_key = FileSystem::compute_file_key(
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    4,
+                    fingerprint,
+                );
+
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
+
+                // Calculate in how many ticks the BSP can volunteer for the file
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
+				// Get the BSP's free balance before volunteering.
+				let bsp_initial_balance = <Test as Config>::Currency::free_balance(&bsp_account_id);
+
+                // Dispatch BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+                // Assert that the RequestStorageBsps has the correct value
+                assert_eq!(
+                    file_system::StorageRequestBsps::<Test>::get(file_key, bsp_id)
+                        .expect("BSP should exist in storage"),
+                    StorageRequestBspsMetadata::<Test> {
+                        confirmed: false,
+                        _phantom: Default::default()
+                    }
+                );
+
+				// Calculate how much should the BSP have gotten from the user's deposit.
+       			let amount_paid_to_bsp = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+			&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        		);
+
+				// Assert that the storage request's deposit paid was updated in storage.
+				assert_eq!(
+					file_system::StorageRequests::<Test>::get(file_key).unwrap().deposit_paid,
+					storage_request_deposit - amount_paid_to_bsp
+				);
+
+				// Assert that the user's balance on hold decreased by that amount.
+				assert_eq!(
+                    <Test as Config>::Currency::balance_on_hold(
+                        &RuntimeHoldReason::FileSystem(
+                            file_system::HoldReason::StorageRequestCreationHold
+                        ),
+                        &owner
+                    ),
+                    storage_request_deposit - amount_paid_to_bsp
+                );
+
+				// Assert that the BSP's free balance increased by that amount.
+                assert_eq!(
+                    <Test as Config>::Currency::free_balance(&bsp_account_id),
+                    bsp_initial_balance + amount_paid_to_bsp
+                );
+
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::AcceptedBspVolunteer {
+                        bsp_id,
+                        bucket_id,
+                        location,
+                        fingerprint,
+                        multiaddresses: create_sp_multiaddresses(),
+                        owner,
+                        size,
+                    }
+                    .into(),
+                );
+            });
+        }
+
+        #[test]
         fn bsp_volunteer_succeeds_after_waiting_enough_ticks_without_spam() {
             new_test_ext().execute_with(|| {
                 let owner_account_id = Keyring::Alice.to_account_id();
@@ -4786,19 +5151,24 @@ mod bsp_volunteer {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id.clone(),
+                    name,
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
 
                 // Get BSP ID.
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4868,7 +5238,6 @@ mod bsp_volunteer {
 mod bsp_confirm {
     use super::*;
     mod failure {
-        use crate::types::FileKeyWithProof;
 
         use super::*;
         use pallet_storage_providers::types::ReputationWeightType;
@@ -4890,8 +5259,13 @@ mod bsp_confirm {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -4983,13 +5357,18 @@ mod bsp_confirm {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount,));
@@ -5049,7 +5428,7 @@ mod bsp_confirm {
                 let fingerprint = BlakeTwo256::hash(&file_content);
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
@@ -5058,8 +5437,13 @@ mod bsp_confirm {
                 assert_ok!(bsp_sign_up(bsp_charlie_signed.clone(), storage_amount,));
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5112,7 +5496,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_bob_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_bob_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5187,7 +5571,7 @@ mod bsp_confirm {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
                 let msp = Keyring::Charlie.to_account_id();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 let size = 4;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
@@ -5195,7 +5579,7 @@ mod bsp_confirm {
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Force BSP to pass all threshold checks when volunteering.
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -5212,8 +5596,13 @@ mod bsp_confirm {
                         FileLocation::<Test>::try_from(format!("test{}", i).into_bytes()).unwrap();
                     let fingerprint = H256::repeat_byte(i as u8);
                     let name = BoundedVec::try_from(format!("bucket{}", i).into_bytes()).unwrap();
-                    let bucket_id =
-                        create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                    let (bucket_id, _) = create_bucket(
+                        &owner_account_id,
+                        name.clone(),
+                        msp_id,
+                        value_prop_id,
+                        false,
+                    );
 
                     // Issue storage request
                     assert_ok!(FileSystem::issue_storage_request(
@@ -5295,15 +5684,16 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_ids =
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 // Setup MSP and bucket
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-                let bucket_id = create_bucket(
+                let (bucket_id, _) = create_bucket(
                     &owner_account_id,
                     BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Setup BSP
@@ -5335,7 +5725,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5389,13 +5779,18 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5423,7 +5818,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5438,7 +5833,7 @@ mod bsp_confirm {
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Simulate insolvent provider
                 pallet_storage_providers::InsolventProviders::<Test>::insert(
@@ -5485,13 +5880,18 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5504,6 +5904,9 @@ mod bsp_confirm {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5525,12 +5928,12 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5579,6 +5982,10 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+								),
                     })
                 );
 
@@ -5667,20 +6074,21 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_ids =
                     BoundedVec::try_from(vec![BoundedVec::try_from(vec![1]).unwrap()]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 // Setup MSP and bucket
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
-                let bucket_id = create_bucket(
+                let (bucket_id, _) = create_bucket(
                     &owner_account_id,
                     BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Setup BSP
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Create file keys with different file locations
                 let locations: Vec<FileLocation<Test>> = (0..3)
@@ -5723,7 +6131,7 @@ mod bsp_confirm {
                     .iter()
                     .map(|&file_key| {
                         FileSystem::query_earliest_file_volunteer_tick(
-                            Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                            Providers::get_provider_id(&bsp_account_id).unwrap(),
                             file_key,
                         )
                         .unwrap()
@@ -5813,13 +6221,18 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -5832,6 +6245,9 @@ mod bsp_confirm {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -5853,12 +6269,12 @@ mod bsp_confirm {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -5907,6 +6323,10 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6007,7 +6427,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6051,6 +6471,10 @@ mod bsp_confirm {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6106,17 +6530,22 @@ mod bsp_confirm {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 // Sign up the MSP that will be used in the test and create a bucket under it for the file.
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider and get its ID.
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Compute the file key of the storage request to issue.
                 let file_key = FileSystem::compute_file_key(
@@ -6158,7 +6587,7 @@ mod bsp_confirm {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6293,8 +6722,13 @@ mod bsp_stop_storing {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6349,13 +6783,18 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -6368,6 +6807,9 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6389,12 +6831,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6450,6 +6892,10 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6494,13 +6940,13 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id, false);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -6513,6 +6959,9 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6534,12 +6983,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6595,6 +7044,10 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6642,13 +7095,13 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id, false);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -6661,6 +7114,9 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6682,12 +7138,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6743,6 +7199,10 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						// The deposit paid should have been updated after paying the BSP that volunteered.
+						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+						),
                     })
                 );
 
@@ -6805,13 +7265,13 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) =
+                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id, false);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -6824,6 +7284,9 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -6845,12 +7308,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -6864,6 +7327,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -6906,6 +7374,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -6951,6 +7420,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7002,13 +7472,18 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -7021,6 +7496,9 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7042,12 +7520,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7061,6 +7539,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7103,6 +7586,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7154,6 +7638,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7186,13 +7671,18 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -7205,6 +7695,9 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7226,12 +7719,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7245,6 +7738,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7287,6 +7785,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7349,6 +7848,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7366,6 +7866,13 @@ mod bsp_stop_storing {
                     .into(),
                 );
 
+				// Move the pending stop storing request from the `file_key` to the default trie root.
+				// This is so the cycles of the BSP are stopped, given that in the mock used for this tests
+				// the new root after applying the change will be the `file_key` of the applied change.
+				let pending_stop_storing_request = PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).unwrap();
+				let default_trie_root = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_default_root();
+				PendingStopStoringRequests::<Test>::insert(&bsp_id, &default_trie_root, pending_stop_storing_request);
+
                 // Advance enough blocks to allow the BSP to confirm the stop storing request.
                 roll_to(
                     frame_system::Pallet::<Test>::block_number() + MinWaitForStopStoring::get(),
@@ -7374,14 +7881,14 @@ mod bsp_stop_storing {
                 // Dispatch BSP confirm stop storing.
                 assert_ok!(FileSystem::bsp_confirm_stop_storing(
                     bsp_signed.clone(),
-                    file_key,
+                    default_trie_root,
                     CompactProof {
-                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                        encoded_nodes: vec![default_trie_root.as_ref().to_vec()],
                     },
                 ));
 
                 // Assert that the pending stop storing request was removed.
-                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &file_key).is_none());
+                assert!(PendingStopStoringRequests::<Test>::get(&bsp_id, &default_trie_root).is_none());
 
                 // Assert that the used capacity of this BSP is now 0
                 assert_eq!(Providers::get_used_capacity(&bsp_id), 0);
@@ -7403,7 +7910,7 @@ mod bsp_stop_storing {
                 System::assert_last_event(
                     Event::BspConfirmStoppedStoring {
                         bsp_id,
-                        file_key,
+                        file_key: default_trie_root,
                         new_root,
                     }
                     .into(),
@@ -7424,13 +7931,18 @@ mod bsp_stop_storing {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -7438,6 +7950,9 @@ mod bsp_stop_storing {
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 				let current_tick_plus_storage_request_ttl = current_tick + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
                 let next_expiration_tick_storage_request = max(NextAvailableStorageRequestExpirationTick::<Test>::get(), current_tick_plus_storage_request_ttl);
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7460,7 +7975,7 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_info(
@@ -7471,7 +7986,7 @@ mod bsp_stop_storing {
 				// Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -7485,6 +8000,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7543,6 +8063,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7588,6 +8109,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7657,13 +8179,18 @@ mod bsp_stop_storing {
 				let second_file_fingerprint = H256::random();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -7671,6 +8198,9 @@ mod bsp_stop_storing {
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
 				let current_tick_plus_storage_request_ttl = current_tick + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
 				let next_expiration_tick_storage_request = max(NextAvailableStorageRequestExpirationTick::<Test>::get(), current_tick_plus_storage_request_ttl);
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch first storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7711,7 +8241,7 @@ mod bsp_stop_storing {
 					second_file_fingerprint,
 				);
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Check that the dynamic-rate payment stream between the user and the provider doesn't exist
                 assert!(
@@ -7725,11 +8255,11 @@ mod bsp_stop_storing {
 				// Calculate in how many ticks the BSP can volunteer for the files
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = max(FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     first_file_key,
                 )
                 .unwrap(), FileSystem::query_earliest_file_volunteer_tick(
-					Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+					Providers::get_provider_id(&bsp_account_id).unwrap(),
 					second_file_key,
 				)
 				.unwrap());
@@ -7744,6 +8274,11 @@ mod bsp_stop_storing {
                 // Dispatch BSP volunteers.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), first_file_key,));
 				assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), second_file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch first BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -7825,6 +8360,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 				assert_eq!(
@@ -7842,6 +8378,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7879,6 +8416,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -7954,13 +8492,18 @@ mod bsp_stop_storing {
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
                 let fingerprint = H256::zero();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -7973,6 +8516,9 @@ mod bsp_stop_storing {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -7994,12 +8540,12 @@ mod bsp_stop_storing {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -8013,6 +8559,11 @@ mod bsp_stop_storing {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -8071,6 +8622,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -8098,13 +8650,18 @@ mod bsp_stop_storing {
                 let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
                 let size = 4;
                 let fingerprint = H256::zero();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(vec![1]).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -8118,6 +8675,9 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
+
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
                     owner.clone(),
@@ -8130,7 +8690,7 @@ mod bsp_stop_storing {
                     ReplicationTarget::Standard,
                 ));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8177,6 +8737,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit,
                     })
                 );
 
@@ -8206,17 +8767,18 @@ mod bsp_stop_storing {
                 let (msp_id, value_prop_id) =
                     add_msp_to_provider_storage(&Keyring::Charlie.to_account_id());
 
-                let bucket_id = create_bucket(
-                    &owner_account_id,
-                    BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
-                    msp_id,
-                    value_prop_id,
-                );
+				let (bucket_id, _) = create_bucket(
+					&owner_account_id,
+					BoundedVec::try_from(b"bucket".to_vec()).unwrap(),
+					msp_id,
+					value_prop_id,
+					false,
+				);
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8238,6 +8800,13 @@ mod bsp_stop_storing {
                     current_tick_plus_storage_request_ttl,
                 );
 
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
+
+				// Get the free balance of the owner and the treasury before the storage request is issued
+				let owner_free_balance_before = <Test as Config>::Currency::free_balance(&owner_account_id);
+				let treasury_free_balance_before = <Test as Config>::Currency::free_balance(&<Test as Config>::TreasuryAccount::get());
+
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
                     bsp_signed.clone(),
@@ -8252,6 +8821,12 @@ mod bsp_stop_storing {
                         encoded_nodes: vec![file_key.as_ref().to_vec()],
                     },
                 ));
+
+				// Assert that the treasury's free balance has only increased by the BSP stop storing file penalty and the owner's
+				// free balance has only diminished by the storage request creation deposit, since a storage request generated by
+				// a BSP stop storing request does not make the user pay anything upfront.
+				assert_eq!(<Test as Config>::Currency::free_balance(&owner_account_id), owner_free_balance_before - storage_request_deposit);
+				assert_eq!(<Test as Config>::Currency::free_balance(&<Test as Config>::TreasuryAccount::get()), treasury_free_balance_before + <<Test as crate::Config>::BspStopStoringFilePenalty as Get<BalanceOf<Test>>>::get());
 
                 // Assert that the storage request was created with one bsps_required
                 assert_eq!(
@@ -8269,6 +8844,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit,
                     })
                 );
 
@@ -8309,14 +8885,15 @@ mod delete_file_and_pending_deletions_tests {
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
                 let _ = create_bucket(
-                    &owner_account_id.clone(),
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 let other_user = Keyring::Bob.to_account_id();
-                let bucket_id = create_bucket(&other_user.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(&other_user, name, msp_id, value_prop_id, false);
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8360,11 +8937,12 @@ mod delete_file_and_pending_deletions_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // For loop to create 1 over maximum of MaxUserPendingDeletionRequests
@@ -8425,7 +9003,13 @@ mod delete_file_and_pending_deletions_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8457,6 +9041,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -8493,6 +9078,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -8516,8 +9102,13 @@ mod delete_file_and_pending_deletions_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8547,9 +9138,9 @@ mod delete_file_and_pending_deletions_tests {
     }
 
     mod success {
-        use crate::MspsAmountOfPendingFileDeletionRequests;
 
         use super::*;
+
         #[test]
         fn delete_file_with_proof_of_inclusion_success() {
             new_test_ext().execute_with(|| {
@@ -8566,8 +9157,13 @@ mod delete_file_and_pending_deletions_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
 				// Increase bucket size and payment stream rate to simulate it storing the file
 				let initial_bucket_size = 2 * size;
@@ -8694,7 +9290,13 @@ mod delete_file_and_pending_deletions_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
 				let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8763,6 +9365,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -8872,7 +9475,13 @@ mod delete_file_and_pending_deletions_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -8904,6 +9513,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -9002,7 +9612,13 @@ mod delete_file_and_pending_deletions_tests {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
 				let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -9099,6 +9715,7 @@ mod delete_file_and_pending_deletions_tests {
 							bucket_id,
 							file_size: size,
 							deposit_paid_for_creation: file_deletion_request_deposit,
+							queue_priority_challenge: true
 						}]
                     )
                         .unwrap()
@@ -9276,11 +9893,12 @@ mod compute_threshold {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -9306,11 +9924,11 @@ mod compute_threshold {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let tick_number =
                     FileSystem::query_earliest_file_volunteer_tick(bsp_id, file_key).unwrap();
@@ -9335,11 +9953,12 @@ mod compute_threshold {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -9365,11 +9984,11 @@ mod compute_threshold {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 let storage_request = file_system::StorageRequests::<Test>::get(file_key).unwrap();
 
@@ -9470,11 +10089,12 @@ mod compute_threshold {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(
-                    &owner_account_id.clone(),
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
                     name.clone(),
                     msp_id,
                     value_prop_id,
+                    false,
                 );
 
                 // Dispatch a signed extrinsic.
@@ -9501,11 +10121,11 @@ mod compute_threshold {
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
 
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set reputation weight of BSP to max
                 pallet_storage_providers::BackupStorageProviders::<Test>::mutate(&bsp_id, |bsp| {
@@ -9542,9 +10162,9 @@ mod compute_threshold {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to zero
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(0);
@@ -9564,9 +10184,9 @@ mod compute_threshold {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to 1
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1);
@@ -9602,16 +10222,16 @@ mod compute_threshold {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_bob_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Create another BSP with higher weight
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to the sum of the two BSPs reputation weights
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(10 + 1);
@@ -9658,15 +10278,15 @@ mod compute_threshold {
                 // Setup: create a BSP
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_bob_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_bob_id = Providers::get_provider_id(&bsp_account_id).unwrap();
                 // Create another BSP
                 let bsp_account_id = Keyring::Charlie.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
-                let bsp_charlie_id = Providers::get_provider_id(bsp_account_id).unwrap();
+                let bsp_charlie_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Set global_weight to the sum of the weights of the BSPs
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::set(1 + 1);
@@ -9718,13 +10338,21 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+				// Initially set Eve as solvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -9737,6 +10365,9 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+       			let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -9758,12 +10389,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -9777,6 +10408,11 @@ mod stop_storing_for_insolvent_user {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Get the current tick number.
                 let tick_when_confirming = ProofsDealer::get_current_tick();
@@ -9812,6 +10448,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -9887,7 +10524,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the BSP has confirmed storing, we can simulate the user being insolvent
                 // and the BSP stopping storing for the user.
-                // Try to stop storing for the insolvent user.
+				// To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+				// value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_ok!(FileSystem::stop_storing_for_insolvent_user(
                     bsp_signed.clone(),
                     file_key,
@@ -9920,6 +10560,9 @@ mod stop_storing_for_insolvent_user {
                         .capacity_used,
                     0
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
             });
         }
 
@@ -9937,13 +10580,21 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 50;
+                let storage_amount: StorageDataUnit<Test> = 50;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+				// Initially set Eve as solvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -9956,6 +10607,9 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -9980,7 +10634,7 @@ mod stop_storing_for_insolvent_user {
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -9994,6 +10648,11 @@ mod stop_storing_for_insolvent_user {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Dispatch BSP confirm storing.
                 assert_ok!(FileSystem::bsp_confirm_storing(
@@ -10030,13 +10689,6 @@ mod stop_storing_for_insolvent_user {
                     }],
                 ));
 
-                // TODO: Fix the
-                // TODO: Uncommenting this would result in test failing with the error `UserWithoutFunds`
-                // pallet_payment_streams::UsersWithoutFunds::<Test>::insert(
-                //     owner_account_id.clone(),
-                //     System::block_number(),
-                // );
-
                 // Assert that the storage was updated
                 assert_eq!(
                     file_system::StorageRequests::<Test>::get(file_key),
@@ -10053,6 +10705,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -10074,7 +10727,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the MSP has accepted storing, we can simulate the user being insolvent
                 // and the MSP stopping storing for the user.
-                // Try to stop storing for the insolvent user.
+				// To make the user insolvent, we release the read lock and wait until we can write
+				// the new value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_ok!(FileSystem::stop_storing_for_insolvent_user(
                     msp_signed.clone(),
                     file_key,
@@ -10111,6 +10767,9 @@ mod stop_storing_for_insolvent_user {
                         .capacity_used,
                     0
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
             });
         }
 
@@ -10127,13 +10786,18 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -10146,6 +10810,9 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10167,12 +10834,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10186,6 +10853,11 @@ mod stop_storing_for_insolvent_user {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Get the current tick number.
                 let tick_when_confirming = ProofsDealer::get_current_tick();
@@ -10221,6 +10893,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -10352,11 +11025,22 @@ mod stop_storing_for_insolvent_user {
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
-                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                // Initially set Eve as solvent and get the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
 
-                // Try to stop storing for the insolvent user.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Try to stop storing for the insolvent user. To mark Eve as insolvent, drop the read lock and wait to be
+                // able to write the new value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         bsp_signed.clone(),
@@ -10372,6 +11056,9 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::NotASp
                 );
+
+                // Drop the latest acquired read lock.
+                drop(eve_flag_read_lock);
             });
         }
 
@@ -10388,13 +11075,18 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -10407,6 +11099,9 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10428,12 +11123,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10447,6 +11142,11 @@ mod stop_storing_for_insolvent_user {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Get the current tick number.
                 let tick_when_confirming = ProofsDealer::get_current_tick();
@@ -10482,6 +11182,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -10580,9 +11281,17 @@ mod stop_storing_for_insolvent_user {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
                 add_msp_to_provider_storage(&another_msp);
 
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let file_key = FileSystem::compute_file_key(
                     owner_account_id.clone(),
@@ -10593,6 +11302,10 @@ mod stop_storing_for_insolvent_user {
                 );
 
                 // Try to stop storing for the insolvent user using another MSP account.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         RuntimeOrigin::signed(another_msp.clone()),
@@ -10608,6 +11321,9 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::MspNotStoringBucket
                 );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
             });
         }
 
@@ -10624,13 +11340,21 @@ mod stop_storing_for_insolvent_user {
                 let fingerprint = H256::zero();
                 let peer_id = BoundedVec::try_from(vec![1]).unwrap();
                 let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
-                let storage_amount: StorageData<Test> = 100;
+                let storage_amount: StorageDataUnit<Test> = 100;
 
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
+				// Initially unset Eve as insolvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
+
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Sign up account as a Backup Storage Provider
                 assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
@@ -10643,6 +11367,9 @@ mod stop_storing_for_insolvent_user {
                     NextAvailableStorageRequestExpirationTick::<Test>::get(),
                     current_tick_plus_storage_request_ttl,
                 );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let storage_request_deposit = calculate_storage_request_deposit();
 
                 // Dispatch storage request.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -10664,12 +11391,12 @@ mod stop_storing_for_insolvent_user {
                     fingerprint,
                 );
 
-                let bsp_id = Providers::get_provider_id(bsp_account_id.clone()).unwrap();
+                let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
                 let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
-                    Providers::get_provider_id(bsp_account_id.clone()).unwrap(),
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
                     file_key,
                 )
                 .unwrap();
@@ -10683,6 +11410,11 @@ mod stop_storing_for_insolvent_user {
 
                 // Dispatch BSP volunteer.
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// The deposit paid for the storage request should have been updated after paying the BSP that volunteered.
+				let new_deposit_paid = storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
 
                 // Get the current tick number.
                 let tick_when_confirming = ProofsDealer::get_current_tick();
@@ -10718,6 +11450,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
+						deposit_paid: new_deposit_paid,
                     })
                 );
 
@@ -10785,6 +11518,10 @@ mod stop_storing_for_insolvent_user {
 
                 // Now that the BSP has confirmed storing, we can simulate the user being insolvent
                 // and the BSP trying to stop storing for that user with an incorrect inclusion proof.
+				// To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+				// value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
                 assert_noop!(
                     FileSystem::stop_storing_for_insolvent_user(
                         bsp_signed.clone(),
@@ -10800,6 +11537,811 @@ mod stop_storing_for_insolvent_user {
                     ),
                     Error::<Test>::ExpectedInclusionProof
                 );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
+            });
+        }
+    }
+}
+
+mod msp_stop_storing_bucket_for_insolvent_user {
+    use super::*;
+
+    mod success {
+
+        use super::*;
+
+        #[test]
+        fn msp_stop_storing_bucket_for_insolvent_user_works() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Eve.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageDataUnit<Test> = 50;
+
+				// Sign up an account as a Main Storage Provider.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+				// Initially set Eve as solvent, acquiring the read lock.
+				let eve_flag_read_lock = set_eve_insolvent(false);
+
+				// Create the bucket, setting it as private so we can check that the collection is deleted.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, maybe_collection_id) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    true,
+                );
+
+				// Check that the collection under the collection ID exists.
+				assert!(maybe_collection_id.is_some());
+				assert!(<<Test as crate::Config>::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&maybe_collection_id.unwrap()));
+
+                // Sign up an account as a Backup Storage Provider.
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+				// Calculate the expiration tick that the storage request is going to have.
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
+                );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let mut storage_request_deposit = calculate_storage_request_deposit();
+
+                // Issue a storage request for a file in the created bucket.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                    ReplicationTarget::Standard
+                ));
+
+				// Compute the file's key.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Calculate in how many ticks the BSP can volunteer for the file.
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
+                // Dispatch the BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// Update the deposit paid by the user since a BSP has used part of it.
+				let amount_to_pay = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
+				storage_request_deposit -= amount_to_pay;
+
+                // Dispatch the BSP confirm storing.
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    }])
+                    .unwrap(),
+                ));
+
+                // Dispatch the MSP accept storing the file.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                // Assert that the storage request was updated.
+                assert_eq!(
+                    file_system::StorageRequests::<Test>::get(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: current_tick,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, true)),
+                        user_peer_ids: peer_ids.clone(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
+                        bsps_confirmed: 1,
+                        bsps_volunteered: 1,
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit,
+                    })
+                );
+
+                // Assert that the capacity used by the MSP was updated.
+				let new_msp_used_capacity = pallet_storage_providers::MainStorageProviders::<Test>::get(msp_id)
+					.expect("MSP should exist in storage")
+					.capacity_used;
+                assert_eq!(new_msp_used_capacity, size);
+
+                // Now that the MSP has accepted storing, we can simulate the user being insolvent
+                // and the MSP stopping to store the bucket of the user.
+				// To make the user insolvent, we release the read lock and wait until we can write
+				// the new value and acquire a new read lock.
+				drop(eve_flag_read_lock);
+				let eve_flag_read_lock = set_eve_insolvent(true);
+                assert_ok!(FileSystem::msp_stop_storing_bucket_for_insolvent_user(
+                    msp_signed.clone(),
+                    bucket_id,
+                ));
+
+				// Check that the payment stream between the MSP and the user does not exist anymore.
+				assert_eq!(PaymentStreams::has_active_payment_stream_with_user(&msp_id, &owner_account_id), false);
+
+				// Check that the collection under the collection ID does not exist anymore.
+				assert!(!<<Test as crate::Config>::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&maybe_collection_id.unwrap()));
+
+				// Check that the used capacity of the MSP has decreased by the bucket's size.
+				assert_eq!(
+					pallet_storage_providers::MainStorageProviders::<Test>::get(msp_id)
+						.expect("MSP should exist in storage")
+						.capacity_used,
+					new_msp_used_capacity - size
+				);
+
+				// Check that the bucket was deleted from the system.
+				assert!(pallet_storage_providers::Buckets::<Test>::get(bucket_id).is_none());
+				assert!(pallet_storage_providers::MainStorageProviderIdsToBuckets::<Test>::get(msp_id, &bucket_id).is_none());
+				assert_eq!(pallet_storage_providers::MainStorageProviders::<Test>::get(msp_id).unwrap().amount_of_buckets, 0);
+				assert_eq!(<Test as crate::Config>::Currency::balance_on_hold(&pallet_storage_providers::HoldReason::BucketDeposit.into(), &owner_account_id), 0);
+
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspStopStoringBucketInsolventUser {
+						msp_id,
+						owner: owner_account_id,
+						bucket_id,
+					}
+                    .into(),
+                );
+
+				// Drop the read lock so other tests that use it can continue.
+				drop(eve_flag_read_lock);
+            });
+        }
+
+        #[test]
+        fn msp_stop_storing_bucket_for_insolvent_user_works_if_user_is_solvent_but_payment_stream_does_not_exist(
+        ) {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Alice.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageDataUnit<Test> = 50;
+
+				// Sign up an account as a Main Storage Provider.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+				// Create the bucket, setting it as private so we can check that the collection is deleted.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, maybe_collection_id) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    true,
+                );
+
+				// Check that the collection under the collection ID exists.
+				assert!(maybe_collection_id.is_some());
+				assert!(<<Test as crate::Config>::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&maybe_collection_id.unwrap()));
+
+                // Sign up an account as a Backup Storage Provider.
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+				// Calculate the expiration tick that the storage request is going to have.
+				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
+                let current_tick_plus_storage_request_ttl =
+                    current_tick
+                        + <<Test as crate::Config>::StorageRequestTtl as Get<u32>>::get() as u64;
+                let next_expiration_tick_storage_request = max(
+                    NextAvailableStorageRequestExpirationTick::<Test>::get(),
+                    current_tick_plus_storage_request_ttl,
+                );
+
+				// Calculate the deposit that the user is going to have to pay to issue this storage request.
+				let mut storage_request_deposit = calculate_storage_request_deposit();
+
+                // Issue a storage request for a file in the created bucket.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                    ReplicationTarget::Standard
+                ));
+
+				// Compute the file's key.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Calculate in how many ticks the BSP can volunteer for the file.
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
+                // Dispatch the BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+				// Update the deposit paid by the user since a BSP has used part of it.
+				let amount_to_pay = <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+					&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+				);
+				storage_request_deposit -= amount_to_pay;
+
+                // Dispatch the BSP confirm storing.
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    }])
+                    .unwrap(),
+                ));
+
+                // Dispatch the MSP accept storing the file.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                // Assert that the storage request was updated.
+                assert_eq!(
+                    file_system::StorageRequests::<Test>::get(file_key),
+                    Some(StorageRequestMetadata {
+                        requested_at: current_tick,
+                        owner: owner_account_id.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        msp: Some((msp_id, true)),
+                        user_peer_ids: peer_ids.clone(),
+                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
+                        bsps_confirmed: 1,
+                        bsps_volunteered: 1,
+                        expires_at: next_expiration_tick_storage_request,
+						deposit_paid: storage_request_deposit,
+                    })
+                );
+
+                // Assert that the capacity used by the MSP was updated.
+				let new_msp_used_capacity = pallet_storage_providers::MainStorageProviders::<Test>::get(msp_id)
+					.expect("MSP should exist in storage")
+					.capacity_used;
+                assert_eq!(new_msp_used_capacity, size);
+
+                // Now that the MSP has accepted storing, we can simulate the user being insolvent
+                // previously, the MSP having already deleted its payment stream with him, and the user
+				// becoming solvent again.
+				assert_ok!(<<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::delete_fixed_rate_payment_stream(&msp_id, &owner_account_id));
+                assert_ok!(FileSystem::msp_stop_storing_bucket_for_insolvent_user(
+                    msp_signed.clone(),
+                    bucket_id,
+                ));
+
+				// Check that the collection under the collection ID does not exist anymore.
+				assert!(!<<Test as crate::Config>::CollectionInspector as shp_traits::InspectCollections>::collection_exists(&maybe_collection_id.unwrap()));
+
+				// Check that the used capacity of the MSP has decreased by the bucket's size.
+				assert_eq!(
+					pallet_storage_providers::MainStorageProviders::<Test>::get(msp_id)
+						.expect("MSP should exist in storage")
+						.capacity_used,
+					new_msp_used_capacity - size
+				);
+
+				// Check that the bucket was deleted from the system.
+				assert!(pallet_storage_providers::Buckets::<Test>::get(bucket_id).is_none());
+				assert!(pallet_storage_providers::MainStorageProviderIdsToBuckets::<Test>::get(msp_id, &bucket_id).is_none());
+				assert_eq!(pallet_storage_providers::MainStorageProviders::<Test>::get(msp_id).unwrap().amount_of_buckets, 0);
+				assert_eq!(<Test as crate::Config>::Currency::balance_on_hold(&pallet_storage_providers::HoldReason::BucketDeposit.into(), &owner_account_id), 0);
+
+
+                // Assert that the correct event was deposited
+                System::assert_last_event(
+                    Event::MspStopStoringBucketInsolventUser {
+						msp_id,
+						owner: owner_account_id,
+						bucket_id,
+					}
+                    .into(),
+                );
+            });
+        }
+    }
+
+    mod failure {
+
+        use super::*;
+
+        #[test]
+        fn msp_stop_storing_bucket_for_insolvent_user_fails_if_caller_not_a_provider() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Eve.to_account_id();
+                let other_account_id = Keyring::Bob.to_account_id();
+                let other_account_signed = RuntimeOrigin::signed(other_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Sign up an account as a Main Storage Provider.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
+                // Create the bucket.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Note: the user does not even have to be insolvent since the check to make sure the provider is a MSP is done
+                // previous to the check of the user's solvency in the extrinsic.
+
+                // Try to stop storing the bucket for the insolvent user as a regular, not registered user.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket_for_insolvent_user(
+                        other_account_signed.clone(),
+                        bucket_id,
+                    ),
+                    Error::<Test>::NotAMsp
+                );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
+            });
+        }
+
+        #[test]
+        fn msp_stop_storing_bucket_for_insolvent_user_fails_if_caller_not_a_msp() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Eve.to_account_id();
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Sign up an account as a Main Storage Provider.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                // Sign up an account as a Backup Storage Provider.
+                let storage_amount: StorageDataUnit<Test> = 50;
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
+                // Create the bucket.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Note: the user does not even have to be insolvent since the check to make sure the provider is a MSP is done
+                // previous to the check of the user's solvency in the extrinsic.
+
+                // Try to stop storing the bucket for the insolvent user as the BSP.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket_for_insolvent_user(
+                        bsp_signed.clone(),
+                        bucket_id,
+                    ),
+                    Error::<Test>::NotAMsp
+                );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
+            });
+        }
+
+        #[test]
+        fn msp_stop_storing_bucket_for_insolvent_user_fails_if_user_not_insolvent() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Eve.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageDataUnit<Test> = 50;
+
+                // Sign up an account as a Main Storage Provider.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
+                // Create the bucket.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Sign up an account as a Backup Storage Provider.
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                // Issue a storage request for a file in the created bucket.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                    ReplicationTarget::Standard
+                ));
+
+                // Compute the file's key.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Calculate in how many ticks the BSP can volunteer for the file.
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
+                // Dispatch the BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+                // Dispatch the BSP confirm storing.
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    }])
+                    .unwrap(),
+                ));
+
+                // Dispatch the MSP accept storing the file.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                // Now that the MSP has accepted storing, we can simulate the user being solvent
+                // and the MSP trying to stop storing the bucket of the user.
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket_for_insolvent_user(
+                        msp_signed.clone(),
+                        bucket_id,
+                    ),
+                    Error::<Test>::UserNotInsolvent
+                );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
+            });
+        }
+
+        #[test]
+        fn msp_stop_storing_bucket_for_insolvent_user_fails_if_bucket_does_not_exist() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Eve.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let msp_signed = RuntimeOrigin::signed(msp.clone());
+
+                // Sign up an account as a Main Storage Provider.
+                let _ = add_msp_to_provider_storage(&msp);
+
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
+                // Create a bucket ID of a bucket that does not exist.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let bucket_id = <Test as file_system::Config>::Providers::derive_bucket_id(
+                    &owner_account_id,
+                    name.clone(),
+                );
+
+                // Simulate the MSP trying to stop storing a bucket that doesn't exist for an insolvent user.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket_for_insolvent_user(
+                        msp_signed.clone(),
+                        bucket_id,
+                    ),
+                    Error::<Test>::BucketNotFound
+                );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
+            });
+        }
+
+        #[test]
+        fn msp_stop_storing_bucket_for_insolvent_user_fails_if_caller_not_storing_the_bucket() {
+            new_test_ext().execute_with(|| {
+                let owner_account_id = Keyring::Eve.to_account_id();
+                let owner_signed = RuntimeOrigin::signed(owner_account_id.clone());
+                let bsp_account_id = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
+                let msp = Keyring::Charlie.to_account_id();
+                let another_msp = Keyring::Dave.to_account_id();
+                let another_msp_signed = RuntimeOrigin::signed(another_msp.clone());
+                let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+                let size = 4;
+                let fingerprint = H256::zero();
+                let peer_id = BoundedVec::try_from(vec![1]).unwrap();
+                let peer_ids: PeerIds<Test> = BoundedVec::try_from(vec![peer_id]).unwrap();
+                let storage_amount: StorageDataUnit<Test> = 50;
+
+                // Sign up an account as a Main Storage Provider.
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+                // Sign up another account as a Main Storage Provider.
+                let (_another_msp_id, _) = add_msp_to_provider_storage(&another_msp);
+
+                // Initially set Eve as solvent, acquiring the read lock.
+                let eve_flag_read_lock = set_eve_insolvent(false);
+
+                // Create the bucket.
+                let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
+
+                // Sign up an account as a Backup Storage Provider.
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), storage_amount));
+
+                // Issue a storage request for a file in the created bucket.
+                assert_ok!(FileSystem::issue_storage_request(
+                    owner_signed.clone(),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    peer_ids.clone(),
+                    ReplicationTarget::Standard
+                ));
+
+                // Compute the file's key.
+                let file_key = FileSystem::compute_file_key(
+                    owner_account_id.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                );
+
+                // Calculate in how many ticks the BSP can volunteer for the file.
+                let current_tick = ProofsDealer::get_current_tick();
+                let tick_when_bsp_can_volunteer = FileSystem::query_earliest_file_volunteer_tick(
+                    Providers::get_provider_id(&bsp_account_id).unwrap(),
+                    file_key,
+                )
+                .unwrap();
+                if tick_when_bsp_can_volunteer > current_tick {
+                    let ticks_to_advance = tick_when_bsp_can_volunteer - current_tick + 1;
+                    let current_block = System::block_number();
+
+                    // Advance by the number of ticks until this BSP can volunteer for the file.
+                    roll_to(current_block + ticks_to_advance);
+                }
+
+                // Dispatch the BSP volunteer.
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key,));
+
+                // Dispatch the BSP confirm storing.
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    CompactProof {
+                        encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                    },
+                    BoundedVec::try_from(vec![FileKeyWithProof {
+                        file_key,
+                        proof: CompactProof {
+                            encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                        }
+                    }])
+                    .unwrap(),
+                ));
+
+                // Dispatch the MSP accept storing the file.
+                assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
+                    RuntimeOrigin::signed(msp.clone()),
+                    vec![StorageRequestMspBucketResponse {
+                        bucket_id,
+                        accept: Some(StorageRequestMspAcceptedFileKeys {
+                            file_keys_and_proofs: vec![FileKeyWithProof {
+                                file_key,
+                                proof: CompactProof {
+                                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                                }
+                            }],
+                            forest_proof: CompactProof {
+                                encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                            },
+                        }),
+                        reject: vec![],
+                    }],
+                ));
+
+                // Now that the MSP has accepted storing, we can simulate the user being insolvent
+                // and the other MSP trying to stop storing the bucket of the user.
+                // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
+                // value and acquire a new read lock.
+                drop(eve_flag_read_lock);
+                let eve_flag_read_lock = set_eve_insolvent(true);
+                assert_noop!(
+                    FileSystem::msp_stop_storing_bucket_for_insolvent_user(
+                        another_msp_signed.clone(),
+                        bucket_id,
+                    ),
+                    Error::<Test>::MspNotStoringBucket
+                );
+
+                // Drop the read lock so other tests that use it can continue.
+                drop(eve_flag_read_lock);
             });
         }
     }
@@ -10819,8 +12361,13 @@ mod msp_stop_storing_bucket {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let none_registered_msp = Keyring::Dave.to_account_id();
                 let none_registered_msp_signed = RuntimeOrigin::signed(none_registered_msp.clone());
@@ -10842,8 +12389,13 @@ mod msp_stop_storing_bucket {
                 let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id =
-                    create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let another_msp = Keyring::Dave.to_account_id();
                 add_msp_to_provider_storage(&another_msp);
@@ -10871,7 +12423,13 @@ mod msp_stop_storing_bucket {
                 let owner_account_id = Keyring::Alice.to_account_id();
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch MSP stop storing bucket.
                 assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
@@ -10901,10 +12459,22 @@ mod msp_stop_storing_bucket {
                 let owner_account_id = Keyring::Alice.to_account_id();
 
                 let name = BoundedVec::try_from(b"bucket".to_vec()).unwrap();
-                let bucket_id = create_bucket(&owner_account_id.clone(), name, msp_id, value_prop_id);
+                let (bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 let another_name = BoundedVec::try_from(b"another_bucket".to_vec()).unwrap();
-                create_bucket(&owner_account_id.clone(), another_name, msp_id, value_prop_id);
+                let (_another_bucket_id, _) = create_bucket(
+                    &owner_account_id,
+                    another_name.clone(),
+                    msp_id,
+                    value_prop_id,
+                    false,
+                );
 
                 // Dispatch MSP stop storing bucket.
                 assert_ok!(FileSystem::msp_stop_storing_bucket(msp_signed, bucket_id));
@@ -10931,7 +12501,7 @@ mod msp_stop_storing_bucket {
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
-    storage_amount: StorageData<Test>,
+    storage_amount: StorageDataUnit<Test>,
 ) -> DispatchResultWithPostInfo {
     let multiaddresses = create_sp_multiaddresses();
 
@@ -11005,7 +12575,8 @@ fn create_bucket(
     name: BucketNameFor<Test>,
     msp_id: ProviderIdFor<Test>,
     value_prop_id: ValuePropId<Test>,
-) -> BucketIdFor<Test> {
+    private: bool,
+) -> (BucketIdFor<Test>, Option<CollectionIdFor<Test>>) {
     let bucket_id =
         <Test as file_system::Config>::Providers::derive_bucket_id(&owner, name.clone());
 
@@ -11016,9 +12587,14 @@ fn create_bucket(
         origin,
         msp_id,
         name.clone(),
-        false,
+        private,
         value_prop_id
     ));
+
+    // Get the collection ID of the bucket.
+    let maybe_collection_id = pallet_storage_providers::Buckets::<Test>::get(bucket_id)
+        .expect("Bucket should exist in storage")
+        .read_access_group_id;
 
     // Assert bucket was created
     assert_eq!(
@@ -11027,8 +12603,8 @@ fn create_bucket(
             root: <Test as pallet_storage_providers::pallet::Config>::DefaultMerkleRoot::get(),
             user_id: owner.clone(),
             msp_id: Some(msp_id),
-            private: false,
-            read_access_group_id: None,
+            private,
+            read_access_group_id: maybe_collection_id,
             size: 0,
             value_prop_id,
         })
@@ -11039,5 +12615,46 @@ fn create_bucket(
         <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &owner).is_some()
     );
 
-    bucket_id
+    (bucket_id, maybe_collection_id)
+}
+
+fn calculate_storage_request_deposit() -> BalanceOf<Test> {
+    let number_of_bsps =
+        <<Test as crate::Config>::Providers as ReadStorageProvidersInterface>::get_number_of_bsps();
+    let number_of_bsps_balance_typed =
+        <Test as crate::Config>::ReplicationTargetToBalance::convert(number_of_bsps);
+    let storage_request_deposit =
+        <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
+            &<Test as crate::Config>::WeightInfo::bsp_volunteer(),
+        )
+        .saturating_mul(number_of_bsps_balance_typed)
+        .saturating_add(<Test as crate::Config>::BaseStorageRequestCreationDeposit::get());
+
+    storage_request_deposit
+}
+
+fn calculate_upfront_amount_to_pay(
+    replication_target: ReplicationTarget<Test>,
+    size: StorageDataUnit<Test>,
+) -> BalanceOf<Test> {
+    let replication_target = match replication_target {
+        ReplicationTarget::Basic => <Test as crate::Config>::BasicReplicationTarget::get(),
+        ReplicationTarget::Standard => <Test as crate::Config>::StandardReplicationTarget::get(),
+        ReplicationTarget::HighSecurity => {
+            <Test as crate::Config>::HighSecurityReplicationTarget::get()
+        }
+        ReplicationTarget::SuperHighSecurity => {
+            <Test as crate::Config>::SuperHighSecurityReplicationTarget::get()
+        }
+        ReplicationTarget::UltraHighSecurity => {
+            <Test as crate::Config>::UltraHighSecurityReplicationTarget::get()
+        }
+        ReplicationTarget::Custom(replication_target) => replication_target,
+    };
+    <<Test as crate::Config>::PaymentStreams as PricePerGigaUnitPerTickInterface>::get_price_per_giga_unit_per_tick()
+				.saturating_mul(<Test as crate::Config>::TickNumberToBalance::convert(<Test as crate::Config>::UpfrontTicksToPay::get()))
+				.saturating_mul(<Test as crate::Config>::ReplicationTargetToBalance::convert(replication_target))
+				.saturating_mul(<Test as crate::Config>::StorageDataUnitToBalance::convert(size))
+				.checked_div(shp_constants::GIGAUNIT.into())
+				.unwrap_or_default()
 }

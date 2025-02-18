@@ -31,6 +31,12 @@ use sp_runtime::{
 };
 use sp_std::collections::btree_set::BTreeSet;
 use sp_trie::{CompactProof, LayoutV1, MemoryDB, TrieConfiguration, TrieLayout};
+use sp_weights::FixedFee;
+use std::{
+    sync::{RwLock, RwLockReadGuard},
+    thread,
+    time::Duration,
+};
 
 type Block = frame_system::mocking::MockBlock<Test>;
 pub(crate) type BlockNumber = u64;
@@ -572,16 +578,19 @@ where
 
 impl pallet_bucket_nfts::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();
 }
 
 pub(crate) type ThresholdType = u32;
+pub(crate) type ReplicationTargetType = u32;
 
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 30;
-    pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const BaseStorageRequestCreationDeposit: Balance = 10;
+    pub const UpfrontTicksToPay: TickNumber = 10;
     pub const FileDeletionRequestCreationDeposit: Balance = 10;
     pub const FileSystemStorageRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
     pub const FileSystemFileDeletionRequestCreationHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::FileDeletionRequestHold);
@@ -597,7 +606,7 @@ impl crate::Config for Test {
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
-    type ReplicationTargetType = u32;
+    type ReplicationTargetType = ReplicationTargetType;
     type ThresholdType = ThresholdType;
     type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
@@ -620,7 +629,12 @@ impl crate::Config for Test {
     type MaxUserPendingDeletionRequests = ConstU32<10u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
-    type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type BaseStorageRequestCreationDeposit = BaseStorageRequestCreationDeposit;
+    type UpfrontTicksToPay = UpfrontTicksToPay;
+    type WeightToFee = FixedFee<5, Balance>;
+    type ReplicationTargetToBalance = ReplicationTargetToBalance;
+    type TickNumberToBalance = TickNumberToBalance;
+    type StorageDataUnitToBalance = StorageDataUnitToBalance;
     type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
     type BasicReplicationTarget = ConstU32<2>;
     type StandardReplicationTarget = ConstU32<3>;
@@ -631,17 +645,68 @@ impl crate::Config for Test {
     type TickRangeToMaximumThreshold = ConstU64<30>;
 }
 
-// If we ever require a better mock that doesn't just return true if it is Eve, change this.
+// Use a RwLock for Eve’s insolvency status.
+static IS_EVE_INSOLVENT: RwLock<bool> = RwLock::new(true);
+
+/// Function to set or unset Eve's insolvency status. Returns a read lock to the RwLock
+/// that makes it so the caller thread can disallow other threads from writing to the lock
+/// until it has finished using it.
+pub fn set_eve_insolvent(insolvent: bool) -> RwLockReadGuard<'static, bool> {
+    // Spin until we can acquire the write lock without any active readers.
+    let mut write_guard = loop {
+        if let Ok(write_guard) = IS_EVE_INSOLVENT.try_write() {
+            // Successfully acquired the lock => no other readers.
+            break write_guard;
+        }
+        // There are active readers, so wait a bit before retrying.
+        thread::sleep(Duration::from_millis(10));
+    };
+
+    // Update Eve's insolvent status.
+    *write_guard = insolvent;
+
+    // Drop the write guard to be able to acquire a read lock.
+    drop(write_guard);
+
+    // Acquire a read lock to the RwLock.
+    IS_EVE_INSOLVENT.read().unwrap()
+}
+
 pub struct MockUserSolvency;
 impl ReadUserSolvencyInterface for MockUserSolvency {
     type AccountId = AccountId;
 
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool {
         if user_account == &Keyring::Eve.to_account_id() {
-            true
+            *IS_EVE_INSOLVENT.read().unwrap()
         } else {
             false
         }
+    }
+}
+
+// Converter from the ReplicationTarget type to the Balance type for math.
+pub struct ReplicationTargetToBalance;
+impl Convert<ReplicationTargetType, Balance> for ReplicationTargetToBalance {
+    fn convert(replication_target: ReplicationTargetType) -> Balance {
+        replication_target.into()
+    }
+}
+
+// Converter from the TickNumber type to the Balance type for math.
+pub type TickNumber = BlockNumber;
+pub struct TickNumberToBalance;
+impl Convert<TickNumber, Balance> for TickNumberToBalance {
+    fn convert(tick_number: TickNumber) -> Balance {
+        tick_number.into()
+    }
+}
+
+// Converter from the StorageDataUnit type to the Balance type for math.
+pub struct StorageDataUnitToBalance;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.into()
     }
 }
 
