@@ -2719,11 +2719,11 @@ where
     pub(crate) fn enqueue_expiration_item(
         expiration_item: ExpirationItem<T>,
     ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let expiration_block = expiration_item.get_next_expiration_block()?;
-        let new_expiration_block = expiration_item.try_append(expiration_block)?;
-        expiration_item.set_next_expiration_block(new_expiration_block)?;
+        let expiration_tick = expiration_item.get_next_expiration_tick()?;
+        let new_expiration_tick = expiration_item.try_append(expiration_tick)?;
+        expiration_item.set_next_expiration_tick(new_expiration_tick)?;
 
-        Ok(new_expiration_block)
+        Ok(new_expiration_tick)
     }
 }
 
@@ -2731,9 +2731,13 @@ where
 /// Hooks implementations for the Storage Providers pallet.
 mod hooks {
     use crate::{
-        pallet, types::StorageHubTickNumber, utils::StorageProviderId, weights::WeightInfo,
+        pallet,
+        types::{ExpirationItem, StorageHubTickNumber},
+        utils::StorageProviderId,
+        weights::WeightInfo,
         AwaitingTopUpFromProviders, Event, HoldReason, InsolventProviders,
-        NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
+        NextAvailableProviderTopUpExpirationShTick, NextStartingShTickToCleanUp, Pallet,
+        ProviderTopUpExpirations,
     };
 
     use frame_support::{
@@ -2835,6 +2839,8 @@ mod hooks {
                     );
                     meter.consume(db_weight.writes(1));
                 }
+            } else {
+                ran_out_of_weight = true;
             }
 
             ran_out_of_weight
@@ -2940,26 +2946,42 @@ mod hooks {
                         }
                     };
                 } else {
+                    let expiration_tick = sp_std::cmp::max(
+                        NextAvailableProviderTopUpExpirationShTick::<T>::get(),
+                        top_up_metadata.end_tick_grace_period,
+                    );
+
+                    let expiration_item = ExpirationItem::ProviderTopUp(typed_provider_id.clone());
+
                     // Inconsistency error. The provider was in the ProviderTopUpExpirations for this tick but the tick at which its
                     // grace period ends is in the future. Fix this by re-inserting the provider in the ProviderTopUpExpirations for the
                     // tick at which its grace period ends.
-                    if let Err(_) = ProviderTopUpExpirations::<T>::try_append(
-                        &top_up_metadata.end_tick_grace_period,
-                        typed_provider_id.clone(),
-                    ) {
-                        // Note: if this fails maybe we should just append the provider to the next expiration tick available
-                        // in ProviderTopUpExpirations and update the AwaitingTopUpFromProviders storage with this tick.
-                        log::error!(
-                            target: "runtime::storage_providers::process_expired_provider_top_up",
-                            "Could not re-insert provider {:?} in ProviderTopUpExpirations for tick {:?}",
-                            typed_provider_id,
-                            top_up_metadata.end_tick_grace_period
-                        );
+                    match expiration_item.try_append(expiration_tick) {
+                        Ok(new_expiration_tick) => {
+                            if let Err(_) =
+                                expiration_item.set_next_expiration_tick(new_expiration_tick)
+                            {
+                                log::error!(
+                                    target: "runtime::storage_providers::process_expired_provider_top_up",
+                                    "Could not update next expiration tick for ProviderTopUp expiration item",
+                                );
+                            }
+                        }
+                        Err(_) => {
+                            // Note: if this fails maybe we should just append the provider to the next expiration tick available
+                            // in ProviderTopUpExpirations and update the AwaitingTopUpFromProviders storage with this tick.
+                            log::error!(
+                                target: "runtime::storage_providers::process_expired_provider_top_up",
+                                "Could not re-insert provider {:?} in ProviderTopUpExpirations for tick {:?}",
+                                typed_provider_id,
+                                top_up_metadata.end_tick_grace_period
+                            );
 
-                        Self::deposit_event(Event::FailedToInsertProviderTopUpExpiration {
-                            provider_id: *typed_provider_id.inner(),
-                            expiration_tick: top_up_metadata.end_tick_grace_period,
-                        });
+                            Self::deposit_event(Event::FailedToInsertProviderTopUpExpiration {
+                                provider_id: *typed_provider_id.inner(),
+                                expiration_tick: top_up_metadata.end_tick_grace_period,
+                            });
+                        }
                     }
                 }
             }
