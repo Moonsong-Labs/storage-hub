@@ -2386,11 +2386,12 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Event emitted when there was an inconsistency error and the provider was found in ProviderTopUpExpirations
+       * Event emitted when there was an inconsistency error and the provider was found in `ProviderTopUpExpirations`
        * for a tick that wasn't actually when its top up expired, and when trying to insert it with the actual
-       * expiration tick in ProviderTopUpExpirations the append failed.
+       * expiration tick in `ProviderTopUpExpirations` the append failed.
        *
-       * The result of this is that
+       * The result of this is that the provider's top up expiration will be reinserted at the correct expiration tick based on the
+       * `TopUpMetadata` found in `AwaitingTopUpFromProviders` storage.
        **/
       FailedToInsertProviderTopUpExpiration: AugmentedEvent<
         ApiType,
