@@ -41,11 +41,12 @@ use sc_tracing::tracing::{debug, error, info, warn};
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{
-    BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId, FILE_CHUNK_SIZE,
+    BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
+    BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
 };
 use shp_file_metadata::ChunkId;
 
-use crate::{events::RemoteUploadRequest, MAX_REQUEST_PACKET_SIZE_BYTES};
+use crate::events::RemoteUploadRequest;
 
 use super::{
     commands::{FileTransferServiceCommand, RequestError},
@@ -239,7 +240,8 @@ impl Actor for FileTransferService {
                     callback,
                 } => {
                     // Calculate max chunks based on packet size and chunk size
-                    let max_chunks = MAX_REQUEST_PACKET_SIZE_BYTES / FILE_CHUNK_SIZE;
+                    let max_chunks =
+                        (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64) / (FILE_CHUNK_SIZE as u64);
                     if chunk_ids.len() > max_chunks as usize {
                         warn!(
                             target: LOG_TARGET,

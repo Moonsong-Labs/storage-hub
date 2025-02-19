@@ -266,8 +266,8 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
             .expect("Failed to receive response from FileTransferService")
     }
 
-    /// Request a download of a file chunk to a peer.
-    /// This returns after receiving a response from the network.
+    /// Request to download a batch of file chunks from a peer.
+    /// This returns after receiving and processing the network response.
     async fn download_request(
         &self,
         peer_id: PeerId,
