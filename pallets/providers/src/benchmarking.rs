@@ -2158,7 +2158,7 @@ mod benchmarks {
             &StorageProviderId::BackupStorageProvider(bsp_id),
             TopUpMetadata::<T> {
                 started_at: frame_system::Pallet::<T>::block_number(),
-                end_block_grace_period: frame_system::Pallet::<T>::block_number() + 10u32.into(),
+                end_tick_grace_period: frame_system::Pallet::<T>::block_number() + 10u32.into(),
             },
         );
 
@@ -2589,7 +2589,7 @@ mod benchmarks {
             StorageProviderId::BackupStorageProvider(bsp_id),
             TopUpMetadata {
                 started_at: Zero::zero(),
-                end_block_grace_period: current_tick,
+                end_tick_grace_period: current_tick,
             },
         );
 
@@ -2610,6 +2610,7 @@ mod benchmarks {
         {
             Pallet::<T>::process_expired_provider_top_up(
                 StorageProviderId::BackupStorageProvider(bsp_id),
+                &current_tick,
                 &mut WeightMeter::new(),
             );
         }
@@ -2736,7 +2737,7 @@ mod benchmarks {
             StorageProviderId::MainStorageProvider(msp_id),
             TopUpMetadata {
                 started_at: Zero::zero(),
-                end_block_grace_period: current_tick,
+                end_tick_grace_period: current_tick,
             },
         );
 
@@ -2757,6 +2758,7 @@ mod benchmarks {
         {
             Pallet::<T>::process_expired_provider_top_up(
                 StorageProviderId::MainStorageProvider(msp_id),
+                &current_tick,
                 &mut WeightMeter::new(),
             );
         }

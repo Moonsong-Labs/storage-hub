@@ -5451,6 +5451,9 @@ mod slash_and_top_up {
                     NativeBalance::free_balance(&<Test as crate::Config>::Treasury::get());
                 let pre_state_provider =
                     MainStorageProviders::<Test>::get(self.provider_id).unwrap();
+                let pre_state_top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(self.provider_id),
+                );
 
                 // Slash the provider
                 assert_ok!(StorageProviders::slash(
@@ -5482,8 +5485,11 @@ mod slash_and_top_up {
                 assert_eq!(last_slashed_event.1, expected_slash_amount);
 
                 let grace_period = ProviderTopUpTtl::<Test>::get();
-                let end_block_grace_period =
-                    ShTickGetter::<Test>::get_current_tick() + grace_period;
+                let end_tick_grace_period = if let Some(ref tpm) = pre_state_top_up_metadata {
+                    tpm.end_tick_grace_period
+                } else {
+                    ShTickGetter::<Test>::get_current_tick() + grace_period
+                };
 
                 // Verify post state based on the test setup
                 if self.automatic_top_up {
@@ -5565,24 +5571,20 @@ mod slash_and_top_up {
                     // Check that the provider's free balance hasn't been reduced since there was not enough to top up
                     assert_eq!(NativeBalance::free_balance(self.account), pre_state_balance);
 
-                    assert_eq!(
-                        top_up_metadata.started_at,
+                    let expected_start_tick = if let Some(tpm) = pre_state_top_up_metadata {
+                        tpm.started_at
+                    } else {
                         ShTickGetter::<Test>::get_current_tick()
-                    );
-                    assert_eq!(
-                        top_up_metadata.end_block_grace_period,
-                        end_block_grace_period
-                    );
+                    };
+
+                    assert_eq!(top_up_metadata.started_at, expected_start_tick);
+                    assert_eq!(top_up_metadata.end_tick_grace_period, end_tick_grace_period);
 
                     // Check that we have queued the provider top up expiration item
-                    assert!(
-                        ProviderTopUpExpirations::<Test>::get(end_block_grace_period)
-                            .iter()
-                            .any(|provider_id| *provider_id
-                                == StorageProviderId::<Test>::MainStorageProvider(
-                                    self.provider_id
-                                ))
-                    );
+                    assert!(ProviderTopUpExpirations::<Test>::get(end_tick_grace_period)
+                        .iter()
+                        .any(|provider_id| *provider_id
+                            == StorageProviderId::<Test>::MainStorageProvider(self.provider_id)));
 
                     // Check that the provider's capacity was reduced by the converted slash amount (storage data units)
                     let expected_capacity_delta =
@@ -5675,7 +5677,7 @@ mod slash_and_top_up {
                 )
                 .is_none());
                 assert!(ProviderTopUpExpirations::<Test>::get(
-                    pre_state_top_up_metadata.end_block_grace_period
+                    pre_state_top_up_metadata.end_tick_grace_period
                 )
                 .iter()
                 .all(|provider_id| *provider_id
@@ -5698,11 +5700,11 @@ mod slash_and_top_up {
                     .unwrap();
 
                 // Wait for the grace period to expire
-                run_to_block((top_up_metadata.end_block_grace_period + 1).into());
+                run_to_block((top_up_metadata.end_tick_grace_period + 1).into());
 
                 // Check that the provider top up expiration no longer exists
                 assert!(ProviderTopUpExpirations::<Test>::get(
-                    top_up_metadata.end_block_grace_period
+                    top_up_metadata.end_tick_grace_period
                 )
                 .iter()
                 .all(|provider_id| *provider_id
@@ -5819,6 +5821,44 @@ mod slash_and_top_up {
                 alice_test_setup.slash_and_verify();
 
                 alice_test_setup.manual_top_up();
+            });
+        }
+
+        #[test]
+        fn slash_does_not_update_top_up_metadata_if_already_exists() {
+            ExtBuilder::build().execute_with(|| {
+                let mut alice_test_setup = TestSetup::default();
+
+                // Slash Alice and leave her without enough balance to cover the capacity deficit
+                let initial_tick = ShTickGetter::<Test>::get_current_tick();
+                alice_test_setup.induce_capacity_deficit = true;
+                alice_test_setup.slash_and_verify();
+
+                // Get the top up metadata of Alice after being slashed
+                let maybe_alice_initial_top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_test_setup.provider_id),
+                );
+                assert!(maybe_alice_initial_top_up_metadata.is_some());
+                let alice_initial_top_up_metadata = maybe_alice_initial_top_up_metadata.unwrap();
+
+                // Advance a few ticks (but less than the ProviderTopUpTtl) and check that the tick incremented accordingly.
+                let provider_top_up_ttl = <Test as crate::Config>::ProviderTopUpTtl::get();
+                run_to_block(
+                    frame_system::Pallet::<Test>::block_number() + provider_top_up_ttl - 1,
+                );
+                let current_tick = ShTickGetter::<Test>::get_current_tick();
+                assert_eq!(current_tick, initial_tick + provider_top_up_ttl - 1);
+
+                // Slash Alice again
+                alice_test_setup.slash_and_verify();
+
+                // Check that the top up metadata has not changed
+                let maybe_alice_final_top_up_metadata = AwaitingTopUpFromProviders::<Test>::get(
+                    StorageProviderId::<Test>::MainStorageProvider(alice_test_setup.provider_id),
+                );
+                assert!(maybe_alice_final_top_up_metadata.is_some());
+                let alice_final_top_up_metadata = maybe_alice_final_top_up_metadata.unwrap();
+                assert_eq!(alice_initial_top_up_metadata, alice_final_top_up_metadata);
             });
         }
 

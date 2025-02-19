@@ -25,7 +25,7 @@ pub struct TopUpMetadata<T: Config> {
     /// The Storage Hub tick number at which the provider will be marked as insolvent.
     ///
     /// It is the tick number at which the provider will be marked as insolvent after processing it from the [`ProviderTopUpExpirations`](crate::ProviderTopUpExpirations) storage.
-    pub end_block_grace_period: StorageHubTickNumber<T>,
+    pub end_tick_grace_period: StorageHubTickNumber<T>,
 }
 
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
@@ -41,7 +41,7 @@ impl<T: Config> ExpirationItem<T> {
         }
     }
 
-    pub(crate) fn get_next_expiration_block(
+    pub(crate) fn get_next_expiration_tick(
         &self,
     ) -> Result<StorageHubTickNumber<T>, DispatchError> {
         // The expiration block is the maximum between the next available block and the current block number plus the TTL.
@@ -76,13 +76,13 @@ impl<T: Config> ExpirationItem<T> {
         Ok(appended_at_tick)
     }
 
-    pub(crate) fn set_next_expiration_block(
+    pub(crate) fn set_next_expiration_tick(
         &self,
-        at_tick: StorageHubTickNumber<T>,
+        next_expiration_tick: StorageHubTickNumber<T>,
     ) -> DispatchResult {
         match self {
             ExpirationItem::ProviderTopUp(_) => {
-                NextAvailableProviderTopUpExpirationShTick::<T>::set(at_tick);
+                NextAvailableProviderTopUpExpirationShTick::<T>::set(next_expiration_tick);
 
                 Ok(())
             }
