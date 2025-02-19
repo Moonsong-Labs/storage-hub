@@ -504,6 +504,27 @@ declare module "@polkadot/api-base/types/events" {
         { fileKey: H256; owner: AccountId32; amountToReturn: u128; error: SpRuntimeDispatchError }
       >;
       /**
+       * Event to notify if, in the `on_idle` hook when cleaning up an expired storage request,
+       * the transfer of a part of that storage request's deposit to one of the volunteered BSPs failed.
+       **/
+      FailedToTransferDepositFundsToBsp: AugmentedEvent<
+        ApiType,
+        [
+          fileKey: H256,
+          owner: AccountId32,
+          bspId: H256,
+          amountToTransfer: u128,
+          error: SpRuntimeDispatchError
+        ],
+        {
+          fileKey: H256;
+          owner: AccountId32;
+          bspId: H256;
+          amountToTransfer: u128;
+          error: SpRuntimeDispatchError;
+        }
+      >;
+      /**
        * Notifies that a file will be deleted.
        **/
       FileDeletionRequest: AugmentedEvent<
@@ -552,11 +573,7 @@ declare module "@polkadot/api-base/types/events" {
       /**
        * Notifies that a move bucket request has expired.
        **/
-      MoveBucketRequestExpired: AugmentedEvent<
-        ApiType,
-        [mspId: H256, bucketId: H256],
-        { mspId: H256; bucketId: H256 }
-      >;
+      MoveBucketRequestExpired: AugmentedEvent<ApiType, [bucketId: H256], { bucketId: H256 }>;
       /**
        * Notifies that a Main Storage Provider (MSP) has accepted a storage request for a specific file key.
        *
@@ -573,6 +590,14 @@ declare module "@polkadot/api-base/types/events" {
        * Notifies that a MSP has stopped storing a bucket.
        **/
       MspStoppedStoringBucket: AugmentedEvent<
+        ApiType,
+        [mspId: H256, owner: AccountId32, bucketId: H256],
+        { mspId: H256; owner: AccountId32; bucketId: H256 }
+      >;
+      /**
+       * Notifies that a MSP has stopped storing a bucket because its owner has become insolvent.
+       **/
+      MspStopStoringBucketInsolventUser: AugmentedEvent<
         ApiType,
         [mspId: H256, owner: AccountId32, bucketId: H256],
         { mspId: H256; owner: AccountId32; bucketId: H256 }

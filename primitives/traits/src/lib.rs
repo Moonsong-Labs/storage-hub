@@ -334,6 +334,12 @@ pub trait MutateBucketsInterface {
     /// Remove a root from a bucket of a MSP, removing the whole bucket from storage.
     fn delete_bucket(bucket_id: Self::BucketId) -> DispatchResult;
 
+    // Delete a bucket without checking whether it's empty or its root is the default one.
+    // Useful for cases when the runtime has to delete a bucket no matter its current status,
+    // for example for an insolvent user.
+    fn force_delete_bucket(msp_id: &Self::ProviderId, bucket_id: &Self::BucketId)
+        -> DispatchResult;
+
     /// Increase the size of a bucket.
     fn increase_bucket_size(
         bucket_id: &Self::BucketId,
@@ -1121,14 +1127,14 @@ pub trait ReadUserSolvencyInterface {
     fn is_user_insolvent(user_account: &Self::AccountId) -> bool;
 }
 
-/// A trait to mutate the price per giga-unit per tick.
+/// A trait to get and set the price per giga-unit per tick of the network.
 ///
-/// This is used by the Payment Streams pallet to expose the function to update the price per giga-unit per tick,
-/// which governs the amount to charge for dynamic-rate payment streams.
+/// This is used by the Payment Streams pallet to expose the function to get and update the price
+/// per giga-unit per tick, which governs the amount to charge for dynamic-rate payment streams.
 ///
 /// The use of giga-units instead of units is to avoid issues with decimal places, since the Balance type
 /// might not granular enough to represent the price per unit.
-pub trait MutatePricePerGigaUnitPerTickInterface {
+pub trait PricePerGigaUnitPerTickInterface {
     /// The type which represents a price per unit per tick.
     type PricePerGigaUnitPerTick: NumericalParam;
 

@@ -9,8 +9,8 @@ use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::MoveBucketRequestedForNewMsp,
-    types::{RetryStrategy, Tip},
+    events::MoveBucketRequestedForMsp,
+    types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
     BucketId, FileKeyProof, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -18,6 +18,7 @@ use shc_common::types::{
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
 use storage_hub_runtime::StorageDataUnit;
 
@@ -70,12 +71,12 @@ where
     pending_bucket_id: Option<BucketId>,
 }
 
-impl<NT> EventHandler<MoveBucketRequestedForNewMsp> for MspMoveBucketTask<NT>
+impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
-    async fn handle_event(&mut self, event: MoveBucketRequestedForNewMsp) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketRequestedForMsp) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: user requested to move bucket {:?} to us",
@@ -105,7 +106,7 @@ where
     /// If it returns an error, the caller (handle_event) will reject the bucket move request.
     async fn handle_move_bucket_request(
         &mut self,
-        event: MoveBucketRequestedForNewMsp,
+        event: MoveBucketRequestedForMsp,
     ) -> anyhow::Result<()> {
         let indexer_db_pool = if let Some(indexer_db_pool) =
             self.storage_hub_handler.indexer_db_pool.clone()
@@ -469,16 +470,27 @@ where
 
                 let file_key_proof =
                     match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
-                        Ok(proof) => proof,
+                        Ok(file_key_proof) => file_key_proof,
                         Err(error) => {
                             error!(
                                 target: LOG_TARGET,
-                                "Failed to decode file key proof: {:?}",
-                                error
+                                "Failed to decode file key proof for chunk {:?} of file {:?}: {:?}",
+                                chunk, file_key, error
                             );
                             continue;
                         }
                     };
+
+                // Verify that the fingerprint in the proof matches the expected file fingerprint
+                let expected_fingerprint = file_metadata.fingerprint;
+                if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+                    error!(
+                        target: LOG_TARGET,
+                        "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                        file_key, expected_fingerprint, file_key_proof.file_metadata.fingerprint
+                    );
+                    continue;
+                }
 
                 let proven = match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
                     Ok(data) => data,
@@ -509,6 +521,29 @@ where
                         target: LOG_TARGET,
                         "Expected chunk id {:?} but got {:?}",
                         chunk, proven[0].key
+                    );
+                    continue;
+                }
+
+                // Validate chunk size
+                // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
+                // one which can be smaller
+                let expected_chunk_size = if chunk == file_metadata.chunks_count() - 1 {
+                    // Last chunk
+                    (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
+                } else {
+                    // All other chunks
+                    FILE_CHUNK_SIZE as usize
+                };
+
+                if chunk_data.len() != expected_chunk_size {
+                    error!(
+                        target: LOG_TARGET,
+                        "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
+                        chunk_id,
+                        file_key,
+                        expected_chunk_size,
+                        chunk_data.len()
                     );
                     continue;
                 }
@@ -624,7 +659,7 @@ where
 
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Tip::from(0))
+                .send_extrinsic(call, SendExtrinsicOptions::default())
                 .await?
                 .with_timeout(Duration::from_secs(60))
                 .watch_for_success(&self.storage_hub_handler.blockchain)

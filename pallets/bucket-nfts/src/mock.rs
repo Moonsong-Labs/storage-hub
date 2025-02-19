@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 use frame_support::{
     derive_impl, parameter_types,
     traits::{AsEnsureOriginWithArg, Everything, Randomness},
-    weights::constants::RocksDbWeight,
+    weights::{constants::RocksDbWeight, FixedFee},
     BoundedBTreeSet,
 };
 use frame_system::pallet_prelude::BlockNumberFor;
@@ -147,7 +147,8 @@ pub(crate) type ThresholdType = u32;
 
 parameter_types! {
     pub const MinWaitForStopStoring: BlockNumber = 30;
-    pub const StorageRequestCreationDeposit: Balance = 10;
+    pub const BaseStorageRequestCreationDeposit: Balance = 10;
+    pub const UpfrontTicksToPay: TickNumber = 10;
     pub const FileDeletionRequestCreationDeposit: Balance = 10;
     pub const FileSystemHoldReason: RuntimeHoldReason = RuntimeHoldReason::FileSystem(pallet_file_system::HoldReason::StorageRequestCreationHold);
 }
@@ -243,6 +244,8 @@ impl ProofsDealerInterface for MockProofsDealer {
     }
 }
 
+pub(crate) type ReplicationTargetType = u32;
+
 impl pallet_file_system::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type WeightInfo = ();
@@ -253,7 +256,7 @@ impl pallet_file_system::Config for Test {
     type UpdateStoragePrice = NoUpdatePriceIndexUpdater<Balance, u64>;
     type UserSolvency = MockUserSolvency;
     type Fingerprint = H256;
-    type ReplicationTargetType = u32;
+    type ReplicationTargetType = ReplicationTargetType;
     type ThresholdType = ThresholdType;
     type ThresholdTypeToTickNumber = ThresholdTypeToBlockNumberConverter;
     type HashToThresholdType = HashToThresholdTypeConverter;
@@ -276,7 +279,12 @@ impl pallet_file_system::Config for Test {
     type MaxUserPendingDeletionRequests = ConstU32<5u32>;
     type MaxUserPendingMoveBucketRequests = ConstU32<10u32>;
     type MinWaitForStopStoring = MinWaitForStopStoring;
-    type StorageRequestCreationDeposit = StorageRequestCreationDeposit;
+    type BaseStorageRequestCreationDeposit = BaseStorageRequestCreationDeposit;
+    type UpfrontTicksToPay = UpfrontTicksToPay;
+    type WeightToFee = FixedFee<5, Balance>;
+    type ReplicationTargetToBalance = ReplicationTargetToBalance;
+    type TickNumberToBalance = TickNumberToBalance;
+    type StorageDataUnitToBalance = StorageDataUnitToBalance;
     type FileDeletionRequestDeposit = FileDeletionRequestCreationDeposit;
     type BasicReplicationTarget = ConstU32<2>;
     type StandardReplicationTarget = ConstU32<3>;
@@ -293,6 +301,31 @@ impl ReadUserSolvencyInterface for MockUserSolvency {
 
     fn is_user_insolvent(_user_account: &Self::AccountId) -> bool {
         false
+    }
+}
+
+// Converter from the ReplicationTarget type to the Balance type for math.
+pub struct ReplicationTargetToBalance;
+impl Convert<ReplicationTargetType, Balance> for ReplicationTargetToBalance {
+    fn convert(replication_target: ReplicationTargetType) -> Balance {
+        replication_target.into()
+    }
+}
+
+// Converter from the TickNumber type to the Balance type for math.
+pub type TickNumber = BlockNumber;
+pub struct TickNumberToBalance;
+impl Convert<TickNumber, Balance> for TickNumberToBalance {
+    fn convert(tick_number: TickNumber) -> Balance {
+        tick_number.into()
+    }
+}
+
+// Converter from the StorageDataUnit type to the Balance type for math.
+pub struct StorageDataUnitToBalance;
+impl Convert<StorageDataUnit, Balance> for StorageDataUnitToBalance {
+    fn convert(data_unit: StorageDataUnit) -> Balance {
+        data_unit.into()
     }
 }
 
@@ -487,6 +520,7 @@ impl Get<AccountId> for TreasuryAccount {
 
 impl crate::Config for Test {
     type RuntimeEvent = RuntimeEvent;
+    type WeightInfo = ();
     type Buckets = Providers;
     #[cfg(feature = "runtime-benchmarks")]
     type Helper = ();

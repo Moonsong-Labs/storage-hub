@@ -12,7 +12,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    types::{ConfirmStoringRequest, RetryStrategy, Tip},
+    types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
@@ -32,6 +32,7 @@ use crate::services::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
+use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -637,7 +638,7 @@ where
 
                 self.storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, Tip::from(0))
+                    .send_extrinsic(call, SendExtrinsicOptions::default())
                     .await?
                     .with_timeout(Duration::from_secs(
                         self.storage_hub_handler
@@ -775,7 +776,7 @@ where
         let result = self
             .storage_hub_handler
             .blockchain
-            .send_extrinsic(call.clone(), Tip::from(0))
+            .send_extrinsic(call.clone(), SendExtrinsicOptions::default())
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler
@@ -804,7 +805,7 @@ where
             let result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Tip::from(0))
+                .send_extrinsic(call, SendExtrinsicOptions::default())
                 .await?
                 .with_timeout(Duration::from_secs(
                     self.storage_hub_handler
@@ -838,6 +839,23 @@ where
     ) -> anyhow::Result<bool> {
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
+
+        // Get the file metadata to verify the fingerprint
+        let file_metadata = write_file_storage
+            .get_metadata(&file_key)
+            .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
+            .ok_or_else(|| anyhow!("File metadata not found"))?;
+
+        // Verify that the fingerprint in the proof matches the expected file fingerprint
+        let expected_fingerprint = file_metadata.fingerprint;
+        if event.file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+            error!(
+                target: LOG_TARGET,
+                "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint
+            );
+            return Err(anyhow!("Fingerprint mismatch"));
+        }
 
         // Verify and extract chunks from proof
         let proven = match event
@@ -873,7 +891,7 @@ where
         let proven = match proven {
             Ok(proven) => proven,
             Err(e) => {
-                error!(target: LOG_TARGET, "{}", e);
+                error!(target: LOG_TARGET, "Failed to verify and get proven file key chunks: {}", e);
                 return Err(e);
             }
         };
@@ -883,6 +901,34 @@ where
         // Process each proven chunk in the batch
         for chunk in proven {
             // TODO: Add a batched write chunk method to the file storage.
+
+            // Validate chunk size
+            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
+            // one which can be smaller
+            let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
+                // Last chunk
+                (file_metadata.file_size % FILE_CHUNK_SIZE) as usize
+            } else {
+                // All other chunks
+                FILE_CHUNK_SIZE as usize
+            };
+
+            if chunk.data.len() != expected_chunk_size {
+                error!(
+                    target: LOG_TARGET,
+                    "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
+                    chunk.key,
+                    file_key,
+                    expected_chunk_size,
+                    chunk.data.len()
+                );
+                return Err(anyhow!(
+                    "Invalid chunk size. Expected {}, got {}",
+                    expected_chunk_size,
+                    chunk.data.len()
+                ));
+            }
+
             let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);
 
             match write_result {
