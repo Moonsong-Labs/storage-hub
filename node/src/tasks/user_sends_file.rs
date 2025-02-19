@@ -14,6 +14,7 @@ use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
 use sp_runtime::AccountId32;
+use tokio::time::Timeout;
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
@@ -305,6 +306,7 @@ where
                             break;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused))
+                        | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
                             if retry_attempts < 3 =>
                         {
                             warn!(
@@ -316,7 +318,7 @@ where
                             retry_attempts += 1;
 
                             // Wait for a short time before retrying
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
                             // Return an error if the provider refused to answer.
@@ -398,7 +400,8 @@ where
                             break;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused))
-                            if retry_attempts < 3 =>
+                        | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
+                            if retry_attempts < 10 =>
                         {
                             warn!(
                                 target: LOG_TARGET,
@@ -409,7 +412,7 @@ where
                             retry_attempts += 1;
 
                             // Wait for a short time before retrying
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
                             // Return an error if the provider refused to answer.

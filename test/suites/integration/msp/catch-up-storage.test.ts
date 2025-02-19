@@ -1,10 +1,10 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, type EnrichedBspApi } from "../../../util";
+import { describeMspNet, shUser, type EnrichedBspApi, waitFor } from "../../../util";
 
 describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
-  { initialised: false },
-  ({ before, createMsp1Api, it, createUserApi }) => {
+  { initialised: false, only: true },
+  ({ before, createMsp1Api, it, createUserApi, createApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
 
@@ -81,17 +81,17 @@ describeMspNet(
       // NOTE:
       // We shouldn't have to recreate an API but any other attempt to reconnect failed
       // Also had to guess for the port of MSP 1
-      // await using newMspApi = await createApi("ws://127.0.0.1:9777");
+      await using newMspApi = await createApi("ws://127.0.0.1:9777");
 
       // Required to trigger out of sync mode
-      // await userApi.rpc.engine.createBlock(true, true);
+      await userApi.rpc.engine.createBlock(true, true);
 
-      // await waitFor({
-      //   lambda: async () =>
-      //     (await newMspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey)).isFileFound
-      // });
+      await waitFor({
+        lambda: async () =>
+          (await newMspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey)).isFileFound
+      });
 
-      // await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
+      await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
     });
   }
 );
