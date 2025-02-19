@@ -46,11 +46,17 @@ lazy_static::lazy_static! {
 }
 
 const LOG_TARGET: &str = "msp-move-bucket-task";
-const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10; // Maximum number of files to download in parallel
-const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5; // Maximum number of chunks requests to do in parallel per file
-const MAX_CHUNKS_PER_REQUEST: usize = 10; // Maximum number of chunks to request in a single network request
-const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5; // Number of peers to select for each chunk download attempt (2 best + 3 random)
-const DOWNLOAD_RETRY_ATTEMPTS: usize = 2; // Number of retries per peer for a single chunk request
+
+/// Maximum number of files to download in parallel
+const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
+// Maximum number of chunks requests to do in parallel per file
+const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
+// Maximum number of chunks to request in a single network request
+const MAX_CHUNKS_PER_REQUEST: usize = 10;
+// Number of peers to select for each chunk download attempt (2 best + 3 random)
+const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
+// Number of retries per peer for a single chunk request
+const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 
 /// [`MspMoveBucketTask`] handles bucket move requests between MSPs.
 ///
@@ -487,13 +493,20 @@ where
             .proven::<StorageProofsMerkleTrieLayout>()
             .map_err(|e| anyhow!("Failed to get proven data: {:?}", e))?;
 
-        if proven.len() != chunk_batch.len() {
+        // Verify that received chunks match requested ones
+        let received_chunk_ids: HashSet<_> = proven.iter().map(|p| p.key).collect();
+        if received_chunk_ids.len() != proven.len() {
+            let mut peer_manager = peer_manager.write().await;
+            peer_manager.record_failure(peer_id);
+            return Err(anyhow!("Received duplicate chunk IDs in response"));
+        }
+        if received_chunk_ids != *chunk_batch {
             let mut peer_manager = peer_manager.write().await;
             peer_manager.record_failure(peer_id);
             return Err(anyhow!(
-                "Expected {} proven chunks but got {}",
-                chunk_batch.len(),
-                proven.len()
+                "Received chunk IDs do not match requested ones. Expected: {:?}, got: {:?}",
+                chunk_batch,
+                received_chunk_ids
             ));
         }
 
