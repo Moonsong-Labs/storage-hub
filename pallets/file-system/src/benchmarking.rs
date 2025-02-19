@@ -208,7 +208,8 @@ mod benchmarks {
         // Ensure the expected event was emitted.
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::MoveBucketAccepted {
             bucket_id,
-            msp_id: new_msp_id,
+            old_msp_id: Some(initial_msp_id),
+            new_msp_id,
             value_prop_id: new_value_prop_id,
         });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
