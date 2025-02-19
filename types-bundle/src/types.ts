@@ -146,6 +146,11 @@ export const ALL_TYPES: RegistryTypes = {
       InternalError: null
     }
   },
+  GenericApplyDeltaEventInfoError: {
+    _enum: {
+      DecodeError: null
+    }
+  },
   QueryProviderMultiaddressesError: {
     _enum: {
       ProviderNotRegistered: null,

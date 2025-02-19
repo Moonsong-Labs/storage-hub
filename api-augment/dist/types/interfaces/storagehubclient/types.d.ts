@@ -41,6 +41,11 @@ export interface FileMetadata extends Struct {
   readonly file_size: u64;
   readonly fingerprint: U8aFixed;
 }
+/** @name GenericApplyDeltaEventInfoError */
+export interface GenericApplyDeltaEventInfoError extends Enum {
+  readonly isDecodeError: boolean;
+  readonly type: "DecodeError";
+}
 /** @name GetBspInfoError */
 export interface GetBspInfoError extends Enum {
   readonly isBspNotRegistered: boolean;

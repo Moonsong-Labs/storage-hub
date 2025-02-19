@@ -50,6 +50,7 @@ import type {
   BackupStorageProviderId,
   BucketId,
   ChunkId,
+  GenericApplyDeltaEventInfoError,
   GetBspInfoError,
   GetChallengePeriodError,
   GetChallengeSeedError,
@@ -328,6 +329,15 @@ declare module "@polkadot/api-base/types/calls" {
     };
     /** 0xb9e7717ace5b45cd/1 */
     fileSystemApi: {
+      /**
+       * Decodes the BucketId expected to be found in the event info of a generic apply delta.
+       **/
+      decodeGenericApplyDeltaEventInfo: AugmentedCall<
+        ApiType,
+        (
+          encodedEventInfo: Bytes | string | Uint8Array
+        ) => Observable<Result<BucketId, GenericApplyDeltaEventInfoError>>
+      >;
       /**
        * Check if a storage request is open to volunteers.
        **/

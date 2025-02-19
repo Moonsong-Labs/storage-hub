@@ -50,6 +50,17 @@ const FILE_SYSTEM_V1 = {
       }
     ],
     type: "Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>"
+  },
+  decode_generic_apply_delta_event_info: {
+    description:
+      "Decodes the BucketId expected to be found in the event info of a generic apply delta.",
+    params: [
+      {
+        name: "encodedEventInfo",
+        type: "Vec<u8>"
+      }
+    ],
+    type: "Result<BucketId, GenericApplyDeltaEventInfoError>"
   }
 };
 const PROOFS_DEALER_V1 = {

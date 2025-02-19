@@ -144,6 +144,11 @@ export const ALL_TYPES = {
       InternalError: null
     }
   },
+  GenericApplyDeltaEventInfoError: {
+    _enum: {
+      DecodeError: null
+    }
+  },
   QueryProviderMultiaddressesError: {
     _enum: {
       ProviderNotRegistered: null,

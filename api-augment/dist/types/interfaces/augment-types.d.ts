@@ -1324,6 +1324,7 @@ import type {
   CheckpointChallenge,
   ChunkId,
   FileMetadata,
+  GenericApplyDeltaEventInfoError,
   GetBspInfoError,
   GetChallengePeriodError,
   GetChallengeSeedError,
@@ -1841,6 +1842,7 @@ declare module "@polkadot/types/types/registry" {
     FungibilityV4: FungibilityV4;
     FungiblesAccessError: FungiblesAccessError;
     Gas: Gas;
+    GenericApplyDeltaEventInfoError: GenericApplyDeltaEventInfoError;
     GenesisBuildErr: GenesisBuildErr;
     GetBspInfoError: GetBspInfoError;
     GetChallengePeriodError: GetChallengePeriodError;
