@@ -51,11 +51,12 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
-        FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
-        FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, NewStorageRequest, SlashableProvider,
-        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
+        BucketMovedAway, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
+        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
+        FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
+        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, StartMovedBucketDownload,
+        UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -1430,35 +1431,61 @@ where
                             }
                         }
                         RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::MoveBucketRejected { bucket_id, msp_id },
+                            pallet_file_system::Event::MoveBucketRejected {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                            },
                         ) => {
                             // This event is relevant in case the Provider managed is a BSP.
                             if let Some(StorageProviderId::BackupStorageProvider(_)) =
                                 &self.provider_id
                             {
-                                self.emit(MoveBucketRejected { bucket_id, msp_id });
+                                self.emit(MoveBucketRejected {
+                                    bucket_id,
+                                    old_msp_id,
+                                    new_msp_id,
+                                });
                             }
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketAccepted {
                                 bucket_id,
-                                msp_id,
+                                old_msp_id,
+                                new_msp_id,
                                 value_prop_id,
                             },
                         ) => {
                             match self.provider_id {
                                 // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
                                 Some(StorageProviderId::BackupStorageProvider(_)) => {
-                                    self.emit(MoveBucketAccepted { bucket_id, msp_id });
-                                }
-                                // As an MSP, this node is interested in the event only if this node is the new MSP.
-                                Some(StorageProviderId::MainStorageProvider(own_msp_id))
-                                    if own_msp_id == msp_id =>
-                                {
-                                    self.emit(StartMovedBucketDownload {
+                                    self.emit(MoveBucketAccepted {
                                         bucket_id,
+                                        old_msp_id,
+                                        new_msp_id,
                                         value_prop_id,
                                     });
+                                }
+                                // As an MSP, this node is interested in the event if:
+                                // 1. This node is the new MSP - to start downloading the bucket
+                                // 2. This node is the old MSP - to clean up the bucket
+                                Some(StorageProviderId::MainStorageProvider(own_msp_id)) => {
+                                    if own_msp_id == new_msp_id {
+                                        // We are the new MSP, start downloading
+                                        self.emit(StartMovedBucketDownload {
+                                            bucket_id,
+                                            value_prop_id,
+                                        });
+                                    } else {
+                                        if old_msp_id == Some(own_msp_id) {
+                                            // We are the old MSP, emit event to clean up
+                                            self.emit(BucketMovedAway {
+                                                bucket_id,
+                                                old_msp_id: own_msp_id,
+                                                new_msp_id: new_msp_id,
+                                            });
+                                        }
+                                    }
                                 }
                                 // Otherwise, ignore the event.
                                 _ => {}

@@ -1204,7 +1204,8 @@ mod request_move_bucket {
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::MoveBucketAccepted {
-                        msp_id: msp_dave_id,
+                        old_msp_id: Some(msp_charlie_id),
+                        new_msp_id: msp_dave_id,
                         bucket_id,
                         value_prop_id: dave_value_prop_id,
                     }
@@ -1291,7 +1292,8 @@ mod request_move_bucket {
                 // Assert that the correct event was deposited
                 System::assert_last_event(
                     Event::MoveBucketRejected {
-                        msp_id: msp_dave_id,
+                        old_msp_id: Some(msp_charlie_id),
+                        new_msp_id: msp_dave_id,
                         bucket_id,
                     }
                     .into(),

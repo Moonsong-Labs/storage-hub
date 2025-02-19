@@ -1,7 +1,8 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::events::FinalisedMspStoppedStoringBucket;
+use shc_blockchain_service::events::{BucketMovedAway, FinalisedMspStoppedStoringBucket};
+use shc_common::types::BucketId;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -12,34 +13,42 @@ use crate::services::{
 
 const LOG_TARGET: &str = "msp-stopped-storing-task";
 
-/// [`MspStoppedStoringTask`]: Handles the event of the MSP stopping storing a bucket.
+/// Task that handles bucket deletion for an MSP in two scenarios:
+/// 1. When a bucket is moved away to another MSP ([`BucketMovedAway`])
+/// 2. When the MSP stops storing a bucket ([`FinalisedMspStoppedStoringBucket`])
 ///
-/// - [`FinalisedMspStoppedStoringBucket`]: Handles the event of the MSP stopping storing a bucket.
-/// This should only be triggered when the anchor relay chain block is finalized to avoid
-/// deleting the bucket prematurely in the event there is a reorg.
-pub struct MspStoppedStoringTask<NT>
+/// The task will:
+/// 1. Delete all files with the bucket prefix from [`FileStorage`]
+/// 2. Remove the bucket's [`ForestStorageHandler`] instance
+///
+/// # Note
+/// The cleanup happens immediately after the events are confirmed in a finalized block.
+///
+/// [`FileStorage`]: shc_file_manager::traits::FileStorage
+/// [`ForestStorageHandler`]: shc_forest_manager::traits::ForestStorageHandler
+pub struct MspDeleteBucketTask<NT>
 where
-    NT: ShNodeType,
+    NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
 }
 
-impl<NT> Clone for MspStoppedStoringTask<NT>
+impl<NT> Clone for MspDeleteBucketTask<NT>
 where
-    NT: ShNodeType,
+    NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
-    fn clone(&self) -> MspStoppedStoringTask<NT> {
+    fn clone(&self) -> MspDeleteBucketTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT> MspStoppedStoringTask<NT>
+impl<NT> MspDeleteBucketTask<NT>
 where
-    NT: ShNodeType,
+    NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
@@ -47,17 +56,64 @@ where
             storage_hub_handler,
         }
     }
+
+    /// Deletes all files in a bucket and removes the bucket's forest storage
+    async fn delete_bucket(&mut self, bucket_id: &BucketId) -> anyhow::Result<()> {
+        self.storage_hub_handler
+            .file_storage
+            .write()
+            .await
+            .delete_files_with_prefix(
+                &bucket_id
+                    .as_ref()
+                    .try_into()
+                    .map_err(|_| anyhow!("Invalid bucket id"))?,
+            )
+            .map_err(|e| anyhow!("Failed to delete files with prefix: {:?}", e))?;
+
+        self.storage_hub_handler
+            .forest_storage_handler
+            .remove_forest_storage(&bucket_id.as_ref().to_vec())
+            .await;
+
+        Ok(())
+    }
 }
 
-/// Handles the [`FinalisedMspStoppedStoringBucket`] event.
-///
-/// This event is triggered by an on-chain event which is part of a finalized anchored relay block.
-///
-/// This task will:
-/// - Delete the bucket from the MSP's storage.
-/// - Delete all the files in the bucket.
-/// upload requests.
-impl<NT> EventHandler<FinalisedMspStoppedStoringBucket> for MspStoppedStoringTask<NT>
+impl<NT> EventHandler<BucketMovedAway> for MspDeleteBucketTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    async fn handle_event(&mut self, event: BucketMovedAway) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "MSP: bucket {:?} moved to MSP {:?}, starting cleanup",
+            event.bucket_id,
+            event.new_msp_id,
+        );
+
+        if let Err(e) = self.delete_bucket(&event.bucket_id).await {
+            error!(
+                target: LOG_TARGET,
+                "Failed to delete bucket {:?} after move: {:?}",
+                event.bucket_id,
+                e
+            );
+            return Err(e);
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "MSP: successfully deleted bucket {:?} after move",
+            event.bucket_id,
+        );
+
+        Ok(())
+    }
+}
+
+impl<NT> EventHandler<FinalisedMspStoppedStoringBucket> for MspDeleteBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -68,28 +124,26 @@ where
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Deleting bucket {:?} for MSP {:?}",
+            "MSP: deleting bucket {:?} for MSP {:?}",
             event.bucket_id,
             event.msp_id
         );
 
-        let file_storage = self.storage_hub_handler.file_storage.clone();
-        let mut file_storage_write = file_storage.write().await;
+        if let Err(e) = self.delete_bucket(&event.bucket_id).await {
+            error!(
+                target: LOG_TARGET,
+                "Failed to delete bucket {:?} after stop storing: {:?}",
+                event.bucket_id,
+                e
+            );
+            return Err(e);
+        }
 
-        file_storage_write
-            .delete_files_with_prefix(
-                &event
-                    .bucket_id
-                    .as_ref()
-                    .try_into()
-                    .map_err(|_| anyhow!("Invalid bucket id"))?,
-            )
-            .map_err(|e| anyhow!("Failed to delete files with prefix: {:?}", e))?;
-
-        self.storage_hub_handler
-            .forest_storage_handler
-            .remove_forest_storage(&event.bucket_id.as_ref().to_vec())
-            .await;
+        info!(
+            target: LOG_TARGET,
+            "MSP: successfully deleted bucket {:?} after stop storing",
+            event.bucket_id,
+        );
 
         Ok(())
     }
