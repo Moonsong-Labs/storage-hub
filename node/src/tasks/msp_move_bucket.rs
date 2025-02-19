@@ -47,11 +47,17 @@ lazy_static! {
 }
 
 const LOG_TARGET: &str = "msp-move-bucket-task";
-const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10; // Maximum number of files to download in parallel
-const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5; // Maximum number of chunks requests to do in parallel per file
-const MAX_CHUNKS_PER_REQUEST: usize = 10; // Maximum number of chunks to request in a single network request
-const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5; // Number of peers to select for each chunk download attempt (2 best + 3 random)
-const DOWNLOAD_RETRY_ATTEMPTS: usize = 2; // Number of retries per peer for a single chunk request
+
+/// Maximum number of files to download in parallel
+const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
+// Maximum number of chunks requests to do in parallel per file
+const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
+// Maximum number of chunks to request in a single network request
+const MAX_CHUNKS_PER_REQUEST: usize = 10;
+// Number of peers to select for each chunk download attempt (2 best + 3 random)
+const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
+// Number of retries per peer for a single chunk request
+const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 
 /// [`MspRespondMoveBucketTask`] handles bucket move requests between MSPs.
 ///
@@ -172,6 +178,8 @@ where
         )
         .await?;
 
+        let total_files = files.len();
+
         // Create forest storage for the bucket if it doesn't exist
         let _ = self
             .storage_hub_handler
@@ -179,26 +187,87 @@ where
             .get_or_create(&bucket)
             .await;
 
-        for file in &files {
-            let file_metadata = file.to_file_metadata(bucket.clone());
-            let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+        // Create semaphore for file-level parallelism
+        let file_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_FILE_DOWNLOADS));
+        let file_tasks: Vec<_> = files
+            .into_iter()
+            .map(|file| {
+                let semaphore = Arc::clone(&file_semaphore);
+                let task = self.clone();
+                let bucket_id = event.bucket_id.clone();
 
-            // Get BSP peer IDs and register them
-            let bsp_peer_ids = file.get_bsp_peer_ids(&mut indexer_connection).await?;
-            if bsp_peer_ids.is_empty() {
-                return Err(anyhow!("No BSP peer IDs found for file {:?}", file_key));
-            }
+                tokio::spawn(async move {
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
 
-            // Register BSP peers for file transfer
-            {
-                let mut peer_manager = self.peer_manager.write().await;
-                for &peer_id in &bsp_peer_ids {
-                    peer_manager.add_peer(peer_id, file_key);
+                    let file_metadata = file.to_file_metadata(bucket_id.as_ref().to_vec());
+                    let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+
+                    // Get BSP peer IDs and register them
+                    let bsp_peer_ids = file
+                        .get_bsp_peer_ids(
+                            &mut task
+                                .storage_hub_handler
+                                .indexer_db_pool
+                                .as_ref()
+                                .unwrap()
+                                .get()
+                                .await?,
+                        )
+                        .await?;
+
+                    if bsp_peer_ids.is_empty() {
+                        return Err(anyhow!("No BSP peer IDs found for file {:?}", file_key));
+                    }
+
+                    // Register BSP peers for file transfer
+                    {
+                        let mut peer_manager = task.peer_manager.write().await;
+                        for &peer_id in &bsp_peer_ids {
+                            peer_manager.add_peer(peer_id, file_key);
+                        }
+                    }
+
+                    // Download file using existing download_file method
+                    task.download_file(&file, &bucket_id).await
+                })
+            })
+            .collect();
+
+        // Wait for all file downloads to complete
+        let results = join_all(file_tasks).await;
+
+        // Process results and count failures
+        let mut failed_downloads = 0;
+        for result in results {
+            match result {
+                Ok(download_result) => {
+                    if let Err(e) = download_result {
+                        error!(
+                            target: LOG_TARGET,
+                            "File download task failed: {:?}", e
+                        );
+                        failed_downloads += 1;
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "File download task panicked: {:?}", e
+                    );
+                    failed_downloads += 1;
                 }
             }
+        }
 
-            // Download file using existing download_file method
-            self.download_file(file, &event.bucket_id).await?;
+        if failed_downloads > 0 {
+            return Err(anyhow!(
+                "Failed to download {} out of {} files",
+                failed_downloads,
+                total_files
+            ));
         }
 
         Ok(())
@@ -314,78 +383,6 @@ where
 
         // Accept the request since we've verified we can handle all files
         self.accept_bucket_move(event.bucket_id).await?;
-
-        // Now download all the files in parallel with a controlled concurrency limit
-        let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_FILE_DOWNLOADS));
-
-        let download_tasks: Vec<_> = files
-            .into_iter()
-            .map(|file| {
-                let semaphore = Arc::clone(&semaphore);
-                let bucket_id = event.bucket_id;
-                let task = self.clone();
-
-                tokio::spawn(async move {
-                    let _permit = semaphore
-                        .acquire()
-                        .await
-                        .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
-
-                    match task.download_file(&file, &bucket_id).await {
-                        Ok(_) => Ok(()),
-                        Err(e) => {
-                            error!(
-                                target: LOG_TARGET,
-                                "Failed to download file {:?}: {:?}",
-                                file.id,
-                                e
-                            );
-                            Err(e)
-                        }
-                    }
-                })
-            })
-            .collect();
-
-        // Wait for all downloads to complete and collect results
-        let results = join_all(download_tasks).await;
-
-        // Process results and count failures
-        let mut failed_downloads = 0;
-        for result in results {
-            match result {
-                Ok(download_result) => {
-                    if let Err(e) = download_result {
-                        error!(
-                            target: LOG_TARGET,
-                            "File download task failed: {:?}", e
-                        );
-                        failed_downloads += 1;
-                    }
-                }
-                Err(e) => {
-                    error!(
-                        target: LOG_TARGET,
-                        "File download task panicked: {:?}", e
-                    );
-                    failed_downloads += 1;
-                }
-            }
-        }
-
-        // Log summary of download results
-        if failed_downloads > 0 {
-            warn!(
-                target: LOG_TARGET,
-                "Finished bucket move with {} failed file downloads",
-                failed_downloads
-            );
-        } else {
-            info!(
-                target: LOG_TARGET,
-                "Successfully completed bucket move with all files downloaded"
-            );
-        }
 
         Ok(())
     }
@@ -859,16 +856,18 @@ where
     ) -> anyhow::Result<()> {
         let file_metadata = file.to_file_metadata(bucket.as_ref().to_vec());
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+        let chunks_count = file_metadata.chunks_count();
 
         info!(
             target: LOG_TARGET,
             "MSP: downloading file {:?}", file_key,
         );
 
+        // Create semaphore for chunk-level parallelism
         let chunk_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHUNKS_PER_FILE));
         let peer_manager = Arc::clone(&self.peer_manager);
 
-        let chunk_tasks: Vec<_> = (0..file_metadata.chunks_count())
+        let chunk_tasks: Vec<_> = (0..chunks_count)
             .step_by(MAX_CHUNKS_PER_REQUEST)
             .map(|chunk_start| {
                 let semaphore = Arc::clone(&chunk_semaphore);
@@ -884,8 +883,7 @@ where
                         .await
                         .map_err(|e| anyhow!("Failed to acquire chunk semaphore: {:?}", e))?;
 
-                    let chunk_batch =
-                        Self::create_chunk_batch(chunk_start, file_metadata.chunks_count());
+                    let chunk_batch = Self::create_chunk_batch(chunk_start, chunks_count);
                     let batch_size_bytes = chunk_batch.len() as u64 * FILE_CHUNK_SIZE as u64;
 
                     // Get the best performing peers for this request and shuffle them
@@ -959,13 +957,20 @@ where
             error!(
                 target: LOG_TARGET,
                 "Failed to download {}/{} chunks for file {:?}",
-                failed_downloads, file_metadata.chunks_count(), file_key
+                failed_downloads,
+                chunks_count,
+                file_key
             );
+            return Err(anyhow!(
+                "Failed to download all chunks for file {:?}",
+                file_key
+            ));
         } else {
             info!(
                 target: LOG_TARGET,
                 "Successfully downloaded {} chunks for file {:?}",
-                file_metadata.chunks_count(), file_key
+                chunks_count,
+                file_key
             );
         }
 
