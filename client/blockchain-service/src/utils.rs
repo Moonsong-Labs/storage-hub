@@ -3,6 +3,7 @@ use std::{cmp::max, sync::Arc, vec};
 use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
+use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
@@ -16,8 +17,8 @@ use shc_common::{
     blockchain_utils::get_events_at_block,
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, BucketId, ForestRoot, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
+        BlockNumber, ForestRoot, ParachainClient, ProofsDealerProviderId, StorageProviderId,
+        TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -1256,10 +1257,20 @@ where
                                 }
                                 let event_info =
                                     event_info.expect("Just checked that this is not None; qed");
-                                let bucket_id = match BucketId::decode(&mut event_info.as_ref()) {
-                                    Ok(bucket_id) => bucket_id,
+                                let bucket_id = match self
+                                    .client
+                                    .runtime_api()
+                                    .decode_generic_apply_delta_event_info(block.hash, event_info)
+                                {
+                                    Ok(runtime_api_result) => match runtime_api_result {
+                                        Ok(bucket_id) => bucket_id,
+                                        Err(e) => {
+                                            error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
+                                            continue;
+                                        }
+                                    },
                                     Err(e) => {
-                                        error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
+                                        error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
                                         continue;
                                     }
                                 };
