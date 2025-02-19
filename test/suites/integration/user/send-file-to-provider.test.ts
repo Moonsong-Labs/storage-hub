@@ -63,7 +63,7 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
     });
   });
 
-  it("MSP first multihash is wrong and second should be correct. User will be able to connect and send file.", async () => {
+  it("MSP first libp2p multiaddress is wrong and second should be correct. User will be able to connect and send file on the second attempt.", async () => {
     const { containerName, p2pPort, peerId } = await addMspContainer({
       name: "lola1",
       additionalArgs: [

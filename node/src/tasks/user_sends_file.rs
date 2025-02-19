@@ -137,8 +137,7 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        self.send_chunks_to_providers(peer_ids, &file_metadata)
-            .await
+        self.send_chunks_to_provider(peer_ids, &file_metadata).await
     }
 }
 
@@ -184,8 +183,7 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        self.send_chunks_to_providers(peer_ids, &file_metadata)
-            .await
+        self.send_chunks_to_provider(peer_ids, &file_metadata).await
     }
 }
 
@@ -193,7 +191,7 @@ impl<NT> UserSendsFileTask<NT>
 where
     NT: ShNodeType,
 {
-    async fn send_chunks_to_providers(
+    async fn send_chunks_to_provider(
         &mut self,
         peer_ids: Vec<PeerId>,
         file_metadata: &FileMetadata,
@@ -209,12 +207,12 @@ where
                 .await
             {
                 Err(err) => {
-                    // if sending chunk failed with one peer id, we try with the next one.
+                    // If sending chunk failed with one peer id, we try with the next one.
                     warn!(target: LOG_TARGET, "{:?}", err);
                     continue;
                 }
                 Ok(()) => {
-                    // if successfull our job is done. No need to try with the next peer id.
+                    // If successful our job is done. No need to try with the next peer id.
                     return Ok(());
                 }
             };
@@ -321,12 +319,12 @@ where
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
-                            // If MSP doesn't receive file, the burden of downloading the file will be on the MSP.
+                            // Return an error if the provider refused to answer.
                             return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                         }
                         Err(e) => {
                             return Err(anyhow::anyhow!(
-                                "Failed to upload batch to peer {:?} (Error: {:?})",
+                                "Unexpected error while trying to upload batch to peer {:?} (Error: {:?})",
                                 peer_id,
                                 e
                             ));
@@ -414,13 +412,12 @@ where
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
-                            // If MSP doesn't receive file, the burden of downloading the file will be on the MSP.
-
+                            // Return an error if the provider refused to answer.
                             return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                         }
                         Err(e) => {
                             return Err(anyhow::anyhow!(
-                                "Failed to upload final batch to peer {:?} (Error: {:?})",
+                                "Unexpected error while trying to upload final batch to peer {:?} (Error: {:?})",
                                 peer_id,
                                 e
                             ));
