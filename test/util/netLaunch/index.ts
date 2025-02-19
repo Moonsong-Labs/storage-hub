@@ -46,7 +46,7 @@ export class NetworkLauncher {
   constructor(
     private readonly type: NetworkType,
     private readonly config: NetLaunchConfig
-  ) {}
+  ) { }
 
   private loadComposeFile() {
     assert(this.type, "Network type has not been set yet");
@@ -601,7 +601,7 @@ export class NetworkLauncher {
       // This will advance the block which also contains the BSP volunteer tx.
       // Hence why we can wait for the BSP to confirm storing.
       await api.wait.mspResponseInTxPool();
-      await api.wait.bspVolunteer();
+      await api.wait.bspVolunteerInTxPool();
       await api.block.seal();
       await api.wait.bspStored();
     }
