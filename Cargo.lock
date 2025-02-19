@@ -7144,6 +7144,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ordered-float"
+version = "3.9.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1e1c390732d15f1d48471625cd92d154e66db2c56645e29a9cd26f4699f72dc"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "overload"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16182,6 +16191,7 @@ dependencies = [
  "kvdb-rocksdb",
  "lazy_static",
  "log",
+ "ordered-float 3.9.2",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
  "pallet-payment-streams",
@@ -16769,7 +16779,7 @@ dependencies = [
  "byteorder",
  "integer-encoding",
  "log",
- "ordered-float",
+ "ordered-float 1.1.1",
  "threadpool",
 ]
 

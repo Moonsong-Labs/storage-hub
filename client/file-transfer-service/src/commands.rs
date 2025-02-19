@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use prost::Message;
+use std::collections::HashSet;
 use thiserror::Error;
 
 use codec::Encode;
@@ -52,7 +53,7 @@ pub enum FileTransferServiceCommand {
         /// File key of the file to download.
         file_key: FileKey,
         /// A set of chunk IDs for batched download requests.
-        chunk_ids: std::collections::HashSet<ChunkId>,
+        chunk_ids: HashSet<ChunkId>,
         /// Bucket ID is only required for Bucket operations.
         /// Since the FileTransferService is not aware of which files are in which buckets,
         /// it needs to be provided by the caller to pass the allow list check.

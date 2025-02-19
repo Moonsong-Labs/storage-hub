@@ -80,7 +80,7 @@ impl ShRole for UserRole {}
 /// - [`RocksDbStorageLayer`]
 /// - [`InMemoryStorageLayer`]
 /// - [`NoStorageLayer`]
-pub trait ShStorageLayer {}
+pub trait ShStorageLayer: Send + Sync + 'static {}
 
 /// RocksDB storage layer. Implements the [`ShStorageLayer`] trait.
 ///

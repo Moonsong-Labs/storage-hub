@@ -22,14 +22,15 @@
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
+use codec::{Decode, Encode};
+use futures::stream::{self, StreamExt};
+use prost::Message;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     sync::Arc,
 };
+use tokio::time::{interval, Duration};
 
-use codec::{Decode, Encode};
-use futures::stream::{self, StreamExt};
-use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse},
     service::traits::NetworkService,
@@ -37,12 +38,14 @@ use sc_network::{
 };
 use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
-use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId};
-use shp_file_metadata::ChunkId;
-use tokio::time::{interval, Duration};
 
-use crate::events::RemoteUploadRequest;
+use shc_actors_framework::actor::{Actor, ActorEventLoop};
+use shc_common::types::{
+    BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId, FILE_CHUNK_SIZE,
+};
+use shp_file_metadata::ChunkId;
+
+use crate::{events::RemoteUploadRequest, MAX_REQUEST_PACKET_SIZE_BYTES};
 
 use super::{
     commands::{FileTransferServiceCommand, RequestError},
@@ -235,11 +238,18 @@ impl Actor for FileTransferService {
                     bucket_id,
                     callback,
                 } => {
-                    const MAX_BATCH_CHUNK_IDS: usize = 100;
-                    if chunk_ids.len() > MAX_BATCH_CHUNK_IDS {
-                        warn!(target: LOG_TARGET, "Requested batch size {} exceeds maximum allowed {}.", chunk_ids.len(), MAX_BATCH_CHUNK_IDS);
+                    // Calculate max chunks based on packet size and chunk size
+                    let max_chunks = MAX_REQUEST_PACKET_SIZE_BYTES / FILE_CHUNK_SIZE;
+                    if chunk_ids.len() > max_chunks as usize {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Requested batch size {} exceeds maximum allowed {} based on packet size limit.",
+                            chunk_ids.len(),
+                            max_chunks
+                        );
                     }
 
+                    // Convert HashSet to Vec only for protobuf encoding
                     let chunk_ids_u64: Vec<u64> =
                         chunk_ids.iter().map(|chunk_id| chunk_id.as_u64()).collect();
 

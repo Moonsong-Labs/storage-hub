@@ -3,6 +3,7 @@ use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBu
 use shc_common::types::{
     BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
 };
+use std::collections::HashSet;
 
 /// A request to upload file chunks to a remote peer with verifiable proof.
 ///
@@ -28,10 +29,17 @@ pub struct RemoteUploadRequest {
 
 impl EventBusMessage for RemoteUploadRequest {}
 
+/// A request to download chunks from a remote peer
+///
+/// # Fields
+/// * `file_key` - The key of the file to download chunks from
+/// * `chunk_ids` - Set of unique chunk IDs to download. Using HashSet to enforce uniqueness
+/// * `bucket_id` - Optional bucket ID for bucket operations
+/// * `request_id` - Unique identifier for this download request
 #[derive(Clone)]
 pub struct RemoteDownloadRequest {
     pub file_key: FileKey,
-    pub chunk_ids: Vec<ChunkId>,
+    pub chunk_ids: HashSet<ChunkId>,
     pub bucket_id: Option<BucketId>,
     pub request_id: DownloadRequestId,
 }

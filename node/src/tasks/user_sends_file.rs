@@ -1,5 +1,9 @@
 use log::{debug, error, info, warn};
+use std::collections::HashSet;
+
 use sc_network::{PeerId, RequestFailure};
+use sp_runtime::AccountId32;
+
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
@@ -12,7 +16,6 @@ use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
 use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
-use sp_runtime::AccountId32;
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
@@ -232,7 +235,7 @@ where
                         .file_storage
                         .read()
                         .await
-                        .generate_proof(&file_key, &current_batch)
+                        .generate_proof(&file_key, &HashSet::from_iter(current_batch.clone()))
                     {
                         Ok(proof) => proof,
                         Err(e) => {
@@ -329,7 +332,7 @@ where
                         .file_storage
                         .read()
                         .await
-                        .generate_proof(&file_key, &current_batch)
+                        .generate_proof(&file_key, &HashSet::from_iter(current_batch.clone()))
                     {
                         Ok(proof) => proof,
                         Err(e) => {
