@@ -28,7 +28,6 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
-use shp_constants::FILE_CHUNK_SIZE;
 use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::types::ShNodeType;
@@ -762,25 +761,14 @@ where
 
         // Process each proven chunk in the batch
         for chunk in proven {
-            // TODO: Add a batched write chunk method to the file storage.
-
-            // Validate chunk size
-            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
-            // one which can be smaller
-            let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
-                // Last chunk
-                (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
-            } else {
-                // All other chunks
-                FILE_CHUNK_SIZE as usize
-            };
+            let chunk_idx = chunk.key.as_u64();
+            let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx);
 
             if chunk.data.len() != expected_chunk_size {
                 error!(
                     target: LOG_TARGET,
-                    "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
-                    chunk.key,
-                    file_key,
+                    "Invalid chunk size for chunk {}: Expected: {}, got: {}",
+                    chunk_idx,
                     expected_chunk_size,
                     chunk.data.len()
                 );
@@ -790,7 +778,12 @@ where
                     RejectedStorageRequestReason::ReceivedInvalidProof,
                 )
                 .await?;
-                return Err(anyhow!("Invalid chunk size"));
+                return Err(anyhow!(
+                    "Invalid chunk size for chunk {}: Expected: {}, got: {}",
+                    chunk_idx,
+                    expected_chunk_size,
+                    chunk.data.len()
+                ));
             }
 
             let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);

@@ -14,7 +14,6 @@ use shc_common::types::{
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
-use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
@@ -210,15 +209,16 @@ where
             let mut current_batch_size = 0;
 
             for chunk_id in 0..chunk_count {
-                // Calculate the size of the current chunk
-                let chunk_size = if chunk_id == chunk_count - 1 {
-                    file_metadata.file_size % FILE_CHUNK_SIZE as u64
-                } else {
-                    FILE_CHUNK_SIZE as u64
-                };
+                let chunk_data = self
+                    .storage_hub_handler
+                    .file_storage
+                    .read()
+                    .await
+                    .get_chunk(&file_key, &ChunkId::new(chunk_id))
+                    .map_err(|e| anyhow::anyhow!("Failed to get chunk: {:?}", e))?;
 
                 // Check if adding this chunk would exceed the batch size limit
-                if current_batch_size + (chunk_size as usize) > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
+                if current_batch_size + chunk_data.len() > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
                     // Send current batch before adding new chunk
                     debug!(
                         target: LOG_TARGET,
@@ -313,7 +313,7 @@ where
 
                 // Add chunk to current batch
                 current_batch.push(ChunkId::new(chunk_id));
-                current_batch_size += chunk_size as usize;
+                current_batch_size += chunk_data.len();
 
                 // If this is the last chunk, send the final batch
                 if chunk_id == chunk_count - 1 && !current_batch.is_empty() {
