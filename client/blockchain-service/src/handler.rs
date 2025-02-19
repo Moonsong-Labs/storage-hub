@@ -32,9 +32,9 @@ use pallet_proofs_dealer_runtime_api::{
     ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
-    StorageProvidersApi,
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsForInsolventUserError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
@@ -51,11 +51,12 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
-        FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
         LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, NewStorageRequest, SlashableProvider,
-        SpStopStoringInsolventUser, UserWithoutFunds,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MspStopStoringBucketInsolventUser,
+        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -985,6 +986,29 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::QueryBucketsForInsolventUser {
+                    msp_id,
+                    user,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let buckets = self
+                        .client
+                        .runtime_api()
+                        .query_buckets_for_insolvent_user(current_block_hash, &msp_id, &user)
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
+                            Err(QueryBucketsForInsolventUserError::InternalError)
+                        });
+
+                    match callback.send(buckets) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back buckets: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::ReleaseForestRootWriteLock {
                     forest_root_write_tx,
                     callback,
@@ -1006,7 +1030,7 @@ where
                     match callback.send(forest_root_write_result) {
                         Ok(_) => {}
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send back forest root write result: {:?}", e);
                         }
                     }
                 }
@@ -1400,6 +1424,32 @@ where
                                 }
                             }
                         }
+                        // A bucket was correctly deleted from a user without funds
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+                                msp_id,
+                                bucket_id,
+                                owner,
+                            },
+                        ) => {
+                            if let Some(managed_provider_id) = &self.provider_id {
+                                // We only emit the event if the Provider ID is the one that this node is managing
+                                // and is a MSP.
+                                match managed_provider_id {
+                                    StorageProviderId::MainStorageProvider(managed_msp_id)
+                                        if managed_msp_id == &msp_id =>
+                                    {
+                                        self.emit(MspStopStoringBucketInsolventUser {
+                                            msp_id,
+                                            bucket_id,
+                                            owner,
+                                        })
+                                    }
+                                    // Otherwise, ignore the event.
+                                    _ => {}
+                                }
+                            }
+                        }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketRequested {
                                 who: _,
@@ -1626,6 +1676,21 @@ where
                                 }
                             }
                         }
+						RuntimeEvent::FileSystem(pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+							msp_id,
+							owner: _,
+							bucket_id
+						}) => {
+							// This event is relevant in case the Provider managed is the MSP of the event.
+							if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) = &self.provider_id {
+								if msp_id == *managed_msp_id {
+									self.emit(FinalisedMspStopStoringBucketInsolventUser {
+										msp_id,
+										bucket_id
+									})
+								}
+							}
+						}
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::BspConfirmStoppedStoring {
                                 bsp_id,
