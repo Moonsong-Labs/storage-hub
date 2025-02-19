@@ -336,7 +336,8 @@ describeMspNet(
             valuePropId
           )
         ],
-        signer: shUser
+        signer: shUser,
+        finaliseBlock: true
       });
 
       assertEventPresent(
@@ -345,6 +346,13 @@ describeMspNet(
         "MoveBucketRequested",
         requestMoveBucketResult.events
       );
+
+      // Finalising the block in the BSP node as well, to trigger the reorg in the BSP node too.
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+
+      // Wait for BSP node to have imported the finalised block built by the user node.
+      await msp2Api.wait.blockImported(finalisedBlockHash.toString());
+      await msp2Api.block.finaliseBlock(finalisedBlockHash.toString());
 
       // Wait for the rejection response from MSP2
       await userApi.wait.waitForTxInPool({
@@ -388,7 +396,8 @@ describeMspNet(
             valuePropId
           )
         ],
-        signer: shUser
+        signer: shUser,
+        finaliseBlock: true
       });
 
       assertEventPresent(
@@ -397,6 +406,13 @@ describeMspNet(
         "MoveBucketRequested",
         requestMoveBucketResult.events
       );
+
+      // Finalising the block in the BSP node as well, to trigger the reorg in the BSP node too.
+      const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
+
+      // Wait for BSP node to have imported the finalised block built by the user node.
+      await msp2Api.wait.blockImported(finalisedBlockHash.toString());
+      await msp2Api.block.finaliseBlock(finalisedBlockHash.toString());
 
       // Wait for the rejection response from MSP2
       await userApi.wait.waitForTxInPool({
