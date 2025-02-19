@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
@@ -567,7 +567,7 @@ where
         // Construct file key proofs for the challenges.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let file_key_proof = read_file_storage
-            .generate_proof(&file_key, &chunks_to_prove)
+            .generate_proof(&file_key, &HashSet::from_iter(chunks_to_prove))
             .map_err(|e| anyhow!("File is not in storage, or proof does not exist: {:?}", e))?;
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);

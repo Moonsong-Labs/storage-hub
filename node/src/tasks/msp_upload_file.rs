@@ -1,7 +1,11 @@
-use std::{cmp::max, collections::HashMap, str::FromStr, time::Duration};
-
 use anyhow::anyhow;
-use pallet_file_system::types::RejectedStorageRequest;
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    time::Duration,
+};
+
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{
@@ -10,6 +14,7 @@ use shc_blockchain_service::types::{
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
+use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
@@ -23,11 +28,11 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shp_constants::FILE_CHUNK_SIZE;
 use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::types::ShNodeType;
 use crate::services::{handler::StorageHubHandler, types::MspForestStorageHandlerT};
-use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -250,7 +255,7 @@ where
                     };
 
                     let proof = match read_file_storage
-                        .generate_proof(&respond.file_key, &chunks_to_prove)
+                        .generate_proof(&respond.file_key, &HashSet::from_iter(chunks_to_prove))
                     {
                         Ok(p) => p,
                         Err(e) => {
