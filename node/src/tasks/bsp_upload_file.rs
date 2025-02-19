@@ -958,13 +958,15 @@ where
                     FileStorageWriteError::FailedToGetFileChunk
                     | FileStorageWriteError::FailedToInsertFileChunk
                     | FileStorageWriteError::FailedToDeleteChunk
+                    | FileStorageWriteError::FailedToDeleteRoot
                     | FileStorageWriteError::FailedToPersistChanges
                     | FileStorageWriteError::FailedToParseFileMetadata
                     | FileStorageWriteError::FailedToParseFingerprint
                     | FileStorageWriteError::FailedToReadStorage
                     | FileStorageWriteError::FailedToUpdatePartialRoot
                     | FileStorageWriteError::FailedToParsePartialRoot
-                    | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                    | FileStorageWriteError::FailedToGetStoredChunksCount
+                    | FileStorageWriteError::ChunkCountOverflow => {
                         return Err(anyhow::anyhow!(format!(
                             "Internal trie read/write error {:?}:{:?}",
                             event.file_key, chunk.key
@@ -976,7 +978,8 @@ where
                             event.file_key
                         )));
                     }
-                    FileStorageWriteError::FailedToConstructTrieIter => {
+                    FileStorageWriteError::FailedToConstructTrieIter
+                    | FileStorageWriteError::FailedToContructFileTrie => {
                         return Err(anyhow::anyhow!(format!(
                             "This is a bug! Failed to construct trie iter for key {:?}.",
                             event.file_key

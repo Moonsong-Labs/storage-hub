@@ -13772,6 +13772,7 @@ dependencies = [
  "sp-runtime 39.0.5",
  "sp-state-machine 0.43.0",
  "sp-trie 29.0.0",
+ "strum 0.26.3",
  "thiserror 1.0.69",
  "trie-db 0.29.1",
 ]
