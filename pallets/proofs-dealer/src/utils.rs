@@ -1075,6 +1075,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
         root: &Self::MerkleHash,
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
+        event_info: Option<Vec<u8>>,
     ) -> Result<Self::MerkleHash, DispatchError> {
         let (_, new_root, _) =
             <T::ForestVerifier as TrieProofDeltaApplier<T::MerkleTrieHashing>>::apply_delta(
@@ -1087,6 +1088,7 @@ impl<T: pallet::Config> ProofsDealerInterface for Pallet<T> {
             mutations: mutations.to_vec(),
             old_root: *root,
             new_root,
+            event_info,
         });
 
         Ok(new_root)

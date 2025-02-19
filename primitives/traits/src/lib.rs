@@ -840,10 +840,14 @@ pub trait ProofsDealerInterface {
     /// it be used to verify proofs associated with a challengeable Provider. That is what `apply_delta` is for.
     ///
     /// The new root is returned.
+    ///
+    /// Additional information for context on where the mutations were applied can be provided
+    /// by using the `event_info` field.
     fn generic_apply_delta(
         root: &Self::MerkleHash,
         mutations: &[(Self::MerkleHash, TrieMutation)],
         proof: &Self::ForestProof,
+        event_info: Option<Vec<u8>>,
     ) -> Result<Self::MerkleHash, DispatchError>;
 
     /// Stop a Provider's challenge cycle.

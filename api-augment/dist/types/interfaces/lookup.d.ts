@@ -1702,6 +1702,7 @@ declare const _default: {
         mutations: string;
         oldRoot: string;
         newRoot: string;
+        eventInfo: string;
       };
       ChallengesTickerSet: {
         paused: string;

@@ -6,11 +6,12 @@ use sp_runtime::RuntimeDebug;
 
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance, BucketId, Multiaddresses, ValuePropositionWithId>
+    pub trait StorageProvidersApi<BlockNumber, BspId, BspInfo, MspId, AccountId, ProviderId, StorageProviderId, StorageDataUnit, Balance, BucketId, Multiaddresses, ValuePropositionWithId>
     where
         BlockNumber: Codec,
         BspId: Codec,
         BspInfo: Codec,
+        MspId: Codec,
         AccountId: Codec,
         ProviderId: Codec,
         StorageProviderId: Codec,
@@ -29,9 +30,10 @@ sp_api::decl_runtime_apis! {
         fn query_earliest_change_capacity_block(bsp_id: &BspId) -> Result<BlockNumber, QueryEarliestChangeCapacityBlockError>;
         fn get_worst_case_scenario_slashable_amount(provider_id: ProviderId) -> Option<Balance>;
         fn get_slash_amount_per_max_file_size() -> Balance;
-        fn query_value_propositions_for_msp(who: &ProviderId) -> sp_runtime::Vec<ValuePropositionWithId>;
+        fn query_value_propositions_for_msp(msp_id: &MspId) -> sp_runtime::Vec<ValuePropositionWithId>;
         fn get_bsp_stake(bsp_id: &BspId) -> Result<Balance, GetStakeError>;
         fn can_delete_provider(provider_id: &ProviderId) -> bool;
+        fn query_buckets_for_msp(msp_id: &MspId) -> Result<sp_runtime::Vec<BucketId>, QueryBucketsForMspError>;
     }
 }
 
@@ -80,6 +82,13 @@ pub enum QueryProviderMultiaddressesError {
 /// Error type for the `get_stake` runtime API call.
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum GetStakeError {
+    ProviderNotRegistered,
+    InternalError,
+}
+
+/// Error type for the `query_buckets_for_msp` runtime API call.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum QueryBucketsForMspError {
     ProviderNotRegistered,
     InternalError,
 }

@@ -1320,6 +1320,7 @@ import type { Error } from "@polkadot/types/interfaces/xcmRuntimeApi";
 import type {
   BackupStorageProvider,
   BackupStorageProviderId,
+  BucketId,
   CheckpointChallenge,
   ChunkId,
   FileMetadata,
@@ -1330,6 +1331,7 @@ import type {
   GetFileFromFileStorageResult,
   GetNextDeadlineTickError,
   GetProofSubmissionRecordError,
+  GetStakeError,
   GetUsersWithDebtOverThresholdError,
   IncompleteFileStatus,
   IsStorageRequestOpenToVolunteersError,
@@ -1340,6 +1342,7 @@ import type {
   ProviderId,
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
+  QueryBucketsForMspError,
   QueryConfirmChunksToProveForFileError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
@@ -1503,6 +1506,7 @@ declare module "@polkadot/types/types/registry" {
     BridgedBlockNumber: BridgedBlockNumber;
     BridgedHeader: BridgedHeader;
     BridgeMessageId: BridgeMessageId;
+    BucketId: BucketId;
     BufferedSessionChange: BufferedSessionChange;
     Bytes: Bytes;
     Call: Call;
@@ -1845,6 +1849,7 @@ declare module "@polkadot/types/types/registry" {
     GetFileFromFileStorageResult: GetFileFromFileStorageResult;
     GetNextDeadlineTickError: GetNextDeadlineTickError;
     GetProofSubmissionRecordError: GetProofSubmissionRecordError;
+    GetStakeError: GetStakeError;
     GetUsersWithDebtOverThresholdError: GetUsersWithDebtOverThresholdError;
     GiltBid: GiltBid;
     GlobalValidationData: GlobalValidationData;
@@ -2211,6 +2216,7 @@ declare module "@polkadot/types/types/registry" {
     PvfPrepTimeoutKind: PvfPrepTimeoutKind;
     QueryAvailableStorageCapacityError: QueryAvailableStorageCapacityError;
     QueryBspConfirmChunksToProveForFileError: QueryBspConfirmChunksToProveForFileError;
+    QueryBucketsForMspError: QueryBucketsForMspError;
     QueryConfirmChunksToProveForFileError: QueryConfirmChunksToProveForFileError;
     QueryEarliestChangeCapacityBlockError: QueryEarliestChangeCapacityBlockError;
     QueryFileEarliestVolunteerBlockError: QueryFileEarliestVolunteerBlockError;

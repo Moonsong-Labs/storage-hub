@@ -24,6 +24,8 @@ export interface BackupStorageProvider extends Struct {
 }
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {}
+/** @name BucketId */
+export interface BucketId extends H256 {}
 /** @name CheckpointChallenge */
 export interface CheckpointChallenge extends Struct {
   readonly file_key: H256;
@@ -98,6 +100,12 @@ export interface GetProofSubmissionRecordError extends Enum {
   readonly isInternalApiError: boolean;
   readonly type: "ProviderNotRegistered" | "ProviderNeverSubmittedProof" | "InternalApiError";
 }
+/** @name GetStakeError */
+export interface GetStakeError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isInternalError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalError";
+}
 /** @name GetUsersWithDebtOverThresholdError */
 export interface GetUsersWithDebtOverThresholdError extends Enum {
   readonly isProviderNotRegistered: boolean;
@@ -154,6 +162,12 @@ export interface QueryBspConfirmChunksToProveForFileError extends Enum {
   readonly asConfirmChunks: QueryConfirmChunksToProveForFileError;
   readonly isInternalError: boolean;
   readonly type: "StorageRequestNotFound" | "ConfirmChunks" | "InternalError";
+}
+/** @name QueryBucketsForMspError */
+export interface QueryBucketsForMspError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isInternalError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalError";
 }
 /** @name QueryConfirmChunksToProveForFileError */
 export interface QueryConfirmChunksToProveForFileError extends Enum {

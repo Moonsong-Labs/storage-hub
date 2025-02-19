@@ -43,6 +43,7 @@ export const ALL_TYPES: RegistryTypes = {
   ShouldRemoveFile: "bool",
   BackupStorageProviderId: "H256",
   MainStorageProviderId: "H256",
+  BucketId: "H256",
   StorageData: "u64",
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",
@@ -149,6 +150,18 @@ export const ALL_TYPES: RegistryTypes = {
     _enum: {
       ProviderNotRegistered: null,
       InternalApiError: null
+    }
+  },
+  GetStakeError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalError: null
+    }
+  },
+  QueryBucketsForMspError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalError: null
     }
   },
   QueryConfirmChunksToProveForFileError: {

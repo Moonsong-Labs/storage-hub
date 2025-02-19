@@ -2954,7 +2954,7 @@ declare module "@polkadot/api-base/types/submittable" {
        * Notes:
        * - This extrinsic could be called by the user itself or by a third party
        * - The deposit that the user has to pay to register as a SP is held when the user requests to register as a SP
-       * - If this extrinsic is successful, it will be free for the caller, to incentive state debloating
+       * - If this extrinsic is successful, it will be free for the caller, to incentive state de-bloating
        **/
       confirmSignUp: AugmentedSubmittable<
         (
