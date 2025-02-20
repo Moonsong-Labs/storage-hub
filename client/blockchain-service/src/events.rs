@@ -140,12 +140,22 @@ impl From<ProcessFileDeletionRequestData> for ForestWriteLockTaskData {
     }
 }
 
+/// Data required to build a proof to submit to the runtime.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessSubmitProofRequestData {
+    /// The Provider ID of the BSP that is submitting the proof.
     pub provider_id: ProofsDealerProviderId,
+    /// The tick for which the proof is being built.
+    ///
+    /// This tick should be the tick where [`Self::seed`] was generated.
     pub tick: BlockNumber,
+    /// The seed that was used to generate the challenges for this proof.
     pub seed: RandomnessOutput,
+    /// All the Forest challenges that the proof to generate has to respond to.
+    ///
+    /// This includes the [`Self::checkpoint_challenges`].
     pub forest_challenges: Vec<H256>,
+    /// The checkpoint challenges that the proof to generate has to respond to.
     pub checkpoint_challenges: Vec<CustomChallenge>,
 }
 
