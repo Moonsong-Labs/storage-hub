@@ -39,7 +39,6 @@ use crate::services::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
-use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -912,28 +911,19 @@ where
             // TODO: Add a batched write chunk method to the file storage.
 
             // Validate chunk size
-            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
-            // one which can be smaller
-            let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
-                // Last chunk
-                (file_metadata.file_size % FILE_CHUNK_SIZE) as usize
-            } else {
-                // All other chunks
-                FILE_CHUNK_SIZE as usize
-            };
-
-            if chunk.data.len() != expected_chunk_size {
+            let chunk_idx = chunk.key.as_u64();
+            if !file_metadata.is_valid_chunk_size(chunk_idx, chunk.data.len()) {
                 error!(
                     target: LOG_TARGET,
                     "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
                     chunk.key,
                     file_key,
-                    expected_chunk_size,
+                    file_metadata.chunk_size_at(chunk_idx),
                     chunk.data.len()
                 );
                 return Err(anyhow!(
                     "Invalid chunk size. Expected {}, got {}",
-                    expected_chunk_size,
+                    file_metadata.chunk_size_at(chunk_idx),
                     chunk.data.len()
                 ));
             }
