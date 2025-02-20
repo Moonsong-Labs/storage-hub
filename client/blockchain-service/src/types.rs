@@ -320,26 +320,46 @@ impl RetryStrategy {
         }
     }
 
+    /// Set the maximum number of times to retry sending the extrinsic.
     pub fn with_max_retries(mut self, max_retries: u32) -> Self {
         self.max_retries = max_retries;
         self
     }
 
+    /// Set the timeout for the extrinsic.
+    ///
+    /// After this timeout, the extrinsic will be retried (if applicable) or fail.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
+    /// Set the maximum tip for the extrinsic.
+    ///
+    /// As the number of times the extrinsic is retried increases, the tip will increase
+    /// exponentially, up to this maximum tip.
     pub fn with_max_tip(mut self, max_tip: f64) -> Self {
         self.max_tip = max_tip;
         self
     }
 
+    /// The base multiplier for the exponential backoff.
+    ///
+    /// A higher value will make the exponential backoff more aggressive, making the tip
+    /// increase quicker.
     pub fn with_base_multiplier(mut self, base_multiplier: f64) -> Self {
         self.base_multiplier = base_multiplier;
         self
     }
 
+    /// Set a function to determine if the extrinsic should be retried.
+    ///
+    /// If this function is provided, it will be called before each retry to determine if the
+    /// extrinsic should be retried or the submission should be considered failed. If this function
+    /// is not provided, the extrinsic will be retried until [`Self::max_retries`] is reached.
+    ///
+    /// Additionally, the function will receive the [`WatchTransactionError`] as an argument, to
+    /// help determine if the extrinsic should be retried or not.
     pub fn with_should_retry(
         mut self,
         should_retry: Option<
@@ -350,7 +370,26 @@ impl RetryStrategy {
         self
     }
 
+    /// Sets [`Self::should_retry`] to retry only if the extrinsic times out.
+    ///
+    /// This means that the extrinsic will not be sent again if, for example, it
+    /// is included in a block but it fails.
+    ///
+    /// See [`WatchTransactionError`] for other possible errors.
+    pub fn retry_only_if_timeout(mut self) -> Self {
+        self.should_retry = Some(Box::new(|error| {
+            Box::pin(async move {
+                match error {
+                    WatchTransactionError::Timeout => true,
+                    _ => false,
+                }
+            })
+        }));
+        self
+    }
+
     /// Computes the tip for the given retry count.
+    ///
     /// The formula for the tip is:
     /// [`Self::max_tip`] * (([`Self::base_multiplier`] ^ (retry_count / [`Self::max_retries`]) - 1) /
     /// ([`Self::base_multiplier`] - 1)).
