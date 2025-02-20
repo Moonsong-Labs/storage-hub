@@ -228,6 +228,50 @@ pub type ExtrinsicHash = H256;
 /// Type alias for the tip.
 pub type Tip = pallet_transaction_payment::ChargeTransactionPayment<storage_hub_runtime::Runtime>;
 
+/// Options for [`send_extrinsic`](crate::BlockchainService::send_extrinsic).
+///
+/// You can safely use [`SendExtrinsicOptions::default`] to create a new instance of `SendExtrinsicOptions`.
+#[derive(Debug)]
+pub struct SendExtrinsicOptions {
+    /// Tip to add to the transaction to incentivize the collator to include the transaction in a block.
+    tip: Tip,
+    /// Optionally override the nonce to use when sending the transaction.
+    nonce: Option<u32>,
+}
+
+impl SendExtrinsicOptions {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_tip(mut self, tip: u128) -> Self {
+        self.tip = Tip::from(tip);
+        self
+    }
+
+    pub fn with_nonce(mut self, nonce: Option<u32>) -> Self {
+        self.nonce = nonce;
+        self
+    }
+
+    pub fn tip(&self) -> Tip {
+        self.tip.clone()
+    }
+
+    pub fn nonce(&self) -> Option<u32> {
+        self.nonce
+    }
+}
+
+impl Default for SendExtrinsicOptions {
+    fn default() -> Self {
+        Self {
+            tip: Tip::from(0),
+            nonce: None,
+        }
+    }
+}
+
 /// A struct which defines a submit extrinsic retry strategy. This defines a simple strategy when
 /// sending and extrinsic. It will retry a maximum number of times ([Self::max_retries]).
 /// If the extrinsic is not included in a block within a certain time frame [`Self::timeout`] it is
@@ -252,10 +296,16 @@ pub struct RetryStrategy {
     /// A higher value will make tips grow faster.
     pub base_multiplier: f64,
     /// An optional check function to determine if the extrinsic should be retried.
+    ///
     /// If this is provided, the function will be called before each retry to determine if the
     /// extrinsic should be retried or the submission should be considered failed. If this is not
     /// provided, the extrinsic will be retried until [`Self::max_retries`] is reached.
-    pub should_retry: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>>,
+    ///
+    /// Additionally, the function will receive the [`WatchTransactionError`] as an argument, to
+    /// help determine if the extrinsic should be retried or not.
+    pub should_retry: Option<
+        Box<dyn Fn(WatchTransactionError) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>,
+    >,
 }
 
 impl RetryStrategy {
@@ -292,7 +342,9 @@ impl RetryStrategy {
 
     pub fn with_should_retry(
         mut self,
-        should_retry: Option<Box<dyn Fn() -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>>,
+        should_retry: Option<
+            Box<dyn Fn(WatchTransactionError) -> Pin<Box<dyn Future<Output = bool> + Send>> + Send>,
+        >,
     ) -> Self {
         self.should_retry = should_retry;
         self
@@ -328,6 +380,21 @@ impl Default for RetryStrategy {
             should_retry: None,
         }
     }
+}
+
+#[derive(thiserror::Error, Debug, Clone)]
+pub enum WatchTransactionError {
+    #[error("Timeout waiting for transaction to be included in a block")]
+    Timeout,
+    #[error("Transaction watcher channel closed")]
+    WatcherChannelClosed,
+    #[error("Transaction failed. DispatchError: {dispatch_error}, DispatchInfo: {dispatch_info}")]
+    TransactionFailed {
+        dispatch_error: String,
+        dispatch_info: String,
+    },
+    #[error("Unexpected error: {0}")]
+    Internal(String),
 }
 
 /// Minimum block information needed to register what is the current best block
@@ -477,50 +544,6 @@ impl Ord for ForestStorageSnapshotInfo {
                     }
                 }
             }
-        }
-    }
-}
-
-/// Options for [`send_extrinsic`](crate::BlockchainService::send_extrinsic).
-///
-/// You can safely use [`SendExtrinsicOptions::default`] to create a new instance of `SendExtrinsicOptions`.
-#[derive(Debug)]
-pub struct SendExtrinsicOptions {
-    /// Tip to add to the transaction to incentivize the collator to include the transaction in a block.
-    tip: Tip,
-    /// Optionally override the nonce to use when sending the transaction.
-    nonce: Option<u32>,
-}
-
-impl SendExtrinsicOptions {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn with_tip(mut self, tip: u128) -> Self {
-        self.tip = Tip::from(tip);
-        self
-    }
-
-    pub fn with_nonce(mut self, nonce: Option<u32>) -> Self {
-        self.nonce = nonce;
-        self
-    }
-
-    pub fn tip(&self) -> Tip {
-        self.tip.clone()
-    }
-
-    pub fn nonce(&self) -> Option<u32> {
-        self.nonce
-    }
-}
-
-impl Default for SendExtrinsicOptions {
-    fn default() -> Self {
-        Self {
-            tip: Tip::from(0),
-            nonce: None,
         }
     }
 }
