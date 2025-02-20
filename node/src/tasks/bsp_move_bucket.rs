@@ -113,9 +113,10 @@ where
     async fn handle_event(&mut self, event: MoveBucketAccepted) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "MoveBucketAccepted: New MSP {:?} accepted move bucket request for bucket {:?}. Will keep accepting download requests for a window of time.",
-            event.msp_id,
-            event.bucket_id
+            "MoveBucketAccepted: New MSP {:?} accepted move bucket request for bucket {:?} from old MSP {:?}. Will keep accepting download requests for a window of time.",
+            event.new_msp_id,
+            event.bucket_id,
+            event.old_msp_id
         );
 
         self.storage_hub_handler
@@ -145,7 +146,7 @@ where
             target: LOG_TARGET,
             "MoveBucketRejected: BSP will no longer accept download requests for files in bucket {:?} from MSP {:?}",
             event.bucket_id,
-            event.msp_id
+            event.new_msp_id
         );
 
         self.storage_hub_handler

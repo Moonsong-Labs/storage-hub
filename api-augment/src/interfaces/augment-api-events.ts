@@ -551,16 +551,16 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MoveBucketAccepted: AugmentedEvent<
         ApiType,
-        [bucketId: H256, mspId: H256, valuePropId: H256],
-        { bucketId: H256; mspId: H256; valuePropId: H256 }
+        [bucketId: H256, oldMspId: Option<H256>, newMspId: H256, valuePropId: H256],
+        { bucketId: H256; oldMspId: Option<H256>; newMspId: H256; valuePropId: H256 }
       >;
       /**
        * Notifies that a bucket move request has been rejected by the MSP.
        **/
       MoveBucketRejected: AugmentedEvent<
         ApiType,
-        [bucketId: H256, mspId: H256],
-        { bucketId: H256; mspId: H256 }
+        [bucketId: H256, oldMspId: Option<H256>, newMspId: H256],
+        { bucketId: H256; oldMspId: Option<H256>; newMspId: H256 }
       >;
       /**
        * Notifies that a bucket is being moved to a new MSP.
