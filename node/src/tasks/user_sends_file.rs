@@ -14,7 +14,6 @@ use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
 use sp_runtime::AccountId32;
-use tokio::time::Timeout;
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
@@ -380,7 +379,7 @@ where
                         .upload_request(peer_id, file_key.as_ref().into(), proof.clone(), None)
                         .await;
 
-                    match upload_response {
+                    match upload_response.as_ref() {
                         Ok(r) => {
                             debug!(
                                 target: LOG_TARGET,
@@ -403,6 +402,7 @@ where
                         | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
                             if retry_attempts < 10 =>
                         {
+                            dbg!(upload_response.as_ref());
                             warn!(
                                 target: LOG_TARGET,
                                 "Final batch upload rejected by peer {:?}, retrying... (attempt {})",
