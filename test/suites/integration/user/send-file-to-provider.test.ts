@@ -36,7 +36,7 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
       newBucketEventDataBlob.bucketId
     );
 
-    await userApi.docker.pauseBspContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
+    await userApi.docker.pauseContainer(userApi.shConsts.NODE_INFOS.msp1.containerName);
 
     await userApi.block.seal({
       calls: [
