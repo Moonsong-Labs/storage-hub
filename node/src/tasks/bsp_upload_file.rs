@@ -440,7 +440,8 @@ where
                         self.storage_hub_handler
                             .provider_config
                             .extrinsic_retry_timeout,
-                    )),
+                    ))
+                    .retry_only_if_timeout(),
                 true,
             )
             .await
