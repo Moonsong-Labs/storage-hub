@@ -775,13 +775,15 @@ where
                     FileStorageWriteError::FailedToGetFileChunk
                     | FileStorageWriteError::FailedToInsertFileChunk
                     | FileStorageWriteError::FailedToDeleteChunk
+                    | FileStorageWriteError::FailedToDeleteRoot
                     | FileStorageWriteError::FailedToPersistChanges
                     | FileStorageWriteError::FailedToParseFileMetadata
                     | FileStorageWriteError::FailedToParseFingerprint
                     | FileStorageWriteError::FailedToReadStorage
                     | FileStorageWriteError::FailedToUpdatePartialRoot
                     | FileStorageWriteError::FailedToParsePartialRoot
-                    | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                    | FileStorageWriteError::FailedToGetStoredChunksCount
+                    | FileStorageWriteError::ChunkCountOverflow => {
                         self.handle_rejected_storage_request(
                             &file_key,
                             bucket_id,
@@ -805,7 +807,8 @@ where
                             file_key
                         )));
                     }
-                    FileStorageWriteError::FailedToConstructTrieIter => {
+                    FileStorageWriteError::FailedToConstructTrieIter
+                    | FileStorageWriteError::FailedToContructFileTrie => {
                         self.handle_rejected_storage_request(
                             &file_key,
                             bucket_id,

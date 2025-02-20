@@ -155,8 +155,8 @@ where
             // - The size of the route is equal to `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES`, or
             // - The parent block is not found, or
             // - We reach the last best block processed.
-            let mut route = vec![new_block_info.clone().into()];
-            let mut last_block_added = new_block_info.clone();
+            let mut route = vec![new_block_info.into()];
+            let mut last_block_added = new_block_info;
             loop {
                 // Check if we are at the genesis block.
                 if last_block_added.number == BlockNumber::zero() {
@@ -213,7 +213,7 @@ where
 
             // The first element in the route is the last best block processed, which will also be the
             // `pivot`, so it will be ignored when processing the `tree_route`.
-            route.push(last_best_block.clone().into());
+            route.push(last_best_block.into());
 
             // Revert the route so that it is in ascending order of blocks, from the last best block processed up to the new imported best block.
             route.reverse();
@@ -245,7 +245,7 @@ where
             .into_iter()
             .chain(std::iter::once(&common_block))
             .chain(enacted)
-            .chain(std::iter::once(&new_block_info.clone().into()))
+            .chain(std::iter::once(&new_block_info.into()))
             .cloned()
             .collect();
 

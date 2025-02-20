@@ -15,10 +15,14 @@ pub enum FileStorageWriteError {
     FailedToGetFileChunk,
     /// File metadata fingerprint does not match the stored file fingerprint.
     FingerprintAndStoredFileMismatch,
+    /// Failed to construct file trie.
+    FailedToContructFileTrie,
     /// Failed to construct iterator for trie.
     FailedToConstructTrieIter,
     /// Failed to commit changes in overlay to disk.
     FailedToPersistChanges,
+    /// Failed to delete root.
+    FailedToDeleteRoot,
     /// Failed to delete chunk.
     FailedToDeleteChunk,
     /// Failed to convert raw bytes into [`FileMetadata`].
@@ -33,6 +37,8 @@ pub enum FileStorageWriteError {
     FailedToParsePartialRoot,
     /// Failed to get chunks count in storage.
     FailedToGetStoredChunksCount,
+    /// Reached chunk count limit (overflow)
+    ChunkCountOverflow,
 }
 
 #[derive(Debug)]
@@ -119,9 +125,6 @@ impl FromStr for ExcludeType {
 pub trait FileDataTrie<T: TrieLayout> {
     /// Get the root of the trie.
     fn get_root(&self) -> &HasherOutT<T>;
-
-    /// Get the number of stored chunks in the trie.
-    fn stored_chunks_count(&self) -> Result<u64, FileStorageError>;
 
     /// Generate proof for a chunk of a file. Returns error if the chunk does not exist.
     fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError>;

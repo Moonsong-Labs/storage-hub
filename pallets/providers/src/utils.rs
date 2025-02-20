@@ -1009,7 +1009,7 @@ where
 
             // Remove provider top up expiration item from the queue
             if let Some(top_up_metadata) = top_up_metadata {
-                ProviderTopUpExpirations::<T>::remove(top_up_metadata.end_block_grace_period);
+                ProviderTopUpExpirations::<T>::remove(top_up_metadata.end_tick_grace_period);
             }
 
             Self::deposit_event(Event::TopUpFulfilled {
@@ -1017,28 +1017,31 @@ where
                 amount: held_deposit_difference,
             });
         } else {
-            // Cannot hold enough balance, start tracking grace period and awaited top up
+            // Cannot hold enough balance, start tracking grace period and awaited top up if the provider wasn't already awaiting a top up
+            // This is to prevent the provider being able to avoid being deleted by not having enough balance to top up and
+            // constantly being slashed.
+            if !AwaitingTopUpFromProviders::<T>::contains_key(&typed_provider_id) {
+                // Queue provider top up expiration
+                let enqueued_at_tick = Self::enqueue_expiration_item(
+                    ExpirationItem::ProviderTopUp(typed_provider_id.clone()),
+                )?;
 
-            // Enqueue the ProviderTopUp expiration item to be processed when the grace period ends
-            let enqueued_at_tick = Self::enqueue_expiration_item(ExpirationItem::ProviderTopUp(
-                typed_provider_id.clone(),
-            ))?;
+                let top_up_metadata = TopUpMetadata {
+                    started_at: ShTickGetter::<T>::get_current_tick(),
+                    end_tick_grace_period: enqueued_at_tick,
+                };
 
-            let top_up_metadata = TopUpMetadata {
-                started_at: ShTickGetter::<T>::get_current_tick(),
-                end_block_grace_period: enqueued_at_tick,
-            };
+                AwaitingTopUpFromProviders::<T>::insert(
+                    typed_provider_id.clone(),
+                    top_up_metadata.clone(),
+                );
 
-            AwaitingTopUpFromProviders::<T>::insert(
-                typed_provider_id.clone(),
-                top_up_metadata.clone(),
-            );
-
-            // Signal to the provider that they need to top up their held deposit to match the current used capacity
-            Self::deposit_event(Event::AwaitingTopUp {
-                provider_id: *provider_id,
-                top_up_metadata,
-            });
+                // Signal to the provider that they need to top up their held deposit to match the current used capacity
+                Self::deposit_event(Event::AwaitingTopUp {
+                    provider_id: *provider_id,
+                    top_up_metadata,
+                });
+            }
         }
 
         // Update the provider's capacity
@@ -1142,7 +1145,7 @@ where
 
         // Remove provider top up expiration item from the queue
         if let Some(top_up_metadata) = top_up_metadata {
-            ProviderTopUpExpirations::<T>::remove(top_up_metadata.end_block_grace_period);
+            ProviderTopUpExpirations::<T>::remove(top_up_metadata.end_tick_grace_period);
         } else {
             log::warn!(
                 "AwaitingTopUpFromProviders storage does not contain a top up metadata for provider {:?} while their held deposit does not cover the needed capacity",
@@ -1652,18 +1655,18 @@ where
         }
     }
 
-    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
+    /// Compute the next tick number to insert an expiring item, and insert it in the corresponding expiration queue.
     ///
-    /// This function attempts to insert a the expiration item at the next available block starting from
-    /// the current next available block.
+    /// This function attempts to insert a the expiration item at the next available tick starting from
+    /// the current next available tick.
     pub(crate) fn enqueue_expiration_item(
         expiration_item: ExpirationItem<T>,
     ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let expiration_block = expiration_item.get_next_expiration_block()?;
-        let new_expiration_block = expiration_item.try_append(expiration_block)?;
-        expiration_item.set_next_expiration_block(new_expiration_block)?;
+        let expiration_tick = expiration_item.get_next_expiration_tick()?;
+        let new_expiration_tick = expiration_item.try_append(expiration_tick)?;
+        expiration_item.set_next_expiration_tick(new_expiration_tick)?;
 
-        Ok(new_expiration_block)
+        Ok(new_expiration_tick)
     }
 }
 
@@ -2800,9 +2803,13 @@ where
 /// Hooks implementations for the Storage Providers pallet.
 mod hooks {
     use crate::{
-        pallet, types::StorageHubTickNumber, utils::StorageProviderId, weights::WeightInfo,
+        pallet,
+        types::{ExpirationItem, StorageHubTickNumber},
+        utils::StorageProviderId,
+        weights::WeightInfo,
         AwaitingTopUpFromProviders, Event, HoldReason, InsolventProviders,
-        NextStartingShTickToCleanUp, Pallet, ProviderTopUpExpirations,
+        NextAvailableProviderTopUpExpirationShTick, NextStartingShTickToCleanUp, Pallet,
+        ProviderTopUpExpirations,
     };
 
     use frame_support::{
@@ -2882,7 +2889,11 @@ mod hooks {
                             .saturating_add(db_weight.writes(1)),
                     ) {
                         // Process a expired provider top up request. This internally consumes the used weight from the meter.
-                        Self::process_expired_provider_top_up(typed_provider_id, meter);
+                        Self::process_expired_provider_top_up(
+                            typed_provider_id,
+                            &tick_to_process,
+                            meter,
+                        );
                     } else {
                         // Push back the expired provider top up into the provider top ups queue to be able to re-insert it.
                         // This should never fail since this element was just taken from the bounded vector, so there must be space for it.
@@ -2900,6 +2911,8 @@ mod hooks {
                     );
                     meter.consume(db_weight.writes(1));
                 }
+            } else {
+                ran_out_of_weight = true;
             }
 
             ran_out_of_weight
@@ -2907,96 +2920,142 @@ mod hooks {
 
         pub(crate) fn process_expired_provider_top_up(
             typed_provider_id: StorageProviderId<T>,
+            current_tick_being_processed: &StorageHubTickNumber<T>,
             meter: &mut WeightMeter,
         ) {
-            // Clear the storage that marks the provider as awaiting a top up.
-            let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::take(&typed_provider_id);
+            // Get the top up metadata of the provider that was awaiting a top up.
+            let maybe_awaiting_top_up = AwaitingTopUpFromProviders::<T>::get(&typed_provider_id);
 
             // Mark the provider as insolvent if it was awaiting a top up
             // If the provider was not awaiting a top up, it means they already topped up either via an
             // automatic top up or a manual top up, and it shouldn't be marked as insolvent.
-            if maybe_awaiting_top_up.is_some() {
-                // Add the provider to the InsolventProviders storage, to mark it as insolvent.
-                InsolventProviders::<T>::insert(typed_provider_id.clone(), ());
+            if let Some(top_up_metadata) = maybe_awaiting_top_up {
+                // Check if the end tick of the grace period for this provider is previous or equal to the current tick being processed.
+                // If it is, process it. If it's not, insert it in ProviderTopUpExpirations in the corresponding tick and return.
+                if top_up_metadata.end_tick_grace_period <= *current_tick_being_processed {
+                    // Add the provider to the InsolventProviders storage, to mark it as insolvent.
+                    InsolventProviders::<T>::insert(typed_provider_id.clone(), ());
 
-                // Deposit the event of the provider being marked as insolvent.
-                Self::deposit_event(Event::ProviderInsolvent {
-                    provider_id: *typed_provider_id.inner(),
-                });
+                    // Clear the storage that marks the provider as awaiting a top up.
+                    AwaitingTopUpFromProviders::<T>::remove(&typed_provider_id);
 
-                // Get the account ID owner of the provider. If the account ID is not found log an error, emit the error event and return early.
-                let provider_account_id =
-                    match <Self as shp_traits::ReadProvidersInterface>::get_owner_account(
-                        *typed_provider_id.inner(),
-                    ) {
-                        Some(account_id) => account_id,
-                        None => {
-                            log::error!(
-                                target: "runtime::storage_providers::process_expired_provider_top_up",
-                                "Could not get owner account of provider {:?} to slash it.",
-                                typed_provider_id
-                            );
+                    // Deposit the event of the provider being marked as insolvent.
+                    Self::deposit_event(Event::ProviderInsolvent {
+                        provider_id: *typed_provider_id.inner(),
+                    });
 
-                            Self::deposit_event(
-                                Event::FailedToGetOwnerAccountOfInsolventProvider {
-                                    provider_id: *typed_provider_id.inner(),
-                                },
-                            );
+                    // Get the account ID owner of the provider. If the account ID is not found log an error, emit the error event and return early.
+                    let provider_account_id =
+                        match <Self as shp_traits::ReadProvidersInterface>::get_owner_account(
+                            *typed_provider_id.inner(),
+                        ) {
+                            Some(account_id) => account_id,
+                            None => {
+                                log::error!(
+                                    target: "runtime::storage_providers::process_expired_provider_top_up",
+                                    "Could not get owner account of provider {:?} to slash it.",
+                                    typed_provider_id
+                                );
 
-                            return;
-                        }
-                    };
+                                Self::deposit_event(
+                                    Event::FailedToGetOwnerAccountOfInsolventProvider {
+                                        provider_id: *typed_provider_id.inner(),
+                                    },
+                                );
 
-                // Get the deposit that the provider has on hold.
-                let held_deposit = T::NativeBalance::balance_on_hold(
-                    &HoldReason::StorageProviderDeposit.into(),
-                    &provider_account_id,
-                );
+                                return;
+                            }
+                        };
 
-                // If the provider has a deposit on hold, slash it, transfering it to the treasury.
-                if !held_deposit.is_zero() {
-                    if let Err(e) = T::NativeBalance::transfer_on_hold(
+                    // Get the deposit that the provider has on hold.
+                    let held_deposit = T::NativeBalance::balance_on_hold(
                         &HoldReason::StorageProviderDeposit.into(),
                         &provider_account_id,
-                        &T::Treasury::get(),
-                        held_deposit,
-                        Precision::BestEffort,
-                        Restriction::Free,
-                        Fortitude::Force,
-                    ) {
-                        // If there's an error slashing the provider, log the error and emit the error event.
-                        log::error!(
-                            target: "runtime::storage_providers::process_expired_provider_top_up",
-                            "Could not slash remaining deposit for provider {:?} due to error: {:?}",
-                            typed_provider_id,
-                            e
-                        );
+                    );
 
-                        Self::deposit_event(Event::FailedToSlashInsolventProvider {
-                            provider_id: *typed_provider_id.inner(),
-                            amount_to_slash: held_deposit,
-                            error: e,
-                        });
+                    // If the provider has a deposit on hold, slash it, transfering it to the treasury.
+                    if !held_deposit.is_zero() {
+                        if let Err(e) = T::NativeBalance::transfer_on_hold(
+                            &HoldReason::StorageProviderDeposit.into(),
+                            &provider_account_id,
+                            &T::Treasury::get(),
+                            held_deposit,
+                            Precision::BestEffort,
+                            Restriction::Free,
+                            Fortitude::Force,
+                        ) {
+                            // If there's an error slashing the provider, log the error and emit the error event.
+                            log::error!(
+                                target: "runtime::storage_providers::process_expired_provider_top_up",
+                                "Could not slash remaining deposit for provider {:?} due to error: {:?}",
+                                typed_provider_id,
+                                e
+                            );
+
+                            Self::deposit_event(Event::FailedToSlashInsolventProvider {
+                                provider_id: *typed_provider_id.inner(),
+                                amount_to_slash: held_deposit,
+                                error: e,
+                            });
+                        }
+                    }
+
+                    // If the provider is a Backup Storage Provider, stop all its cycles.
+                    if let StorageProviderId::BackupStorageProvider(bsp_id) = typed_provider_id {
+                        if let Err(e) = Self::do_stop_all_cycles(&provider_account_id) {
+                            // If there's an error stopping all cycles for the provider, log the error and emit the error event.
+                            log::error!(
+                                target: "runtime::storage_providers::process_expired_provider_top_up",
+                                "Could not stop all cycles for provider {:?} due to error: {:?}",
+                                bsp_id,
+                                e
+                            );
+
+                            Self::deposit_event(Event::FailedToStopAllCyclesForInsolventBsp {
+                                provider_id: bsp_id,
+                                error: e,
+                            });
+                        }
+                    };
+                } else {
+                    let expiration_tick = sp_std::cmp::max(
+                        NextAvailableProviderTopUpExpirationShTick::<T>::get(),
+                        top_up_metadata.end_tick_grace_period,
+                    );
+
+                    let expiration_item = ExpirationItem::ProviderTopUp(typed_provider_id.clone());
+
+                    // Inconsistency error. The provider was in the ProviderTopUpExpirations for this tick but the tick at which its
+                    // grace period ends is in the future. Fix this by re-inserting the provider in the ProviderTopUpExpirations for the
+                    // tick at which its grace period ends.
+                    match expiration_item.try_append(expiration_tick) {
+                        Ok(new_expiration_tick) => {
+                            if let Err(_) =
+                                expiration_item.set_next_expiration_tick(new_expiration_tick)
+                            {
+                                log::error!(
+                                    target: "runtime::storage_providers::process_expired_provider_top_up",
+                                    "Could not update next expiration tick for ProviderTopUp expiration item",
+                                );
+                            }
+                        }
+                        Err(_) => {
+                            // Note: if this fails maybe we should just append the provider to the next expiration tick available
+                            // in ProviderTopUpExpirations and update the AwaitingTopUpFromProviders storage with this tick.
+                            log::error!(
+                                target: "runtime::storage_providers::process_expired_provider_top_up",
+                                "Could not re-insert provider {:?} in ProviderTopUpExpirations for tick {:?}",
+                                typed_provider_id,
+                                top_up_metadata.end_tick_grace_period
+                            );
+
+                            Self::deposit_event(Event::FailedToInsertProviderTopUpExpiration {
+                                provider_id: *typed_provider_id.inner(),
+                                expiration_tick: top_up_metadata.end_tick_grace_period,
+                            });
+                        }
                     }
                 }
-
-                // If the provider is a Backup Storage Provider, stop all its cycles.
-                if let StorageProviderId::BackupStorageProvider(bsp_id) = typed_provider_id {
-                    if let Err(e) = Self::do_stop_all_cycles(&provider_account_id) {
-                        // If there's an error stopping all cycles for the provider, log the error and emit the error event.
-                        log::error!(
-                            target: "runtime::storage_providers::process_expired_provider_top_up",
-                            "Could not stop all cycles for provider {:?} due to error: {:?}",
-                            bsp_id,
-                            e
-                        );
-
-                        Self::deposit_event(Event::FailedToStopAllCyclesForInsolventBsp {
-                            provider_id: bsp_id,
-                            error: e,
-                        });
-                    }
-                };
             }
 
             // Consume the corresponding weight used by this function.
