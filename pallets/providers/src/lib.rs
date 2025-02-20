@@ -991,7 +991,7 @@ pub mod pallet {
         /// Notes:
         /// - This extrinsic could be called by the user itself or by a third party
         /// - The deposit that the user has to pay to register as a SP is held when the user requests to register as a SP
-        /// - If this extrinsic is successful, it will be free for the caller, to incentive state debloating
+        /// - If this extrinsic is successful, it will be free for the caller, to incentive state de-bloating
         #[pallet::call_index(2)]
         #[pallet::weight({
 			T::WeightInfo::confirm_sign_up_bsp()

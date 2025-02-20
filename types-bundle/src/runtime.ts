@@ -52,6 +52,17 @@ const FILE_SYSTEM_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>"
+  },
+  decode_generic_apply_delta_event_info: {
+    description:
+      "Decodes the BucketId expected to be found in the event info of a generic apply delta.",
+    params: [
+      {
+        name: "encodedEventInfo",
+        type: "Vec<u8>"
+      }
+    ],
+    type: "Result<BucketId, GenericApplyDeltaEventInfoError>"
   }
 };
 
@@ -261,6 +272,16 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
     ],
     type: "Vec<ValuePropositionWithId>"
   },
+  get_bsp_stake: {
+    description: "Get the stake of a BSP.",
+    params: [
+      {
+        name: "bspId",
+        type: "BackupStorageProviderId"
+      }
+    ],
+    type: "Result<Balance, GetStakeError>"
+  },
   can_delete_provider: {
     description: "Check if a provider can be deleted.",
     params: [
@@ -270,6 +291,16 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "bool"
+  },
+  query_buckets_for_msp: {
+    description: "Get the Buckets that an MSP is storing.",
+    params: [
+      {
+        name: "mspId",
+        type: "MainStorageProviderId"
+      }
+    ],
+    type: "Result<Vec<BucketId>, QueryBucketsForMspError>"
   }
 };
 
