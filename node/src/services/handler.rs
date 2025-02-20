@@ -13,7 +13,8 @@ use shc_blockchain_service::{
         MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
         NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
-        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
+        StartMovedBucketDownload, UserWithoutFunds,
     },
     BlockchainService,
 };
@@ -266,6 +267,20 @@ where
             .clone()
             .subscribe_to(&self.task_spawner, &self.blockchain, true);
         move_bucket_requested_for_new_msp_event_bus_listener.start();
+
+        // MspDownloadMovedBucketTask handles downloading files after a bucket move is confirmed.
+        let msp_download_moved_bucket_task = MspMoveBucketTask::new(self.clone());
+        // Subscribing to StartMovedBucketDownload event from the BlockchainService.
+        let start_moved_bucket_download_event_bus_listener: EventBusListener<
+            StartMovedBucketDownload,
+            _,
+        > = msp_download_moved_bucket_task.clone().subscribe_to(
+            &self.task_spawner,
+            &self.blockchain,
+            true,
+        );
+        start_moved_bucket_download_event_bus_listener.start();
+
         let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
 
         // Subscribing to NotifyPeriod event from the BlockchainService.
