@@ -1,5 +1,5 @@
 use log::info;
-use std::{io, path::PathBuf, sync::Arc};
+use std::{collections::HashSet, io, path::PathBuf, sync::Arc};
 
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
@@ -268,9 +268,8 @@ where
         &self.root
     }
 
-    /// Generates a proof for the specified chunk IDs.
-    /// Returns a [`FileProof`] containing the merkle proof and fingerprint.
-    fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
+    // Generates a [`FileProof`] for requested chunks.
+    fn generate_proof(&self, chunk_ids: &HashSet<ChunkId>) -> Result<FileProof, FileStorageError> {
         let db = self.as_hash_db();
         let recorder: Recorder<T::Hash> = Recorder::default();
 
@@ -842,16 +841,16 @@ where
     /// Returns error if file is incomplete or proof generation fails.
     fn generate_proof(
         &self,
-        file_key: &HasherOutT<T>,
-        chunk_ids: &Vec<ChunkId>,
+        key: &HasherOutT<T>,
+        chunk_ids: &HashSet<ChunkId>,
     ) -> Result<FileKeyProof, FileStorageError> {
         let metadata = self
-            .get_metadata(file_key)?
+            .get_metadata(key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let file_trie = self.get_file_trie(&metadata)?;
 
-        let stored_chunks = self.stored_chunks_count(file_key)?;
+        let stored_chunks = self.stored_chunks_count(key)?;
         if metadata.chunks_count() != stored_chunks {
             return Err(FileStorageError::IncompleteFile);
         }
@@ -1129,7 +1128,7 @@ mod tests {
         };
 
         let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64), ChunkId::new(2u64)];
-
+        let chunk_ids_set: HashSet<ChunkId> = chunk_ids.iter().cloned().collect();
         let chunks = vec![
             Chunk::from([0u8; 1024]),
             Chunk::from([1u8; 1024]),
@@ -1150,7 +1149,7 @@ mod tests {
         assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        let file_proof = file_trie.generate_proof(&chunk_ids).unwrap();
+        let file_proof = file_trie.generate_proof(&chunk_ids_set).unwrap();
 
         assert_eq!(
             file_proof.fingerprint.as_ref(),
@@ -1398,6 +1397,8 @@ mod tests {
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
 
+        let chunk_ids_set: HashSet<ChunkId> = chunk_ids.iter().cloned().collect();
+
         let file_metadata = FileMetadata {
             file_size: 1024u64 * chunks.len() as u64,
             fingerprint,
@@ -1427,7 +1428,7 @@ mod tests {
             .unwrap();
         assert!(file_storage.get_chunk(&key, &chunk_ids[2]).is_ok());
 
-        let file_proof = file_storage.generate_proof(&key, &chunk_ids).unwrap();
+        let file_proof = file_storage.generate_proof(&key, &chunk_ids_set).unwrap();
         let proven_leaves = file_proof.proven::<LayoutV1<BlakeTwo256>>().unwrap();
         for (id, leaf) in proven_leaves.iter().enumerate() {
             assert_eq!(chunk_ids[id], leaf.key);

@@ -1,6 +1,7 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use prost::Message;
+use std::collections::HashSet;
 use thiserror::Error;
 
 use codec::Encode;
@@ -51,8 +52,8 @@ pub enum FileTransferServiceCommand {
         peer_id: PeerId,
         /// File key of the file to download.
         file_key: FileKey,
-        /// Chunk ID of the chunk to download.
-        chunk_id: ChunkId,
+        /// A set of chunk IDs for batched download requests.
+        chunk_ids: HashSet<ChunkId>,
         /// Bucket ID is only required for Bucket operations.
         /// Since the FileTransferService is not aware of which files are in which buckets,
         /// it needs to be provided by the caller to pass the allow list check.
@@ -153,7 +154,7 @@ pub trait FileTransferServiceInterface {
         &self,
         peer_id: PeerId,
         file_key: FileKey,
-        chunk_id: ChunkId,
+        chunk_ids: std::collections::HashSet<ChunkId>,
         bucket_id: Option<BucketId>,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError>;
 
@@ -265,20 +266,20 @@ impl FileTransferServiceInterface for ActorHandle<FileTransferService> {
             .expect("Failed to receive response from FileTransferService")
     }
 
-    /// Request a download of a file chunk to a peer.
-    /// This returns after receiving a response from the network.
+    /// Request to download a batch of file chunks from a peer.
+    /// This returns after receiving and processing the network response.
     async fn download_request(
         &self,
         peer_id: PeerId,
         file_key: FileKey,
-        chunk_id: ChunkId,
+        chunk_ids: std::collections::HashSet<ChunkId>,
         bucket_id: Option<BucketId>,
     ) -> Result<schema::v1::provider::RemoteDownloadDataResponse, RequestError> {
         let (callback, file_transfer_rx) = tokio::sync::oneshot::channel();
         let command = FileTransferServiceCommand::DownloadRequest {
             peer_id,
             file_key,
-            chunk_id,
+            chunk_ids,
             bucket_id,
             callback,
         };
