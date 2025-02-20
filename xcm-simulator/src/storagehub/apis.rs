@@ -452,5 +452,9 @@ impl_runtime_apis! {
         fn can_delete_provider(provider_id: &ProviderIdFor<Runtime>) -> bool {
             Providers::can_delete_provider(provider_id)
         }
+
+        fn query_buckets_for_insolvent_user(msp_id: &ProviderIdFor<Runtime>, user: &AccountId) -> Result<Vec<BucketId<Runtime>>, QueryBucketsForInsolventUserError> {
+            Providers::query_buckets_for_insolvent_user(msp_id, user)
+        }
     }
 }

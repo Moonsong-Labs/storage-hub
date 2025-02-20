@@ -270,6 +270,20 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "bool"
+  },
+  query_buckets_for_insolvent_user: {
+    description: "Query the buckets for an insolvent user.",
+    params: [
+      {
+        name: "mspId",
+        type: "ProviderId"
+      },
+      {
+        name: "user",
+        type: "AccountId"
+      }
+    ],
+    type: "Result<Vec<H256>, QueryBucketsForInsolventUserError>"
   }
 };
 
