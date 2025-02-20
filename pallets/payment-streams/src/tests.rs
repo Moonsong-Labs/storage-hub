@@ -1075,7 +1075,7 @@ mod fixed_rate_streams {
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
                     pallet_storage_providers::types::TopUpMetadata {
                         started_at: System::block_number(),
-                        end_block_grace_period: System::block_number() + 10,
+                        end_tick_grace_period: System::block_number() + 10,
                     },
                 );
 
@@ -1236,7 +1236,7 @@ mod fixed_rate_streams {
                     StorageProviderId::<Test>::MainStorageProvider(alice_msp_id),
                     pallet_storage_providers::types::TopUpMetadata {
                         started_at: System::block_number(),
-                        end_block_grace_period: System::block_number() + 10,
+                        end_tick_grace_period: System::block_number() + 10,
                     },
                 );
 
@@ -4178,7 +4178,7 @@ mod dynamic_rate_streams {
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     pallet_storage_providers::types::TopUpMetadata {
                         started_at: System::block_number(),
-                        end_block_grace_period: System::block_number() + 10,
+                        end_tick_grace_period: System::block_number() + 10,
                     },
                 );
                 let current_price_index = AccumulatedPriceIndex::<Test>::get();
@@ -4994,7 +4994,7 @@ mod dynamic_rate_streams {
                     StorageProviderId::<Test>::BackupStorageProvider(alice_bsp_id),
                     pallet_storage_providers::types::TopUpMetadata {
                         started_at: System::block_number(),
-                        end_block_grace_period: System::block_number() + 1,
+                        end_tick_grace_period: System::block_number() + 1,
                     },
                 );
 
