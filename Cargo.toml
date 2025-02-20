@@ -67,6 +67,7 @@ scale-info = { version = "2.11.0", default-features = false, features = [
 serde = { version = "1.0.210", default-features = false }
 serde_json = { version = "1.0.121", default-features = false }
 smallvec = "1.11.0"
+strum = { version = "0.26.3", features = ["derive"] }
 thiserror = "1.0.48"
 tokio = "1.36.0"
 toml = "0.8.19"
