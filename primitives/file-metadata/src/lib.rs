@@ -75,13 +75,18 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     /// Calculates the size of a chunk at a given index.
     ///
     /// # Arguments
-    /// * `chunk_idx` - The index of the chunk (0-based)
+    /// - `chunk_idx` - The index of the chunk (0-based)
     ///
     /// # Returns
     /// The size of the chunk in bytes
     ///
     /// This method handles the special case where the file size is an exact multiple
     /// of the chunk size, ensuring the last chunk is properly sized.
+    ///
+    /// In short:
+    /// - For all chunks except the last one, it returns [`CHUNK_SIZE`]
+    /// - For the last chunk, it returns the remainder of the file size modulo [`CHUNK_SIZE`],
+    ///   or [`CHUNK_SIZE`] if the file size is an exact multiple of [`CHUNK_SIZE`].
     pub fn chunk_size_at(&self, chunk_idx: u64) -> usize {
         let remaining_size = self.file_size % CHUNK_SIZE;
         if remaining_size == 0 || chunk_idx != self.chunks_count() - 1 {
@@ -94,8 +99,8 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     /// Validates if a chunk's size is correct for its position
     ///
     /// # Arguments
-    /// * `chunk_idx` - The index of the chunk (0-based)
-    /// * `chunk_size` - The actual size of the chunk to validate
+    /// - `chunk_idx` - The index of the chunk (0-based)
+    /// - `chunk_size` - The actual size of the chunk to validate
     ///
     /// # Returns
     /// true if the chunk size is valid, false otherwise

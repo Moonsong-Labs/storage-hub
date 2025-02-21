@@ -28,7 +28,6 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
-use shp_constants::FILE_CHUNK_SIZE;
 use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::types::ShNodeType;
