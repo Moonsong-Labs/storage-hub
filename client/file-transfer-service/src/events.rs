@@ -30,17 +30,15 @@ pub struct RemoteUploadRequest {
 impl EventBusMessage for RemoteUploadRequest {}
 
 /// A request to download chunks from a remote peer
-///
-/// # Fields
-/// * `file_key` - The key of the file to download chunks from
-/// * `chunk_ids` - Set of unique chunk IDs to download. Using HashSet to enforce uniqueness
-/// * `bucket_id` - Optional bucket ID for bucket operations
-/// * `request_id` - Unique identifier for this download request
 #[derive(Clone)]
 pub struct RemoteDownloadRequest {
+    /// The key of the file to download chunks from
     pub file_key: FileKey,
+    /// Set of unique chunk IDs to download. Using HashSet to enforce uniqueness
     pub chunk_ids: HashSet<ChunkId>,
+    /// Optional bucket ID for bucket operations
     pub bucket_id: Option<BucketId>,
+    /// Unique identifier for this download request
     pub request_id: DownloadRequestId,
 }
 
