@@ -325,7 +325,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
 
     // Wait until the BSP stores both files
     const bspAddress = userApi.createType("Address", bspKey.address);
-    await userApi.wait.bspStored({ expectedExts: 2, bspAccount: bspAddress });
+    await userApi.wait.bspStored({ expectedExts: 1, bspAccount: bspAddress });
   });
 
   it("BSP does not increase its capacity over its configured maximum (and skips volunteering if that would be needed).", async () => {

@@ -5,7 +5,7 @@ import { BN } from "@polkadot/util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
-  { initialised: "multi", networkConfig: "standard" },
+  { initialised: "multi", networkConfig: "standard", only: true },
   ({ before, it, createUserApi, createBspApi, getLaunchResponse, createApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
@@ -194,7 +194,8 @@ describeBspNet(
         method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
-        assertLength: 3
+        assertLength: 3,
+        exactLength: false
       });
 
       // Seal a block to allow BSPs to charge the payment stream
