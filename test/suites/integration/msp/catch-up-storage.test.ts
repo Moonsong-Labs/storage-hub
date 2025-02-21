@@ -101,7 +101,7 @@ describeMspNet(
       await userApi.docker.waitForLog({
         searchString:
           'File upload complete. Peer PeerId("12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV") has the entire file',
-        containerName: "docker-sh-user-1",
+        containerName: "docker-sh-user-1"
       });
 
       await waitFor({
