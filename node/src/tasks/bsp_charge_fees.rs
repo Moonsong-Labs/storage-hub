@@ -9,7 +9,7 @@ use shc_blockchain_service::{
         LastChargeableInfoUpdated, ProcessStopStoringForInsolventUserRequest,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
-    types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
+    types::StopStoringForInsolventUserRequest,
 };
 use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -109,7 +109,7 @@ where
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, SendExtrinsicOptions::default())
+                .send_extrinsic(call, Default::default())
                 .await;
 
             match charging_result {
@@ -302,10 +302,7 @@ where
             // continue only if it is successful.
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(
-                    stop_storing_for_insolvent_user_call,
-                    SendExtrinsicOptions::default(),
-                )
+                .send_extrinsic(stop_storing_for_insolvent_user_call, Default::default())
                 .await?
                 .with_timeout(Duration::from_secs(
                     self.storage_hub_handler
@@ -328,7 +325,7 @@ where
                 let charging_result = self
                     .storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, SendExtrinsicOptions::default())
+                    .send_extrinsic(call, Default::default())
                     .await;
 
                 match charging_result {

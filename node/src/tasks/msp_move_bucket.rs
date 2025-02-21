@@ -3,14 +3,13 @@ use codec::Decode;
 use rand::seq::SliceRandom;
 use sc_tracing::tracing::*;
 use sp_core::H256;
-use std::{cmp::max, time::Duration};
+use std::time::Duration;
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface,
-    events::MoveBucketRequestedForMsp,
-    types::{RetryStrategy, SendExtrinsicOptions},
+    capacity_manager::CapacityRequestData, commands::BlockchainServiceInterface,
+    events::MoveBucketRequestedForMsp, types::RetryStrategy,
 };
 use shc_common::types::{
     BucketId, FileKeyProof, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -20,7 +19,6 @@ use shc_file_transfer_service::commands::FileTransferServiceInterface;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
-use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -596,80 +594,53 @@ where
             .await
             .map_err(|e| {
                 let err_msg = format!("Failed to query available storage capacity: {:?}", e);
-                error!(target: LOG_TARGET, err_msg);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
                 anyhow::anyhow!(err_msg)
             })?;
 
-        // Increase storage capacity if the available capacity is less than the required size
+        // Increase storage capacity if the available capacity is less than the file size.
         if available_capacity < required_size {
             warn!(
                 target: LOG_TARGET,
-                "Insufficient storage capacity to accept bucket move. Available: {}, Required: {}",
-                available_capacity,
-                required_size
+                "Insufficient storage capacity to move bucket. Required: {}, available: {}",
+                required_size, available_capacity
             );
 
+            // Check that the BSP has not reached the maximum storage capacity.
             let current_capacity = self
                 .storage_hub_handler
                 .blockchain
                 .query_storage_provider_capacity(own_msp_id)
                 .await
                 .map_err(|e| {
-                    let err_msg = format!("Failed to query storage provider capacity: {:?}", e);
-                    error!(target: LOG_TARGET, err_msg);
-                    anyhow::anyhow!(err_msg)
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query storage provider capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
                 })?;
 
             let max_storage_capacity = self
                 .storage_hub_handler
                 .provider_config
-                .max_storage_capacity;
+                .capacity_config
+                .max_capacity();
 
-            if max_storage_capacity == current_capacity {
-                let err_msg =
-                    "Reached maximum storage capacity limit. Unable to add more storage capacity.";
-                warn!(target: LOG_TARGET, err_msg);
+            if max_storage_capacity <= current_capacity {
+                let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
+                error!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
                 return Err(anyhow::anyhow!(err_msg));
             }
 
-            let new_capacity = self.calculate_capacity(required_size, current_capacity)?;
-
-            let call = storage_hub_runtime::RuntimeCall::Providers(
-                pallet_storage_providers::Call::change_capacity { new_capacity },
-            );
-
-            let earliest_change_capacity_block = self
-                .storage_hub_handler
-                .blockchain
-                .query_earliest_change_capacity_block(own_msp_id)
-                .await
-                .map_err(|e| {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to query earliest change capacity block: {:?}", e
-                    );
-                    anyhow::anyhow!("Failed to query earliest change capacity block: {:?}", e)
-                })?;
-
-            // Wait for the earliest block where the capacity can be changed
             self.storage_hub_handler
                 .blockchain
-                .wait_for_block(earliest_change_capacity_block)
+                .increase_capacity(CapacityRequestData::new(required_size))
                 .await?;
-
-            self.storage_hub_handler
-                .blockchain
-                .send_extrinsic(call, SendExtrinsicOptions::default())
-                .await?
-                .with_timeout(Duration::from_secs(60))
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await?;
-
-            info!(
-                target: LOG_TARGET,
-                "Increased storage capacity to {:?} bytes",
-                new_capacity
-            );
 
             let available_capacity = self
                 .storage_hub_handler
@@ -677,45 +648,24 @@ where
                 .query_available_storage_capacity(own_msp_id)
                 .await
                 .map_err(|e| {
+                    let err_msg = format!("Failed to query available storage capacity: {:?}", e);
                     error!(
                         target: LOG_TARGET,
-                        "Failed to query available storage capacity: {:?}", e
+                        err_msg
                     );
-                    anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                    anyhow::anyhow!(err_msg)
                 })?;
 
-            // Reject bucket move if the new available capacity is still less than required
+            // Skip volunteering if the new available capacity is still less than the file size.
             if available_capacity < required_size {
-                let err_msg =
-                    "Increased storage capacity is still insufficient to accept bucket move.";
-                warn!(target: LOG_TARGET, "{}", err_msg);
+                let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Skipping volunteering.";
+                warn!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
                 return Err(anyhow::anyhow!(err_msg));
             }
         }
 
         Ok(())
-    }
-
-    fn calculate_capacity(
-        &self,
-        required_size: u64,
-        current_capacity: StorageDataUnit,
-    ) -> Result<StorageDataUnit, anyhow::Error> {
-        let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (required_size + jump_capacity - 1) / jump_capacity;
-        let jumps = max(jumps_needed, 1);
-        let bytes_to_add = jumps * jump_capacity;
-        let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
-            anyhow::anyhow!("Reached maximum storage capacity limit. Cannot accept bucket move.")
-        })?;
-
-        let max_storage_capacity = self
-            .storage_hub_handler
-            .provider_config
-            .max_storage_capacity;
-
-        let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
-
-        Ok(new_capacity)
     }
 }

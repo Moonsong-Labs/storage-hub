@@ -239,7 +239,10 @@ export class BspNetTestApi implements AsyncDisposable {
        * @param options.timeoutMs - Optional timeout in milliseconds
        * @returns A promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
        */
-      bspStoredInTxPool: (options?: { expectedExts?: number; timeoutMs?: number }) =>
+      bspStoredInTxPool: (options?: {
+        expectedExts?: number;
+        timeoutMs?: number;
+      }) =>
         Waits.waitForBspStoredWithoutSealing(this._api, {
           checkQuantity: options?.expectedExts,
           timeout: options?.timeoutMs
@@ -506,6 +509,8 @@ export class BspNetTestApi implements AsyncDisposable {
       ) => BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber }),
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
+       * It will stop at the block before the minimum change time is reached since the capacity
+       * change extrinsic will be sent and included in the next block.
        *
        * @param bspId - The ID of the BSP that the capacity change is for.
        * @returns A promise that resolves when the minimum change time is reached.
