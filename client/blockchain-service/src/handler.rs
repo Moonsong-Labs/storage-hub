@@ -450,7 +450,7 @@ where
                         .unwrap_or_else(|_| {
                             error!(target: LOG_TARGET, "Failed to query earliest block to change capacity");
                             Err(QueryEarliestChangeCapacityBlockError::InternalError)
-                        }).into();
+                        });
 
                     match callback.send(earliest_block_to_change_capacity) {
                         Ok(_) => {
@@ -499,8 +499,9 @@ where
                             bsp_id.into(),
                             file_key,
                         )
-                        .unwrap_or_else(|_| Err(QueryFileEarliestVolunteerTickError::InternalError))
-                        .into();
+                        .unwrap_or_else(|_| {
+                            Err(QueryFileEarliestVolunteerTickError::InternalError)
+                        });
 
                     match callback.send(earliest_block_to_volunteer) {
                         Ok(_) => {
@@ -659,8 +660,7 @@ where
                         .client
                         .runtime_api()
                         .get_last_tick_provider_submitted_proof(current_block_hash, &provider_id)
-                        .unwrap_or_else(|_| Err(GetProofSubmissionRecordError::InternalApiError))
-                        .into();
+                        .unwrap_or_else(|_| Err(GetProofSubmissionRecordError::InternalApiError));
 
                     match callback.send(last_tick) {
                         Ok(_) => {
@@ -684,7 +684,7 @@ where
                         .unwrap_or_else(|_| {
                             error!(target: LOG_TARGET, "Failed to query challenge period for provider [{:?}]", provider_id);
                             Err(GetChallengePeriodError::InternalApiError)
-                        }).into();
+                        });
 
                     match callback.send(challenge_period) {
                         Ok(_) => {
