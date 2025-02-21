@@ -87,6 +87,11 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     /// - For all chunks except the last one, it returns [`CHUNK_SIZE`]
     /// - For the last chunk, it returns the remainder of the file size modulo [`CHUNK_SIZE`],
     ///   or [`CHUNK_SIZE`] if the file size is an exact multiple of [`CHUNK_SIZE`].
+    ///
+    /// A `file_size` should never be 0. But if for whatever reason a [`FileMetadata`] is
+    /// created with `file_size = 0`, this method will return that the expected chunk size
+    /// is [`CHUNK_SIZE`], essentially making the verification fail. Which is ok, given that
+    /// a `file_size = 0` is an invalid file.
     pub fn chunk_size_at(&self, chunk_idx: u64) -> usize {
         let remaining_size = self.file_size % CHUNK_SIZE;
         if remaining_size == 0 || chunk_idx != self.chunks_count() - 1 {

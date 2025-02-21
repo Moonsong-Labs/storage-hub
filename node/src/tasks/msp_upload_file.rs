@@ -362,6 +362,12 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        if event.size == 0 {
+            let err_msg = "File size cannot be 0";
+            error!(target: LOG_TARGET, err_msg);
+            return Err(anyhow!(err_msg));
+        }
+
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
