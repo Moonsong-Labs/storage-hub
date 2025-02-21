@@ -24,13 +24,13 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("MSP accepts subsequent storage request for the same file key", async () => {
+    it("MSP accept storage request after catching up with blockchain and user properly retry sending file", async () => {
       const source = "res/whatsup.jpg";
       const destination = "test/smile.jpg";
       const bucketName = "trying-things";
 
       // Stop the msp container so it will be behind when we restart the node.
-      await userApi.docker.pauseBspContainer("docker-sh-msp-1");
+      await userApi.docker.pauseContainer("docker-sh-msp-1");
 
       const newBucketEventEvent = await userApi.createBucket(bucketName);
       const newBucketEventDataBlob =
@@ -73,7 +73,7 @@ describeMspNet(
       // Advancing 10 blocks to see if MSP catchup
       await userApi.block.skip(10);
 
-      await userApi.docker.restartBspContainer({ containerName: "docker-sh-msp-1" });
+      await userApi.docker.restartContainer({ containerName: "docker-sh-msp-1" });
 
       await userApi.docker.waitForLog({
         searchString: "💾 StorageHub's Blockchain Service starting up!",
