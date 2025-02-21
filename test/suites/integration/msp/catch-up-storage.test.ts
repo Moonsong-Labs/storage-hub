@@ -1,9 +1,9 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, type EnrichedBspApi, waitFor } from "../../../util";
+import { describeMspNet, shUser, type EnrichedBspApi, waitFor, sleep } from "../../../util";
 
 describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
-  { initialised: false, only: true },
+  { initialised: false },
   ({ before, createMsp1Api, it, createUserApi, createApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -75,8 +75,10 @@ describeMspNet(
 
       await userApi.docker.restartBspContainer({ containerName: "docker-sh-msp-1" });
 
-      // need to wait for the container to be up again
-      // await sleep(5000);
+      await userApi.docker.waitForLog({ searchString: "💾 StorageHub's Blockchain Service starting up!", containerName: "docker-sh-msp-1" });
+
+      // IMPORTANT!!! DO NOT REMOVE!!! Need to wait for the container to be up again.
+      await sleep(10000);
 
       // NOTE:
       // We shouldn't have to recreate an API but any other attempt to reconnect failed
@@ -86,11 +88,15 @@ describeMspNet(
       // Required to trigger out of sync mode
       await userApi.rpc.engine.createBlock(true, true);
 
+      await userApi.docker.waitForLog({ searchString: "🥱 Handling coming out of sync mode", containerName: "docker-sh-msp-1" });
+      await userApi.docker.waitForLog({ searchString: 'File upload complete. Peer PeerId("12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV") has the entire file', containerName: "docker-sh-user-1", timeout: 120000 });
+
       await waitFor({
         lambda: async () =>
           (await newMspApi.rpc.storagehubclient.isFileInFileStorage(event.data.fileKey)).isFileFound
       });
 
+      await userApi.block.seal();
       await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
     });
   }

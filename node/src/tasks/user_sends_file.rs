@@ -305,21 +305,38 @@ where
                             break;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused))
-                        | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
                             if retry_attempts < 3 =>
                         {
                             warn!(
                                 target: LOG_TARGET,
-                                "Batch upload rejected by peer {:?}, retrying... (attempt {})",
+                                "Final batch upload rejected by peer {:?}, retrying... (attempt {})",
                                 peer_id,
                                 retry_attempts + 1
                             );
                             retry_attempts += 1;
 
                             // Wait for a short time before retrying
-                            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
-                        Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
+                        Err(RequestError::RequestFailure(RequestFailure::Network(_)))
+                            if retry_attempts < 10 =>
+                        {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Unable to upload final batch to peer {:?}, retrying... (attempt {})",
+                                peer_id,
+                                retry_attempts + 1
+                            );
+                            retry_attempts += 1;
+
+                            // Wait a bit for the MSP to be online
+                            self.storage_hub_handler
+                                .blockchain
+                                .wait_for_block(10)
+                                .await?;
+                        }
+                        Err(RequestError::RequestFailure(RequestFailure::Refused))
+                        | Err(RequestError::RequestFailure(RequestFailure::Network(_))) => {
                             // Return an error if the provider refused to answer.
                             return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                         }
@@ -399,10 +416,8 @@ where
                             break;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused))
-                        | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
-                            if retry_attempts < 10 =>
+                            if retry_attempts < 3 =>
                         {
-                            dbg!(upload_response.as_ref());
                             warn!(
                                 target: LOG_TARGET,
                                 "Final batch upload rejected by peer {:?}, retrying... (attempt {})",
@@ -412,9 +427,27 @@ where
                             retry_attempts += 1;
 
                             // Wait for a short time before retrying
-                            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
-                        Err(RequestError::RequestFailure(RequestFailure::Refused)) => {
+                        Err(RequestError::RequestFailure(RequestFailure::Network(_)))
+                            if retry_attempts < 10 =>
+                        {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Unable to upload final batch to peer {:?}, retrying... (attempt {})",
+                                peer_id,
+                                retry_attempts + 1
+                            );
+                            retry_attempts += 1;
+
+                            // Wait a bit for the MSP to be online
+                            self.storage_hub_handler
+                                .blockchain
+                                .wait_for_block(10)
+                                .await?;
+                        }
+                        Err(RequestError::RequestFailure(RequestFailure::Refused))
+                        | Err(RequestError::RequestFailure(RequestFailure::Network(_))) => {
                             // Return an error if the provider refused to answer.
                             return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                         }

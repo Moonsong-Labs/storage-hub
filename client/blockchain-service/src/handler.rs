@@ -1214,6 +1214,11 @@ where
                     }
                 };
 
+                info!(
+                    "We have {} pending storage requests",
+                    storage_requests.len()
+                );
+
                 // loop over each pending storage requests to start a new storage request task for the MSP
                 for (file_key, sr) in storage_requests {
                     self.emit(NewStorageRequest {
