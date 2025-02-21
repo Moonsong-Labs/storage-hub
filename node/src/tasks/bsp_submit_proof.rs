@@ -288,8 +288,7 @@ where
         };
 
         // Attempt to submit the extrinsic with retries and tip increase.
-        match self
-            .storage_hub_handler
+        self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -305,25 +304,10 @@ where
                 false,
             )
             .await
-        {
-            Ok(_) => trace!(target: LOG_TARGET, "Proof submitted successfully"),
-            Err(e) => {
+            .map_err(|e| {
                 error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
-
-                // Queue again a new proof submission so that this BSP restarts the proof
-                // submission process from scratch immediately once the forest root write
-                // lock is available again. This could help if, for example, this proof was
-                // built with an outdated Forest root.
-                self.queue_submit_proof_request(
-                    event.data.provider_id,
-                    event.data.tick,
-                    event.data.seed,
-                )
-                .await?;
-
-                return Err(anyhow!("Failed to submit proof due to: {}", e));
-            }
-        };
+                anyhow!("Failed to submit proof due to: {}", e)
+            })?;
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 
@@ -404,6 +388,8 @@ where
         tick: BlockNumber,
         seed: RandomnessOutput,
     ) -> anyhow::Result<()> {
+        trace!(target: LOG_TARGET, "Queueing submit proof request for provider [{:?}] with tick [{:?}] and seed [{:?}]", provider_id, tick, seed);
+
         // Derive forest challenges from seed.
         let mut forest_challenges = self
             .derive_forest_challenges_from_seed(seed, provider_id)
