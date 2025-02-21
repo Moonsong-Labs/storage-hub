@@ -343,7 +343,7 @@ where
     /// Rejects a bucket move request and performs cleanup of any partially created resources.
     ///
     /// # Arguments
-    /// * `bucket_id` - The ID of the bucket whose move request is being rejected
+    /// - `bucket_id` - The ID of the bucket whose move request is being rejected
     ///
     /// # Cleanup Steps
     /// 1. Deletes any files that were inserted into file storage during validation
