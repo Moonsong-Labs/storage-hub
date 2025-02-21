@@ -672,15 +672,15 @@ where
     ///    - Controlled by a top-level semaphore to prevent system overload
     ///
     /// 2. Chunk-Level Parallelism:
-    ///    - For each file, up to [`MAX_CONCURRENT_CHUNKS_PER_FILE`] chunks can be downloaded in parallel
+    ///    - For each file, up to [`MAX_CONCURRENT_CHUNKS_PER_FILE`] chunk batches can be downloaded in parallel
     ///    - Each chunk download is managed by a separate task
     ///    - Chunk downloads are batched ([`MAX_CHUNKS_PER_REQUEST`] chunks per request) for efficiency
     ///
     /// 3. Peer Selection and Retry Strategy:
     ///    - For each chunk batch:
-    ///      * Selects [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] peers (2 best performing + remaining random)
-    ///      * Tries each selected peer up to [`DOWNLOAD_RETRY_ATTEMPTS`] times
-    ///      * First successful download stops the retry process
+    ///      - Selects [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] peers (2 best performing + remaining random)
+    ///      - Tries each selected peer up to [`DOWNLOAD_RETRY_ATTEMPTS`] times
+    ///      - First successful download stops the retry process
     ///    - Total retry attempts per chunk = [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] * [`DOWNLOAD_RETRY_ATTEMPTS`]
     async fn download_file(
         &self,
