@@ -1,4 +1,11 @@
-use std::{cmp::max, collections::HashMap, ops::Add, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    ops::Add,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -364,8 +371,10 @@ where
             confirm_storing_requests_with_chunks_to_prove.into_iter()
         {
             match (
-                read_file_storage
-                    .generate_proof(&confirm_storing_request.file_key, &chunks_to_prove),
+                read_file_storage.generate_proof(
+                    &confirm_storing_request.file_key,
+                    &HashSet::from_iter(chunks_to_prove),
+                ),
                 read_file_storage.get_metadata(&confirm_storing_request.file_key),
             ) {
                 (Ok(proof), Ok(Some(metadata))) => {

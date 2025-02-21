@@ -1,9 +1,20 @@
 use anyhow::anyhow;
+use futures::future::join_all;
+use ordered_float::OrderedFloat;
+use priority_queue::PriorityQueue;
+use rand::{rngs::StdRng, SeedableRng};
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex},
+    time::Duration,
+};
+use tokio::sync::Semaphore;
+
 use codec::Decode;
-use rand::seq::SliceRandom;
+use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
-use std::{cmp::max, time::Duration};
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
@@ -13,13 +24,16 @@ use shc_blockchain_service::{
     types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
-    BucketId, FileKeyProof, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
+    BucketId, FileKeyProof, FileMetadata, HashT, ProviderId, StorageProofsMerkleTrieLayout,
+    StorageProviderId,
 };
 use shc_file_manager::traits::FileStorage;
-use shc_file_transfer_service::commands::FileTransferServiceInterface;
+use shc_file_transfer_service::{
+    commands::FileTransferServiceInterface, schema::v1::provider::RemoteDownloadDataResponse,
+};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_constants::FILE_CHUNK_SIZE;
-use shp_file_metadata::ChunkId;
+use shp_file_metadata::{Chunk, ChunkId, Leaf as ProvenLeaf};
 use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{
@@ -27,8 +41,22 @@ use crate::services::{
     types::{MspForestStorageHandlerT, ShNodeType},
 };
 
+lazy_static::lazy_static! {
+    static ref GLOBAL_RNG: Mutex<StdRng> = Mutex::new(StdRng::from_entropy());
+}
+
 const LOG_TARGET: &str = "msp-move-bucket-task";
-const DOWNLOAD_REQUEST_RETRY_COUNT: usize = 30;
+
+/// Maximum number of files to download in parallel
+const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
+// Maximum number of chunks requests to do in parallel per file
+const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
+// Maximum number of chunks to request in a single network request
+const MAX_CHUNKS_PER_REQUEST: usize = 10;
+// Number of peers to select for each chunk download attempt (2 best + 3 random)
+const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
+// Number of retries per peer for a single chunk request
+const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 
 /// [`MspMoveBucketTask`] handles bucket move requests between MSPs.
 ///
@@ -39,18 +67,18 @@ const DOWNLOAD_REQUEST_RETRY_COUNT: usize = 30;
 /// # Lifecycle
 /// 1. When a move bucket request is received:
 ///    - Verifies that indexer is enabled and accessible
-///    - Checks if there is sufficient storage capacity, increasing it if needed
+///    - Checks if there is sufficient storage capacity via [`MspMoveBucketTask::check_and_increase_capacity`]
 ///    - Validates that all files in the bucket can be handled
 ///    - Inserts file metadata into local storage and forest storage
 ///    - Verifies BSP peer IDs are available for each file
 ///
 /// 2. If all validations pass:
-///    - Accepts the move request by sending [`BucketMoveRequestResponse::Accepted`]
-///    - Downloads all files from BSPs
+///    - Accepts the move request via [`MspMoveBucketTask::accept_bucket_move`]
+///    - Downloads all files in parallel using [`MspMoveBucketTask::download_file`] with controlled concurrency
 ///    - Updates local forest root to match on-chain state
 ///
 /// 3. If any validation fails:
-///    - Rejects the move request by sending [`BucketMoveRequestResponse::Rejected`]
+///    - Rejects the move request via [`MspMoveBucketTask::reject_bucket_move`]
 ///    - Cleans up any partially inserted file metadata
 ///    - Removes any created forest storage
 ///
@@ -69,6 +97,7 @@ where
     storage_hub_handler: StorageHubHandler<NT>,
     file_storage_inserted_file_keys: Vec<H256>,
     pending_bucket_id: Option<BucketId>,
+    bsp_peer_manager: Arc<tokio::sync::RwLock<BspPeerManager>>,
 }
 
 impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspMoveBucketTask<NT>
@@ -98,7 +127,7 @@ where
 
 impl<NT> MspMoveBucketTask<NT>
 where
-    NT: ShNodeType,
+    NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
     /// Internal implementation of the move bucket request handling.
@@ -206,17 +235,76 @@ where
         // Accept the request since we've verified we can handle all files
         self.accept_bucket_move(event.bucket_id).await?;
 
-        // Now download all the files
-        for file in files {
-            if let Err(error) = self.download_file(&file, &event.bucket_id).await {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to download file: {:?}",
-                    error
-                );
-                // Continue with other files even if one fails
-                continue;
+        // Now download all the files in parallel with a controlled concurrency limit
+        let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_FILE_DOWNLOADS));
+
+        let download_tasks: Vec<_> = files
+            .into_iter()
+            .map(|file| {
+                let semaphore = Arc::clone(&semaphore);
+                let bucket_id = event.bucket_id;
+                let task = self.clone();
+
+                tokio::spawn(async move {
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
+
+                    match task.download_file(&file, &bucket_id).await {
+                        Ok(_) => Ok(()),
+                        Err(e) => {
+                            error!(
+                                target: LOG_TARGET,
+                                "Failed to download file {:?}: {:?}",
+                                file.id,
+                                e
+                            );
+                            Err(e)
+                        }
+                    }
+                })
+            })
+            .collect();
+
+        // Wait for all downloads to complete and collect results
+        let results = join_all(download_tasks).await;
+
+        // Process results and count failures
+        let mut failed_downloads = 0;
+        for result in results {
+            match result {
+                Ok(download_result) => {
+                    if let Err(e) = download_result {
+                        error!(
+                            target: LOG_TARGET,
+                            "File download task failed: {:?}", e
+                        );
+                        failed_downloads += 1;
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "File download task panicked: {:?}", e
+                    );
+                    failed_downloads += 1;
+                }
             }
+        }
+
+        // Log summary of download results
+        if failed_downloads > 0 {
+            warn!(
+                target: LOG_TARGET,
+                "Finished bucket move with {} failed file downloads",
+                failed_downloads
+            );
+        } else {
+            info!(
+                target: LOG_TARGET,
+                "Successfully completed bucket move with all files downloaded"
+            );
         }
 
         Ok(())
@@ -233,13 +321,14 @@ where
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
             pending_bucket_id: self.pending_bucket_id.clone(),
+            bsp_peer_manager: self.bsp_peer_manager.clone(),
         }
     }
 }
 
 impl<NT> MspMoveBucketTask<NT>
 where
-    NT: ShNodeType,
+    NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
@@ -247,13 +336,14 @@ where
             storage_hub_handler,
             file_storage_inserted_file_keys: Vec::new(),
             pending_bucket_id: None,
+            bsp_peer_manager: Arc::new(tokio::sync::RwLock::new(BspPeerManager::new())), // Minimum 3 peers per request
         }
     }
 
     /// Rejects a bucket move request and performs cleanup of any partially created resources.
     ///
     /// # Arguments
-    /// * `bucket_id` - The ID of the bucket whose move request is being rejected
+    /// - `bucket_id` - The ID of the bucket whose move request is being rejected
     ///
     /// # Cleanup Steps
     /// 1. Deletes any files that were inserted into file storage during validation
@@ -371,39 +461,227 @@ where
         Ok(())
     }
 
+    /// Processes a single chunk download response
+    async fn process_chunk_download_response(
+        &self,
+        file_key: H256,
+        file_metadata: &FileMetadata,
+        chunks_count: u64,
+        chunk_batch: &HashSet<ChunkId>,
+        peer_id: PeerId,
+        download_request: RemoteDownloadDataResponse,
+        peer_manager: &Arc<tokio::sync::RwLock<BspPeerManager>>,
+        batch_size_bytes: u64,
+        start_time: std::time::Instant,
+    ) -> Result<bool, anyhow::Error> {
+        let file_key_proof = FileKeyProof::decode(&mut download_request.file_key_proof.as_ref())
+            .map_err(|e| anyhow!("Failed to decode file key proof: {:?}", e))?;
+
+        // Verify fingerprint
+        let expected_fingerprint = file_metadata.fingerprint;
+        if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+            let mut peer_manager = peer_manager.write().await;
+            peer_manager.record_failure(peer_id);
+            return Err(anyhow!(
+                "Fingerprint mismatch. Expected: {:?}, got: {:?}",
+                expected_fingerprint,
+                file_key_proof.file_metadata.fingerprint
+            ));
+        }
+
+        let proven = file_key_proof
+            .proven::<StorageProofsMerkleTrieLayout>()
+            .map_err(|e| anyhow!("Failed to get proven data: {:?}", e))?;
+
+        // Verify that received chunks match requested ones
+        let received_chunk_ids: HashSet<_> = proven.iter().map(|p| p.key).collect();
+        if received_chunk_ids.len() != proven.len() {
+            let mut peer_manager = peer_manager.write().await;
+            peer_manager.record_failure(peer_id);
+            return Err(anyhow!("Received duplicate chunk IDs in response"));
+        }
+        if received_chunk_ids != *chunk_batch {
+            let mut peer_manager = peer_manager.write().await;
+            peer_manager.record_failure(peer_id);
+            return Err(anyhow!(
+                "Received chunk IDs do not match requested ones. Expected: {:?}, got: {:?}",
+                chunk_batch,
+                received_chunk_ids
+            ));
+        }
+
+        // Process each proven chunk
+        for proven_chunk in proven {
+            self.process_proven_chunk(file_key, file_metadata, chunks_count, proven_chunk)
+                .await?;
+        }
+
+        let download_time = start_time.elapsed();
+        let mut peer_manager = peer_manager.write().await;
+        peer_manager.record_success(peer_id, batch_size_bytes, download_time.as_millis() as u64);
+
+        Ok(true)
+    }
+
+    /// Processes a single proven chunk
+    async fn process_proven_chunk(
+        &self,
+        file_key: H256,
+        file_metadata: &FileMetadata,
+        chunks_count: u64,
+        proven_chunk: ProvenLeaf<ChunkId, Chunk>,
+    ) -> Result<(), anyhow::Error> {
+        let chunk_id = proven_chunk.key;
+        let chunk_data = proven_chunk.data;
+
+        // Validate chunk size
+        let chunk_idx = chunk_id.as_u64();
+        let expected_chunk_size = if chunk_idx == chunks_count - 1 {
+            (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
+        } else {
+            FILE_CHUNK_SIZE as usize
+        };
+
+        if chunk_data.len() != expected_chunk_size {
+            return Err(anyhow!(
+                "Invalid chunk size for chunk {}: Expected: {}, got: {}",
+                chunk_idx,
+                expected_chunk_size,
+                chunk_data.len()
+            ));
+        }
+
+        self.storage_hub_handler
+            .file_storage
+            .write()
+            .await
+            .write_chunk(&file_key, &chunk_id, &chunk_data)
+            .map_err(|error| anyhow!("Failed to write chunk {}: {:?}", chunk_idx, error))?;
+
+        Ok(())
+    }
+
+    /// Attempts to download a batch of chunks from a specific peer
+    async fn try_download_chunk_batch(
+        &self,
+        peer_id: PeerId,
+        file_key: H256,
+        file_metadata: &FileMetadata,
+        chunks_count: u64,
+        chunk_batch: &HashSet<ChunkId>,
+        bucket: &BucketId,
+        peer_manager: &Arc<tokio::sync::RwLock<BspPeerManager>>,
+        batch_size_bytes: u64,
+    ) -> Result<bool, anyhow::Error> {
+        for attempt in 0..=DOWNLOAD_RETRY_ATTEMPTS {
+            if attempt > 0 {
+                warn!(
+                    target: LOG_TARGET,
+                    "Retrying download with peer {:?} (attempt {}/{})",
+                    peer_id,
+                    attempt + 1,
+                    DOWNLOAD_RETRY_ATTEMPTS + 1
+                );
+            }
+
+            let start_time = std::time::Instant::now();
+
+            match self
+                .storage_hub_handler
+                .file_transfer
+                .download_request(
+                    peer_id,
+                    file_key.into(),
+                    chunk_batch.clone(),
+                    Some(bucket.clone()),
+                )
+                .await
+            {
+                Ok(download_request) => {
+                    match self
+                        .process_chunk_download_response(
+                            file_key,
+                            file_metadata,
+                            chunks_count,
+                            chunk_batch,
+                            peer_id,
+                            download_request,
+                            peer_manager,
+                            batch_size_bytes,
+                            start_time,
+                        )
+                        .await
+                    {
+                        Ok(success) => return Ok(success),
+                        Err(e) if attempt < DOWNLOAD_RETRY_ATTEMPTS => {
+                            warn!(
+                                target: LOG_TARGET,
+                                "Download attempt {} failed for peer {:?}: {:?}",
+                                attempt + 1,
+                                peer_id,
+                                e
+                            );
+                            continue;
+                        }
+                        Err(e) => {
+                            let mut peer_manager = peer_manager.write().await;
+                            peer_manager.record_failure(peer_id);
+                            return Err(e);
+                        }
+                    }
+                }
+                Err(e) if attempt < DOWNLOAD_RETRY_ATTEMPTS => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Download attempt {} failed for peer {:?}: {:?}",
+                        attempt + 1,
+                        peer_id,
+                        e
+                    );
+                    continue;
+                }
+                Err(e) => {
+                    let mut peer_manager = peer_manager.write().await;
+                    peer_manager.record_failure(peer_id);
+                    return Err(anyhow!(
+                        "Download request failed after {} attempts to peer {:?}: {:?}",
+                        DOWNLOAD_RETRY_ATTEMPTS + 1,
+                        peer_id,
+                        e
+                    ));
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    /// Creates a batch of chunk IDs to request together
+    fn create_chunk_batch(chunk_start: u64, chunks_count: u64) -> HashSet<ChunkId> {
+        let chunk_end = std::cmp::min(chunk_start + (MAX_CHUNKS_PER_REQUEST as u64), chunks_count);
+        (chunk_start..chunk_end).map(ChunkId::new).collect()
+    }
+
     /// Downloads a file from BSPs (Backup Storage Providers) chunk by chunk.
     ///
-    /// # Flow
-    /// 1. Constructs file metadata and key from the provided file and bucket information
-    /// 2. Retrieves and shuffles BSP peer IDs to distribute load across providers
-    /// 3. For each chunk in the file:
-    ///    - Cycles through BSP peers attempting to download the chunk
-    ///    - Retries failed downloads up to DOWNLOAD_REQUEST_RETRY_COUNT times
-    ///    - Verifies proof and chunk data integrity before storage
+    /// # Parallelism Implementation
+    /// The download process uses a multi-level parallelism approach:
     ///
-    /// # Verification Steps
-    /// - Decodes and validates the file key proof from the download response
-    /// - Ensures exactly one proven chunk is received
-    /// - Verifies chunk ID matches the expected chunk being downloaded
-    /// - Validates chunk data before writing to storage
+    /// 1. File-Level Parallelism:
+    ///    - Up to [`MAX_CONCURRENT_FILE_DOWNLOADS`] files can be downloaded simultaneously
+    ///    - Controlled by a top-level semaphore to prevent system overload
     ///
-    /// # Error Handling
-    /// - Logs errors for failed download attempts
-    /// - Continues to next BSP peer on failure
-    /// - Tracks download success/failure per chunk
-    /// - Continues to next chunk even if current chunk fails all retry attempts
+    /// 2. Chunk-Level Parallelism:
+    ///    - For each file, up to [`MAX_CONCURRENT_CHUNKS_PER_FILE`] chunk batches can be downloaded in parallel
+    ///    - Each chunk download is managed by a separate task
+    ///    - Chunk downloads are batched ([`MAX_CHUNKS_PER_REQUEST`] chunks per request) for efficiency
     ///
-    /// # Arguments
-    /// * `file` - The file model containing metadata and BSP information
-    /// * `bucket` - The bucket ID where the file belongs
-    ///
-    /// # Returns
-    /// Returns `Ok(())` if the download process completes (even with some failed chunks)
-    /// Returns `Err` for critical failures that prevent the download process from continuing
-    ///
-    /// # Note
-    /// The function implements a round-robin approach to BSP selection with random initial
-    /// distribution.
+    /// 3. Peer Selection and Retry Strategy:
+    ///    - For each chunk batch:
+    ///      - Selects [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] peers (2 best performing + remaining random)
+    ///      - Tries each selected peer up to [`DOWNLOAD_RETRY_ATTEMPTS`] times
+    ///      - First successful download stops the retry process
+    ///    - Total retry attempts per chunk = [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] * [`DOWNLOAD_RETRY_ATTEMPTS`]
     async fn download_file(
         &self,
         file: &shc_indexer_db::models::File,
@@ -414,11 +692,11 @@ where
 
         info!(
             target: LOG_TARGET,
-            "MSP: downloading file {:?}",
-            file_key,
+            "MSP: downloading file {:?}", file_key,
         );
 
-        let mut bsp_peer_ids = file
+        // Get BSP peer IDs and initialize them in the peer manager
+        let bsp_peer_ids = file
             .get_bsp_peer_ids(
                 &mut self
                     .storage_hub_handler
@@ -430,155 +708,116 @@ where
             )
             .await?;
 
-        // Shuffle BSP peer IDs to distribute load randomly across BSPs and avoid
-        // overwhelming a single BSP with sequential requests
-        bsp_peer_ids.shuffle(&mut rand::thread_rng());
-
-        // TODO: Consider optimizing BSP selection strategy - current approach uses round-robin,
-        // but we could potentially stick with a responsive BSP until it fails
-        let mut bsp_peer_ids_iter = bsp_peer_ids.iter().cycle();
+        {
+            let mut peer_manager = self.bsp_peer_manager.write().await;
+            for &peer_id in &bsp_peer_ids {
+                peer_manager.add_peer(peer_id, file_key.clone());
+            }
+        }
 
         let chunks_count = file_metadata.chunks_count();
-        for chunk in 0..chunks_count {
-            let mut downloaded = false;
-            for _ in 0..DOWNLOAD_REQUEST_RETRY_COUNT {
-                let peer_id = bsp_peer_ids_iter
-                    .next()
-                    .expect("Iterator will never be empty due to .cycle()");
+        let chunk_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHUNKS_PER_FILE));
+        let peer_manager = Arc::clone(&self.bsp_peer_manager);
 
-                let download_request = match self
-                    .storage_hub_handler
-                    .file_transfer
-                    .download_request(
-                        *peer_id,
-                        file_key.into(),
-                        ChunkId::new(chunk),
-                        Some(*bucket),
-                    )
-                    .await
-                {
-                    Ok(request) => request,
-                    Err(error) => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Failed to download chunk {:?} from peer {:?}: {:?}",
-                            chunk, peer_id, error
+        let chunk_tasks: Vec<_> = (0..chunks_count)
+            .step_by(MAX_CHUNKS_PER_REQUEST)
+            .map(|chunk_start| {
+                let semaphore = Arc::clone(&chunk_semaphore);
+                let task = self.clone();
+                let file_metadata = file_metadata.clone();
+                let file_key = file_key.clone();
+                let bucket = bucket.clone();
+                let peer_manager = Arc::clone(&peer_manager);
+
+                tokio::spawn(async move {
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .map_err(|e| anyhow!("Failed to acquire chunk semaphore: {:?}", e))?;
+
+                    let chunk_batch = Self::create_chunk_batch(chunk_start, chunks_count);
+                    let batch_size_bytes = chunk_batch.len() as u64 * FILE_CHUNK_SIZE as u64;
+
+                    // Get the best performing peers for this request and shuffle them
+                    let selected_peers = {
+                        let peer_manager = peer_manager.read().await;
+                        let mut peers = peer_manager.select_peers(
+                            2,
+                            CHUNK_REQUEST_PEER_RETRY_ATTEMPTS - 2,
+                            &file_key,
                         );
-                        continue;
-                    }
-                };
-
-                let file_key_proof =
-                    match FileKeyProof::decode(&mut download_request.file_key_proof.as_ref()) {
-                        Ok(file_key_proof) => file_key_proof,
-                        Err(error) => {
-                            error!(
-                                target: LOG_TARGET,
-                                "Failed to decode file key proof for chunk {:?} of file {:?}: {:?}",
-                                chunk, file_key, error
-                            );
-                            continue;
-                        }
+                        use rand::seq::SliceRandom;
+                        peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
+                        peers
                     };
 
-                // Verify that the fingerprint in the proof matches the expected file fingerprint
-                let expected_fingerprint = file_metadata.fingerprint;
-                if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
-                    error!(
-                        target: LOG_TARGET,
-                        "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
-                        file_key, expected_fingerprint, file_key_proof.file_metadata.fingerprint
-                    );
-                    continue;
-                }
+                    // Try each selected peer
+                    for peer_id in selected_peers {
+                        match task
+                            .try_download_chunk_batch(
+                                peer_id,
+                                file_key,
+                                &file_metadata,
+                                chunks_count,
+                                &chunk_batch,
+                                &bucket,
+                                &peer_manager,
+                                batch_size_bytes,
+                            )
+                            .await
+                        {
+                            Ok(true) => return Ok(()),
+                            Ok(false) | Err(_) => continue,
+                        }
+                    }
 
-                let proven = match file_key_proof.proven::<StorageProofsMerkleTrieLayout>() {
-                    Ok(data) => data,
-                    Err(error) => {
+                    Err(anyhow!(
+                        "Failed to download chunk {} after all retries",
+                        chunk_start
+                    ))
+                })
+            })
+            .collect();
+
+        // Wait for all downloads to complete and collect results
+        let results = join_all(chunk_tasks).await;
+
+        // Process results and count failures
+        let mut failed_downloads = 0;
+        for result in results {
+            match result {
+                Ok(download_result) => {
+                    if let Err(e) = download_result {
                         error!(
                             target: LOG_TARGET,
-                            "Failed to get proven data: {:?}",
-                            error
+                            "File download chunk task failed: {:?}", e
                         );
-                        continue;
+                        failed_downloads += 1;
                     }
-                };
-
-                if proven.len() != 1 {
-                    error!(
-                        target: LOG_TARGET,
-                        "Expected exactly one proven chunk but got {}",
-                        proven.len()
-                    );
-                    continue;
                 }
-
-                let chunk_data = proven[0].data.clone();
-                let chunk_id = ChunkId::new(chunk);
-
-                if chunk_id != proven[0].key {
+                Err(e) => {
                     error!(
                         target: LOG_TARGET,
-                        "Expected chunk id {:?} but got {:?}",
-                        chunk, proven[0].key
+                        "File download chunk task panicked: {:?}", e
                     );
-                    continue;
-                }
-
-                // Validate chunk size
-                // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
-                // one which can be smaller
-                let expected_chunk_size = if chunk == file_metadata.chunks_count() - 1 {
-                    // Last chunk
-                    (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
-                } else {
-                    // All other chunks
-                    FILE_CHUNK_SIZE as usize
-                };
-
-                if chunk_data.len() != expected_chunk_size {
-                    error!(
-                        target: LOG_TARGET,
-                        "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
-                        chunk_id,
-                        file_key,
-                        expected_chunk_size,
-                        chunk_data.len()
-                    );
-                    continue;
-                }
-
-                if let Err(error) = self
-                    .storage_hub_handler
-                    .file_storage
-                    .write()
-                    .await
-                    .write_chunk(&file_key, &chunk_id, &chunk_data)
-                {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to write chunk: {:?}",
-                        error
-                    );
-                } else {
-                    downloaded = true;
-                    break;
+                    failed_downloads += 1;
                 }
             }
+        }
 
-            if !downloaded {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to download chunk {:?} after {} retries",
-                    chunk,
-                    DOWNLOAD_REQUEST_RETRY_COUNT
-                );
-                // TODO: Improve handling of failed chunk downloads:
-                // - Consider implementing a retry mechanism with backoff
-                // - Track failed chunks for later retry attempts
-                // - Potentially notify the user about partial downloads
-                // - Add metrics/monitoring for failed downloads
-            }
+        // Log summary of download results
+        if failed_downloads > 0 {
+            error!(
+                target: LOG_TARGET,
+                "Failed to download {}/{} chunks for file {:?}",
+                failed_downloads, chunks_count, file_key
+            );
+        } else {
+            info!(
+                target: LOG_TARGET,
+                "Successfully downloaded {} chunks for file {:?}",
+                chunks_count, file_key
+            );
         }
 
         Ok(())
@@ -717,5 +956,227 @@ where
         let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
 
         Ok(new_capacity)
+    }
+}
+
+/// Tracks performance metrics for a BSP peer.
+/// This struct is used to track the performance metrics for a BSP peer.
+/// It is used to select the best performing peers for a given file.
+#[derive(Debug, Clone)]
+struct BspPeerStats {
+    /// The number of successful downloads for the peer
+    pub successful_downloads: u64,
+
+    /// The number of failed downloads for the peer
+    pub failed_downloads: u64,
+
+    /// The total number of bytes downloaded for the peer
+    pub total_bytes_downloaded: u64,
+
+    /// The total download time for the peer
+    pub total_download_time_ms: u64,
+
+    /// The time of the last successful download for the peer
+    pub last_success_time: Option<std::time::Instant>,
+
+    /// The set of file keys that the peer can provide. This is used to
+    /// update the right priority queue in [`BspPeerManager::peer_queues`].
+    pub file_keys: HashSet<H256>,
+}
+
+impl BspPeerStats {
+    fn new() -> Self {
+        Self {
+            successful_downloads: 0,
+            failed_downloads: 0,
+            total_bytes_downloaded: 0,
+            total_download_time_ms: 0,
+            last_success_time: None,
+            file_keys: HashSet::new(),
+        }
+    }
+
+    fn record_success(&mut self, bytes_downloaded: u64, download_time_ms: u64) {
+        self.successful_downloads += 1;
+        self.total_bytes_downloaded += bytes_downloaded;
+        self.total_download_time_ms += download_time_ms;
+        self.last_success_time = Some(std::time::Instant::now());
+    }
+
+    fn record_failure(&mut self) {
+        self.failed_downloads += 1;
+    }
+
+    fn get_success_rate(&self) -> f64 {
+        let total = self.successful_downloads + self.failed_downloads;
+        if total == 0 {
+            return 0.0;
+        }
+        self.successful_downloads as f64 / total as f64
+    }
+
+    fn get_average_speed_bytes_per_sec(&self) -> f64 {
+        if self.total_download_time_ms == 0 {
+            return 0.0;
+        }
+        (self.total_bytes_downloaded as f64 * 1000.0) / self.total_download_time_ms as f64
+    }
+
+    /// Calculates a score for the peer based on its success rate and average speed
+    ///
+    /// The score is a weighted combination of the peer's success rate and average speed.
+    /// The success rate is weighted more heavily (70%) compared to the average speed (30%).
+    ///
+    fn get_score(&self) -> f64 {
+        // Combine success rate and speed into a single score
+        // Weight success rate more heavily (70%) compared to speed (30%)
+        let success_weight = 0.7;
+        let speed_weight = 0.3;
+
+        let success_score = self.get_success_rate();
+        let speed_score = if self.successful_downloads == 0 {
+            0.0
+        } else {
+            // Normalize speed score between 0 and 1
+            // Using 30MB/s as a reference for max speed
+            let max_speed = 50.0 * 1024.0 * 1024.0;
+            (self.get_average_speed_bytes_per_sec() / max_speed).min(1.0)
+        };
+
+        (success_score * success_weight) + (speed_score * speed_weight)
+    }
+
+    /// Register that this peer is requested for a file key
+    fn add_file_key(&mut self, file_key: H256) {
+        self.file_keys.insert(file_key);
+    }
+}
+
+/// Manages BSP peer selection and performance tracking
+///
+/// This struct maintains performance metrics for each peer and provides improved peer selection
+/// based on historical performance. It uses a priority queue system to rank peers based on their
+/// performance scores, which are calculated using a weighted combination of success rate (70%) and
+/// download speed (30%).
+///
+/// # Peer Selection Strategy
+/// - Selects a mix of best-performing peers and random peers for each request
+/// - Uses priority queues to maintain peer rankings per file
+/// - Implements a hybrid selection approach:
+///   - Best performers: Selected based on weighted scoring
+///   - Random selection: Ensures network diversity and prevents starvation
+///
+/// # Performance Tracking
+/// - Tracks success/failure rates
+/// - Monitors download speeds
+/// - Records total bytes transferred
+#[derive(Debug)]
+struct BspPeerManager {
+    peers: HashMap<PeerId, BspPeerStats>,
+    // Map from file_key to a priority queue of peers sorted by score
+    peer_queues: HashMap<H256, PriorityQueue<PeerId, OrderedFloat<f64>>>,
+}
+
+impl BspPeerManager {
+    /// Creates a new BspPeerManager with empty peer stats and queues
+    fn new() -> Self {
+        Self {
+            peers: HashMap::new(),
+            peer_queues: HashMap::new(),
+        }
+    }
+
+    /// Registers a new peer for a specific file and initializes its performance tracking
+    fn add_peer(&mut self, peer_id: PeerId, file_key: H256) {
+        let stats = self
+            .peers
+            .entry(peer_id)
+            .or_insert_with(|| BspPeerStats::new());
+        stats.add_file_key(file_key.clone());
+
+        // Add to the priority queue for this file key
+        let queue = self
+            .peer_queues
+            .entry(file_key)
+            .or_insert_with(PriorityQueue::new);
+        queue.push(peer_id, OrderedFloat::from(stats.get_score()));
+    }
+
+    /// Records a successful download attempt and updates peer's performance metrics
+    fn record_success(&mut self, peer_id: PeerId, bytes_downloaded: u64, download_time_ms: u64) {
+        if let Some(stats) = self.peers.get_mut(&peer_id) {
+            stats.record_success(bytes_downloaded, download_time_ms);
+            let new_score = stats.get_score();
+
+            // Update scores in all queues containing this peer
+            for file_key in stats.file_keys.iter() {
+                if let Some(queue) = self.peer_queues.get_mut(file_key) {
+                    queue.change_priority(&peer_id, OrderedFloat::from(new_score));
+                }
+            }
+        }
+    }
+
+    /// Records a failed download attempt and updates peer's performance metrics
+    fn record_failure(&mut self, peer_id: PeerId) {
+        if let Some(stats) = self.peers.get_mut(&peer_id) {
+            stats.record_failure();
+            let new_score = stats.get_score();
+
+            // Update scores in all queues containing this peer
+            for file_key in stats.file_keys.iter() {
+                if let Some(queue) = self.peer_queues.get_mut(file_key) {
+                    queue.change_priority(&peer_id, OrderedFloat::from(new_score));
+                }
+            }
+        }
+    }
+
+    /// Selects a list of peers for downloading chunks of a specific file
+    ///
+    /// # Arguments
+    /// - `count_best` - Number of top-performing peers to select based on scores
+    /// - `count_random` - Number of additional random peers to select for diversity
+    /// - `file_key` - The file key for which peers are being selected
+    ///
+    /// # Selection Strategy
+    /// 1. First selects the top `count_best` peers based on their performance scores
+    /// 2. Then randomly selects `count_random` additional peers from the remaining pool
+    /// 3. Returns a combined list of selected peers in a randomized order
+    ///
+    /// This hybrid approach ensures both performance (by selecting proven peers) and
+    /// network health (by giving chances to other peers through random selection).
+    fn select_peers(&self, count_best: usize, count_random: usize, file_key: &H256) -> Vec<PeerId> {
+        let queue = match self.peer_queues.get(file_key) {
+            Some(queue) => queue,
+            None => return Vec::new(),
+        };
+
+        let mut selected_peers = Vec::with_capacity(count_best + count_random);
+        let mut queue_clone = queue.clone();
+
+        // Extract top count_best peers
+        let actual_best_count = count_best.min(queue_clone.len());
+        for _ in 0..actual_best_count {
+            if let Some((peer_id, _)) = queue_clone.pop() {
+                selected_peers.push(peer_id);
+            }
+        }
+
+        // Randomly select additional peers from the remaining pool
+        if count_random > 0 && !queue_clone.is_empty() {
+            use rand::seq::SliceRandom;
+            let remaining_peers: Vec<_> = queue_clone
+                .into_iter()
+                .map(|(peer_id, _)| peer_id)
+                .collect();
+            let mut remaining_peers = remaining_peers;
+            remaining_peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
+
+            let actual_random_count = count_random.min(remaining_peers.len());
+            selected_peers.extend(remaining_peers.iter().take(actual_random_count));
+        }
+
+        selected_peers
     }
 }
