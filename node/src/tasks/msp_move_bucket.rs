@@ -1063,8 +1063,8 @@ impl BspPeerStats {
 /// - Selects a mix of best-performing peers and random peers for each request
 /// - Uses priority queues to maintain peer rankings per file
 /// - Implements a hybrid selection approach:
-///   * Best performers: Selected based on weighted scoring
-///   * Random selection: Ensures network diversity and prevents starvation
+///   - Best performers: Selected based on weighted scoring
+///   - Random selection: Ensures network diversity and prevents starvation
 ///
 /// # Performance Tracking
 /// - Tracks success/failure rates
@@ -1135,9 +1135,9 @@ impl BspPeerManager {
     /// Selects a list of peers for downloading chunks of a specific file
     ///
     /// # Arguments
-    /// * `count_best` - Number of top-performing peers to select based on scores
-    /// * `count_random` - Number of additional random peers to select for diversity
-    /// * `file_key` - The file key for which peers are being selected
+    /// - `count_best` - Number of top-performing peers to select based on scores
+    /// - `count_random` - Number of additional random peers to select for diversity
+    /// - `file_key` - The file key for which peers are being selected
     ///
     /// # Selection Strategy
     /// 1. First selects the top `count_best` peers based on their performance scores
