@@ -14,7 +14,7 @@ import {
 
 describeBspNet(
   "BSP proofs resubmitted on chain re-org ♻️",
-  { initialised: true, networkConfig: "standard", only: true },
+  { initialised: true, networkConfig: "standard" },
   ({ before, createUserApi, createBspApi, it }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
