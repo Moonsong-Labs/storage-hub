@@ -5,7 +5,7 @@ import { BN } from "@polkadot/util";
 
 describeBspNet(
   "BSPNet: Collect users debt",
-  { initialised: "multi", networkConfig: "standard", only: true },
+  { initialised: "multi", networkConfig: "standard" },
   ({ before, it, createUserApi, createBspApi, getLaunchResponse, createApi }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
