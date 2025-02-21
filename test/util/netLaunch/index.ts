@@ -682,7 +682,7 @@ export class NetworkLauncher {
     await api.wait.bspStored(4);
 
     // Stop BSP that is supposed to be down
-    await api.docker.stopBspContainer(bspDownContainerName);
+    await api.docker.stopContainer(bspDownContainerName);
 
     // Attempt to debounce and stabilise
     await sleep(1500);

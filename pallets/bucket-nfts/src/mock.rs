@@ -218,6 +218,7 @@ impl ProofsDealerInterface for MockProofsDealer {
         _root: &Self::MerkleHash,
         _mutations: &[(Self::MerkleHash, TrieMutation)],
         _proof: &Self::ForestProof,
+        _event_data: Option<Vec<u8>>,
     ) -> Result<Self::MerkleHash, sp_runtime::DispatchError> {
         Ok(H256::default())
     }

@@ -343,7 +343,7 @@ where
     /// Rejects a bucket move request and performs cleanup of any partially created resources.
     ///
     /// # Arguments
-    /// * `bucket_id` - The ID of the bucket whose move request is being rejected
+    /// - `bucket_id` - The ID of the bucket whose move request is being rejected
     ///
     /// # Cleanup Steps
     /// 1. Deletes any files that were inserted into file storage during validation
@@ -664,15 +664,15 @@ where
     ///    - Controlled by a top-level semaphore to prevent system overload
     ///
     /// 2. Chunk-Level Parallelism:
-    ///    - For each file, up to [`MAX_CONCURRENT_CHUNKS_PER_FILE`] chunks can be downloaded in parallel
+    ///    - For each file, up to [`MAX_CONCURRENT_CHUNKS_PER_FILE`] chunk batches can be downloaded in parallel
     ///    - Each chunk download is managed by a separate task
     ///    - Chunk downloads are batched ([`MAX_CHUNKS_PER_REQUEST`] chunks per request) for efficiency
     ///
     /// 3. Peer Selection and Retry Strategy:
     ///    - For each chunk batch:
-    ///      * Selects [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] peers (2 best performing + remaining random)
-    ///      * Tries each selected peer up to [`DOWNLOAD_RETRY_ATTEMPTS`] times
-    ///      * First successful download stops the retry process
+    ///      - Selects [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] peers (2 best performing + remaining random)
+    ///      - Tries each selected peer up to [`DOWNLOAD_RETRY_ATTEMPTS`] times
+    ///      - First successful download stops the retry process
     ///    - Total retry attempts per chunk = [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] * [`DOWNLOAD_RETRY_ATTEMPTS`]
     async fn download_file(
         &self,
@@ -950,27 +950,28 @@ where
     }
 }
 
-/// Tracks performance metrics for a BSP peer
-///
+/// Tracks performance metrics for a BSP peer.
 /// This struct is used to track the performance metrics for a BSP peer.
 /// It is used to select the best performing peers for a given file.
-///
-/// # Fields
-/// * `peer_id` - The ID of the peer
-/// * `successful_downloads` - The number of successful downloads for the peer
-/// * `failed_downloads` - The number of failed downloads for the peer
-/// * `total_bytes_downloaded` - The total number of bytes downloaded for the peer
-/// * `total_download_time_ms` - The total download time for the peer
-/// * `last_success_time` - The time of the last successful download for the peer
-/// * `file_keys` - The set of file keys that the peer can provide. This is used to
-///   update the right priority queue in [`BspPeerManager::peer_queues`].
 #[derive(Debug, Clone)]
 struct BspPeerStats {
+    /// The number of successful downloads for the peer
     pub successful_downloads: u64,
+
+    /// The number of failed downloads for the peer
     pub failed_downloads: u64,
+
+    /// The total number of bytes downloaded for the peer
     pub total_bytes_downloaded: u64,
+
+    /// The total download time for the peer
     pub total_download_time_ms: u64,
+
+    /// The time of the last successful download for the peer
     pub last_success_time: Option<std::time::Instant>,
+
+    /// The set of file keys that the peer can provide. This is used to
+    /// update the right priority queue in [`BspPeerManager::peer_queues`].
     pub file_keys: HashSet<H256>,
 }
 
@@ -1053,8 +1054,8 @@ impl BspPeerStats {
 /// - Selects a mix of best-performing peers and random peers for each request
 /// - Uses priority queues to maintain peer rankings per file
 /// - Implements a hybrid selection approach:
-///   * Best performers: Selected based on weighted scoring
-///   * Random selection: Ensures network diversity and prevents starvation
+///   - Best performers: Selected based on weighted scoring
+///   - Random selection: Ensures network diversity and prevents starvation
 ///
 /// # Performance Tracking
 /// - Tracks success/failure rates
@@ -1125,9 +1126,9 @@ impl BspPeerManager {
     /// Selects a list of peers for downloading chunks of a specific file
     ///
     /// # Arguments
-    /// * `count_best` - Number of top-performing peers to select based on scores
-    /// * `count_random` - Number of additional random peers to select for diversity
-    /// * `file_key` - The file key for which peers are being selected
+    /// - `count_best` - Number of top-performing peers to select based on scores
+    /// - `count_random` - Number of additional random peers to select for diversity
+    /// - `file_key` - The file key for which peers are being selected
     ///
     /// # Selection Strategy
     /// 1. First selects the top `count_best` peers based on their performance scores
