@@ -75,7 +75,10 @@ describeMspNet(
 
       await userApi.docker.restartBspContainer({ containerName: "docker-sh-msp-1" });
 
-      await userApi.docker.waitForLog({ searchString: "💾 StorageHub's Blockchain Service starting up!", containerName: "docker-sh-msp-1" });
+      await userApi.docker.waitForLog({
+        searchString: "💾 StorageHub's Blockchain Service starting up!",
+        containerName: "docker-sh-msp-1"
+      });
 
       // IMPORTANT!!! DO NOT REMOVE!!! Need to wait for the container to be up again.
       await sleep(10000);
@@ -88,8 +91,16 @@ describeMspNet(
       // Required to trigger out of sync mode
       await userApi.rpc.engine.createBlock(true, true);
 
-      await userApi.docker.waitForLog({ searchString: "🥱 Handling coming out of sync mode", containerName: "docker-sh-msp-1" });
-      await userApi.docker.waitForLog({ searchString: 'File upload complete. Peer PeerId("12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV") has the entire file', containerName: "docker-sh-user-1", timeout: 120000 });
+      await userApi.docker.waitForLog({
+        searchString: "🥱 Handling coming out of sync mode",
+        containerName: "docker-sh-msp-1"
+      });
+      await userApi.docker.waitForLog({
+        searchString:
+          'File upload complete. Peer PeerId("12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV") has the entire file',
+        containerName: "docker-sh-user-1",
+        timeout: 120000
+      });
 
       await waitFor({
         lambda: async () =>
