@@ -128,23 +128,14 @@ impl CapacityRequestQueue {
     /// Complete all requests waiting for inclusion, notifying the callers of success.
     ///
     /// The `requests_waiting_for_inclusion` list is cleared after the requests are notified.
-    pub fn complete_requests_waiting_for_inclusion(&mut self) {
-        // Notify all callers of success
+    pub fn complete_requests_waiting_for_inclusion(&mut self, result: Result<(), String>) {
+        // Notify all callers of result
         while let Some(request) = self.requests_waiting_for_inclusion.pop() {
-            request.send_result(Ok(()));
+            request.send_result(result.clone().map_err(anyhow::Error::msg));
         }
 
         // Clear the last submitted transaction
         self.last_submitted_transaction = None;
-    }
-
-    /// Fail all requests waiting for inclusion with an error message
-    ///
-    /// The `requests_waiting_for_inclusion` list is cleared after the requests are notified.
-    pub fn fail_requests_waiting_for_inclusion(&mut self, error_msg: String) {
-        while let Some(request) = self.requests_waiting_for_inclusion.pop() {
-            request.send_result(Err(anyhow!(error_msg.clone())));
-        }
     }
 
     /// Fail all pending requests with an error message

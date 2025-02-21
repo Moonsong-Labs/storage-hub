@@ -152,65 +152,64 @@ where
                 // Check if extrinsic was included in the current block.
                 if let Ok(extrinsic) = self
                     .get_extrinsic_from_block(current_block_hash, last_submitted_transaction.hash())
-                .await
-                .map_err(|e| {
-                    error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to get extrinsic from block: {:?}", e);
-                        anyhow::anyhow!("Failed to get extrinsic from block: {:?}", e)
-                    })
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to get extrinsic from block: {:?}", e))
                 {
-                    info!(target: LOG_TARGET, "[notify_capacity_manager] Extrinsic found in block, checking if it succeeded or failed");
                     // Check if the extrinsic succeeded or failed.
-                    // We notify the callers of the success or failure of the extrinsic.
-                    for event in extrinsic.events.iter() {
-                        match &event.event {
-                            RuntimeEvent::System(system_event) => match system_event {
-                                frame_system::Event::ExtrinsicSuccess { dispatch_info } => {
-                                    debug!(
-                                        target: LOG_TARGET,
-                                        "Extrinsic succeeded: {:?}", dispatch_info
-                                    );
-                                    if let Err(e) = self.execute_with_capacity_manager(|manager| {
-                                        manager.complete_requests_waiting_for_inclusion();
-                                    }) {
-                                        error!(target: LOG_TARGET, "Failed to complete requests waiting for inclusion: {:?}", e);
+                    let result = extrinsic
+                        .events
+                        .iter()
+                        .find_map(|event| {
+                            if let RuntimeEvent::System(system_event) = &event.event {
+                                match system_event {
+                                    frame_system::Event::ExtrinsicSuccess { dispatch_info: _ } => {
+                                        Some(Ok(()))
                                     }
-                                }
-                                frame_system::Event::ExtrinsicFailed { dispatch_error, dispatch_info: _ } => {
-                                    error!(
-                                        target: LOG_TARGET,
-                                        "Extrinsic failed: {:?}", dispatch_error
-                                    );
-                                    if let Err(e) = self.execute_with_capacity_manager(|manager| {
-                                        manager.fail_requests_waiting_for_inclusion(format!("Extrinsic failed: {:?}", dispatch_error));
-                                    }) {
-                                        error!(target: LOG_TARGET, "Failed to fail requests waiting for inclusion: {:?}", e);
+                                    frame_system::Event::ExtrinsicFailed {
+                                        dispatch_error,
+                                        dispatch_info: _,
+                                    } => {
+                                        Some(Err(format!("Extrinsic failed: {:?}", dispatch_error)))
                                     }
+                                    _ => None,
                                 }
-                                _ => {}
-                            },
-                            _ => {}
-                        }
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(Ok(()));
+
+                    // Notify all callers of the result.
+                    if let Err(e) = self.execute_with_capacity_manager(|manager| {
+                        manager.complete_requests_waiting_for_inclusion(result);
+                    }) {
+                        error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to complete requests waiting for inclusion: {:?}", e);
                     }
                 }
             }
         }
 
+        // We will only attempt to process the next batch of requests in the queue if there are no requests waiting for inclusion.
+        if self
+            .capacity_manager
+            .as_ref()
+            .unwrap()
+            .has_requests_waiting_for_inclusion()
+        {
+            return;
+        }
+
         // Query earliest block to change capacity
-        let earliest_block = match self
+        let Ok(earliest_block) = self
             .client
             .runtime_api()
             .query_earliest_change_capacity_block(current_block_hash, &provider_id)
             .unwrap_or_else(|_| {
                 error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to query earliest block to change capacity");
                 Err(QueryEarliestChangeCapacityBlockError::InternalError)
-            }) {
-            Ok(earliest_block) => {
-                earliest_block
-            }
-            Err(e) => {
-                error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to query earliest block to change capacity: {:?}", e);
-                return;
-            }
+            })
+        else {
+            return;
         };
 
         // We can send the transaction 1 block before the earliest block to change capacity since it will be included in the next block.

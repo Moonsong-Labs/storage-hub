@@ -372,7 +372,7 @@ where
             <(UserRole, NoStorageLayer) as ShNodeType>::FSH::new(),
             // Not used by the user role
             ProviderConfig {
-                capacity_config: CapacityConfig::new(0, 0, 0.0),
+                capacity_config: CapacityConfig::new(0, 0),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
