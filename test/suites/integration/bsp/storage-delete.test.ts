@@ -47,7 +47,7 @@ describeBspNet(
 
       // Wait for the two BSP to volunteer
       await userApi.wait.bspVolunteer(2);
-      await userApi.wait.bspStored(2);
+      await userApi.wait.bspStored({ expectedExts: 2 });
 
       // Revoke the storage request otherwise the new storage request event is not being triggered
       await userApi.block.seal({

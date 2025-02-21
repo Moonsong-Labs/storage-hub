@@ -18,9 +18,10 @@ describeBspNet(
       );
       await userApi.wait.bspVolunteer(1);
 
-      await userApi.wait.bspStoredInTxPool({
+      await userApi.wait.bspStored({
         expectedExts: 1,
-        timeoutMs: 12000
+        timeoutMs: 12000,
+        sealBlock: false
       });
 
       await assertDockerLog(
