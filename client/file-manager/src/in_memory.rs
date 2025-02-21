@@ -31,7 +31,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         &self.root
     }
 
-    fn generate_proof(&self, chunk_ids: &Vec<ChunkId>) -> Result<FileProof, FileStorageError> {
+    fn generate_proof(&self, chunk_ids: &HashSet<ChunkId>) -> Result<FileProof, FileStorageError> {
         let recorder: Recorder<T::Hash> = Recorder::default();
 
         // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
@@ -181,7 +181,7 @@ where
     fn generate_proof(
         &self,
         file_key: &HasherOutT<T>,
-        chunk_id: &Vec<ChunkId>,
+        chunk_ids: &HashSet<ChunkId>,
     ) -> Result<FileKeyProof, FileStorageError> {
         let metadata = self
             .metadata
@@ -212,7 +212,7 @@ where
         }
 
         Ok(file_data
-            .generate_proof(chunk_id)?
+            .generate_proof(chunk_ids)?
             .to_file_key_proof(metadata.clone()))
     }
 
@@ -527,7 +527,7 @@ mod tests {
     #[test]
     fn file_trie_generate_proof_works() {
         let chunk_ids = vec![ChunkId::new(0u64), ChunkId::new(1u64), ChunkId::new(2u64)];
-
+        let chunk_ids_set: HashSet<ChunkId> = chunk_ids.iter().cloned().collect();
         let chunks = vec![
             Chunk::from([0u8; 1024]),
             Chunk::from([1u8; 1024]),
@@ -548,7 +548,7 @@ mod tests {
         assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        let file_proof = file_trie.generate_proof(&chunk_ids).unwrap();
+        let file_proof = file_trie.generate_proof(&chunk_ids_set).unwrap();
 
         assert_eq!(
             file_proof.fingerprint.as_ref(),
@@ -702,6 +702,7 @@ mod tests {
             .enumerate()
             .map(|(id, _)| ChunkId::new(id as u64))
             .collect();
+        let chunk_ids_set: HashSet<ChunkId> = chunk_ids.iter().cloned().collect();
 
         let mut file_trie = InMemoryFileDataTrie::<LayoutV1<BlakeTwo256>>::new();
         file_trie.write_chunk(&chunk_ids[0], &chunks[0]).unwrap();
@@ -733,7 +734,7 @@ mod tests {
 
         assert!(file_storage.get_metadata(&key).is_ok());
 
-        let file_proof = file_storage.generate_proof(&key, &chunk_ids).unwrap();
+        let file_proof = file_storage.generate_proof(&key, &chunk_ids_set).unwrap();
         let proven_leaves = file_proof.proven::<LayoutV1<BlakeTwo256>>().unwrap();
         for (id, leaf) in proven_leaves.iter().enumerate() {
             assert_eq!(chunk_ids[id], leaf.key);

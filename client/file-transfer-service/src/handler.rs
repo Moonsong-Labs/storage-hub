@@ -22,14 +22,15 @@
 //! `crate::request_responses::RequestResponsesBehaviour` with
 //! [`LightClientRequestHandler`](handler::LightClientRequestHandler).
 
+use codec::{Decode, Encode};
+use futures::stream::{self, StreamExt};
+use prost::Message;
 use std::{
     collections::{BTreeSet, HashMap, HashSet},
     sync::Arc,
 };
+use tokio::time::{interval, Duration};
 
-use codec::{Decode, Encode};
-use futures::stream::{self, StreamExt};
-use prost::Message;
 use sc_network::{
     request_responses::{IncomingRequest, OutgoingResponse},
     service::traits::NetworkService,
@@ -37,10 +38,13 @@ use sc_network::{
 };
 use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
+
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId};
+use shc_common::types::{
+    BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
+    BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
+};
 use shp_file_metadata::ChunkId;
-use tokio::time::{interval, Duration};
 
 use crate::events::RemoteUploadRequest;
 
@@ -231,19 +235,34 @@ impl Actor for FileTransferService {
                 FileTransferServiceCommand::DownloadRequest {
                     peer_id,
                     file_key,
-                    chunk_id,
+                    chunk_ids,
                     bucket_id,
                     callback,
                 } => {
+                    // Calculate max chunks based on packet size and chunk size
+                    let max_chunks =
+                        (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE as u64) / (FILE_CHUNK_SIZE as u64);
+                    if chunk_ids.len() > max_chunks as usize {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Requested batch size {} exceeds maximum allowed {} based on packet size limit.",
+                            chunk_ids.len(),
+                            max_chunks
+                        );
+                    }
+
+                    // Convert HashSet to Vec only for protobuf encoding
+                    let chunk_ids_u64: Vec<u64> =
+                        chunk_ids.iter().map(|chunk_id| chunk_id.as_u64()).collect();
+
                     let request = schema::v1::provider::request::Request::RemoteDownloadDataRequest(
                         schema::v1::provider::RemoteDownloadDataRequest {
                             file_key: file_key.encode(),
-                            file_chunk_id: chunk_id.as_u64(),
+                            file_chunk_ids: chunk_ids_u64,
                             bucket_id: bucket_id.map(|id| id.encode()),
                         },
                     );
 
-                    // Serialize the request
                     let mut request_data = Vec::new();
                     request.encode(&mut request_data);
 
@@ -259,13 +278,11 @@ impl Actor for FileTransferService {
 
                     match callback.send(rx) {
                         Ok(()) => {}
-                        Err(_) => error!(
-                            target: LOG_TARGET,
-                            "Failed to send the response back. Looks like the requester task is gone."
-                        ),
+                        Err(_) => {
+                            error!(target: LOG_TARGET, "Failed to send the response back. Looks like the requester task is gone.")
+                        }
                     }
                 }
-
                 FileTransferServiceCommand::DownloadResponse {
                     request_id,
                     file_key_proof,
@@ -325,7 +342,6 @@ impl Actor for FileTransferService {
                         ),
                     };
                 }
-
                 FileTransferServiceCommand::AddKnownAddress {
                     peer_id,
                     multiaddress,
@@ -672,14 +688,18 @@ impl FileTransferService {
                     return;
                 }
 
-                let chunk_id = ChunkId::new(r.file_chunk_id);
+                let chunk_ids = r
+                    .file_chunk_ids
+                    .iter()
+                    .map(|id| ChunkId::new(*id))
+                    .collect();
                 let request_id = self.download_pending_response_nonce.next();
                 self.download_pending_responses
                     .insert(request_id.clone(), pending_response);
 
                 self.emit(RemoteDownloadRequest {
                     file_key,
-                    chunk_id,
+                    chunk_ids,
                     request_id,
                     bucket_id,
                 });

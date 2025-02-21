@@ -1,7 +1,13 @@
-use std::{collections::HashMap, str::FromStr, time::Duration};
+use std::{cmp::max, collections::HashMap, str::FromStr, time::Duration};
 
 use anyhow::anyhow;
-use pallet_file_system::types::RejectedStorageRequest;
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    time::Duration,
+};
+
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::capacity_manager::CapacityRequestData;
@@ -9,6 +15,7 @@ use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequ
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
+use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
@@ -22,10 +29,10 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::types::ShNodeType;
 use crate::services::{handler::StorageHubHandler, types::MspForestStorageHandlerT};
-use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -248,7 +255,7 @@ where
                     };
 
                     let proof = match read_file_storage
-                        .generate_proof(&respond.file_key, &chunks_to_prove)
+                        .generate_proof(&respond.file_key, &HashSet::from_iter(chunks_to_prove))
                     {
                         Ok(p) => p,
                         Err(e) => {
@@ -325,57 +332,9 @@ where
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
-        // Apply the necessary deltas to each one of the bucket's forest storage to reflect the result.
+        // Remove the files that were rejected from the File Storage.
+        // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
         for storage_request_msp_bucket_response in storage_request_msp_response {
-            // Add the file keys that were accepted to the forest storage of the bucket.
-            if let Some(StorageRequestMspAcceptedFileKeys {
-                file_keys_and_proofs,
-                ..
-            }) = &storage_request_msp_bucket_response.accept
-            {
-                let fs = self
-                    .storage_hub_handler
-                    .forest_storage_handler
-                    .get(
-                        &storage_request_msp_bucket_response
-                            .bucket_id
-                            .as_ref()
-                            .to_vec(),
-                    )
-                    .await
-                    .ok_or_else(|| anyhow!("Failed to get forest storage."))?;
-
-                let mut write_fs = fs.write().await;
-
-                let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-
-                let file_metadatas: Vec<FileMetadata> = file_keys_and_proofs
-                    .iter()
-                    .filter_map(|file_key_with_proof| {
-                        match read_file_storage.get_metadata(&file_key_with_proof.file_key) {
-                            Ok(Some(metadata)) => Some(metadata),
-                            Ok(None) => {
-                                // TODO: Should probably save this to state and retry later.
-                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ File does not exist after responding to storage request for file key {:?}", file_key_with_proof.file_key);
-                                None
-                            }
-                            Err(e) => {
-                                // TODO: Should probably save this to state and retry later.
-                                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get file metadata after responding to storage request for file key {:?}: {:?}", file_key_with_proof.file_key, e);
-                                None
-                            }
-                        }
-                    })
-                    .collect();
-
-                drop(read_file_storage);
-
-                if let Err(e) = write_fs.insert_files_metadata(&file_metadatas) {
-                    // TODO: Should probably figure out a way to stop storing the file.
-                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to insert file metadatas after responding to storage requests: {:?}", e);
-                }
-            }
-
             let mut fs = self.storage_hub_handler.file_storage.write().await;
 
             for RejectedStorageRequest { file_key, .. } in
