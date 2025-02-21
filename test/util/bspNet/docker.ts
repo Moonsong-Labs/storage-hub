@@ -44,138 +44,46 @@ export const showContainers = () => {
 
 export const addBspContainer = async (options?: {
   name?: string;
-  connectToPeer?: boolean; // unused
   additionalArgs?: string[];
-}) => {
-  const docker = new Docker();
-  const existingBsps = (
-    await docker.listContainers({
-      filters: { ancestor: [DOCKER_IMAGE] }
-    })
-  )
-    .flatMap(({ Command }) => Command)
-    .filter((cmd) => cmd.includes("--provider-type=bsp"));
-
-  const bspNum = existingBsps.length;
-
-  assert(bspNum > 0, "No existing BSP containers");
-
-  const p2pPort = 30350 + bspNum;
-  const rpcPort = 9888 + bspNum * 7;
-  const containerName = options?.name || `docker-sh-bsp-${bspNum + 1}`;
-  // get bootnode from docker args
-
-  const { Args } = await docker.getContainer("docker-sh-user-1").inspect();
-
-  const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
-
-  assert(bootNodeArg, "No bootnode found in docker args");
-
-  let keystorePath: string;
-  const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
-  if (keystoreArg) {
-    keystorePath = keystoreArg.split("=")[1];
-  } else {
-    keystorePath = "/keystore";
-  }
-
-  const container = await docker.createContainer({
-    Image: DOCKER_IMAGE,
-    name: containerName,
-    platform: "linux/amd64",
-    NetworkingConfig: {
-      EndpointsConfig: {
-        docker_default: {}
-      }
-    },
-    HostConfig: {
-      PortBindings: {
-        "9944/tcp": [{ HostPort: rpcPort.toString() }],
-        [`${p2pPort}/tcp`]: [{ HostPort: p2pPort.toString() }]
-      },
-      Binds: [`${process.cwd()}/../docker/dev-keystores:${keystorePath}:rw`]
-    },
-    Cmd: [
-      "--dev",
-      "--sealing=manual",
-      "--provider",
-      "--provider-type=bsp",
-      `--name=${containerName}`,
-      "--no-hardware-benchmarks",
-      "--unsafe-rpc-external",
-      "--rpc-methods=unsafe",
-      "--rpc-cors=all",
-      `--port=${p2pPort}`,
-      "--base-path=/data",
-      bootNodeArg,
-      ...(options?.additionalArgs || [])
-    ]
-  });
-  await container.start();
-
-  let peerId: string | undefined;
-  for (let i = 0; i < 200; i++) {
-    try {
-      peerId = await sendCustomRpc(`http://127.0.0.1:${rpcPort}`, "system_localPeerId");
-      break;
-    } catch {
-      await sleep(50);
-    }
-  }
-
-  assert(peerId, "Failed to connect after 10s. Exiting...");
-
-  const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
-
-  const chainName = api.consts.system.version.specName.toString();
-
-  assert(chainName === "storage-hub-runtime", `Error connecting to BSP via api ${containerName}`);
-
-  await api.disconnect();
-
-  console.log(
-    `▶️ BSP container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
-  );
-
-  return { containerName, rpcPort, p2pPort, peerId };
-};
+}) => addContainer("bsp", options);
 
 export const addMspContainer = async (options?: {
   name?: string;
-  connectToPeer?: boolean; // unused
   additionalArgs?: string[];
-}) => {
+}) => addContainer("msp", options);
+
+const addContainer = async (
+  providerType: "bsp" | "msp",
+  options?: {
+    name?: string;
+    additionalArgs?: string[];
+  }
+) => {
   const docker = new Docker();
-  const existingMsps = (
+  const existingContainers = (
     await docker.listContainers({
       filters: { ancestor: [DOCKER_IMAGE] }
     })
   )
     .flatMap(({ Command }) => Command)
-    .filter((cmd) => cmd.includes("--provider-type=msp"));
+    .filter((cmd) => cmd.includes(`--provider-type=${providerType}`));
 
-  const bspNum = existingMsps.length;
+  const containerCount = existingContainers.length;
 
-  assert(bspNum > 0, "No existing MSP containers");
+  assert(containerCount > 0, `No existing ${providerType.toUpperCase()} containers`);
 
-  const p2pPort = 30350 + bspNum;
-  const rpcPort = 9888 + bspNum * 7;
-  const containerName = options?.name || `docker-sh-msp-${bspNum + 1}`;
-  // get bootnode from docker args
+  const p2pPort = 30350 + containerCount;
+  const rpcPort = 9888 + containerCount * 7;
+  const containerName = options?.name || `docker-sh-${providerType}-${containerCount + 1}`;
 
+  // Get bootnode from docker args
   const { Args } = await docker.getContainer("docker-sh-user-1").inspect();
-
   const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
 
   assert(bootNodeArg, "No bootnode found in docker args");
 
-  let keystorePath: string;
   const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
-  if (keystoreArg) {
-    keystorePath = keystoreArg.split("=")[1];
-  } else {
-    keystorePath = "/keystore";
-  }
+  const keystorePath = keystoreArg ? keystoreArg.split("=")[1] : "/keystore";
 
   const container = await docker.createContainer({
     Image: DOCKER_IMAGE,
@@ -197,7 +105,7 @@ export const addMspContainer = async (options?: {
       "--dev",
       "--sealing=manual",
       "--provider",
-      "--provider-type=msp",
+      `--provider-type=${providerType}`,
       `--name=${containerName}`,
       "--no-hardware-benchmarks",
       "--unsafe-rpc-external",
@@ -209,6 +117,7 @@ export const addMspContainer = async (options?: {
       ...(options?.additionalArgs || [])
     ]
   });
+
   await container.start();
 
   let peerId: string | undefined;
@@ -224,28 +133,30 @@ export const addMspContainer = async (options?: {
   assert(peerId, "Failed to connect after 10s. Exiting...");
 
   const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
-
   const chainName = api.consts.system.version.specName.toString();
 
-  assert(chainName === "storage-hub-runtime", `Error connecting to MSP via api ${containerName}`);
+  assert(
+    chainName === "storage-hub-runtime",
+    `Error connecting to ${providerType.toUpperCase()} via api ${containerName}`
+  );
 
   await api.disconnect();
 
   console.log(
-    `▶️ MSP container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
+    `▶️ ${providerType.toUpperCase()} container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
 };
 
 // Make this a rusty style OO function with api contexts
-export const pauseBspContainer = async (containerName: string) => {
+export const pauseContainer = async (containerName: string) => {
   const docker = new Docker();
   const container = docker.getContainer(containerName);
   await container.pause();
 };
 
-export const stopBspContainer = async (containerName: string) => {
+export const stopContainer = async (containerName: string) => {
   const docker = new Docker();
   const containersToStop = await docker.listContainers({
     filters: { name: [containerName] }
@@ -255,7 +166,7 @@ export const stopBspContainer = async (containerName: string) => {
   await docker.getContainer(containersToStop[0].Id).remove({ force: true });
 };
 
-export const startBspContainer = async (options: {
+export const startContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -263,7 +174,7 @@ export const startBspContainer = async (options: {
   await container.start();
 };
 
-export const restartBspContainer = async (options: {
+export const restartContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -271,7 +182,7 @@ export const restartBspContainer = async (options: {
   await container.restart();
 };
 
-export const resumeBspContainer = async (options: {
+export const resumeContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();

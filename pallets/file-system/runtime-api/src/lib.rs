@@ -45,19 +45,27 @@ pub enum QueryConfirmChunksToProveForFileError {
     ChallengedChunkToChunkIdError,
 }
 
+/// Error type for `decode_generic_apply_delta_event_info`.
+#[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
+pub enum GenericApplyDeltaEventInfoError {
+    DecodeError,
+}
+
 sp_api::decl_runtime_apis! {
     #[api_version(1)]
-    pub trait FileSystemApi<BackupStorageProviderId, MainStorageProviderId, FileKey, TickNumber, ChunkId>
+    pub trait FileSystemApi<BackupStorageProviderId, MainStorageProviderId, FileKey, TickNumber, ChunkId, GenericApplyDeltaEventInfo>
     where
         BackupStorageProviderId: Codec,
         MainStorageProviderId: Codec,
         FileKey: Codec,
         TickNumber: Codec,
         ChunkId: Codec,
+        GenericApplyDeltaEventInfo: Codec,
     {
         fn is_storage_request_open_to_volunteers(file_key: FileKey) -> Result<bool, IsStorageRequestOpenToVolunteersError>;
         fn query_earliest_file_volunteer_tick(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<TickNumber, QueryFileEarliestVolunteerTickError>;
         fn query_bsp_confirm_chunks_to_prove_for_file(bsp_id: BackupStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryBspConfirmChunksToProveForFileError>;
         fn query_msp_confirm_chunks_to_prove_for_file(msp_id: MainStorageProviderId, file_key: FileKey) -> Result<Vec<ChunkId>, QueryMspConfirmChunksToProveForFileError>;
+        fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<GenericApplyDeltaEventInfo, GenericApplyDeltaEventInfoError>;
     }
 }

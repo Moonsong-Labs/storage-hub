@@ -40,7 +40,7 @@ describeBspNet(
       const bucketName = "tastytest";
 
       // Pause BSP-Three.
-      await userApi.docker.pauseBspContainer("sh-bsp-three");
+      await userApi.docker.pauseContainer("sh-bsp-three");
 
       const { fileKey, location, fingerprint, fileSize, bucketId } =
         await userApi.file.createBucketAndSendNewStorageRequest(source, destination, bucketName);
@@ -58,7 +58,7 @@ describeBspNet(
       await userApi.assert.eventPresent("fileSystem", "StorageRequestRevoked");
 
       // Unpause BSP Three
-      await userApi.docker.resumeBspContainer({
+      await userApi.docker.resumeContainer({
         containerName: "sh-bsp-three"
       });
       await userApi.wait.bspCatchUpToChainTip(bspThreeApi);

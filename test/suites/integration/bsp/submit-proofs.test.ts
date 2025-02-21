@@ -269,8 +269,8 @@ describeBspNet(
 
     it("New storage request sent by user, to only one BSP", async () => {
       // Pause BSP-Two and BSP-Three.
-      await userApi.docker.pauseBspContainer("sh-bsp-two");
-      await userApi.docker.pauseBspContainer("sh-bsp-three");
+      await userApi.docker.pauseContainer("sh-bsp-two");
+      await userApi.docker.pauseContainer("sh-bsp-three");
 
       // Send transaction to create new storage request.
       const source = "res/adolphus.jpg";
@@ -365,10 +365,10 @@ describeBspNet(
       });
 
       // Resume BSP-Two and BSP-Three.
-      await userApi.docker.resumeBspContainer({
+      await userApi.docker.resumeContainer({
         containerName: "sh-bsp-two"
       });
-      await userApi.docker.resumeBspContainer({
+      await userApi.docker.resumeContainer({
         containerName: "sh-bsp-three"
       });
 
