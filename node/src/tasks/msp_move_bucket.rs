@@ -959,27 +959,28 @@ where
     }
 }
 
-/// Tracks performance metrics for a BSP peer
-///
+/// Tracks performance metrics for a BSP peer.
 /// This struct is used to track the performance metrics for a BSP peer.
 /// It is used to select the best performing peers for a given file.
-///
-/// # Fields
-/// * `peer_id` - The ID of the peer
-/// * `successful_downloads` - The number of successful downloads for the peer
-/// * `failed_downloads` - The number of failed downloads for the peer
-/// * `total_bytes_downloaded` - The total number of bytes downloaded for the peer
-/// * `total_download_time_ms` - The total download time for the peer
-/// * `last_success_time` - The time of the last successful download for the peer
-/// * `file_keys` - The set of file keys that the peer can provide. This is used to
-///   update the right priority queue in [`BspPeerManager::peer_queues`].
 #[derive(Debug, Clone)]
 struct BspPeerStats {
+    /// The number of successful downloads for the peer
     pub successful_downloads: u64,
+
+    /// The number of failed downloads for the peer
     pub failed_downloads: u64,
+
+    /// The total number of bytes downloaded for the peer
     pub total_bytes_downloaded: u64,
+
+    /// The total download time for the peer
     pub total_download_time_ms: u64,
+
+    /// The time of the last successful download for the peer
     pub last_success_time: Option<std::time::Instant>,
+
+    /// The set of file keys that the peer can provide. This is used to
+    /// update the right priority queue in [`BspPeerManager::peer_queues`].
     pub file_keys: HashSet<H256>,
 }
 
