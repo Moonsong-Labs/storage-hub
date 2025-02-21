@@ -3,7 +3,7 @@ import { describeMspNet, shUser, type EnrichedBspApi, waitFor, sleep } from "../
 
 describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
-  { initialised: false },
+  { initialised: false, only: true },
   ({ before, createMsp1Api, it, createUserApi, createApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -95,11 +95,13 @@ describeMspNet(
         searchString: "🥱 Handling coming out of sync mode",
         containerName: "docker-sh-msp-1"
       });
+
+      await userApi.block.skip(4); // user retry every 5 blocks. The one we created before and this one
+
       await userApi.docker.waitForLog({
         searchString:
           'File upload complete. Peer PeerId("12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV") has the entire file',
         containerName: "docker-sh-user-1",
-        timeout: 120000
       });
 
       await waitFor({

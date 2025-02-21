@@ -319,6 +319,7 @@ where
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Network(_)))
+                        | Err(RequestError::RequestFailure(RequestFailure::NotConnected))
                             if retry_attempts < 10 =>
                         {
                             warn!(
@@ -332,11 +333,12 @@ where
                             // Wait a bit for the MSP to be online
                             self.storage_hub_handler
                                 .blockchain
-                                .wait_for_block(10)
+                                .wait_for_num_blocks(5)
                                 .await?;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused))
-                        | Err(RequestError::RequestFailure(RequestFailure::Network(_))) => {
+                        | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
+                        | Err(RequestError::RequestFailure(RequestFailure::NotConnected)) => {
                             // Return an error if the provider refused to answer.
                             return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                         }
@@ -430,6 +432,7 @@ where
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Network(_)))
+                        | Err(RequestError::RequestFailure(RequestFailure::NotConnected))
                             if retry_attempts < 10 =>
                         {
                             warn!(
@@ -443,11 +446,12 @@ where
                             // Wait a bit for the MSP to be online
                             self.storage_hub_handler
                                 .blockchain
-                                .wait_for_block(10)
+                                .wait_for_num_blocks(5)
                                 .await?;
                         }
                         Err(RequestError::RequestFailure(RequestFailure::Refused))
-                        | Err(RequestError::RequestFailure(RequestFailure::Network(_))) => {
+                        | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
+                        | Err(RequestError::RequestFailure(RequestFailure::NotConnected)) => {
                             // Return an error if the provider refused to answer.
                             return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                         }
