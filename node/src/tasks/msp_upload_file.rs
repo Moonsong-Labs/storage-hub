@@ -1,7 +1,11 @@
-use std::{cmp::max, collections::HashMap, str::FromStr, time::Duration};
-
 use anyhow::anyhow;
-use pallet_file_system::types::RejectedStorageRequest;
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    str::FromStr,
+    time::Duration,
+};
+
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{
@@ -10,6 +14,7 @@ use shc_blockchain_service::types::{
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
+use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
@@ -27,7 +32,6 @@ use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::types::ShNodeType;
 use crate::services::{handler::StorageHubHandler, types::MspForestStorageHandlerT};
-use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "msp-upload-file-task";
 
@@ -250,7 +254,7 @@ where
                     };
 
                     let proof = match read_file_storage
-                        .generate_proof(&respond.file_key, &chunks_to_prove)
+                        .generate_proof(&respond.file_key, &HashSet::from_iter(chunks_to_prove))
                     {
                         Ok(p) => p,
                         Err(e) => {
@@ -358,6 +362,12 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        if event.size == 0 {
+            let err_msg = "File size cannot be 0";
+            error!(target: LOG_TARGET, err_msg);
+            return Err(anyhow!(err_msg));
+        }
+
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
@@ -709,25 +719,14 @@ where
 
         // Process each proven chunk in the batch
         for chunk in proven {
-            // TODO: Add a batched write chunk method to the file storage.
-
-            // Validate chunk size
-            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
-            // one which can be smaller
-            let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
-                // Last chunk
-                (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
-            } else {
-                // All other chunks
-                FILE_CHUNK_SIZE as usize
-            };
+            let chunk_idx = chunk.key.as_u64();
+            let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx);
 
             if chunk.data.len() != expected_chunk_size {
                 error!(
                     target: LOG_TARGET,
-                    "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
-                    chunk.key,
-                    file_key,
+                    "Invalid chunk size for chunk {}: Expected: {}, got: {}",
+                    chunk_idx,
                     expected_chunk_size,
                     chunk.data.len()
                 );
@@ -737,7 +736,12 @@ where
                     RejectedStorageRequestReason::ReceivedInvalidProof,
                 )
                 .await?;
-                return Err(anyhow!("Invalid chunk size"));
+                return Err(anyhow!(
+                    "Invalid chunk size for chunk {}: Expected: {}, got: {}",
+                    chunk_idx,
+                    expected_chunk_size,
+                    chunk.data.len()
+                ));
             }
 
             let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);

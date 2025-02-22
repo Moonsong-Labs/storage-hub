@@ -1,4 +1,12 @@
-use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, str::FromStr, sync::Arc};
+use std::{
+    collections::HashSet,
+    fmt::Debug,
+    fs::File,
+    io::{Read, Write},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+};
 
 use jsonrpsee::{
     core::{async_trait, RpcResult},
@@ -877,7 +885,7 @@ where
     // Construct file key proofs for the challenges.
     let read_file_storage = file_storage.read().await;
     let file_key_proof = read_file_storage
-        .generate_proof(&file_key, &chunks_to_prove)
+        .generate_proof(&file_key, &HashSet::from_iter(chunks_to_prove))
         .map_err(|e| {
             into_rpc_error(format!(
                 "File is not in storage, or proof does not exist: {:?}",
