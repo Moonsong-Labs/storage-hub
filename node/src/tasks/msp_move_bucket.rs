@@ -466,7 +466,6 @@ where
         &self,
         file_key: H256,
         file_metadata: &FileMetadata,
-        chunks_count: u64,
         chunk_batch: &HashSet<ChunkId>,
         peer_id: PeerId,
         download_request: RemoteDownloadDataResponse,
@@ -512,7 +511,7 @@ where
 
         // Process each proven chunk
         for proven_chunk in proven {
-            self.process_proven_chunk(file_key, file_metadata, chunks_count, proven_chunk)
+            self.process_proven_chunk(file_key, file_metadata, proven_chunk)
                 .await?;
         }
 
@@ -528,7 +527,6 @@ where
         &self,
         file_key: H256,
         file_metadata: &FileMetadata,
-        chunks_count: u64,
         proven_chunk: ProvenLeaf<ChunkId, Chunk>,
     ) -> Result<(), anyhow::Error> {
         let chunk_id = proven_chunk.key;
@@ -536,11 +534,7 @@ where
 
         // Validate chunk size
         let chunk_idx = chunk_id.as_u64();
-        let expected_chunk_size = if chunk_idx == chunks_count - 1 {
-            (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
-        } else {
-            FILE_CHUNK_SIZE as usize
-        };
+        let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx);
 
         if chunk_data.len() != expected_chunk_size {
             return Err(anyhow!(
@@ -567,7 +561,6 @@ where
         peer_id: PeerId,
         file_key: H256,
         file_metadata: &FileMetadata,
-        chunks_count: u64,
         chunk_batch: &HashSet<ChunkId>,
         bucket: &BucketId,
         peer_manager: &Arc<tokio::sync::RwLock<BspPeerManager>>,
@@ -602,7 +595,6 @@ where
                         .process_chunk_download_response(
                             file_key,
                             file_metadata,
-                            chunks_count,
                             chunk_batch,
                             peer_id,
                             download_request,
@@ -715,11 +707,10 @@ where
             }
         }
 
-        let chunks_count = file_metadata.chunks_count();
         let chunk_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHUNKS_PER_FILE));
         let peer_manager = Arc::clone(&self.bsp_peer_manager);
 
-        let chunk_tasks: Vec<_> = (0..chunks_count)
+        let chunk_tasks: Vec<_> = (0..file_metadata.chunks_count())
             .step_by(MAX_CHUNKS_PER_REQUEST)
             .map(|chunk_start| {
                 let semaphore = Arc::clone(&chunk_semaphore);
@@ -735,7 +726,8 @@ where
                         .await
                         .map_err(|e| anyhow!("Failed to acquire chunk semaphore: {:?}", e))?;
 
-                    let chunk_batch = Self::create_chunk_batch(chunk_start, chunks_count);
+                    let chunk_batch =
+                        Self::create_chunk_batch(chunk_start, file_metadata.chunks_count());
                     let batch_size_bytes = chunk_batch.len() as u64 * FILE_CHUNK_SIZE as u64;
 
                     // Get the best performing peers for this request and shuffle them
@@ -758,7 +750,6 @@ where
                                 peer_id,
                                 file_key,
                                 &file_metadata,
-                                chunks_count,
                                 &chunk_batch,
                                 &bucket,
                                 &peer_manager,
@@ -810,13 +801,13 @@ where
             error!(
                 target: LOG_TARGET,
                 "Failed to download {}/{} chunks for file {:?}",
-                failed_downloads, chunks_count, file_key
+                failed_downloads, file_metadata.chunks_count(), file_key
             );
         } else {
             info!(
                 target: LOG_TARGET,
                 "Successfully downloaded {} chunks for file {:?}",
-                chunks_count, file_key
+                file_metadata.chunks_count(), file_key
             );
         }
 

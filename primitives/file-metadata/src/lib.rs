@@ -71,6 +71,47 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     pub fn last_chunk_id(&self) -> ChunkId {
         ChunkId::new(self.chunks_count() - 1)
     }
+
+    /// Calculates the size of a chunk at a given index.
+    ///
+    /// # Arguments
+    /// - `chunk_idx` - The index of the chunk (0-based)
+    ///
+    /// # Returns
+    /// The size of the chunk in bytes
+    ///
+    /// This method handles the special case where the file size is an exact multiple
+    /// of the chunk size, ensuring the last chunk is properly sized.
+    ///
+    /// In short:
+    /// - For all chunks except the last one, it returns [`CHUNK_SIZE`]
+    /// - For the last chunk, it returns the remainder of the file size modulo [`CHUNK_SIZE`],
+    ///   or [`CHUNK_SIZE`] if the file size is an exact multiple of [`CHUNK_SIZE`].
+    ///
+    /// A `file_size` should never be 0. But if for whatever reason a [`FileMetadata`] is
+    /// created with `file_size = 0`, this method will return that the expected chunk size
+    /// is [`CHUNK_SIZE`], essentially making the verification fail. Which is ok, given that
+    /// a `file_size = 0` is an invalid file.
+    pub fn chunk_size_at(&self, chunk_idx: u64) -> usize {
+        let remaining_size = self.file_size % CHUNK_SIZE;
+        if remaining_size == 0 || chunk_idx != self.chunks_count() - 1 {
+            CHUNK_SIZE as usize
+        } else {
+            remaining_size as usize
+        }
+    }
+
+    /// Validates if a chunk's size is correct for its position
+    ///
+    /// # Arguments
+    /// - `chunk_idx` - The index of the chunk (0-based)
+    /// - `chunk_size` - The actual size of the chunk to validate
+    ///
+    /// # Returns
+    /// true if the chunk size is valid, false otherwise
+    pub fn is_valid_chunk_size(&self, chunk_idx: u64, chunk_size: usize) -> bool {
+        self.chunk_size_at(chunk_idx) == chunk_size
+    }
 }
 
 /// Interface for encoding and decoding FileMetadata, used by the runtime.
@@ -286,3 +327,47 @@ impl<K, D: Debug> Leaf<K, D> {
 
 /// A hash type of arbitrary length `H_LENGTH`.
 pub type Hash<const H_LENGTH: usize> = [u8; H_LENGTH];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const TEST_CHUNK_SIZE: u64 = 1024;
+
+    #[test]
+    fn test_chunk_size_calculations() {
+        let metadata = FileMetadata::<32, TEST_CHUNK_SIZE, 1024> {
+            file_size: 2500,
+            fingerprint: Fingerprint::from([0u8; 32]),
+            owner: vec![],
+            location: vec![],
+            bucket_id: vec![],
+        };
+
+        // Test regular chunks
+        assert_eq!(metadata.chunk_size_at(0), TEST_CHUNK_SIZE as usize);
+        assert_eq!(metadata.chunk_size_at(1), TEST_CHUNK_SIZE as usize);
+
+        // Test last chunk
+        assert_eq!(metadata.chunk_size_at(2), 452); // 2500 % 1024 = 452
+
+        // Test validation
+        assert!(metadata.is_valid_chunk_size(0, TEST_CHUNK_SIZE as usize));
+        assert!(metadata.is_valid_chunk_size(2, 452));
+        assert!(!metadata.is_valid_chunk_size(1, 500));
+    }
+
+    #[test]
+    fn test_exact_multiple_chunks() {
+        let metadata = FileMetadata::<32, TEST_CHUNK_SIZE, 1024> {
+            file_size: TEST_CHUNK_SIZE * 2, // Exactly 2 chunks
+            fingerprint: Fingerprint::from([0u8; 32]),
+            owner: vec![],
+            location: vec![],
+            bucket_id: vec![],
+        };
+
+        // Both chunks should be full size since file_size is exact multiple of chunk_size
+        assert_eq!(metadata.chunk_size_at(0), TEST_CHUNK_SIZE as usize);
+        assert_eq!(metadata.chunk_size_at(1), TEST_CHUNK_SIZE as usize);
+    }
+}
