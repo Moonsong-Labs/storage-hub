@@ -8,7 +8,7 @@ use rand::{rngs::StdRng, SeedableRng};
 use std::{
     cmp::max,
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::sync::{RwLock, Semaphore};
@@ -50,13 +50,13 @@ const LOG_TARGET: &str = "msp-move-bucket-task";
 
 /// Maximum number of files to download in parallel
 const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
-// Maximum number of chunks requests to do in parallel per file
+/// Maximum number of chunks requests to do in parallel per file
 const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
-// Maximum number of chunks to request in a single network request
+/// Maximum number of chunks to request in a single network request
 const MAX_CHUNKS_PER_REQUEST: usize = 10;
-// Number of peers to select for each chunk download attempt (2 best + 3 random)
+/// Number of peers to select for each chunk download attempt (2 best + 3 random)
 const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
-// Number of retries per peer for a single chunk request
+/// Number of retries per peer for a single chunk request
 const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 
 /// [`MspRespondMoveBucketTask`] handles bucket move requests between MSPs.
@@ -69,14 +69,28 @@ const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 /// # Lifecycle
 /// 1. When a move bucket request is received:
 ///    - Verifies that indexer is enabled and accessible
-///    - Checks if there is sufficient storage capacity
+///    - Checks if there is sufficient storage capacity via [`MspMoveBucketTask::check_and_increase_capacity`]
 ///    - Validates that all files in the bucket can be handled
-///    - Accepts or rejects the move request
-/// 2. When a bucket move is confirmed:
-///    - Queries the blockchain for all files in the bucket
-///    - Queries BSP multiaddresses and registers them for file transfer
-///    - Downloads files from BSPs in batches
-///    - Updates the forest with the downloaded files
+///    - Inserts file metadata into local storage and forest storage
+///    - Verifies BSP peer IDs are available for each file
+///
+/// 2. If all validations pass:
+///    - Accepts the move request via [`MspMoveBucketTask::accept_bucket_move`]
+///    - Downloads all files in parallel using [`MspMoveBucketTask::download_file`] with controlled concurrency
+///    - Updates local forest root to match on-chain state
+///
+/// 3. If any validation fails:
+///    - Rejects the move request via [`MspMoveBucketTask::reject_bucket_move`]
+///    - Cleans up any partially inserted file metadata
+///    - Removes any created forest storage
+///
+/// # Error Handling
+/// The task will reject the bucket move request if:
+/// - Indexer is disabled or inaccessible
+/// - Insufficient storage capacity and unable to increase
+/// - File metadata insertion fails
+/// - BSP peer IDs are unavailable
+/// - Database connection issues occur
 pub struct MspMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
@@ -390,7 +404,7 @@ where
     /// Rejects a bucket move request and performs cleanup of any partially created resources.
     ///
     /// # Arguments
-    /// * `bucket_id` - The ID of the bucket whose move request is being rejected
+    /// - `bucket_id` - The ID of the bucket whose move request is being rejected
     ///
     /// # Cleanup Steps
     /// 1. Deletes any files that were inserted into file storage during validation
@@ -1155,6 +1169,228 @@ impl BspPeerManager {
     /// * `count_best` - Number of top-performing peers to select based on scores
     /// * `count_random` - Number of additional random peers to select for diversity
     /// * `file_key` - The file key for which peers are being selected
+    ///
+    /// # Selection Strategy
+    /// 1. First selects the top `count_best` peers based on their performance scores
+    /// 2. Then randomly selects `count_random` additional peers from the remaining pool
+    /// 3. Returns a combined list of selected peers in a randomized order
+    ///
+    /// This hybrid approach ensures both performance (by selecting proven peers) and
+    /// network health (by giving chances to other peers through random selection).
+    fn select_peers(&self, count_best: usize, count_random: usize, file_key: &H256) -> Vec<PeerId> {
+        let queue = match self.peer_queues.get(file_key) {
+            Some(queue) => queue,
+            None => return Vec::new(),
+        };
+
+        let mut selected_peers = Vec::with_capacity(count_best + count_random);
+        let mut queue_clone = queue.clone();
+
+        // Extract top count_best peers
+        let actual_best_count = count_best.min(queue_clone.len());
+        for _ in 0..actual_best_count {
+            if let Some((peer_id, _)) = queue_clone.pop() {
+                selected_peers.push(peer_id);
+            }
+        }
+
+        // Randomly select additional peers from the remaining pool
+        if count_random > 0 && !queue_clone.is_empty() {
+            use rand::seq::SliceRandom;
+            let remaining_peers: Vec<_> = queue_clone
+                .into_iter()
+                .map(|(peer_id, _)| peer_id)
+                .collect();
+            let mut remaining_peers = remaining_peers;
+            remaining_peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
+
+            let actual_random_count = count_random.min(remaining_peers.len());
+            selected_peers.extend(remaining_peers.iter().take(actual_random_count));
+        }
+
+        selected_peers
+    }
+}
+
+/// Tracks performance metrics for a BSP peer.
+/// This struct is used to track the performance metrics for a BSP peer.
+/// It is used to select the best performing peers for a given file.
+#[derive(Debug, Clone)]
+struct BspPeerStats {
+    /// The number of successful downloads for the peer
+    pub successful_downloads: u64,
+
+    /// The number of failed downloads for the peer
+    pub failed_downloads: u64,
+
+    /// The total number of bytes downloaded for the peer
+    pub total_bytes_downloaded: u64,
+
+    /// The total download time for the peer
+    pub total_download_time_ms: u64,
+
+    /// The time of the last successful download for the peer
+    pub last_success_time: Option<std::time::Instant>,
+
+    /// The set of file keys that the peer can provide. This is used to
+    /// update the right priority queue in [`BspPeerManager::peer_queues`].
+    pub file_keys: HashSet<H256>,
+}
+
+impl BspPeerStats {
+    fn new() -> Self {
+        Self {
+            successful_downloads: 0,
+            failed_downloads: 0,
+            total_bytes_downloaded: 0,
+            total_download_time_ms: 0,
+            last_success_time: None,
+            file_keys: HashSet::new(),
+        }
+    }
+
+    fn record_success(&mut self, bytes_downloaded: u64, download_time_ms: u64) {
+        self.successful_downloads += 1;
+        self.total_bytes_downloaded += bytes_downloaded;
+        self.total_download_time_ms += download_time_ms;
+        self.last_success_time = Some(std::time::Instant::now());
+    }
+
+    fn record_failure(&mut self) {
+        self.failed_downloads += 1;
+    }
+
+    fn get_success_rate(&self) -> f64 {
+        let total = self.successful_downloads + self.failed_downloads;
+        if total == 0 {
+            return 0.0;
+        }
+        self.successful_downloads as f64 / total as f64
+    }
+
+    fn get_average_speed_bytes_per_sec(&self) -> f64 {
+        if self.total_download_time_ms == 0 {
+            return 0.0;
+        }
+        (self.total_bytes_downloaded as f64 * 1000.0) / self.total_download_time_ms as f64
+    }
+
+    /// Calculates a score for the peer based on its success rate and average speed
+    ///
+    /// The score is a weighted combination of the peer's success rate and average speed.
+    /// The success rate is weighted more heavily (70%) compared to the average speed (30%).
+    ///
+    fn get_score(&self) -> f64 {
+        // Combine success rate and speed into a single score
+        // Weight success rate more heavily (70%) compared to speed (30%)
+        let success_weight = 0.7;
+        let speed_weight = 0.3;
+
+        let success_score = self.get_success_rate();
+        let speed_score = if self.successful_downloads == 0 {
+            0.0
+        } else {
+            // Normalize speed score between 0 and 1
+            // Using 30MB/s as a reference for max speed
+            let max_speed = 50.0 * 1024.0 * 1024.0;
+            (self.get_average_speed_bytes_per_sec() / max_speed).min(1.0)
+        };
+
+        (success_score * success_weight) + (speed_score * speed_weight)
+    }
+
+    /// Register that this peer is requested for a file key
+    fn add_file_key(&mut self, file_key: H256) {
+        self.file_keys.insert(file_key);
+    }
+}
+
+/// Manages BSP peer selection and performance tracking
+///
+/// This struct maintains performance metrics for each peer and provides improved peer selection
+/// based on historical performance. It uses a priority queue system to rank peers based on their
+/// performance scores, which are calculated using a weighted combination of success rate (70%) and
+/// download speed (30%).
+///
+/// # Peer Selection Strategy
+/// - Selects a mix of best-performing peers and random peers for each request
+/// - Uses priority queues to maintain peer rankings per file
+/// - Implements a hybrid selection approach:
+///   - Best performers: Selected based on weighted scoring
+///   - Random selection: Ensures network diversity and prevents starvation
+///
+/// # Performance Tracking
+/// - Tracks success/failure rates
+/// - Monitors download speeds
+/// - Records total bytes transferred
+#[derive(Debug)]
+struct BspPeerManager {
+    peers: HashMap<PeerId, BspPeerStats>,
+    // Map from file_key to a priority queue of peers sorted by score
+    peer_queues: HashMap<H256, PriorityQueue<PeerId, OrderedFloat<f64>>>,
+}
+
+impl BspPeerManager {
+    /// Creates a new BspPeerManager with empty peer stats and queues
+    fn new() -> Self {
+        Self {
+            peers: HashMap::new(),
+            peer_queues: HashMap::new(),
+        }
+    }
+
+    /// Registers a new peer for a specific file and initializes its performance tracking
+    fn add_peer(&mut self, peer_id: PeerId, file_key: H256) {
+        let stats = self
+            .peers
+            .entry(peer_id)
+            .or_insert_with(|| BspPeerStats::new());
+        stats.add_file_key(file_key.clone());
+
+        // Add to the priority queue for this file key
+        let queue = self
+            .peer_queues
+            .entry(file_key)
+            .or_insert_with(PriorityQueue::new);
+        queue.push(peer_id, OrderedFloat::from(stats.get_score()));
+    }
+
+    /// Records a successful download attempt and updates peer's performance metrics
+    fn record_success(&mut self, peer_id: PeerId, bytes_downloaded: u64, download_time_ms: u64) {
+        if let Some(stats) = self.peers.get_mut(&peer_id) {
+            stats.record_success(bytes_downloaded, download_time_ms);
+            let new_score = stats.get_score();
+
+            // Update scores in all queues containing this peer
+            for file_key in stats.file_keys.iter() {
+                if let Some(queue) = self.peer_queues.get_mut(file_key) {
+                    queue.change_priority(&peer_id, OrderedFloat::from(new_score));
+                }
+            }
+        }
+    }
+
+    /// Records a failed download attempt and updates peer's performance metrics
+    fn record_failure(&mut self, peer_id: PeerId) {
+        if let Some(stats) = self.peers.get_mut(&peer_id) {
+            stats.record_failure();
+            let new_score = stats.get_score();
+
+            // Update scores in all queues containing this peer
+            for file_key in stats.file_keys.iter() {
+                if let Some(queue) = self.peer_queues.get_mut(file_key) {
+                    queue.change_priority(&peer_id, OrderedFloat::from(new_score));
+                }
+            }
+        }
+    }
+
+    /// Selects a list of peers for downloading chunks of a specific file
+    ///
+    /// # Arguments
+    /// - `count_best` - Number of top-performing peers to select based on scores
+    /// - `count_random` - Number of additional random peers to select for diversity
+    /// - `file_key` - The file key for which peers are being selected
     ///
     /// # Selection Strategy
     /// 1. First selects the top `count_best` peers based on their performance scores
