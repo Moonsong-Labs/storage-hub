@@ -4,7 +4,6 @@ use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{
-    cmp::max,
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
@@ -33,7 +32,6 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::{Chunk, ChunkId, Leaf as ProvenLeaf};
-use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -202,7 +200,7 @@ where
                 .file_storage
                 .write()
                 .await
-                .insert_file(file_key.clone(), file_metadata.clone())
+                .insert_file(file_key, file_metadata.clone())
                 .map_err(|error| {
                     anyhow!(
                         "CRITICAL ❗️❗️❗️: Failed to insert file {:?} into file storage: {:?}",
@@ -319,7 +317,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
-            pending_bucket_id: self.pending_bucket_id.clone(),
+            pending_bucket_id: self.pending_bucket_id,
             bsp_peer_manager: self.bsp_peer_manager.clone(),
         }
     }
@@ -588,12 +586,7 @@ where
             match self
                 .storage_hub_handler
                 .file_transfer
-                .download_request(
-                    peer_id,
-                    file_key.into(),
-                    chunk_batch.clone(),
-                    Some(bucket.clone()),
-                )
+                .download_request(peer_id, file_key.into(), chunk_batch.clone(), Some(*bucket))
                 .await
             {
                 Ok(download_request) => {
@@ -710,7 +703,7 @@ where
         {
             let mut peer_manager = self.bsp_peer_manager.write().await;
             for &peer_id in &bsp_peer_ids {
-                peer_manager.add_peer(peer_id, file_key.clone());
+                peer_manager.add_peer(peer_id, file_key);
             }
         }
 
@@ -724,8 +717,7 @@ where
                 let semaphore = Arc::clone(&chunk_semaphore);
                 let task = self.clone();
                 let file_metadata = file_metadata.clone();
-                let file_key = file_key.clone();
-                let bucket = bucket.clone();
+                let bucket = *bucket;
                 let peer_manager = Arc::clone(&peer_manager);
 
                 tokio::spawn(async move {
@@ -1043,7 +1035,7 @@ impl BspPeerManager {
             .peers
             .entry(peer_id)
             .or_insert_with(|| BspPeerStats::new());
-        stats.add_file_key(file_key.clone());
+        stats.add_file_key(file_key);
 
         // Add to the priority queue for this file key
         let queue = self

@@ -1,8 +1,5 @@
-use std::{cmp::max, collections::HashMap, str::FromStr, time::Duration};
-
 use anyhow::anyhow;
 use std::{
-    cmp::max,
     collections::{HashMap, HashSet},
     str::FromStr,
     time::Duration,
@@ -22,14 +19,13 @@ use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewSt
 use shc_common::types::{
     FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
     StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
-    StorageRequestMspBucketResponse, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+    StorageRequestMspBucketResponse, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
-use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::types::ShNodeType;
 use crate::services::{handler::StorageHubHandler, types::MspForestStorageHandlerT};

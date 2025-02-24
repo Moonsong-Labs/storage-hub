@@ -94,8 +94,7 @@ impl CapacityRequestQueue {
         total_required: StorageData,
     ) -> StorageData {
         // Calculate how many jumps we need to cover the required capacity
-        let jumps_needed = (total_required + self.capacity_config.jump_capacity - 1)
-            / self.capacity_config.jump_capacity;
+        let jumps_needed = total_required.div_ceil(self.capacity_config.jump_capacity);
         let total_jump_capacity = jumps_needed * self.capacity_config.jump_capacity;
 
         // Calculate new total capacity
