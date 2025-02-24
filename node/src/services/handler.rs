@@ -37,7 +37,7 @@ use crate::{
         bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
         bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
         msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspDeleteBucketTask,
-        msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspMoveBucketTask,
+        msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspRespondMoveBucketTask,
         msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
     },
@@ -263,7 +263,7 @@ where
         finalised_file_deletion_request_event_bus_listener.start();
 
         // MspMoveBucketTask handles events for moving buckets to a new MSP.
-        let msp_move_bucket_task = MspMoveBucketTask::new(self.clone());
+        let msp_move_bucket_task = MspRespondMoveBucketTask::new(self.clone());
         // Subscribing to MoveBucketRequestedForNewMsp event from the FileTransferService.
         let move_bucket_requested_for_new_msp_event_bus_listener: EventBusListener<
             MoveBucketRequestedForMsp,
@@ -274,7 +274,7 @@ where
         move_bucket_requested_for_new_msp_event_bus_listener.start();
 
         // MspDownloadMovedBucketTask handles downloading files after a bucket move is confirmed.
-        let msp_download_moved_bucket_task = MspMoveBucketTask::new(self.clone());
+        let msp_download_moved_bucket_task = MspRespondMoveBucketTask::new(self.clone());
         // Subscribing to StartMovedBucketDownload event from the BlockchainService.
         let start_moved_bucket_download_event_bus_listener: EventBusListener<
             StartMovedBucketDownload,

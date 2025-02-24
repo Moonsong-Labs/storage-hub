@@ -15,7 +15,7 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError,
+    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError, QueryBucketsForMspError,
     QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
@@ -1654,6 +1654,20 @@ where
             return Err(Error::<T>::NotRegistered.into());
         }
     }
+
+    /// Compute the next tick number to insert an expiring item, and insert it in the corresponding expiration queue.
+    ///
+    /// This function attempts to insert a the expiration item at the next available tick starting from
+    /// the current next available tick.
+    pub(crate) fn enqueue_expiration_item(
+        expiration_item: ExpirationItem<T>,
+    ) -> Result<BlockNumberFor<T>, DispatchError> {
+        let expiration_tick = expiration_item.get_next_expiration_tick()?;
+        let new_expiration_tick = expiration_item.try_append(expiration_tick)?;
+        expiration_item.set_next_expiration_tick(new_expiration_tick)?;
+
+        Ok(new_expiration_tick)
+    }
 }
 
 impl<T: Config> From<MainStorageProvider<T>> for BackupStorageProvider<T> {
@@ -2772,18 +2786,16 @@ where
         true
     }
 
-    /// Compute the next block number to insert an expiring item, and insert it in the corresponding expiration queue.
-    ///
-    /// This function attempts to insert a the expiration item at the next available block starting from
-    /// the current next available block.
-    pub(crate) fn enqueue_expiration_item(
-        expiration_item: ExpirationItem<T>,
-    ) -> Result<BlockNumberFor<T>, DispatchError> {
-        let expiration_tick = expiration_item.get_next_expiration_tick()?;
-        let new_expiration_tick = expiration_item.try_append(expiration_tick)?;
-        expiration_item.set_next_expiration_tick(new_expiration_tick)?;
+    pub fn query_buckets_for_msp(
+        msp_id: &MainStorageProviderId<T>,
+    ) -> Result<Vec<BucketId<T>>, QueryBucketsForMspError> {
+        if !MainStorageProviders::<T>::contains_key(msp_id) {
+            return Err(QueryBucketsForMspError::ProviderNotRegistered);
+        }
 
-        Ok(new_expiration_tick)
+        Ok(MainStorageProviderIdsToBuckets::<T>::iter_prefix(msp_id)
+            .map(|(bucket_id, _)| bucket_id)
+            .collect())
     }
 }
 

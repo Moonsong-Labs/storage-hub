@@ -2151,14 +2151,23 @@ declare module "@polkadot/api-base/types/events" {
        * This is the generic version of [`MutationsAppliedForProvider`](Event::MutationsAppliedForProvider)
        * when [`generic_apply_delta`](ProofsDealerInterface::generic_apply_delta) is used
        * and the root is not necessarily linked to a specific Provider.
+       *
+       * Additional information for context on where the mutations were applied can be provided
+       * by using the `event_info` field.
        **/
       MutationsApplied: AugmentedEvent<
         ApiType,
-        [mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>, oldRoot: H256, newRoot: H256],
+        [
+          mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>,
+          oldRoot: H256,
+          newRoot: H256,
+          eventInfo: Option<Bytes>
+        ],
         {
           mutations: Vec<ITuple<[H256, ShpTraitsTrieMutation]>>;
           oldRoot: H256;
           newRoot: H256;
+          eventInfo: Option<Bytes>;
         }
       >;
       /**

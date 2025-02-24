@@ -1,14 +1,13 @@
 use anyhow::anyhow;
 use codec::Decode;
 use futures::future::join_all;
-use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use std::{
     cmp::max,
     collections::{HashMap, HashSet},
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 use tokio::sync::{RwLock, Semaphore};
@@ -42,21 +41,21 @@ use crate::services::{
     types::{MspForestStorageHandlerT, ShNodeType},
 };
 
-lazy_static! {
-    static ref GLOBAL_RNG: std::sync::Mutex<StdRng> = std::sync::Mutex::new(StdRng::from_entropy());
+lazy_static::lazy_static! {
+    static ref GLOBAL_RNG: Mutex<StdRng> = Mutex::new(StdRng::from_entropy());
 }
 
 const LOG_TARGET: &str = "msp-move-bucket-task";
 
 /// Maximum number of files to download in parallel
 const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
-// Maximum number of chunks requests to do in parallel per file
+/// Maximum number of chunks requests to do in parallel per file
 const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
-// Maximum number of chunks to request in a single network request
+/// Maximum number of chunks to request in a single network request
 const MAX_CHUNKS_PER_REQUEST: usize = 10;
-// Number of peers to select for each chunk download attempt (2 best + 3 random)
+/// Number of peers to select for each chunk download attempt (2 best + 3 random)
 const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
-// Number of retries per peer for a single chunk request
+/// Number of retries per peer for a single chunk request
 const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 
 /// [`MspRespondMoveBucketTask`] handles bucket move requests between MSPs.
@@ -69,15 +68,29 @@ const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 /// # Lifecycle
 /// 1. When a move bucket request is received:
 ///    - Verifies that indexer is enabled and accessible
-///    - Checks if there is sufficient storage capacity
+///    - Checks if there is sufficient storage capacity via [`MspMoveBucketTask::check_and_increase_capacity`]
 ///    - Validates that all files in the bucket can be handled
-///    - Accepts or rejects the move request
-/// 2. When a bucket move is confirmed:
-///    - Queries the blockchain for all files in the bucket
-///    - Queries BSP multiaddresses and registers them for file transfer
-///    - Downloads files from BSPs in batches
-///    - Updates the forest with the downloaded files
-pub struct MspMoveBucketTask<NT>
+///    - Inserts file metadata into local storage and forest storage
+///    - Verifies BSP peer IDs are available for each file
+///
+/// 2. If all validations pass:
+///    - Accepts the move request via [`MspMoveBucketTask::accept_bucket_move`]
+///    - Downloads all files in parallel using [`MspMoveBucketTask::download_file`] with controlled concurrency
+///    - Updates local forest root to match on-chain state
+///
+/// 3. If any validation fails:
+///    - Rejects the move request via [`MspMoveBucketTask::reject_bucket_move`]
+///    - Cleans up any partially inserted file metadata
+///    - Removes any created forest storage
+///
+/// # Error Handling
+/// The task will reject the bucket move request if:
+/// - Indexer is disabled or inaccessible
+/// - Insufficient storage capacity and unable to increase
+/// - File metadata insertion fails
+/// - BSP peer IDs are unavailable
+/// - Database connection issues occur
+pub struct MspRespondMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -88,12 +101,12 @@ where
     file_storage_inserted_file_keys: Vec<H256>,
 }
 
-impl<NT> Clone for MspMoveBucketTask<NT>
+impl<NT> Clone for MspRespondMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
-    fn clone(&self) -> MspMoveBucketTask<NT> {
+    fn clone(&self) -> MspRespondMoveBucketTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             peer_manager: self.peer_manager.clone(),
@@ -103,7 +116,7 @@ where
     }
 }
 
-impl<NT> MspMoveBucketTask<NT>
+impl<NT> MspRespondMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -118,7 +131,7 @@ where
     }
 }
 
-impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspMoveBucketTask<NT>
+impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspRespondMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -144,7 +157,7 @@ where
     }
 }
 
-impl<NT> EventHandler<StartMovedBucketDownload> for MspMoveBucketTask<NT>
+impl<NT> EventHandler<StartMovedBucketDownload> for MspRespondMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -268,13 +281,18 @@ where
                 failed_downloads,
                 total_files
             ));
+        } else {
+            info!(
+                target: LOG_TARGET,
+                "Successfully completed bucket move with all files downloaded"
+            );
         }
 
         Ok(())
     }
 }
 
-impl<NT> MspMoveBucketTask<NT>
+impl<NT> MspRespondMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -390,7 +408,7 @@ where
     /// Rejects a bucket move request and performs cleanup of any partially created resources.
     ///
     /// # Arguments
-    /// * `bucket_id` - The ID of the bucket whose move request is being rejected
+    /// - `bucket_id` - The ID of the bucket whose move request is being rejected
     ///
     /// # Cleanup Steps
     /// 1. Deletes any files that were inserted into file storage during validation
@@ -839,15 +857,15 @@ where
     ///    - Controlled by a top-level semaphore to prevent system overload
     ///
     /// 2. Chunk-Level Parallelism:
-    ///    - For each file, up to [`MAX_CONCURRENT_CHUNKS_PER_FILE`] chunks can be downloaded in parallel
+    ///    - For each file, up to [`MAX_CONCURRENT_CHUNKS_PER_FILE`] chunk batches can be downloaded in parallel
     ///    - Each chunk download is managed by a separate task
     ///    - Chunk downloads are batched ([`MAX_CHUNKS_PER_REQUEST`] chunks per request) for efficiency
     ///
     /// 3. Peer Selection and Retry Strategy:
     ///    - For each chunk batch:
-    ///      * Selects [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] peers (2 best performing + remaining random)
-    ///      * Tries each selected peer up to [`DOWNLOAD_RETRY_ATTEMPTS`] times
-    ///      * First successful download stops the retry process
+    ///      - Selects [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] peers (2 best performing + remaining random)
+    ///      - Tries each selected peer up to [`DOWNLOAD_RETRY_ATTEMPTS`] times
+    ///      - First successful download stops the retry process
     ///    - Total retry attempts per chunk = [`CHUNK_REQUEST_PEER_RETRY_ATTEMPTS`] * [`DOWNLOAD_RETRY_ATTEMPTS`]
     async fn download_file(
         &self,
@@ -894,7 +912,6 @@ where
                             CHUNK_REQUEST_PEER_RETRY_ATTEMPTS - 2,
                             &file_key,
                         );
-                        use rand::seq::SliceRandom;
                         peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
                         peers
                     };
@@ -978,27 +995,28 @@ where
     }
 }
 
-/// Tracks performance metrics for a BSP peer
-///
+/// Tracks performance metrics for a BSP peer.
 /// This struct is used to track the performance metrics for a BSP peer.
 /// It is used to select the best performing peers for a given file.
-///
-/// # Fields
-/// * `peer_id` - The ID of the peer
-/// * `successful_downloads` - The number of successful downloads for the peer
-/// * `failed_downloads` - The number of failed downloads for the peer
-/// * `total_bytes_downloaded` - The total number of bytes downloaded for the peer
-/// * `total_download_time_ms` - The total download time for the peer
-/// * `last_success_time` - The time of the last successful download for the peer
-/// * `file_keys` - The set of file keys that the peer can provide. This is used to
-///   update the right priority queue in [`BspPeerManager::peer_queues`].
 #[derive(Debug, Clone)]
 struct BspPeerStats {
+    /// The number of successful downloads for the peer
     pub successful_downloads: u64,
+
+    /// The number of failed downloads for the peer
     pub failed_downloads: u64,
+
+    /// The total number of bytes downloaded for the peer
     pub total_bytes_downloaded: u64,
+
+    /// The total download time for the peer
     pub total_download_time_ms: u64,
+
+    /// The time of the last successful download for the peer
     pub last_success_time: Option<std::time::Instant>,
+
+    /// The set of file keys that the peer can provide. This is used to
+    /// update the right priority queue in [`BspPeerManager::peer_queues`].
     pub file_keys: HashSet<H256>,
 }
 
@@ -1080,8 +1098,8 @@ impl BspPeerStats {
 /// - Selects a mix of best-performing peers and random peers for each request
 /// - Uses priority queues to maintain peer rankings per file
 /// - Implements a hybrid selection approach:
-///   * Best performers: Selected based on weighted scoring
-///   * Random selection: Ensures network diversity and prevents starvation
+///   - Best performers: Selected based on weighted scoring
+///   - Random selection: Ensures network diversity and prevents starvation
 ///
 /// # Performance Tracking
 /// - Tracks success/failure rates
@@ -1152,9 +1170,9 @@ impl BspPeerManager {
     /// Selects a list of peers for downloading chunks of a specific file
     ///
     /// # Arguments
-    /// * `count_best` - Number of top-performing peers to select based on scores
-    /// * `count_random` - Number of additional random peers to select for diversity
-    /// * `file_key` - The file key for which peers are being selected
+    /// - `count_best` - Number of top-performing peers to select based on scores
+    /// - `count_random` - Number of additional random peers to select for diversity
+    /// - `file_key` - The file key for which peers are being selected
     ///
     /// # Selection Strategy
     /// 1. First selects the top `count_best` peers based on their performance scores

@@ -1,4 +1,4 @@
-use codec::Encode;
+use codec::{Decode, Encode};
 use core::cmp::max;
 use frame_support::{
     ensure,
@@ -21,9 +21,9 @@ use sp_runtime::{
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
 use pallet_file_system_runtime_api::{
-    IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
-    QueryConfirmChunksToProveForFileError, QueryFileEarliestVolunteerTickError,
-    QueryMspConfirmChunksToProveForFileError,
+    GenericApplyDeltaEventInfoError, IsStorageRequestOpenToVolunteersError,
+    QueryBspConfirmChunksToProveForFileError, QueryConfirmChunksToProveForFileError,
+    QueryFileEarliestVolunteerTickError, QueryMspConfirmChunksToProveForFileError,
 };
 use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettings, MintType};
 use shp_constants::GIGAUNIT;
@@ -339,6 +339,13 @@ where
 
         Self::query_confirm_chunks_to_prove_for_file(msp_id, storage_request_metadata, file_key)
             .map_err(|e| QueryMspConfirmChunksToProveForFileError::ConfirmChunks(e))
+    }
+
+    pub fn decode_generic_apply_delta_event_info(
+        encoded_event_info: Vec<u8>,
+    ) -> Result<BucketIdFor<T>, GenericApplyDeltaEventInfoError> {
+        Self::do_decode_generic_apply_delta_event_info(encoded_event_info.as_ref())
+            .map_err(|_| GenericApplyDeltaEventInfoError::DecodeError)
     }
 
     fn query_confirm_chunks_to_prove_for_file(
@@ -1356,6 +1363,7 @@ where
                     .collect::<Vec<_>>()
                     .as_slice(),
                 &accepted_file_keys.forest_proof,
+                Some(bucket_id.encode()),
             )?;
 
         // Update root of the bucket.
@@ -2404,6 +2412,7 @@ where
                     &bucket_root,
                     &[(file_key, TrieRemoveMutation::default().into())],
                     &inclusion_forest_proof,
+                    Some(bucket_id.encode()),
                 )?;
 
             // Update root of the Bucket.
@@ -2586,6 +2595,7 @@ where
                         &bucket_root,
                         &[(file_key, TrieRemoveMutation::default().into())],
                         &inclusion_forest_proof,
+                        Some(bucket_id.encode()),
                     )?;
 
                 // Update root of the Bucket.
@@ -2678,6 +2688,7 @@ where
                     &bucket_root,
                     &[(file_key, TrieRemoveMutation::default().into())],
                     &forest_proof,
+                    Some(Self::do_encode_generic_apply_delta_event_info(bucket_id)),
                 )?;
 
             // Update root of the Bucket.
@@ -2799,6 +2810,16 @@ where
             fingerprint: fingerprint.as_ref().into(),
         }
         .file_key::<FileKeyHasher<T>>()
+    }
+
+    fn do_encode_generic_apply_delta_event_info(bucket_id: BucketIdFor<T>) -> Vec<u8> {
+        bucket_id.encode()
+    }
+
+    fn do_decode_generic_apply_delta_event_info(
+        encoded_event_info: &[u8],
+    ) -> Result<BucketIdFor<T>, codec::Error> {
+        BucketIdFor::<T>::decode(&mut encoded_event_info.as_ref())
     }
 }
 

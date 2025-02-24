@@ -348,7 +348,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
     await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
 
     // Stop the other BSP so it doesn't volunteer for the files.
-    await userApi.docker.pauseBspContainer("docker-sh-bsp-1");
+    await userApi.docker.pauseContainer("docker-sh-bsp-1");
 
     // Issue the first storage request. The new BSP should have enough capacity to volunteer for it.
     const source1 = "res/cloud.jpg";
@@ -425,7 +425,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
     );
 
     // Disconnect and stop the new BSP.
-    await userApi.docker.stopBspContainer("sh-bsp-two");
+    await userApi.docker.stopContainer("sh-bsp-two");
     await bspTwoApi.disconnect();
   });
 });
