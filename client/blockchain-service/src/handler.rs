@@ -32,7 +32,7 @@ use pallet_proofs_dealer_runtime_api::{
     ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsForInsolventUserError,
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsOfUserStoredByMspError,
     QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
@@ -986,7 +986,7 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::QueryBucketsForInsolventUser {
+                BlockchainServiceCommand::QueryBucketsOfUserStoredByMsp {
                     msp_id,
                     user,
                     callback,
@@ -996,10 +996,10 @@ where
                     let buckets = self
                         .client
                         .runtime_api()
-                        .query_buckets_for_insolvent_user(current_block_hash, &msp_id, &user)
+                        .query_buckets_of_user_stored_by_msp(current_block_hash, &msp_id, &user)
                         .unwrap_or_else(|e| {
                             error!(target: LOG_TARGET, "{}", e);
-                            Err(QueryBucketsForInsolventUserError::InternalError)
+                            Err(QueryBucketsOfUserStoredByMspError::InternalError)
                         });
 
                     match callback.send(buckets) {

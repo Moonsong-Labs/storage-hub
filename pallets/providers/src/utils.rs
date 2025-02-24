@@ -15,10 +15,9 @@ use frame_support::{
 };
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError,
-    QueryBucketsForInsolventUserError, QueryBucketsForMspError,
-    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
-    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError, QueryBucketsForMspError,
+    QueryBucketsOfUserStoredByMspError, QueryEarliestChangeCapacityBlockError,
+    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shp_constants::GIGAUNIT;
 use shp_traits::{
@@ -2799,15 +2798,15 @@ where
             .collect())
     }
 
-    pub fn query_buckets_for_insolvent_user(
+    pub fn query_buckets_of_user_stored_by_msp(
         msp_id: &ProviderIdFor<T>,
         user: &T::AccountId,
-    ) -> Result<Vec<BucketId<T>>, QueryBucketsForInsolventUserError> {
+    ) -> Result<Vec<BucketId<T>>, QueryBucketsOfUserStoredByMspError> {
         if !Self::is_msp(msp_id) {
-            return Err(QueryBucketsForInsolventUserError::NotAnMsp);
+            return Err(QueryBucketsOfUserStoredByMspError::NotAnMsp);
         }
 
-        // Get all buckets that have this MSP as their provider and belong to the insolvent user
+        // Get all buckets that have this MSP as their provider and belong to the user
         let buckets: Vec<BucketId<T>> = Buckets::<T>::iter()
             .filter_map(|(bucket_id, bucket)| {
                 if bucket.msp_id == Some(*msp_id) && bucket.user_id == *user {

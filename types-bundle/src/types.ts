@@ -208,7 +208,7 @@ export const ALL_TYPES: RegistryTypes = {
       InternalApiError: null
     }
   },
-  QueryBucketsForInsolventUserError: {
+  QueryBucketsOfUserStoredByMspError: {
     _enum: {
       NotAnMsp: null,
       InternalError: null

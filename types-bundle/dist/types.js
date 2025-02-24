@@ -206,7 +206,7 @@ export const ALL_TYPES = {
       InternalApiError: null
     }
   },
-  QueryBucketsForInsolventUserError: {
+  QueryBucketsOfUserStoredByMspError: {
     _enum: {
       NotAnMsp: null,
       InternalError: null

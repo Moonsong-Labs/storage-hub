@@ -461,8 +461,8 @@ impl_runtime_apis! {
             Providers::query_buckets_for_msp(msp_id)
         }
 
-        fn query_buckets_for_insolvent_user(msp_id: &ProviderIdFor<Runtime>, user: &AccountId) -> Result<Vec<BucketId<Runtime>>, QueryBucketsForInsolventUserError> {
-            Providers::query_buckets_for_insolvent_user(msp_id, user)
+        fn query_buckets_of_user_stored_by_msp(msp_id: &ProviderIdFor<Runtime>, user: &AccountId) -> Result<Vec<BucketId<Runtime>>, QueryBucketsOfUserStoredByMspError> {
+            Providers::query_buckets_of_user_stored_by_msp(msp_id, user)
         }
     }
 }

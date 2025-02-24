@@ -16,7 +16,7 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetProofSubmissionRecordError,
 };
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsForInsolventUserError,
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsOfUserStoredByMspError,
     QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
@@ -202,11 +202,11 @@ pub enum BlockchainServiceCommand {
         request: FileDeletionRequest,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
     },
-    QueryBucketsForInsolventUser {
+    QueryBucketsOfUserStoredByMsp {
         msp_id: ProviderId,
         user: AccountId,
         callback:
-            tokio::sync::oneshot::Sender<Result<Vec<BucketId>, QueryBucketsForInsolventUserError>>,
+            tokio::sync::oneshot::Sender<Result<Vec<BucketId>, QueryBucketsOfUserStoredByMspError>>,
     },
 }
 
@@ -403,12 +403,12 @@ pub trait BlockchainServiceInterface {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
     ) -> Result<()>;
 
-    /// Helper function to query all buckets stored by an MSP for a specific insolvent user.
-    async fn query_buckets_for_insolvent_user(
+    /// Helper function to query all the buckets stored by an MSP that belong to a specific user.
+    async fn query_buckets_of_user_stored_by_msp(
         &self,
         msp_id: ProviderId,
         user: AccountId,
-    ) -> Result<Vec<BucketId>, QueryBucketsForInsolventUserError>;
+    ) -> Result<Vec<BucketId>, QueryBucketsOfUserStoredByMspError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -918,14 +918,14 @@ where
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
     }
 
-    /// Helper function to query all buckets stored by an MSP for a specific insolvent user.
-    async fn query_buckets_for_insolvent_user(
+    /// Helper function to query all the buckets stored by an MSP that belong to a specific user.
+    async fn query_buckets_of_user_stored_by_msp(
         &self,
         msp_id: ProviderId,
         user: AccountId,
-    ) -> Result<Vec<BucketId>, QueryBucketsForInsolventUserError> {
+    ) -> Result<Vec<BucketId>, QueryBucketsOfUserStoredByMspError> {
         let (callback, rx) = tokio::sync::oneshot::channel();
-        let message = BlockchainServiceCommand::QueryBucketsForInsolventUser {
+        let message = BlockchainServiceCommand::QueryBucketsOfUserStoredByMsp {
             msp_id,
             user,
             callback,
