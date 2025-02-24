@@ -92,10 +92,10 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     }
 
     // Waiting for a confirmation of the first file to be stored
-    await userApi.wait.bspStored(1);
+    await userApi.wait.bspStored({ expectedExts: 1 });
 
     // Here we expect the 2 others files to be batched
-    await userApi.wait.bspStored(1);
+    await userApi.wait.bspStored({ expectedExts: 1 });
 
     // Wait for BSP to update its local Forest root before starting to generate the inclusion proofs
     await waitFor({
@@ -243,10 +243,10 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
       }
 
       // Waiting for a confirmation of the first file to be stored
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
 
       // Here we expect the 2 others files to be batched
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
 
       // Wait for BSP to update its local Forest root before starting to generate the inclusion proofs
       await waitFor({

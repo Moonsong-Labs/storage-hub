@@ -679,7 +679,7 @@ export class NetworkLauncher {
       null
     );
     await api.wait.bspVolunteer(4);
-    await api.wait.bspStored(4);
+    await api.wait.bspStored({ expectedExts: 4 });
 
     // Stop BSP that is supposed to be down
     await api.docker.stopContainer(bspDownContainerName);

@@ -2,7 +2,7 @@ import "@storagehub/api-augment"; // must be first import
 
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
+import type { EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
@@ -13,7 +13,7 @@ import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
 import { addBsp } from "./helpers";
 import * as NodeBspNet from "./node";
-import type { BspNetApi, SealBlockOptions } from "./types";
+import type { BspNetApi, BspStoredOptions, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
 
 /**
@@ -217,13 +217,24 @@ export class BspNetTestApi implements AsyncDisposable {
        *
        * Checks that `expectedExts` extrinsics have been submitted to the tx pool.
        * Then seals a block and checks for the `BspConfirmedStoring` events.
-       * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
-       * @param sealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
+       * @param options - Options for the BSP Stored waiting utility function.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number, bspAccount?: Address, sealBlock = true) =>
-        Waits.waitForBspStored(this._api, expectedExts, bspAccount, sealBlock),
+      bspStored: (
+        options: BspStoredOptions = {
+          expectedExts: undefined,
+          bspAccount: undefined,
+          timeoutMs: undefined,
+          sealBlock: true
+        }
+      ) =>
+        Waits.waitForBspStored(
+          this._api,
+          options.expectedExts,
+          options.bspAccount,
+          options.timeoutMs,
+          options.sealBlock
+        ),
 
       /**
        * A generic utility to wait for a transaction to be in the tx pool.
@@ -231,19 +242,6 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the transaction is in the tx pool.
        */
       waitForTxInPool: (options: WaitForTxOptions) => Waits.waitForTxInPool(this._api, options),
-
-      /**
-       * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
-       * @param options - Optional configuration object
-       * @param options.expectedExts - Optional number of expected extrinsics
-       * @param options.timeoutMs - Optional timeout in milliseconds
-       * @returns A promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
-       */
-      bspStoredInTxPool: (options?: { expectedExts?: number; timeoutMs?: number }) =>
-        Waits.waitForBspStoredWithoutSealing(this._api, {
-          checkQuantity: options?.expectedExts,
-          timeout: options?.timeoutMs
-        }),
 
       /**
        * Waits for a Storage Provider to complete storing a file key.
