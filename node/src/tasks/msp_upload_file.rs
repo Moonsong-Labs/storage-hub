@@ -19,7 +19,7 @@ use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewSt
 use shc_common::types::{
     FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
     StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
-    StorageRequestMspBucketResponse, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
+    StorageRequestMspBucketResponse, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
