@@ -55,9 +55,8 @@ use crate::{
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
         LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MspStopStoringBucketInsolventUser,
-        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, StartMovedBucketDownload,
-        UserWithoutFunds,
+        MoveBucketRequested, MoveBucketRequestedForMsp, NewStorageRequest, SlashableProvider,
+        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
     },
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -1422,32 +1421,6 @@ where
                                         location,
                                         new_root,
                                     })
-                                }
-                            }
-                        }
-                        // A bucket was correctly deleted from a user without funds
-                        RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
-                                msp_id,
-                                bucket_id,
-                                owner,
-                            },
-                        ) => {
-                            if let Some(managed_provider_id) = &self.provider_id {
-                                // We only emit the event if the Provider ID is the one that this node is managing
-                                // and is a MSP.
-                                match managed_provider_id {
-                                    StorageProviderId::MainStorageProvider(managed_msp_id)
-                                        if managed_msp_id == &msp_id =>
-                                    {
-                                        self.emit(MspStopStoringBucketInsolventUser {
-                                            msp_id,
-                                            bucket_id,
-                                            owner,
-                                        })
-                                    }
-                                    // Otherwise, ignore the event.
-                                    _ => {}
                                 }
                             }
                         }

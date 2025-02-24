@@ -11,11 +11,10 @@ use shc_blockchain_service::{
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         FinalisedProofSubmittedForPendingFileDeletionRequest, LastChargeableInfoUpdated,
         MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested,
-        MoveBucketRequestedForMsp, MspStopStoringBucketInsolventUser, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
-        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
-        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
-        StartMovedBucketDownload, UserWithoutFunds,
+        MoveBucketRequestedForMsp, MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod,
+        ProcessConfirmStoringRequest, ProcessFileDeletionRequest, ProcessMspRespondStoringRequest,
+        ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
+        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
     },
     BlockchainService,
 };
@@ -297,18 +296,6 @@ where
                 true,
             );
         user_without_funds_event_bus_listener.start();
-
-        // Subscribing to MspStopStoringBucketInsolvent user to delete all stored buckets owned by a
-        // user that has been declared as without funds.
-        let msp_stop_storing_bucket_insolvent_user_event_bus_listener: EventBusListener<
-            MspStopStoringBucketInsolventUser,
-            _,
-        > = msp_stop_storing_insolvent_user.clone().subscribe_to(
-            &self.task_spawner,
-            &self.blockchain,
-            true,
-        );
-        msp_stop_storing_bucket_insolvent_user_event_bus_listener.start();
 
         // Subscribing to FinalisedMspStopStoringBucketInsolventUser event from the BlockchainService.
         let finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener: EventBusListener<

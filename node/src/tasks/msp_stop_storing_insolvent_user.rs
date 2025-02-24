@@ -6,10 +6,7 @@ use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
-    events::{
-        FinalisedMspStopStoringBucketInsolventUser, MspStopStoringBucketInsolventUser,
-        UserWithoutFunds,
-    },
+    events::{FinalisedMspStopStoringBucketInsolventUser, UserWithoutFunds},
     types::SendExtrinsicOptions,
 };
 use shc_common::types::{ProviderId, StorageProviderId};
@@ -26,13 +23,13 @@ const LOG_TARGET: &str = "msp-stop-storing-bucket-insolvent-user-task";
 /// MSP Stop Storing Bucket for Insolvent User Task: Handles stopping storing all buckets that belong to an insolvent user.
 ///
 /// The task has three handlers:
-/// - [`UserWithoutFunds`] and [`MspStopStoringBucketInsolventUser`]: React to the events emitted by the runtime when a user has no funds to pay
-/// for their payment streams or when this provider has correctly deleted a bucket from a user without funds.
+/// - [`UserWithoutFunds`]: React to the event emitted by the runtime when a user has no funds to pay
+/// for their payment streams.
 /// - [`FinalisedMspStopStoringBucketInsolventUser`]: Reacts to the event emitted by the state when the on-chain event `MspStopStoringBucketInsolventUser`
 /// gets finalised.
 ///
 /// The flow of each handler is as follows:
-/// - Reacting to [`UserWithoutFunds`] and [`MspStopStoringBucketInsolventUser`] event from the runtime:
+/// - Reacting to [`UserWithoutFunds`] event from the runtime:
 /// 	- Sends extrinsics to stop storing each bucket for the insolvent user.
 ///
 /// - Reacting to [`FinalisedMspStopStoringBucketInsolventUser`] event from the BlockchainService:
@@ -96,26 +93,6 @@ where
             };
 
         self.handle_insolvent_user_buckets(event.who, msp_on_chain_id)
-            .await
-    }
-}
-
-impl<NT> EventHandler<MspStopStoringBucketInsolventUser> for MspStopStoringInsolventUserTask<NT>
-where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-{
-    async fn handle_event(
-        &mut self,
-        event: MspStopStoringBucketInsolventUser,
-    ) -> anyhow::Result<()> {
-        info!(
-            target: LOG_TARGET,
-            "Processing MspStopStoringBucketInsolventUser for user {:?}",
-            event.owner
-        );
-
-        self.handle_insolvent_user_buckets(event.owner, event.msp_id)
             .await
     }
 }
