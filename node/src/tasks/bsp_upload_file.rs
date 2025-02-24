@@ -36,7 +36,6 @@ use crate::services::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
-use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -90,91 +89,6 @@ where
             storage_hub_handler,
             file_key_cleanup: None,
         }
-    }
-
-    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let mut is_allowed = read_file_storage
-            .is_allowed(
-                &event.file_key.into(),
-                shc_file_manager::traits::ExcludeType::File,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("File is in the exclude list");
-            drop(read_file_storage);
-            return Ok(false);
-        }
-
-        is_allowed = read_file_storage
-            .is_allowed(
-                &event.fingerprint.as_hash().into(),
-                shc_file_manager::traits::ExcludeType::Fingerprint,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("File fingerprint is in the exclude list");
-            drop(read_file_storage);
-            return Ok(false);
-        }
-
-        let owner = H256::from(event.who.as_ref());
-        is_allowed = read_file_storage
-            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("Owner is in the exclude list");
-            drop(read_file_storage);
-            return Ok(false);
-        }
-
-        is_allowed = read_file_storage
-            .is_allowed(
-                &event.bucket_id,
-                shc_file_manager::traits::ExcludeType::Bucket,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("Bucket is in the exclude list");
-            drop(read_file_storage);
-            return Ok(false);
-        }
-
-        drop(read_file_storage);
-
-        return Ok(true);
     }
 }
 
@@ -472,6 +386,12 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        if event.size == 0 {
+            let err_msg = "File size cannot be 0";
+            error!(target: LOG_TARGET, err_msg);
+            return Err(anyhow!(err_msg));
+        }
+
         // First check if the file is not on our exclude list
         let is_allowed = self.is_allowed(&event).await?;
 
@@ -828,28 +748,19 @@ where
             // TODO: Add a batched write chunk method to the file storage.
 
             // Validate chunk size
-            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
-            // one which can be smaller
-            let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
-                // Last chunk
-                (file_metadata.file_size % FILE_CHUNK_SIZE) as usize
-            } else {
-                // All other chunks
-                FILE_CHUNK_SIZE as usize
-            };
-
-            if chunk.data.len() != expected_chunk_size {
+            let chunk_idx = chunk.key.as_u64();
+            if !file_metadata.is_valid_chunk_size(chunk_idx, chunk.data.len()) {
                 error!(
                     target: LOG_TARGET,
                     "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
                     chunk.key,
                     file_key,
-                    expected_chunk_size,
+                    file_metadata.chunk_size_at(chunk_idx),
                     chunk.data.len()
                 );
                 return Err(anyhow!(
                     "Invalid chunk size. Expected {}, got {}",
-                    expected_chunk_size,
+                    file_metadata.chunk_size_at(chunk_idx),
                     chunk.data.len()
                 ));
             }
@@ -915,6 +826,91 @@ where
         }
 
         Ok(file_complete)
+    }
+
+    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let mut is_allowed = read_file_storage
+            .is_allowed(
+                &event.file_key.into(),
+                shc_file_manager::traits::ExcludeType::File,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.fingerprint.as_hash().into(),
+                shc_file_manager::traits::ExcludeType::Fingerprint,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File fingerprint is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        let owner = H256::from(event.who.as_ref());
+        is_allowed = read_file_storage
+            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Owner is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.bucket_id,
+                shc_file_manager::traits::ExcludeType::Bucket,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Bucket is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        drop(read_file_storage);
+
+        return Ok(true);
     }
 
     async fn unvolunteer_file(&self, file_key: H256) {

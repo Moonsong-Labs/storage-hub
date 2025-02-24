@@ -1,16 +1,16 @@
 use anyhow::anyhow;
+use codec::Decode;
 use futures::future::join_all;
 use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
-use rand::{rngs::StdRng, SeedableRng};
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::sync::Semaphore;
+use tokio::sync::{RwLock, Semaphore};
 
-use codec::Decode;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
@@ -18,8 +18,10 @@ use sp_core::H256;
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    capacity_manager::CapacityRequestData, commands::BlockchainServiceInterface,
-    events::MoveBucketRequestedForMsp, types::RetryStrategy,
+    capacity_manager::CapacityRequestData,
+    commands::BlockchainServiceInterface,
+    events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
+    types::RetryStrategy,
 };
 use shc_common::types::{
     BucketId, FileKeyProof, FileMetadata, HashT, ProviderId, StorageProofsMerkleTrieLayout,
@@ -46,20 +48,21 @@ const LOG_TARGET: &str = "msp-move-bucket-task";
 
 /// Maximum number of files to download in parallel
 const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
-// Maximum number of chunks requests to do in parallel per file
+/// Maximum number of chunks requests to do in parallel per file
 const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
-// Maximum number of chunks to request in a single network request
+/// Maximum number of chunks to request in a single network request
 const MAX_CHUNKS_PER_REQUEST: usize = 10;
-// Number of peers to select for each chunk download attempt (2 best + 3 random)
+/// Number of peers to select for each chunk download attempt (2 best + 3 random)
 const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
-// Number of retries per peer for a single chunk request
+/// Number of retries per peer for a single chunk request
 const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 
-/// [`MspMoveBucketTask`] handles bucket move requests between MSPs.
+/// [`MspRespondMoveBucketTask`] handles bucket move requests between MSPs.
 ///
 /// # Event Handling
-/// This task handles the [`MoveBucketRequestedForNewMsp`] event which is emitted when a user
-/// requests to move their bucket from one MSP to this MSP.
+/// This task handles both:
+/// - [`MoveBucketRequestedForMsp`] event which is emitted when a user requests to move their bucket
+/// - [`StartMovedBucketDownload`] event which is emitted when a bucket move is confirmed
 ///
 /// # Lifecycle
 /// 1. When a move bucket request is received:
@@ -86,18 +89,48 @@ const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 /// - File metadata insertion fails
 /// - BSP peer IDs are unavailable
 /// - Database connection issues occur
-pub struct MspMoveBucketTask<NT>
+pub struct MspRespondMoveBucketTask<NT>
 where
-    NT: ShNodeType,
+    NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
-    file_storage_inserted_file_keys: Vec<H256>,
+    peer_manager: Arc<RwLock<BspPeerManager>>,
     pending_bucket_id: Option<BucketId>,
-    bsp_peer_manager: Arc<tokio::sync::RwLock<BspPeerManager>>,
+    file_storage_inserted_file_keys: Vec<H256>,
 }
 
-impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspMoveBucketTask<NT>
+impl<NT> Clone for MspRespondMoveBucketTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    fn clone(&self) -> MspRespondMoveBucketTask<NT> {
+        Self {
+            storage_hub_handler: self.storage_hub_handler.clone(),
+            peer_manager: self.peer_manager.clone(),
+            pending_bucket_id: self.pending_bucket_id.clone(),
+            file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
+        }
+    }
+}
+
+impl<NT> MspRespondMoveBucketTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+        Self {
+            storage_hub_handler,
+            peer_manager: Arc::new(RwLock::new(BspPeerManager::new())),
+            pending_bucket_id: None,
+            file_storage_inserted_file_keys: Vec::new(),
+        }
+    }
+}
+
+impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspRespondMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -110,6 +143,7 @@ where
         );
 
         if let Err(error) = self.handle_move_bucket_request(event.clone()).await {
+            // TODO: Based on the error, we should persist the bucket move request and retry later.
             error!(
                 target: LOG_TARGET,
                 "Failed to handle move bucket request: {:?}",
@@ -122,7 +156,142 @@ where
     }
 }
 
-impl<NT> MspMoveBucketTask<NT>
+impl<NT> EventHandler<StartMovedBucketDownload> for MspRespondMoveBucketTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    async fn handle_event(&mut self, event: StartMovedBucketDownload) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "StartMovedBucketDownload: Starting download process for bucket {:?}",
+            event.bucket_id
+        );
+
+        let indexer_db_pool = if let Some(indexer_db_pool) =
+            self.storage_hub_handler.indexer_db_pool.clone()
+        {
+            indexer_db_pool
+        } else {
+            return Err(anyhow!("Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."));
+        };
+
+        let mut indexer_connection = indexer_db_pool.get().await.map_err(|error| {
+            anyhow!(
+                "Failed to get indexer connection after timeout: {:?}",
+                error
+            )
+        })?;
+
+        let bucket = event.bucket_id.as_ref().to_vec();
+        let files = shc_indexer_db::models::File::get_by_onchain_bucket_id(
+            &mut indexer_connection,
+            bucket.clone(),
+        )
+        .await?;
+
+        let total_files = files.len();
+
+        // Create forest storage for the bucket if it doesn't exist
+        let _ = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get_or_create(&bucket)
+            .await;
+
+        // Create semaphore for file-level parallelism
+        let file_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_FILE_DOWNLOADS));
+        let file_tasks: Vec<_> = files
+            .into_iter()
+            .map(|file| {
+                let semaphore = Arc::clone(&file_semaphore);
+                let task = self.clone();
+                let bucket_id = event.bucket_id.clone();
+
+                tokio::spawn(async move {
+                    let _permit = semaphore
+                        .acquire()
+                        .await
+                        .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
+
+                    let file_metadata = file.to_file_metadata(bucket_id.as_ref().to_vec());
+                    let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+
+                    // Get BSP peer IDs and register them
+                    let bsp_peer_ids = file
+                        .get_bsp_peer_ids(
+                            &mut task
+                                .storage_hub_handler
+                                .indexer_db_pool
+                                .as_ref()
+                                .unwrap()
+                                .get()
+                                .await?,
+                        )
+                        .await?;
+
+                    if bsp_peer_ids.is_empty() {
+                        return Err(anyhow!("No BSP peer IDs found for file {:?}", file_key));
+                    }
+
+                    // Register BSP peers for file transfer
+                    {
+                        let mut peer_manager = task.peer_manager.write().await;
+                        for &peer_id in &bsp_peer_ids {
+                            peer_manager.add_peer(peer_id, file_key);
+                        }
+                    }
+
+                    // Download file using existing download_file method
+                    task.download_file(&file, &bucket_id).await
+                })
+            })
+            .collect();
+
+        // Wait for all file downloads to complete
+        let results = join_all(file_tasks).await;
+
+        // Process results and count failures
+        let mut failed_downloads = 0;
+        for result in results {
+            match result {
+                Ok(download_result) => {
+                    if let Err(e) = download_result {
+                        error!(
+                            target: LOG_TARGET,
+                            "File download task failed: {:?}", e
+                        );
+                        failed_downloads += 1;
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "File download task panicked: {:?}", e
+                    );
+                    failed_downloads += 1;
+                }
+            }
+        }
+
+        if failed_downloads > 0 {
+            return Err(anyhow!(
+                "Failed to download {} out of {} files",
+                failed_downloads,
+                total_files
+            ));
+        } else {
+            info!(
+                target: LOG_TARGET,
+                "Successfully completed bucket move with all files downloaded"
+            );
+        }
+
+        Ok(())
+    }
+}
+
+impl<NT> MspRespondMoveBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -232,109 +401,7 @@ where
         // Accept the request since we've verified we can handle all files
         self.accept_bucket_move(event.bucket_id).await?;
 
-        // Now download all the files in parallel with a controlled concurrency limit
-        let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_FILE_DOWNLOADS));
-
-        let download_tasks: Vec<_> = files
-            .into_iter()
-            .map(|file| {
-                let semaphore = Arc::clone(&semaphore);
-                let bucket_id = event.bucket_id;
-                let task = self.clone();
-
-                tokio::spawn(async move {
-                    let _permit = semaphore
-                        .acquire()
-                        .await
-                        .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
-
-                    match task.download_file(&file, &bucket_id).await {
-                        Ok(_) => Ok(()),
-                        Err(e) => {
-                            error!(
-                                target: LOG_TARGET,
-                                "Failed to download file {:?}: {:?}",
-                                file.id,
-                                e
-                            );
-                            Err(e)
-                        }
-                    }
-                })
-            })
-            .collect();
-
-        // Wait for all downloads to complete and collect results
-        let results = join_all(download_tasks).await;
-
-        // Process results and count failures
-        let mut failed_downloads = 0;
-        for result in results {
-            match result {
-                Ok(download_result) => {
-                    if let Err(e) = download_result {
-                        error!(
-                            target: LOG_TARGET,
-                            "File download task failed: {:?}", e
-                        );
-                        failed_downloads += 1;
-                    }
-                }
-                Err(e) => {
-                    error!(
-                        target: LOG_TARGET,
-                        "File download task panicked: {:?}", e
-                    );
-                    failed_downloads += 1;
-                }
-            }
-        }
-
-        // Log summary of download results
-        if failed_downloads > 0 {
-            warn!(
-                target: LOG_TARGET,
-                "Finished bucket move with {} failed file downloads",
-                failed_downloads
-            );
-        } else {
-            info!(
-                target: LOG_TARGET,
-                "Successfully completed bucket move with all files downloaded"
-            );
-        }
-
         Ok(())
-    }
-}
-
-impl<NT> Clone for MspMoveBucketTask<NT>
-where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
-{
-    fn clone(&self) -> MspMoveBucketTask<NT> {
-        Self {
-            storage_hub_handler: self.storage_hub_handler.clone(),
-            file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
-            pending_bucket_id: self.pending_bucket_id,
-            bsp_peer_manager: self.bsp_peer_manager.clone(),
-        }
-    }
-}
-
-impl<NT> MspMoveBucketTask<NT>
-where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-{
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
-        Self {
-            storage_hub_handler,
-            file_storage_inserted_file_keys: Vec::new(),
-            pending_bucket_id: None,
-            bsp_peer_manager: Arc::new(tokio::sync::RwLock::new(BspPeerManager::new())), // Minimum 3 peers per request
-        }
     }
 
     /// Rejects a bucket move request and performs cleanup of any partially created resources.
@@ -458,16 +525,150 @@ where
         Ok(())
     }
 
+    async fn check_and_increase_capacity(
+        &self,
+        required_size: u64,
+        own_msp_id: ProviderId,
+    ) -> anyhow::Result<()> {
+        let available_capacity = self
+            .storage_hub_handler
+            .blockchain
+            .query_available_storage_capacity(own_msp_id)
+            .await
+            .map_err(|e| {
+                let err_msg = format!("Failed to query available storage capacity: {:?}", e);
+                error!(target: LOG_TARGET, err_msg);
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        // Increase storage capacity if the available capacity is less than the required size
+        if available_capacity < required_size {
+            warn!(
+                target: LOG_TARGET,
+                "Insufficient storage capacity to accept bucket move. Available: {}, Required: {}",
+                available_capacity,
+                required_size
+            );
+
+            let current_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_storage_provider_capacity(own_msp_id)
+                .await
+                .map_err(|e| {
+                    let err_msg = format!("Failed to query storage provider capacity: {:?}", e);
+                    error!(target: LOG_TARGET, err_msg);
+                    anyhow::anyhow!(err_msg)
+                })?;
+
+            let max_storage_capacity = self
+                .storage_hub_handler
+                .provider_config
+                .max_storage_capacity;
+
+            if max_storage_capacity == current_capacity {
+                let err_msg =
+                    "Reached maximum storage capacity limit. Unable to add more storage capacity.";
+                warn!(target: LOG_TARGET, err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
+
+            let new_capacity = self.calculate_capacity(required_size, current_capacity)?;
+
+            let call = storage_hub_runtime::RuntimeCall::Providers(
+                pallet_storage_providers::Call::change_capacity { new_capacity },
+            );
+
+            let earliest_change_capacity_block = self
+                .storage_hub_handler
+                .blockchain
+                .query_earliest_change_capacity_block(own_msp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query earliest change capacity block: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query earliest change capacity block: {:?}", e)
+                })?;
+
+            // Wait for the earliest block where the capacity can be changed
+            self.storage_hub_handler
+                .blockchain
+                .wait_for_block(earliest_change_capacity_block)
+                .await?;
+
+            self.storage_hub_handler
+                .blockchain
+                .send_extrinsic(call, SendExtrinsicOptions::default())
+                .await?
+                .with_timeout(Duration::from_secs(60))
+                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .await?;
+
+            info!(
+                target: LOG_TARGET,
+                "Increased storage capacity to {:?} bytes",
+                new_capacity
+            );
+
+            let available_capacity = self
+                .storage_hub_handler
+                .blockchain
+                .query_available_storage_capacity(own_msp_id)
+                .await
+                .map_err(|e| {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to query available storage capacity: {:?}", e
+                    );
+                    anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                })?;
+
+            // Reject bucket move if the new available capacity is still less than required
+            if available_capacity < required_size {
+                let err_msg =
+                    "Increased storage capacity is still insufficient to accept bucket move.";
+                warn!(target: LOG_TARGET, "{}", err_msg);
+                return Err(anyhow::anyhow!(err_msg));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn calculate_capacity(
+        &self,
+        required_size: u64,
+        current_capacity: StorageDataUnit,
+    ) -> Result<StorageDataUnit, anyhow::Error> {
+        let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
+        let jumps_needed = (required_size + jump_capacity - 1) / jump_capacity;
+        let jumps = max(jumps_needed, 1);
+        let bytes_to_add = jumps * jump_capacity;
+        let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
+            anyhow::anyhow!("Reached maximum storage capacity limit. Cannot accept bucket move.")
+        })?;
+
+        let max_storage_capacity = self
+            .storage_hub_handler
+            .provider_config
+            .max_storage_capacity;
+
+        let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
+
+        Ok(new_capacity)
+    }
+
     /// Processes a single chunk download response
     async fn process_chunk_download_response(
         &self,
         file_key: H256,
         file_metadata: &FileMetadata,
-        chunks_count: u64,
         chunk_batch: &HashSet<ChunkId>,
         peer_id: PeerId,
         download_request: RemoteDownloadDataResponse,
-        peer_manager: &Arc<tokio::sync::RwLock<BspPeerManager>>,
+        peer_manager: &Arc<RwLock<BspPeerManager>>,
         batch_size_bytes: u64,
         start_time: std::time::Instant,
     ) -> Result<bool, anyhow::Error> {
@@ -490,26 +691,19 @@ where
             .proven::<StorageProofsMerkleTrieLayout>()
             .map_err(|e| anyhow!("Failed to get proven data: {:?}", e))?;
 
-        // Verify that received chunks match requested ones
-        let received_chunk_ids: HashSet<_> = proven.iter().map(|p| p.key).collect();
-        if received_chunk_ids.len() != proven.len() {
-            let mut peer_manager = peer_manager.write().await;
-            peer_manager.record_failure(peer_id);
-            return Err(anyhow!("Received duplicate chunk IDs in response"));
-        }
-        if received_chunk_ids != *chunk_batch {
+        if proven.len() != chunk_batch.len() {
             let mut peer_manager = peer_manager.write().await;
             peer_manager.record_failure(peer_id);
             return Err(anyhow!(
-                "Received chunk IDs do not match requested ones. Expected: {:?}, got: {:?}",
-                chunk_batch,
-                received_chunk_ids
+                "Expected {} proven chunks but got {}",
+                chunk_batch.len(),
+                proven.len()
             ));
         }
 
         // Process each proven chunk
         for proven_chunk in proven {
-            self.process_proven_chunk(file_key, file_metadata, chunks_count, proven_chunk)
+            self.process_proven_chunk(file_key, file_metadata, proven_chunk)
                 .await?;
         }
 
@@ -525,7 +719,6 @@ where
         &self,
         file_key: H256,
         file_metadata: &FileMetadata,
-        chunks_count: u64,
         proven_chunk: ProvenLeaf<ChunkId, Chunk>,
     ) -> Result<(), anyhow::Error> {
         let chunk_id = proven_chunk.key;
@@ -533,11 +726,7 @@ where
 
         // Validate chunk size
         let chunk_idx = chunk_id.as_u64();
-        let expected_chunk_size = if chunk_idx == chunks_count - 1 {
-            (file_metadata.file_size % FILE_CHUNK_SIZE as u64) as usize
-        } else {
-            FILE_CHUNK_SIZE as usize
-        };
+        let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx);
 
         if chunk_data.len() != expected_chunk_size {
             return Err(anyhow!(
@@ -564,10 +753,9 @@ where
         peer_id: PeerId,
         file_key: H256,
         file_metadata: &FileMetadata,
-        chunks_count: u64,
         chunk_batch: &HashSet<ChunkId>,
         bucket: &BucketId,
-        peer_manager: &Arc<tokio::sync::RwLock<BspPeerManager>>,
+        peer_manager: &Arc<RwLock<BspPeerManager>>,
         batch_size_bytes: u64,
     ) -> Result<bool, anyhow::Error> {
         for attempt in 0..=DOWNLOAD_RETRY_ATTEMPTS {
@@ -594,7 +782,6 @@ where
                         .process_chunk_download_response(
                             file_key,
                             file_metadata,
-                            chunks_count,
                             chunk_batch,
                             peer_id,
                             download_request,
@@ -681,35 +868,16 @@ where
     ) -> anyhow::Result<()> {
         let file_metadata = file.to_file_metadata(bucket.as_ref().to_vec());
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+        let chunks_count = file_metadata.chunks_count();
 
         info!(
             target: LOG_TARGET,
             "MSP: downloading file {:?}", file_key,
         );
 
-        // Get BSP peer IDs and initialize them in the peer manager
-        let bsp_peer_ids = file
-            .get_bsp_peer_ids(
-                &mut self
-                    .storage_hub_handler
-                    .indexer_db_pool
-                    .as_ref()
-                    .unwrap()
-                    .get()
-                    .await?,
-            )
-            .await?;
-
-        {
-            let mut peer_manager = self.bsp_peer_manager.write().await;
-            for &peer_id in &bsp_peer_ids {
-                peer_manager.add_peer(peer_id, file_key);
-            }
-        }
-
-        let chunks_count = file_metadata.chunks_count();
+        // Create semaphore for chunk-level parallelism
         let chunk_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHUNKS_PER_FILE));
-        let peer_manager = Arc::clone(&self.bsp_peer_manager);
+        let peer_manager = Arc::clone(&self.peer_manager);
 
         let chunk_tasks: Vec<_> = (0..chunks_count)
             .step_by(MAX_CHUNKS_PER_REQUEST)
@@ -737,7 +905,6 @@ where
                             CHUNK_REQUEST_PEER_RETRY_ATTEMPTS - 2,
                             &file_key,
                         );
-                        use rand::seq::SliceRandom;
                         peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
                         peers
                     };
@@ -749,7 +916,6 @@ where
                                 peer_id,
                                 file_key,
                                 &file_metadata,
-                                chunks_count,
                                 &chunk_batch,
                                 &bucket,
                                 &peer_manager,
@@ -801,13 +967,20 @@ where
             error!(
                 target: LOG_TARGET,
                 "Failed to download {}/{} chunks for file {:?}",
-                failed_downloads, chunks_count, file_key
+                failed_downloads,
+                chunks_count,
+                file_key
             );
+            return Err(anyhow!(
+                "Failed to download all chunks for file {:?}",
+                file_key
+            ));
         } else {
             info!(
                 target: LOG_TARGET,
                 "Successfully downloaded {} chunks for file {:?}",
-                chunks_count, file_key
+                chunks_count,
+                file_key
             );
         }
 
