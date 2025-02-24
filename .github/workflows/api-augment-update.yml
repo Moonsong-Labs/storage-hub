@@ -10,14 +10,14 @@ on:
 # TODO: When we start publishing runtimes, change steps to fetch from docker instead
 jobs:
   upgrading-typescript-api:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2204
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.sha }}
       - name: Use Node.js
-        uses: actions/setup-node@v4
+        uses: useblacksmith/setup-node@v5
         with:
           node-version: 22
       - name: Use pnpm
@@ -28,7 +28,7 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
-         cache: false
+          cache: false
       - uses: rui314/setup-mold@v1
       - uses: ./.github/workflow-templates/setup-pnpm
       - name: Install libpq-dev
