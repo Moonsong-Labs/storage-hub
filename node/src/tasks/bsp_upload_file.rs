@@ -1,4 +1,11 @@
-use std::{cmp::max, collections::HashMap, ops::Add, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    cmp::max,
+    collections::{HashMap, HashSet},
+    ops::Add,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -32,7 +39,6 @@ use crate::services::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
-use shp_constants::FILE_CHUNK_SIZE;
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
@@ -89,91 +95,6 @@ where
             file_key_cleanup: None,
             capacity_queue: Arc::new(Mutex::new(0_u64)),
         }
-    }
-
-    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
-        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
-        let mut is_allowed = read_file_storage
-            .is_allowed(
-                &event.file_key.into(),
-                shc_file_manager::traits::ExcludeType::File,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("File is in the exclude list");
-            drop(read_file_storage);
-            return Ok(false);
-        }
-
-        is_allowed = read_file_storage
-            .is_allowed(
-                &event.fingerprint.as_hash().into(),
-                shc_file_manager::traits::ExcludeType::Fingerprint,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("File fingerprint is in the exclude list");
-            drop(read_file_storage);
-            return Ok(false);
-        }
-
-        let owner = H256::from(event.who.as_ref());
-        is_allowed = read_file_storage
-            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("Owner is in the exclude list");
-            drop(read_file_storage);
-            return Ok(false);
-        }
-
-        is_allowed = read_file_storage
-            .is_allowed(
-                &event.bucket_id,
-                shc_file_manager::traits::ExcludeType::Bucket,
-            )
-            .map_err(|e| {
-                let err_msg = format!("Failed to read file exclude list: {:?}", e);
-                error!(
-                    target: LOG_TARGET,
-                    err_msg
-                );
-                anyhow::anyhow!(err_msg)
-            })?;
-
-        if !is_allowed {
-            info!("Bucket is in the exclude list");
-            drop(read_file_storage);
-            return Ok(false);
-        }
-
-        drop(read_file_storage);
-
-        return Ok(true);
     }
 }
 
@@ -364,8 +285,10 @@ where
             confirm_storing_requests_with_chunks_to_prove.into_iter()
         {
             match (
-                read_file_storage
-                    .generate_proof(&confirm_storing_request.file_key, &chunks_to_prove),
+                read_file_storage.generate_proof(
+                    &confirm_storing_request.file_key,
+                    &HashSet::from_iter(chunks_to_prove),
+                ),
                 read_file_storage.get_metadata(&confirm_storing_request.file_key),
             ) {
                 (Ok(proof), Ok(Some(metadata))) => {
@@ -440,7 +363,8 @@ where
                         self.storage_hub_handler
                             .provider_config
                             .extrinsic_retry_timeout,
-                    )),
+                    ))
+                    .retry_only_if_timeout(),
                 true,
             )
             .await
@@ -469,6 +393,12 @@ where
         &mut self,
         event: NewStorageRequest,
     ) -> anyhow::Result<()> {
+        if event.size == 0 {
+            let err_msg = "File size cannot be 0";
+            error!(target: LOG_TARGET, err_msg);
+            return Err(anyhow!(err_msg));
+        }
+
         // First check if the file is not on our exclude list
         let is_allowed = self.is_allowed(&event).await?;
 
@@ -903,28 +833,19 @@ where
             // TODO: Add a batched write chunk method to the file storage.
 
             // Validate chunk size
-            // We expect all chunks to be of size `FILE_CHUNK_SIZE` except for the last
-            // one which can be smaller
-            let expected_chunk_size = if chunk.key.as_u64() == file_metadata.chunks_count() - 1 {
-                // Last chunk
-                (file_metadata.file_size % FILE_CHUNK_SIZE) as usize
-            } else {
-                // All other chunks
-                FILE_CHUNK_SIZE as usize
-            };
-
-            if chunk.data.len() != expected_chunk_size {
+            let chunk_idx = chunk.key.as_u64();
+            if !file_metadata.is_valid_chunk_size(chunk_idx, chunk.data.len()) {
                 error!(
                     target: LOG_TARGET,
                     "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
                     chunk.key,
                     file_key,
-                    expected_chunk_size,
+                    file_metadata.chunk_size_at(chunk_idx),
                     chunk.data.len()
                 );
                 return Err(anyhow!(
                     "Invalid chunk size. Expected {}, got {}",
-                    expected_chunk_size,
+                    file_metadata.chunk_size_at(chunk_idx),
                     chunk.data.len()
                 ));
             }
@@ -958,13 +879,15 @@ where
                     FileStorageWriteError::FailedToGetFileChunk
                     | FileStorageWriteError::FailedToInsertFileChunk
                     | FileStorageWriteError::FailedToDeleteChunk
+                    | FileStorageWriteError::FailedToDeleteRoot
                     | FileStorageWriteError::FailedToPersistChanges
                     | FileStorageWriteError::FailedToParseFileMetadata
                     | FileStorageWriteError::FailedToParseFingerprint
                     | FileStorageWriteError::FailedToReadStorage
                     | FileStorageWriteError::FailedToUpdatePartialRoot
                     | FileStorageWriteError::FailedToParsePartialRoot
-                    | FileStorageWriteError::FailedToGetStoredChunksCount => {
+                    | FileStorageWriteError::FailedToGetStoredChunksCount
+                    | FileStorageWriteError::ChunkCountOverflow => {
                         return Err(anyhow::anyhow!(format!(
                             "Internal trie read/write error {:?}:{:?}",
                             event.file_key, chunk.key
@@ -976,7 +899,8 @@ where
                             event.file_key
                         )));
                     }
-                    FileStorageWriteError::FailedToConstructTrieIter => {
+                    FileStorageWriteError::FailedToConstructTrieIter
+                    | FileStorageWriteError::FailedToContructFileTrie => {
                         return Err(anyhow::anyhow!(format!(
                             "This is a bug! Failed to construct trie iter for key {:?}.",
                             event.file_key
@@ -987,6 +911,91 @@ where
         }
 
         Ok(file_complete)
+    }
+
+    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
+        let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        let mut is_allowed = read_file_storage
+            .is_allowed(
+                &event.file_key.into(),
+                shc_file_manager::traits::ExcludeType::File,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.fingerprint.as_hash().into(),
+                shc_file_manager::traits::ExcludeType::Fingerprint,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("File fingerprint is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        let owner = H256::from(event.who.as_ref());
+        is_allowed = read_file_storage
+            .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Owner is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        is_allowed = read_file_storage
+            .is_allowed(
+                &event.bucket_id,
+                shc_file_manager::traits::ExcludeType::Bucket,
+            )
+            .map_err(|e| {
+                let err_msg = format!("Failed to read file exclude list: {:?}", e);
+                error!(
+                    target: LOG_TARGET,
+                    err_msg
+                );
+                anyhow::anyhow!(err_msg)
+            })?;
+
+        if !is_allowed {
+            info!("Bucket is in the exclude list");
+            drop(read_file_storage);
+            return Ok(false);
+        }
+
+        drop(read_file_storage);
+
+        return Ok(true);
     }
 
     /// Calculate the new capacity after adding the required capacity for the file.

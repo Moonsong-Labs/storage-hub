@@ -629,6 +629,17 @@ pub mod pallet {
             error: DispatchError,
         },
 
+        /// Event emitted when there was an inconsistency error and the provider was found in `ProviderTopUpExpirations`
+        /// for a tick that wasn't actually when its top up expired, and when trying to insert it with the actual
+        /// expiration tick in `ProviderTopUpExpirations` the append failed.
+        ///
+        /// The result of this is that the provider's top up expiration will be reinserted at the correct expiration tick based on the
+        /// `TopUpMetadata` found in `AwaitingTopUpFromProviders` storage.
+        FailedToInsertProviderTopUpExpiration {
+            provider_id: ProviderIdFor<T>,
+            expiration_tick: StorageHubTickNumber<T>,
+        },
+
         /// Event emitted when a provider has been marked as insolvent.
         ///
         /// This happens when the provider hasn't topped up their deposit within the grace period after being slashed
@@ -980,7 +991,7 @@ pub mod pallet {
         /// Notes:
         /// - This extrinsic could be called by the user itself or by a third party
         /// - The deposit that the user has to pay to register as a SP is held when the user requests to register as a SP
-        /// - If this extrinsic is successful, it will be free for the caller, to incentive state debloating
+        /// - If this extrinsic is successful, it will be free for the caller, to incentive state de-bloating
         #[pallet::call_index(2)]
         #[pallet::weight({
 			T::WeightInfo::confirm_sign_up_bsp()

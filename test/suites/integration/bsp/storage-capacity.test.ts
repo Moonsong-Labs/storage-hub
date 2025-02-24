@@ -208,7 +208,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
 
       // Wait until the BSP stores the file.
       const bspAddress = userApi.createType("Address", bspKey.address);
-      await userApi.wait.bspStored(1, bspAddress);
+      await userApi.wait.bspStored({ expectedExts: 1, bspAccount: bspAddress });
 
       // Update the used capacity of the BSP.
       capacityUsed = (
@@ -325,7 +325,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
 
     // Wait until the BSP stores both files
     const bspAddress = userApi.createType("Address", bspKey.address);
-    await userApi.wait.bspStored(1, bspAddress);
+    await userApi.wait.bspStored({ expectedExts: 1, bspAccount: bspAddress });
   });
 
   it("BSP does not increase its capacity over its configured maximum (and skips volunteering if that would be needed).", async () => {
@@ -348,7 +348,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
     await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
 
     // Stop the other BSP so it doesn't volunteer for the files.
-    await userApi.docker.pauseBspContainer("docker-sh-bsp-1");
+    await userApi.docker.pauseContainer("docker-sh-bsp-1");
 
     // Issue the first storage request. The new BSP should have enough capacity to volunteer for it.
     const source1 = "res/cloud.jpg";
@@ -381,7 +381,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
 
     // Wait until the BSP confirms storing the file.
     const bspTwpAddress = userApi.createType("Address", bspTwoKey.address);
-    await userApi.wait.bspStored(1, bspTwpAddress);
+    await userApi.wait.bspStored({ expectedExts: 1, bspAccount: bspTwpAddress });
 
     // Issue the second storage request. The BSP shouldn't be able to volunteer for this one since
     // it would have to increase its capacity over its configured maximum.
@@ -425,7 +425,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
     );
 
     // Disconnect and stop the new BSP.
-    await userApi.docker.stopBspContainer("sh-bsp-two");
+    await userApi.docker.stopContainer("sh-bsp-two");
     await bspTwoApi.disconnect();
   });
 });

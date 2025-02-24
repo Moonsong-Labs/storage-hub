@@ -135,10 +135,12 @@ export const waitForBspStored = async (
   api: ApiPromise,
   checkQuantity?: number,
   bspAccount?: Address,
+  timeoutMs?: number,
   shouldSealBlock = true
 ) => {
-  // To allow time for local file transfer to complete (10s)
-  const iterations = 100;
+  // To allow time for local file transfer to complete.
+  // Default is 10s, with iterations of 100ms delay.
+  const iterations = timeoutMs ? Math.ceil(timeoutMs / 100) : 100;
   const delay = 100;
 
   // This check is because a BSP cannot confirm storing a file in the same block in which it has to submit a proof,
@@ -190,31 +192,6 @@ export const waitForBspStored = async (
       );
     }
   }
-};
-
-/**
- * Waits for a BSP to send to the tx pool the extrinsic to confirm storing a file.
- *
- * This function performs the following steps:
- * 1. Waits for a longer period to allow for local file transfer.
- * 2. Checks for the presence of a 'bspConfirmStoring' extrinsic in the transaction pool.
- *
- * @param api - The ApiPromise instance to interact with the blockchain.
- * @param checkQuantity - Optional param to specify the number of expected extrinsics.
- * @returns A Promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
- *
- * @throws Will throw an error if the expected extrinsic is not found.
- */
-export const waitForBspStoredWithoutSealing = async (
-  api: ApiPromise,
-  options?: { checkQuantity?: number; timeout?: number }
-) => {
-  await waitForTxInPool(api, {
-    module: "fileSystem",
-    method: "bspConfirmStoring",
-    checkQuantity: options?.checkQuantity,
-    timeout: options?.timeout ?? 10_000
-  });
 };
 
 /**

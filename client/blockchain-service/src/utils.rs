@@ -3,6 +3,7 @@ use std::{cmp::max, sync::Arc, vec};
 use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
+use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
@@ -16,8 +17,8 @@ use shc_common::{
     blockchain_utils::get_events_at_block,
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, ParachainClient, ProofsDealerProviderId, StorageProviderId, TrieAddMutation,
-        TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
+        BlockNumber, ForestRoot, ParachainClient, ProofsDealerProviderId, StorageProviderId,
+        TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -154,8 +155,8 @@ where
             // - The size of the route is equal to `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES`, or
             // - The parent block is not found, or
             // - We reach the last best block processed.
-            let mut route = vec![new_block_info.clone().into()];
-            let mut last_block_added = new_block_info.clone();
+            let mut route = vec![new_block_info.into()];
+            let mut last_block_added = new_block_info;
             loop {
                 // Check if we are at the genesis block.
                 if last_block_added.number == BlockNumber::zero() {
@@ -212,7 +213,7 @@ where
 
             // The first element in the route is the last best block processed, which will also be the
             // `pivot`, so it will be ignored when processing the `tree_route`.
-            route.push(last_best_block.clone().into());
+            route.push(last_best_block.into());
 
             // Revert the route so that it is in ascending order of blocks, from the last best block processed up to the new imported best block.
             route.reverse();
@@ -244,7 +245,7 @@ where
             .into_iter()
             .chain(std::iter::once(&common_block))
             .chain(enacted)
-            .chain(std::iter::once(&new_block_info.clone().into()))
+            .chain(std::iter::once(&new_block_info.into()))
             .cloned()
             .collect();
 
@@ -1151,22 +1152,28 @@ where
             trace!(target: LOG_TARGET, "Applying Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
         }
 
+        // Preemptively getting the Buckets managed by this node, in case it is an MSP, so that we
+        // do the query just once, instead of doing it for every event.
+        let buckets_managed_by_msp = if let Some(StorageProviderId::MainStorageProvider(msp_id)) =
+            &self.provider_id
+        {
+            self.client
+                    .runtime_api()
+                    .query_buckets_for_msp(block.hash, msp_id)
+                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", msp_id, e))
+                    .ok()
+                    .and_then(|api_result| {
+                        api_result
+                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", msp_id, e))
+                            .ok()
+                    })
+        } else {
+            None
+        };
+
         // Process the events in the block, specifically those that are related to the Forest root changes.
         match get_events_at_block(&self.client, &block.hash) {
             Ok(events) => {
-                // If we are reverting the Forest root changes in this block, we process the events in reverse order.
-                // Normally, the order for processing the events would be irrelevant, because adding or removing different
-                // file keys from the Forest is independent of the order in which they are processed. However, if for
-                // whatever unexpected reason, in the same block, we find two operations for the same file key (for instance,
-                // an addition first and a removal in a later transaction), we need to process them in reverse order (revert
-                // the removal first, by adding it, and revert the addition later, by removing it).
-                let events = if revert {
-                    events.into_iter().rev().collect::<Vec<_>>()
-                } else {
-                    events
-                };
-
-                // Iterate through the events and process them.
                 for ev in events {
                     match ev.event.clone() {
                         RuntimeEvent::ProofsDealer(
@@ -1182,92 +1189,119 @@ where
                                 &self.provider_id
                             {
                                 // Check if the `provider_id` is the BSP that this node is managing.
-                                if provider_id == *bsp_id {
-                                    trace!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
-                                    trace!(target: LOG_TARGET, "Mutations: {:?}", mutations);
-
-                                    // Apply forest root changes to the Forest Storage.
-                                    for (file_key, mutation) in &mutations {
-                                        // If we are reverting the Forest root changes, we need to revert the mutation.
-                                        let mutation = if revert {
-                                            trace!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:?}]", mutation, file_key);
-                                            match self.revert_mutation(mutation) {
-                                                Ok(mutation) => mutation,
-                                                Err(e) => {
-                                                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to revert mutation. This is a bug. Please report it to the StorageHub team. \nError: {:?}", e);
-                                                    return;
-                                                }
-                                            }
-                                        } else {
-                                            trace!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
-                                            mutation.clone()
-                                        };
-
-                                        // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
-                                        // and not to the File Storage.
-                                        // This is because if in a future block built on top of this one, the BSP needs to provide
-                                        // a proof, it will be against the Forest root with this change applied.
-                                        // For file deletions, we will remove the file from the File Storage only after finality is reached.
-                                        // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                                        if let Err(e) = self
-                                            .apply_mutation_to_bsp_forest(file_key, &mutation)
-                                            .await
-                                        {
-                                            error!(target: LOG_TARGET, "Failed to apply mutation to BSP's Forest");
-                                            error!(target: LOG_TARGET, "BSP ID: {:?}", provider_id);
-                                            error!(target: LOG_TARGET, "Mutation: {:?}", mutation);
-                                            error!(target: LOG_TARGET, "Error: {:?}", e);
-                                        }
-                                    }
-
-                                    // Verify that the new Forest root matches the one in the block.
-                                    let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-                                    let fs = match self
-                                        .forest_storage_handler
-                                        .get(&current_forest_key.into())
-                                        .await
-                                    {
-                                        Some(fs) => fs,
-                                        None => {
-                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get Forest Storage.");
-                                            return;
-                                        }
-                                    };
-
-                                    let local_new_root = fs.read().await.root();
-
-                                    trace!(target: LOG_TARGET, "Mutations applied. New local Forest root: {:?}", local_new_root);
-
-                                    if revert {
-                                        if old_root != local_new_root {
-                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ New Forest root does not match the one in the block. This is a bug. Please report it to the StorageHub team.");
-                                            return;
-                                        }
-                                    } else {
-                                        if new_root != local_new_root {
-                                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ New Forest root does not match the one in the block. This is a bug. Please report it to the StorageHub team.");
-                                            return;
-                                        }
-                                    }
-
-                                    info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
+                                if provider_id != *bsp_id {
+                                    debug!(target: LOG_TARGET, "Provider ID [{:?}] is not the BSP ID [{:?}] that this node is managing. Skipping mutations applied event.", provider_id, bsp_id);
+                                    continue;
                                 }
+
+                                trace!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
+                                trace!(target: LOG_TARGET, "Mutations: {:?}", mutations);
+
+                                // Apply forest root changes to the BSP's Forest Storage.
+                                // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
+                                // and not to the File Storage.
+                                // This is because if in a future block built on top of this one, the BSP needs to provide
+                                // a proof, it will be against the Forest root with this change applied.
+                                // For file deletions, we will remove the file from the File Storage only after finality is reached.
+                                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+                                let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+                                if let Err(e) = self
+                                    .apply_forest_mutations_and_verify_root(
+                                        current_forest_key,
+                                        &mutations,
+                                        revert,
+                                        old_root,
+                                        new_root,
+                                    )
+                                    .await
+                                {
+                                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for BSP [{:?}]. \nError: {:?}", provider_id, e);
+                                    return;
+                                };
+
+                                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
                             }
                         }
                         RuntimeEvent::ProofsDealer(
                             pallet_proofs_dealer::Event::MutationsApplied {
-                                mutations: _,
-                                old_root: _,
-                                new_root: _,
+                                mutations,
+                                old_root,
+                                new_root,
+                                event_info,
                             },
                         ) => {
                             // This event is relevant in case the Provider managed is an MSP.
                             // In which case the mutations are applied to a Bucket's Forest root.
-                            if let Some(StorageProviderId::MainStorageProvider(_msp_id)) =
+                            if let Some(StorageProviderId::MainStorageProvider(_)) =
                                 &self.provider_id
                             {
-                                // TODO: Check if Bucket is managed by this MSP.
-                                // TODO: Apply forest root changes to the Bucket's Forest Storage.
+                                // Check that this MSP is managing at least one bucket.
+                                if buckets_managed_by_msp.is_none() {
+                                    debug!(target: LOG_TARGET, "MSP is not managing any buckets. Skipping mutations applied event.");
+                                    continue;
+                                }
+                                let buckets_managed_by_msp = buckets_managed_by_msp
+                                    .as_ref()
+                                    .expect("Just checked that this is not None; qed");
+                                if buckets_managed_by_msp.is_empty() {
+                                    debug!(target: LOG_TARGET, "Buckets managed by MSP is an empty vector. Skipping mutations applied event.");
+                                    continue;
+                                }
+
+                                // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
+                                // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
+                                // in the `event_info` field.
+                                if event_info.is_none() {
+                                    error!(target: LOG_TARGET, "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated. This should never happen. This is a bug. Please report it to the StorageHub team.");
+                                    continue;
+                                }
+                                let event_info =
+                                    event_info.expect("Just checked that this is not None; qed");
+                                let bucket_id = match self
+                                    .client
+                                    .runtime_api()
+                                    .decode_generic_apply_delta_event_info(block.hash, event_info)
+                                {
+                                    Ok(runtime_api_result) => match runtime_api_result {
+                                        Ok(bucket_id) => bucket_id,
+                                        Err(e) => {
+                                            error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
+                                            continue;
+                                        }
+                                    },
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
+                                        continue;
+                                    }
+                                };
+
+                                // Check if Bucket is managed by this MSP.
+                                if !buckets_managed_by_msp.contains(&bucket_id) {
+                                    debug!(target: LOG_TARGET, "Bucket [{:?}] is not managed by this MSP. Skipping mutations applied event.", bucket_id);
+                                    continue;
+                                }
+
+                                // Apply forest root changes to the Bucket's Forest Storage.
+                                // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
+                                // and not to the File Storage.
+                                // For file deletions, we will remove the file from the File Storage only after finality is reached.
+                                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+                                let bucket_forest_key = bucket_id.as_ref().to_vec();
+                                if let Err(e) = self
+                                    .apply_forest_mutations_and_verify_root(
+                                        bucket_forest_key,
+                                        &mutations,
+                                        revert,
+                                        old_root,
+                                        new_root,
+                                    )
+                                    .await
+                                {
+                                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
+                                    return;
+                                };
+
+                                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
                             }
                         }
                         _ => {}
@@ -1280,20 +1314,99 @@ where
         }
     }
 
-    /// Applies a [`TrieMutation`] to the Forest of a BSP.
+    /// Applies a set of [`TrieMutation`]s to a Merkle Patricia Forest, and verifies the new local
+    /// Forest root against `old_root` or `new_root`, depending on the value of `revert`.
+    ///
+    /// If `revert` is set to `true`, the Forest root changes will be reverted, and the new local
+    /// Forest root will be verified against the `old_root` Forest root.
+    ///
+    /// If `revert` is set to `false`, the Forest root changes will be applied, and the new local
+    /// Forest root will be verified against the `new_root` Forest root.
+    ///
+    /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`.
+    async fn apply_forest_mutations_and_verify_root(
+        &self,
+        forest_key: Vec<u8>,
+        mutations: &[(H256, TrieMutation)],
+        revert: bool,
+        old_root: ForestRoot,
+        new_root: ForestRoot,
+    ) -> Result<()> {
+        for (file_key, mutation) in mutations {
+            // If we are reverting the Forest root changes, we need to revert the mutation.
+            let mutation = if revert {
+                trace!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                match self.revert_mutation(mutation) {
+                    Ok(mutation) => mutation,
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to revert mutation. This is a bug. Please report it to the StorageHub team. \nError: {:?}", e);
+                        return Err(anyhow!("Failed to revert mutation."));
+                    }
+                }
+            } else {
+                trace!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                mutation.clone()
+            };
+
+            // Apply mutation to the Forest.
+            if let Err(e) = self
+                .apply_forest_mutation(forest_key.clone(), file_key, &mutation)
+                .await
+            {
+                error!(target: LOG_TARGET, "Failed to apply mutation to Forest [{:?}]", forest_key);
+                error!(target: LOG_TARGET, "Mutation: {:?}", mutation);
+                error!(target: LOG_TARGET, "Error: {:?}", e);
+            }
+        }
+
+        // Verify that the new Forest root matches the one in the block.
+        let fs = match self.forest_storage_handler.get(&forest_key.into()).await {
+            Some(fs) => fs,
+            None => {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get Forest Storage.");
+                return Err(anyhow!("Failed to get Forest Storage."));
+            }
+        };
+
+        let local_new_root = fs.read().await.root();
+
+        trace!(target: LOG_TARGET, "Mutations applied. New local Forest root: {:?}", local_new_root);
+
+        if revert {
+            if old_root != local_new_root {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ New local Forest root does not match the one in the block after reverting mutations. This is a bug. Please report it to the StorageHub team.");
+                return Err(anyhow!(
+                    "New local Forest root does not match the one in the block after reverting mutations."
+                ));
+            }
+        } else {
+            if new_root != local_new_root {
+                error!(target: LOG_TARGET, "CRITICAL❗️❗️ New local Forest root does not match the one in the block after applying mutations. This is a bug. Please report it to the StorageHub team.");
+                return Err(anyhow!(
+                    "New local Forest root does not match the one in the block after applying mutations."
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Applies a [`TrieMutation`] to the a Merkle Patricia Forest.
     ///
     /// If `mutation` is a [`TrieAddMutation`], it will decode the [`TrieAddMutation::value`] as a
     /// [`FileMetadata`] and insert it into the Forest.
     /// If `mutation` is a [`TrieRemoveMutation`], it will remove the file with the key `file_key` from the Forest.
-    async fn apply_mutation_to_bsp_forest(
+    ///
+    /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`.
+    async fn apply_forest_mutation(
         &self,
+        forest_key: Vec<u8>,
         file_key: &H256,
         mutation: &TrieMutation,
     ) -> Result<()> {
-        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
         let fs = self
             .forest_storage_handler
-            .get(&current_forest_key.into())
+            .get(&forest_key.into())
             .await
             .ok_or_else(|| anyhow!("CRITICAL❗️❗️ Failed to get forest storage."))?;
 

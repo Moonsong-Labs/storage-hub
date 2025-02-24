@@ -30,6 +30,9 @@ export interface BackupStorageProvider extends Struct {
 /** @name BackupStorageProviderId */
 export interface BackupStorageProviderId extends H256 {}
 
+/** @name BucketId */
+export interface BucketId extends H256 {}
+
 /** @name CheckpointChallenge */
 export interface CheckpointChallenge extends Struct {
   readonly file_key: H256;
@@ -46,6 +49,12 @@ export interface FileMetadata extends Struct {
   readonly location: Bytes;
   readonly file_size: u64;
   readonly fingerprint: U8aFixed;
+}
+
+/** @name GenericApplyDeltaEventInfoError */
+export interface GenericApplyDeltaEventInfoError extends Enum {
+  readonly isDecodeError: boolean;
+  readonly type: "DecodeError";
 }
 
 /** @name GetBspInfoError */
@@ -112,6 +121,13 @@ export interface GetProofSubmissionRecordError extends Enum {
   readonly isProviderNeverSubmittedProof: boolean;
   readonly isInternalApiError: boolean;
   readonly type: "ProviderNotRegistered" | "ProviderNeverSubmittedProof" | "InternalApiError";
+}
+
+/** @name GetStakeError */
+export interface GetStakeError extends Enum {
+  readonly isProviderNotRegistered: boolean;
+  readonly isInternalError: boolean;
+  readonly type: "ProviderNotRegistered" | "InternalError";
 }
 
 /** @name GetUsersWithDebtOverThresholdError */
@@ -182,11 +198,11 @@ export interface QueryBspConfirmChunksToProveForFileError extends Enum {
   readonly type: "StorageRequestNotFound" | "ConfirmChunks" | "InternalError";
 }
 
-/** @name QueryBucketsForInsolventUserError */
-export interface QueryBucketsForInsolventUserError extends Enum {
-  readonly isNotAnMsp: boolean;
+/** @name QueryBucketsForMspError */
+export interface QueryBucketsForMspError extends Enum {
+  readonly isProviderNotRegistered: boolean;
   readonly isInternalError: boolean;
-  readonly type: "NotAnMsp" | "InternalError";
+  readonly type: "ProviderNotRegistered" | "InternalError";
 }
 
 /** @name QueryConfirmChunksToProveForFileError */

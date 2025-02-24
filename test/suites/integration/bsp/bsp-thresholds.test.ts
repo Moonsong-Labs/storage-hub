@@ -269,7 +269,7 @@ describeBspNet(
       // Checking volunteering and confirming for the high reputation BSP
       await userApi.wait.bspVolunteer(1);
       await bspApi.wait.fileStorageComplete(fileKey);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
 
       // Checking volunteering and confirming for the low reputation BSP
       // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
@@ -289,7 +289,7 @@ describeBspNet(
         "Zero reputation BSP should be able to volunteer and be accepted"
       );
       await bspDownApi.disconnect();
-      await userApi.docker.stopBspContainer("sh-bsp-down");
+      await userApi.docker.stopContainer("sh-bsp-down");
     });
 
     it("BSP two eventually volunteers after threshold curve is met", async () => {
@@ -361,7 +361,7 @@ describeBspNet(
 
       await userApi.wait.bspVolunteer(1);
       await bspApi.wait.fileStorageComplete(fileKey);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
 
       // Then wait for the second BSP to volunteer and confirm storing the file
       // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
@@ -369,10 +369,10 @@ describeBspNet(
 
       await userApi.wait.bspVolunteer(1);
       await bspTwoApi.wait.fileStorageComplete(fileKey);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
 
       await bspTwoApi.disconnect();
-      await userApi.docker.stopBspContainer("sh-bsp-two");
+      await userApi.docker.stopContainer("sh-bsp-two");
     });
 
     it("BSP with reputation is prioritised", async () => {
@@ -477,7 +477,7 @@ describeBspNet(
       // Verify that the BSP with reputation is prioritised over the lower reputation BSPs
       assert(filtered.length === 1, "BSP with reputation should be prioritised");
       await bspThreeApi.disconnect();
-      await userApi.docker.stopBspContainer("sh-bsp-three");
+      await userApi.docker.stopContainer("sh-bsp-three");
     });
 
     it(
@@ -549,7 +549,7 @@ describeBspNet(
           "BSP two should not be able to spam the chain and reach his threshold to volunteer"
         );
 
-        await userApi.docker.stopBspContainer("sh-bsp-two");
+        await userApi.docker.stopContainer("sh-bsp-two");
       }
     );
   }

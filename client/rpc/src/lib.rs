@@ -1,4 +1,12 @@
-use std::{fmt::Debug, fs::File, io::Read, io::Write, path::PathBuf, str::FromStr, sync::Arc};
+use std::{
+    collections::HashSet,
+    fmt::Debug,
+    fs::File,
+    io::{Read, Write},
+    path::PathBuf,
+    str::FromStr,
+    sync::Arc,
+};
 
 use jsonrpsee::{
     core::{async_trait, RpcResult},
@@ -17,9 +25,9 @@ use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BackupStorageProviderId, BlockNumber, ChunkId, CustomChallenge, FileMetadata, ForestLeaf,
-        HashT, KeyProof, KeyProofs, MainStorageProviderId, ProofsDealerProviderId, Proven,
-        RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
+        BackupStorageProviderId, BlockNumber, BucketId, ChunkId, CustomChallenge, FileMetadata,
+        ForestLeaf, HashT, KeyProof, KeyProofs, MainStorageProviderId, ProofsDealerProviderId,
+        Proven, RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
         FILE_CHUNK_SIZE,
     },
 };
@@ -252,6 +260,7 @@ where
             H256,
             BlockNumber,
             ChunkId,
+            BucketId,
         >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
@@ -876,7 +885,7 @@ where
     // Construct file key proofs for the challenges.
     let read_file_storage = file_storage.read().await;
     let file_key_proof = read_file_storage
-        .generate_proof(&file_key, &chunks_to_prove)
+        .generate_proof(&file_key, &HashSet::from_iter(chunks_to_prove))
         .map_err(|e| {
             into_rpc_error(format!(
                 "File is not in storage, or proof does not exist: {:?}",

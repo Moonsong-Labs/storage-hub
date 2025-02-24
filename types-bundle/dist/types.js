@@ -41,6 +41,7 @@ export const ALL_TYPES = {
   ShouldRemoveFile: "bool",
   BackupStorageProviderId: "H256",
   MainStorageProviderId: "H256",
+  BucketId: "H256",
   StorageData: "u64",
   MerklePatriciaRoot: "H256",
   ChunkId: "u64",
@@ -143,10 +144,27 @@ export const ALL_TYPES = {
       InternalError: null
     }
   },
+  GenericApplyDeltaEventInfoError: {
+    _enum: {
+      DecodeError: null
+    }
+  },
   QueryProviderMultiaddressesError: {
     _enum: {
       ProviderNotRegistered: null,
       InternalApiError: null
+    }
+  },
+  GetStakeError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalError: null
+    }
+  },
+  QueryBucketsForMspError: {
+    _enum: {
+      ProviderNotRegistered: null,
+      InternalError: null
     }
   },
   QueryConfirmChunksToProveForFileError: {

@@ -44,40 +44,46 @@ export const showContainers = () => {
 
 export const addBspContainer = async (options?: {
   name?: string;
-  connectToPeer?: boolean; // unused
   additionalArgs?: string[];
-}) => {
+}) => addContainer("bsp", options);
+
+export const addMspContainer = async (options?: {
+  name?: string;
+  additionalArgs?: string[];
+}) => addContainer("msp", options);
+
+const addContainer = async (
+  providerType: "bsp" | "msp",
+  options?: {
+    name?: string;
+    additionalArgs?: string[];
+  }
+) => {
   const docker = new Docker();
-  const existingBsps = (
+  const existingContainers = (
     await docker.listContainers({
       filters: { ancestor: [DOCKER_IMAGE] }
     })
   )
     .flatMap(({ Command }) => Command)
-    .filter((cmd) => cmd.includes("--provider-type=bsp"));
+    .filter((cmd) => cmd.includes(`--provider-type=${providerType}`));
 
-  const bspNum = existingBsps.length;
+  const containerCount = existingContainers.length;
 
-  assert(bspNum > 0, "No existing BSP containers");
+  assert(containerCount > 0, `No existing ${providerType.toUpperCase()} containers`);
 
-  const p2pPort = 30350 + bspNum;
-  const rpcPort = 9888 + bspNum * 7;
-  const containerName = options?.name || `docker-sh-bsp-${bspNum + 1}`;
-  // get bootnode from docker args
+  const p2pPort = 30350 + containerCount;
+  const rpcPort = 9888 + containerCount * 7;
+  const containerName = options?.name || `docker-sh-${providerType}-${containerCount + 1}`;
 
+  // Get bootnode from docker args
   const { Args } = await docker.getContainer("docker-sh-user-1").inspect();
-
   const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
 
   assert(bootNodeArg, "No bootnode found in docker args");
 
-  let keystorePath: string;
   const keystoreArg = Args.find((arg) => arg.includes("--keystore-path="));
-  if (keystoreArg) {
-    keystorePath = keystoreArg.split("=")[1];
-  } else {
-    keystorePath = "/keystore";
-  }
+  const keystorePath = keystoreArg ? keystoreArg.split("=")[1] : "/keystore";
 
   const container = await docker.createContainer({
     Image: DOCKER_IMAGE,
@@ -99,7 +105,7 @@ export const addBspContainer = async (options?: {
       "--dev",
       "--sealing=manual",
       "--provider",
-      "--provider-type=bsp",
+      `--provider-type=${providerType}`,
       `--name=${containerName}`,
       "--no-hardware-benchmarks",
       "--unsafe-rpc-external",
@@ -111,6 +117,7 @@ export const addBspContainer = async (options?: {
       ...(options?.additionalArgs || [])
     ]
   });
+
   await container.start();
 
   let peerId: string | undefined;
@@ -126,28 +133,30 @@ export const addBspContainer = async (options?: {
   assert(peerId, "Failed to connect after 10s. Exiting...");
 
   const api = await BspNetTestApi.create(`ws://127.0.0.1:${rpcPort}`);
-
   const chainName = api.consts.system.version.specName.toString();
 
-  assert(chainName === "storage-hub-runtime", `Error connecting to BSP via api ${containerName}`);
+  assert(
+    chainName === "storage-hub-runtime",
+    `Error connecting to ${providerType.toUpperCase()} via api ${containerName}`
+  );
 
   await api.disconnect();
 
   console.log(
-    `▶️ BSP container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
+    `▶️ ${providerType.toUpperCase()} container started with name: ${containerName}, rpc port: ${rpcPort}, p2p port: ${p2pPort}, peerId: ${peerId}`
   );
 
   return { containerName, rpcPort, p2pPort, peerId };
 };
 
 // Make this a rusty style OO function with api contexts
-export const pauseBspContainer = async (containerName: string) => {
+export const pauseContainer = async (containerName: string) => {
   const docker = new Docker();
   const container = docker.getContainer(containerName);
   await container.pause();
 };
 
-export const stopBspContainer = async (containerName: string) => {
+export const stopContainer = async (containerName: string) => {
   const docker = new Docker();
   const containersToStop = await docker.listContainers({
     filters: { name: [containerName] }
@@ -157,7 +166,7 @@ export const stopBspContainer = async (containerName: string) => {
   await docker.getContainer(containersToStop[0].Id).remove({ force: true });
 };
 
-export const startBspContainer = async (options: {
+export const startContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -165,7 +174,7 @@ export const startBspContainer = async (options: {
   await container.start();
 };
 
-export const restartBspContainer = async (options: {
+export const restartContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();
@@ -173,7 +182,7 @@ export const restartBspContainer = async (options: {
   await container.restart();
 };
 
-export const resumeBspContainer = async (options: {
+export const resumeContainer = async (options: {
   containerName: string;
 }) => {
   const docker = new Docker();

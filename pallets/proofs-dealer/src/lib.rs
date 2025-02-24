@@ -484,10 +484,14 @@ pub mod pallet {
         /// This is the generic version of [`MutationsAppliedForProvider`](Event::MutationsAppliedForProvider)
         /// when [`generic_apply_delta`](ProofsDealerInterface::generic_apply_delta) is used
         /// and the root is not necessarily linked to a specific Provider.
+        ///
+        /// Additional information for context on where the mutations were applied can be provided
+        /// by using the `event_info` field.
         MutationsApplied {
             mutations: Vec<(KeyFor<T>, TrieMutation)>,
             old_root: KeyFor<T>,
             new_root: KeyFor<T>,
+            event_info: Option<Vec<u8>>,
         },
 
         /// The [`ChallengesTicker`] has been paused or unpaused.

@@ -601,7 +601,7 @@ export class NetworkLauncher {
       // This will advance the block which also contains the BSP volunteer tx.
       // Hence why we can wait for the BSP to confirm storing.
       await api.wait.mspResponseInTxPool();
-      await api.wait.bspVolunteer();
+      await api.wait.bspVolunteerInTxPool();
       await api.block.seal();
       await api.wait.bspStored();
     }
@@ -679,10 +679,10 @@ export class NetworkLauncher {
       null
     );
     await api.wait.bspVolunteer(4);
-    await api.wait.bspStored(4);
+    await api.wait.bspStored({ expectedExts: 4 });
 
     // Stop BSP that is supposed to be down
-    await api.docker.stopBspContainer(bspDownContainerName);
+    await api.docker.stopContainer(bspDownContainerName);
 
     // Attempt to debounce and stabilise
     await sleep(1500);

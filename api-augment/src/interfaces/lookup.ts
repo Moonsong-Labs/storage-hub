@@ -1407,6 +1407,10 @@ export default {
         providerId: "H256",
         error: "SpRuntimeDispatchError"
       },
+      FailedToInsertProviderTopUpExpiration: {
+        providerId: "H256",
+        expirationTick: "u32"
+      },
       ProviderInsolvent: {
         providerId: "H256"
       },
@@ -1474,7 +1478,7 @@ export default {
    **/
   PalletStorageProvidersTopUpMetadata: {
     startedAt: "u32",
-    endBlockGracePeriod: "u32"
+    endTickGracePeriod: "u32"
   },
   /**
    * Lookup134: pallet_file_system::pallet::Event<T>
@@ -1723,7 +1727,8 @@ export default {
       MutationsApplied: {
         mutations: "Vec<(H256,ShpTraitsTrieMutation)>",
         oldRoot: "H256",
-        newRoot: "H256"
+        newRoot: "H256",
+        eventInfo: "Option<Bytes>"
       },
       ChallengesTickerSet: {
         paused: "bool"

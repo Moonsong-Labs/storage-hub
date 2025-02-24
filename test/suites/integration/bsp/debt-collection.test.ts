@@ -194,7 +194,8 @@ describeBspNet(
         method: "chargeMultipleUsersPaymentStreams",
         module: "paymentStreams",
         checkTxPool: true,
-        assertLength: 3
+        assertLength: 3,
+        exactLength: false
       });
 
       // Seal a block to allow BSPs to charge the payment stream
@@ -264,7 +265,7 @@ describeBspNet(
       await bspApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
       await bspTwoApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
       await bspThreeApi.wait.fileStorageComplete(cloudFileMetadata.fileKey);
-      await userApi.wait.bspStored(3);
+      await userApi.wait.bspStored({ expectedExts: 3 });
 
       const adolphusFileMetadata = await userApi.file.createBucketAndSendNewStorageRequest(
         "res/adolphus.jpg",
@@ -279,7 +280,7 @@ describeBspNet(
       await bspApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
       await bspTwoApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
       await bspThreeApi.wait.fileStorageComplete(adolphusFileMetadata.fileKey);
-      await userApi.wait.bspStored(3);
+      await userApi.wait.bspStored({ expectedExts: 3 });
 
       // Check the payment stream info after adding the new files
       const paymentStreamInfoAfterAddingFiles =

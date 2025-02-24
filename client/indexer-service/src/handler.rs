@@ -616,6 +616,9 @@ impl IndexerService {
             pallet_storage_providers::Event::FailedToStopAllCyclesForInsolventBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
+            pallet_storage_providers::Event::FailedToInsertProviderTopUpExpiration { .. } => {
+                // In the future we should monitor for this to detect eventual bugs in the pallets
+            }
             pallet_storage_providers::Event::__Ignore(_, _) => {}
         }
         Ok(())

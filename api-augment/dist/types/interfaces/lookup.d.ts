@@ -1391,6 +1391,10 @@ declare const _default: {
         providerId: string;
         error: string;
       };
+      FailedToInsertProviderTopUpExpiration: {
+        providerId: string;
+        expirationTick: string;
+      };
       ProviderInsolvent: {
         providerId: string;
       };
@@ -1458,7 +1462,7 @@ declare const _default: {
    **/
   PalletStorageProvidersTopUpMetadata: {
     startedAt: string;
-    endBlockGracePeriod: string;
+    endTickGracePeriod: string;
   };
   /**
    * Lookup134: pallet_file_system::pallet::Event<T>
@@ -1702,6 +1706,7 @@ declare const _default: {
         mutations: string;
         oldRoot: string;
         newRoot: string;
+        eventInfo: string;
       };
       ChallengesTickerSet: {
         paused: string;
