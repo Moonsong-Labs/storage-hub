@@ -38,6 +38,8 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProvenFileKeyError {
+    /// The file metadata can not be created.
+    FailedToCreateFileMetadata,
     /// The fingerprint from FileMetadata can not be converted to the output of the trie's hasher.
     FingerprintAndTrieHashMismatch,
     /// The root hash of the trie does not match the expected root hash.
@@ -66,11 +68,14 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
         proof: CompactProof,
-    ) -> Self {
-        Self {
-            file_metadata: FileMetadata::new(owner, bucket_id, location, size, fingerprint),
+    ) -> Result<Self, ProvenFileKeyError> {
+        let file_metadata = FileMetadata::new(owner, bucket_id, location, size, fingerprint)
+            .map_err(|_| ProvenFileKeyError::FailedToCreateFileMetadata)?;
+
+        Ok(Self {
+            file_metadata,
             proof,
-        }
+        })
     }
 
     /// Verifies and extracts proven chunks from a Merkle trie proof.
@@ -81,7 +86,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
     {
         // Convert the fingerprint from the proof to the output of the hasher.
-        let expected_root: &[u8; H_LENGTH] = &self.file_metadata.fingerprint.into();
+        let expected_root: &[u8; H_LENGTH] = self.file_metadata.fingerprint().as_ref();
         let expected_root: <T::Hash as sp_core::Hasher>::Out = (*expected_root)
             .try_into()
             .map_err(|_| ProvenFileKeyError::FingerprintAndTrieHashMismatch)?;

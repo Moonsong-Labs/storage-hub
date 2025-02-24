@@ -519,7 +519,8 @@ mod benchmarks {
             ReplicationTarget::Custom(replication_target.into()),
         )?;
 
-        let file_key = Pallet::<T>::compute_file_key(user, bucket_id, location, size, fingerprint);
+        let file_key =
+            Pallet::<T>::compute_file_key(user, bucket_id, location, size, fingerprint).unwrap();
 
         // The `revoke_storage_request` executes the `drain_prefix` function to remove all sub keys including the primary key
         // from `StorageRequestBsps`.
@@ -673,7 +674,8 @@ mod benchmarks {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
 
@@ -720,12 +722,12 @@ mod benchmarks {
                     .expect("File key proof should be decodable");
 
                 // Create the storage request for it:
-                let location = file_key_proof.file_metadata.location.clone();
-                let fingerprint_hash = file_key_proof.file_metadata.fingerprint.clone().as_hash();
+                let location = file_key_proof.file_metadata.location().clone();
+                let fingerprint_hash = file_key_proof.file_metadata.fingerprint().clone().as_hash();
                 let fingerprint =
                     <T as frame_system::Config>::Hash::decode(&mut fingerprint_hash.as_ref())
                         .expect("Fingerprint should be decodable as it is a hash");
-                let size = file_key_proof.file_metadata.file_size;
+                let size = file_key_proof.file_metadata.file_size();
                 let storage_request_metadata = StorageRequestMetadata::<T> {
                     requested_at:
                         <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
@@ -869,7 +871,8 @@ mod benchmarks {
             location.clone(),
             size,
             fingerprint,
-        );
+        )
+        .unwrap();
 
         // Query the earliest that this BSP can volunteer for this file
         let query_result = Pallet::<T>::query_earliest_file_volunteer_tick(bsp_id, file_key);
@@ -1047,12 +1050,12 @@ mod benchmarks {
                 .expect("File key proof should be decodable");
 
             // Create the storage request for it:
-            let location = file_key_proof.file_metadata.location.clone();
-            let fingerprint_hash = file_key_proof.file_metadata.fingerprint.clone().as_hash();
+            let location = file_key_proof.file_metadata.location().clone();
+            let fingerprint_hash = file_key_proof.file_metadata.fingerprint().clone().as_hash();
             let fingerprint =
                 <T as frame_system::Config>::Hash::decode(&mut fingerprint_hash.as_ref())
                     .expect("Fingerprint should be decodable as it is a hash");
-            let size = file_key_proof.file_metadata.file_size;
+            let size = file_key_proof.file_metadata.file_size();
             let storage_request_metadata = StorageRequestMetadata::<T> {
 				requested_at:
 					<<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
@@ -1214,13 +1217,13 @@ mod benchmarks {
         // Get the file's metadata
         let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
         let file_fingerprint = <T as frame_system::Config>::Hash::decode(
-            &mut file_metadata.fingerprint.as_hash().as_ref(),
+            &mut file_metadata.fingerprint().as_hash().as_ref(),
         )
         .expect("Fingerprint should be decodable as it is a hash");
-        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
-        let file_size = file_metadata.file_size;
+        let file_location: FileLocation<T> = file_metadata.location().clone().try_into().unwrap();
+        let file_size = file_metadata.file_size();
         let file_bucket_id =
-            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id().as_ref())
                 .expect("Bucket ID should be decodable as it is a hash");
 
         // Create the bucket to store in the MSP
@@ -1315,13 +1318,13 @@ mod benchmarks {
         // Get the file's metadata
         let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
         let file_fingerprint = <T as frame_system::Config>::Hash::decode(
-            &mut file_metadata.fingerprint.as_hash().as_ref(),
+            &mut file_metadata.fingerprint().as_hash().as_ref(),
         )
         .expect("Fingerprint should be decodable as it is a hash");
-        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
-        let file_size = file_metadata.file_size;
+        let file_location: FileLocation<T> = file_metadata.location().clone().try_into().unwrap();
+        let file_size = file_metadata.file_size();
         let file_bucket_id =
-            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id().as_ref())
                 .expect("Bucket ID should be decodable as it is a hash");
 
         // Increase the used capacity of the BSP to match the file size, so its challenge and randomness cycles gets reset when confirming
@@ -1495,13 +1498,13 @@ mod benchmarks {
         // Get the file's metadata
         let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
         let file_fingerprint = <T as frame_system::Config>::Hash::decode(
-            &mut file_metadata.fingerprint.as_hash().as_ref(),
+            &mut file_metadata.fingerprint().as_hash().as_ref(),
         )
         .expect("Fingerprint should be decodable as it is a hash");
-        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
-        let file_size = file_metadata.file_size;
+        let file_location: FileLocation<T> = file_metadata.location().clone().try_into().unwrap();
+        let file_size = file_metadata.file_size();
         let file_bucket_id =
-            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id().as_ref())
                 .expect("Bucket ID should be decodable as it is a hash");
 
         // Increase the used capacity of the BSP to match the file size, so its challenge and randomness cycles gets reset when confirming
@@ -1661,13 +1664,13 @@ mod benchmarks {
         // Get the file's metadata
         let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
         let file_fingerprint = <T as frame_system::Config>::Hash::decode(
-            &mut file_metadata.fingerprint.as_hash().as_ref(),
+            &mut file_metadata.fingerprint().as_hash().as_ref(),
         )
         .expect("Fingerprint should be decodable as it is a hash");
-        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
-        let file_size = file_metadata.file_size;
+        let file_location: FileLocation<T> = file_metadata.location().clone().try_into().unwrap();
+        let file_size = file_metadata.file_size();
         let file_bucket_id =
-            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id().as_ref())
                 .expect("Bucket ID should be decodable as it is a hash");
 
         // Create the bucket to store in the MSP
@@ -1925,13 +1928,13 @@ mod benchmarks {
         // Get the file's metadata
         let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
         let file_fingerprint = <T as frame_system::Config>::Hash::decode(
-            &mut file_metadata.fingerprint.as_hash().as_ref(),
+            &mut file_metadata.fingerprint().as_hash().as_ref(),
         )
         .expect("Fingerprint should be decodable as it is a hash");
-        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
-        let file_size = file_metadata.file_size;
+        let file_location: FileLocation<T> = file_metadata.location().clone().try_into().unwrap();
+        let file_size = file_metadata.file_size();
         let file_bucket_id =
-            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id().as_ref())
                 .expect("Bucket ID should be decodable as it is a hash");
 
         // Create the bucket to store in the MSP
@@ -2063,13 +2066,13 @@ mod benchmarks {
         // Get the file's metadata
         let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
         let file_fingerprint = <T as frame_system::Config>::Hash::decode(
-            &mut file_metadata.fingerprint.as_hash().as_ref(),
+            &mut file_metadata.fingerprint().as_hash().as_ref(),
         )
         .expect("Fingerprint should be decodable as it is a hash");
-        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
-        let file_size = file_metadata.file_size;
+        let file_location: FileLocation<T> = file_metadata.location().clone().try_into().unwrap();
+        let file_size = file_metadata.file_size();
         let file_bucket_id =
-            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id().as_ref())
                 .expect("Bucket ID should be decodable as it is a hash");
 
         // Create the bucket to store in the MSP
@@ -2230,13 +2233,13 @@ mod benchmarks {
         // Get the file's metadata
         let file_metadata = fetch_file_key_metadata_for_inclusion_proof();
         let file_fingerprint = <T as frame_system::Config>::Hash::decode(
-            &mut file_metadata.fingerprint.as_hash().as_ref(),
+            &mut file_metadata.fingerprint().as_hash().as_ref(),
         )
         .expect("Fingerprint should be decodable as it is a hash");
-        let file_location: FileLocation<T> = file_metadata.location.try_into().unwrap();
-        let file_size = file_metadata.file_size;
+        let file_location: FileLocation<T> = file_metadata.location().clone().try_into().unwrap();
+        let file_size = file_metadata.file_size();
         let file_bucket_id =
-            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id.as_ref())
+            <T as frame_system::Config>::Hash::decode(&mut file_metadata.bucket_id().as_ref())
                 .expect("Bucket ID should be decodable as it is a hash");
 
         // Create the bucket to store in the MSP
@@ -2521,7 +2524,8 @@ mod benchmarks {
             location.clone(),
             size,
             fingerprint,
-        );
+        )
+        .unwrap();
 
         // Simulate the MSP accepting the storage request
         StorageRequests::<T>::mutate(file_key, |storage_request| {
@@ -2637,7 +2641,8 @@ mod benchmarks {
             location.clone(),
             size,
             fingerprint,
-        );
+        )
+        .unwrap();
 
         // Simulate the MSP rejecting the storage request
         StorageRequests::<T>::mutate(file_key, |storage_request| {

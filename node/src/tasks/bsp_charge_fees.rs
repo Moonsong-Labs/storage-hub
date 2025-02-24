@@ -273,11 +273,11 @@ where
 
         if !user_files.is_empty() {
             let (file_key, metadata) = user_files.first().expect("User files is not empty");
-            let bucket_id = H256::from_slice(metadata.bucket_id.as_ref());
-            let location = sp_runtime::BoundedVec::truncate_from(metadata.location.clone());
+            let bucket_id = H256::from_slice(metadata.bucket_id().as_ref());
+            let location = sp_runtime::BoundedVec::truncate_from(metadata.location().clone());
             let owner = insolvent_user.clone();
-            let fingerprint = H256(metadata.fingerprint.into());
-            let size = metadata.file_size;
+            let fingerprint = metadata.fingerprint().as_ref().into();
+            let size = metadata.file_size();
             let inclusion_forest_proof = fs
                 .read()
                 .await

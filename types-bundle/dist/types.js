@@ -169,7 +169,9 @@ export const ALL_TYPES = {
   },
   QueryConfirmChunksToProveForFileError: {
     _enum: {
-      ChallengedChunkToChunkIdError: null
+      ChallengedChunkToChunkIdError: null,
+      FailedToCreateFileMetadata: null,
+      FailedToGenerateChunkChallenges: null
     }
   },
   GetUsersWithDebtOverThresholdError: {

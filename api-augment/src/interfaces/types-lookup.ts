@@ -6003,6 +6003,8 @@ declare module "@polkadot/types/lookup" {
     readonly isNoPrivacyChange: boolean;
     readonly isOperationNotAllowedForInsolventProvider: boolean;
     readonly isOperationNotAllowedWhileBucketIsNotStoredByMsp: boolean;
+    readonly isFailedToComputeFileKey: boolean;
+    readonly isFailedToCreateFileMetadata: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -6082,7 +6084,9 @@ declare module "@polkadot/types/lookup" {
       | "RootNotUpdated"
       | "NoPrivacyChange"
       | "OperationNotAllowedForInsolventProvider"
-      | "OperationNotAllowedWhileBucketIsNotStoredByMsp";
+      | "OperationNotAllowedWhileBucketIsNotStoredByMsp"
+      | "FailedToComputeFileKey"
+      | "FailedToCreateFileMetadata";
   }
 
   /** @name PalletProofsDealerProofSubmissionRecord (468) */

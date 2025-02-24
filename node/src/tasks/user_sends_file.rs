@@ -120,13 +120,14 @@ where
             .extract_peer_ids_and_register_known_addresses(multiaddress_vec)
             .await;
 
-        let file_metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size.into(),
-            fingerprint: event.fingerprint,
-            location: event.location.into_inner(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            event.bucket_id.as_ref().to_vec(),
+            event.location.into_inner(),
+            event.size.into(),
+            event.fingerprint,
+        )
+        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
 
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
@@ -158,13 +159,14 @@ where
             event.location,
         );
 
-        let file_metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size.into(),
-            fingerprint: event.fingerprint,
-            location: event.location.into_inner(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
+            event.bucket_id.as_ref().to_vec(),
+            event.location.into_inner(),
+            event.size.into(),
+            event.fingerprint,
+        )
+        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
 
         // Adds the multiaddresses of the BSP volunteering to store the file to the known addresses of the file transfer service.
         // This is required to establish a connection to the BSP.
@@ -221,7 +223,7 @@ where
 
         Err(anyhow::anyhow!(
             "Failed to send file {:?} to any of the peers",
-            file_metadata.fingerprint
+            file_metadata.fingerprint()
         ))
     }
 
@@ -236,6 +238,8 @@ where
 
         let mut current_batch = Vec::new();
         let mut current_batch_size = 0;
+
+        let fingerprint = file_metadata.fingerprint();
 
         for chunk_id in 0..chunk_count {
             let chunk_data = self
@@ -291,7 +295,7 @@ where
                             debug!(
                                 target: LOG_TARGET,
                                 "Successfully uploaded batch for file {:?} to peer {:?}",
-                                file_metadata.fingerprint,
+                                fingerprint,
                                 peer_id
                             );
 
@@ -301,7 +305,7 @@ where
                                     target: LOG_TARGET,
                                     "Stopping file upload process. Peer {:?} has the entire file {:?}",
                                     peer_id,
-                                    file_metadata.fingerprint
+                                    fingerprint
                                 );
                                 return Ok(());
                             }
@@ -389,7 +393,7 @@ where
                             debug!(
                                 target: LOG_TARGET,
                                 "Successfully uploaded final batch for file {:?} to peer {:?}",
-                                file_metadata.fingerprint,
+                                fingerprint,
                                 peer_id
                             );
 
@@ -398,7 +402,7 @@ where
                                     target: LOG_TARGET,
                                     "File upload complete. Peer {:?} has the entire file {:?}",
                                     peer_id,
-                                    file_metadata.fingerprint
+                                    fingerprint
                                 );
                             }
                             break;
@@ -433,7 +437,7 @@ where
             }
         }
 
-        info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
+        info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", fingerprint, peer_id);
         Ok(())
     }
 }

@@ -4712,7 +4712,9 @@ export default {
       "RootNotUpdated",
       "NoPrivacyChange",
       "OperationNotAllowedForInsolventProvider",
-      "OperationNotAllowedWhileBucketIsNotStoredByMsp"
+      "OperationNotAllowedWhileBucketIsNotStoredByMsp",
+      "FailedToComputeFileKey",
+      "FailedToCreateFileMetadata"
     ]
   },
   /**

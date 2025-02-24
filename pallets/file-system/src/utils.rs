@@ -358,9 +358,13 @@ where
             provider_id,
             file_key,
             &storage_request_metadata,
-        );
+        )
+        .map_err(|_| QueryConfirmChunksToProveForFileError::FailedToGenerateChunkChallenges)?;
 
-        let chunks = storage_request_metadata.to_file_metadata().chunks_count();
+        let chunks = storage_request_metadata
+            .to_file_metadata()
+            .map_err(|_| QueryConfirmChunksToProveForFileError::FailedToCreateFileMetadata)?
+            .chunks_count();
 
         let chunks_to_prove = challenges
             .iter()
@@ -382,8 +386,11 @@ where
         sp_id: ProviderIdFor<T>,
         file_key: MerkleHash<T>,
         storage_request_metadata: &StorageRequestMetadata<T>,
-    ) -> Vec<<<T as pallet::Config>::Providers as ReadProvidersInterface>::MerkleHash> {
-        let file_metadata = storage_request_metadata.clone().to_file_metadata();
+    ) -> Result<
+        Vec<<<T as pallet::Config>::Providers as ReadProvidersInterface>::MerkleHash>,
+        DispatchError,
+    > {
+        let file_metadata = storage_request_metadata.clone().to_file_metadata()?;
         let chunks_to_check = file_metadata.chunks_to_check();
 
         let mut challenges =
@@ -397,7 +404,7 @@ where
 
         challenges.push(T::ChunkIdToMerkleHash::convert(last_chunk_id));
 
-        challenges
+        Ok(challenges)
     }
 
     /// Create a bucket for an owner (user) under a given MSP account.
@@ -909,7 +916,8 @@ where
             location.clone(),
             size,
             fingerprint,
-        );
+        )
+        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
         // Check a storage request does not already exist for this file key.
         ensure!(
@@ -1242,7 +1250,7 @@ where
                 msp_id,
                 file_key_with_proof.file_key,
                 &storage_request_metadata,
-            );
+            )?;
 
             // Only check the key proof, increase the bucket size and capacity used if the file key is not in the forest proof, and
             // add the file metadata to the `accepted_files_metadata` since all keys in this array will be added to the bucket forest via an apply delta.
@@ -1717,7 +1725,7 @@ where
                 bsp_id,
                 file_key,
                 &storage_request_metadata,
-            );
+            )?;
 
             // Check that the key proof is valid.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
@@ -2065,7 +2073,8 @@ where
             location.clone(),
             size,
             fingerprint,
-        );
+        )
+        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
         // Check that the metadata corresponds to the expected file key.
         ensure!(
@@ -2319,7 +2328,8 @@ where
             location.clone(),
             size,
             fingerprint,
-        );
+        )
+        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
         // Check that the metadata corresponds to the expected file key.
         ensure!(
@@ -2492,7 +2502,8 @@ where
             location.clone(),
             size,
             fingerprint,
-        );
+        )
+        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
         // Check that the metadata corresponds to the expected file key.
         ensure!(
@@ -2793,19 +2804,21 @@ where
         location: FileLocation<T>,
         size: StorageDataUnit<T>,
         fingerprint: Fingerprint<T>,
-    ) -> MerkleHash<T> {
-        shp_file_metadata::FileMetadata::<
+    ) -> Result<MerkleHash<T>, DispatchError> {
+        match shp_file_metadata::FileMetadata::<
             { shp_constants::H_LENGTH },
             { shp_constants::FILE_CHUNK_SIZE },
             { shp_constants::FILE_SIZE_TO_CHALLENGES },
-        > {
-            owner: owner.encode(),
-            bucket_id: bucket_id.as_ref().to_vec(),
-            location: location.clone().to_vec(),
-            file_size: size.into(),
-            fingerprint: fingerprint.as_ref().into(),
+        >::new(
+            owner.encode(),
+            bucket_id.as_ref().to_vec(),
+            location.clone().to_vec(),
+            size.into(),
+            fingerprint.as_ref().into(),
+        ) {
+            Ok(file_metadata) => Ok(file_metadata.file_key::<FileKeyHasher<T>>()),
+            Err(_) => return Err(Error::<T>::FailedToCreateFileMetadata.into()),
         }
-        .file_key::<FileKeyHasher<T>>()
     }
 
     fn do_encode_generic_apply_delta_event_info(bucket_id: BucketIdFor<T>) -> Vec<u8> {

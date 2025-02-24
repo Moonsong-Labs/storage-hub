@@ -176,6 +176,8 @@ pub mod pallet {
         UnableToConvertTickNumberForArithmetic,
         /// We encountered an error while modifying seed queue
         QueueError(queue::QueueError),
+        /// Failed to create file metadata
+        FailedToCreateFileMetadata,
     }
 
     /// A map that holds whether a Provider is active in the randomness system and as such should send seed commitments and reveals and
