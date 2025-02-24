@@ -47,7 +47,7 @@ jobs:
 
   check-ts-fmt:
     name: "Check format with biome"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -56,7 +56,7 @@ jobs:
 
   check-ts-lint:
     name: "Check lint with biome"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -65,7 +65,7 @@ jobs:
 
   typecheck-ts:
     name: "Typecheck with tsc"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm

@@ -27,7 +27,7 @@ on:
 
 jobs:
   setup:
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     outputs:
       node_changed: ${{ steps.node_check.outputs.changed }}
       image-tag: ${{ steps.set-tag.outputs.tag }}
@@ -63,7 +63,7 @@ jobs:
     needs: [setup]
     if: needs.setup.outputs.node_changed == 'true'
     name: "Build node image"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-32vcpu-ubuntu-2204
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
@@ -141,7 +141,7 @@ jobs:
   #   needs: [build_image, setup]
   #   if: always()
   #   name: "Test Simple Network"
-  #   runs-on: blacksmith-4vcpu-ubuntu-2204
+  #   runs-on: blacksmith-2vcpu-ubuntu-2204
   #   env:
   #     SH_IMAGE: ${{ needs.setup.outputs.image-tag }}
   #   defaults:
@@ -168,7 +168,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run Para & Relay Network Test"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -210,7 +210,7 @@ jobs:
     if: always()
     name: "Run Zombienet Tests"
     timeout-minutes: 30
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -245,7 +245,7 @@ jobs:
     timeout-minutes: 30
     if: always()
     name: "Run Dev Node Tests"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     strategy:
       fail-fast: false
       matrix:
@@ -295,7 +295,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run FullNet Tests"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -388,7 +388,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run BSPNet Tests"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -478,7 +478,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Check Rust/TS bindings are up to date"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
