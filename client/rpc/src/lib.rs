@@ -107,6 +107,20 @@ pub enum GetFileFromFileStorageResult {
     FileFoundWithInconsistency(FileMetadata),
 }
 
+/// Result of adding files to the forest storage.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum AddFilesToForestStorageResult {
+    ForestNotFound,
+    Success,
+}
+
+/// Result of removing files from the forest storage.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum RemoveFilesFromForestStorageResult {
+    ForestNotFound,
+    Success,
+}
+
 /// Provides an interface with the desired RPC method.
 /// Used by the `rpc` macro from `jsonrpsee`
 /// to generate the trait that is actually going to be implemented.
@@ -121,12 +135,47 @@ pub trait StorageHubClientApi {
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult>;
 
+    /// Remove a file from the file storage.
+    ///
+    /// This is useful to allow BSPs and MSPs to manually adjust their file storage to match
+    /// the state of the network if any inconsistencies are found.
+    #[method(name = "removeFileFromFileStorage")]
+    async fn remove_file_from_file_storage(&self, file_key: H256) -> RpcResult<()>;
+
     #[method(name = "saveFileToDisk")]
     async fn save_file_to_disk(
         &self,
         file_key: H256,
         file_path: String,
     ) -> RpcResult<SaveFileToDisk>;
+
+    /// Add files to the forest storage under the given forest key.
+    ///
+    /// This allows BSPs and MSPs to add files manually to their forest storage to solve inconsistencies
+    /// between their local state and their on-chain state (as represented by their root).
+    ///
+    /// In the case of an BSP node, the forest key is empty since it only maintains a single forest.
+    /// In the case of an MSP node, the forest key is a bucket ID.
+    #[method(name = "addFilesToForestStorage")]
+    async fn add_files_to_forest_storage(
+        &self,
+        forest_key: Option<H256>,
+        metadata_of_files_to_add: Vec<FileMetadata>,
+    ) -> RpcResult<AddFilesToForestStorageResult>;
+
+    /// Remove files from the forest storage under the given forest key.
+    ///
+    /// This allows BSPs and MSPs to remove files manually from their forest storage to solve inconsistencies
+    /// between their local state and their on-chain state (as represented by their root).
+    ///
+    /// In the case of an BSP node, the forest key is empty since it only maintains a single forest.
+    /// In the case of an MSP node, the forest key is a bucket ID.
+    #[method(name = "removeFilesFromForestStorage")]
+    async fn remove_files_from_forest_storage(
+        &self,
+        forest_key: Option<H256>,
+        file_keys: Vec<H256>,
+    ) -> RpcResult<RemoveFilesFromForestStorageResult>;
 
     /// Get the root hash of a forest.
     ///
@@ -348,6 +397,18 @@ where
         Ok(result)
     }
 
+    async fn remove_file_from_file_storage(&self, file_key: H256) -> RpcResult<()> {
+        // Acquire a write lock for the file storage.
+        let mut write_file_storage = self.file_storage.write().await;
+
+        // Remove the file from the file storage.
+        write_file_storage
+            .delete_file(&file_key)
+            .map_err(into_rpc_error)?;
+
+        Ok(())
+    }
+
     async fn save_file_to_disk(
         &self,
         file_key: H256,
@@ -399,6 +460,62 @@ where
         }
 
         Ok(SaveFileToDisk::Success(file_metadata))
+    }
+
+    async fn add_files_to_forest_storage(
+        &self,
+        forest_key: Option<H256>,
+        metadata_of_files_to_add: Vec<FileMetadata>,
+    ) -> RpcResult<AddFilesToForestStorageResult> {
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
+
+        // Get the forest storage.
+        let fs = match self.forest_storage_handler.get(&forest_key).await {
+            Some(fs) => fs,
+            None => return Ok(AddFilesToForestStorageResult::ForestNotFound),
+        };
+
+        // Acquire a write lock for the forest storage.
+        let mut write_fs = fs.write().await;
+
+        // Add the file keys to the forest storage.
+        write_fs
+            .insert_files_metadata(&metadata_of_files_to_add)
+            .map_err(into_rpc_error)?;
+
+        Ok(AddFilesToForestStorageResult::Success)
+    }
+
+    async fn remove_files_from_forest_storage(
+        &self,
+        forest_key: Option<H256>,
+        file_keys: Vec<H256>,
+    ) -> RpcResult<RemoveFilesFromForestStorageResult> {
+        let forest_key = match forest_key {
+            Some(forest_key) => forest_key.as_ref().to_vec().into(),
+            None => CURRENT_FOREST_KEY.to_vec().into(),
+        };
+
+        // Get the forest storage.
+        let fs = match self.forest_storage_handler.get(&forest_key).await {
+            Some(fs) => fs,
+            None => return Ok(RemoveFilesFromForestStorageResult::ForestNotFound),
+        };
+
+        // Acquire a write lock for the forest storage.
+        let mut write_fs = fs.write().await;
+
+        // Remove the file keys from the forest storage.
+        for file_key in file_keys {
+            write_fs
+                .delete_file_key(&file_key)
+                .map_err(into_rpc_error)?;
+        }
+
+        Ok(RemoveFilesFromForestStorageResult::Success)
     }
 
     async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<Option<H256>> {
