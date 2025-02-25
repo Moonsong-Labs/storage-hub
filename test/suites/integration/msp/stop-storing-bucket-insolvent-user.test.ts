@@ -4,7 +4,6 @@ import { MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
 describeMspNet(
   "MSP test: MSP stops storing buckets that belong to insolvent users",
-  { only: true },
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
