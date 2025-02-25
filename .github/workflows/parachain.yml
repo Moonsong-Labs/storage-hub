@@ -67,7 +67,7 @@ jobs:
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: "0"
+      CARGO_INCREMENTAL: "1"
     steps:
       - uses: actions/checkout@v4
       - name: Run sccache-cache
