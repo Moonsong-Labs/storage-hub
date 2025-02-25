@@ -215,7 +215,11 @@ describeMspNet(
       // This includes BSP volunteers
       await userApi.block.seal();
 
-      await userApi.wait.bspStoredInTxPool();
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspConfirmStoring",
+        checkQuantity: matchedEvents.length * 2
+      });
 
       // Wait for the MSP to update its local forest root by polling until it matches the on-chain root
       await waitFor({
