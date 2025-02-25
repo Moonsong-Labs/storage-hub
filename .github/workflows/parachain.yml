@@ -65,13 +65,11 @@ jobs:
     name: "Build node image"
     runs-on: blacksmith-32vcpu-ubuntu-2204
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
       CARGO_INCREMENTAL: "1"
     steps:
       - uses: actions/checkout@v4
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.4
+      # - name: Run sccache-cache
+      #   uses: mozilla-actions/sccache-action@v0.0.4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           cache: false
