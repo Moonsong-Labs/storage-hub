@@ -4,7 +4,7 @@ import { MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
 describeMspNet(
   "MSP test: MSP stops storing buckets that belong to insolvent users",
-  { indexer: true },
+  { only: true },
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -339,37 +339,33 @@ describeMspNet(
     });
 
     it("MSP stops storing the buckets and files of the now insolvent user.", async () => {
-      // Initiate variable to keep track of in which block each bucket got deleted.
-      const blockWithDeletedBucketIds = [];
-      // Execute this loop twice since the user is storing two buckets with the MSP.
-      for (const _bucketId of [firstBucketId, secondBucketId]) {
-        // Check that the MSP is trying to delete a bucket of the user.
-        const result = await userApi.assert.extrinsicPresent({
-          method: "mspStopStoringBucketForInsolventUser",
-          module: "fileSystem",
-          checkTxPool: true,
-          timeout: 10000
-        });
+      // After the user has been marked as insolvent, the MSP should stop storing the buckets of the user.
+      // For that, it will spawn multiple tasks, each submitting one extrinsic to delete one bucket.
+      // Wait then until both extrinsics are in the tx pool, then seal a block with them and finalise it.
+      // After that, the MSP should have deleted the bucket roots and the files from its storage.
 
-        // Check which bucket the MSP is trying to delete and print it to console.
-        const txPool = await userApi.rpc.author.pendingExtrinsics();
-        const mspStopStoringBucketForInsolventUserExtrinsic = result.map(
-          (match) => txPool[match.extIndex]
-        );
-        const bucketIdBeingDeleted =
-          mspStopStoringBucketForInsolventUserExtrinsic[0].args[0].toString();
-        console.log("MSP is deleting bucket with ID: ", bucketIdBeingDeleted);
+      // Check that the MSP is trying to delete both buckets of the user.
+      await userApi.assert.extrinsicPresent({
+        method: "mspStopStoringBucketForInsolventUser",
+        module: "fileSystem",
+        checkTxPool: true,
+        timeout: 10000,
+        assertLength: 2,
+        exactLength: true
+      });
 
-        // Seal a block to allow the MSP to stop storing this bucket, but don't finalise it yet, store it to finalise later.
-        const block = await userApi.block.seal({ finaliseBlock: false });
-        blockWithDeletedBucketIds.push({
-          blockHash: block.blockReceipt.blockHash,
-          bucketId: bucketIdBeingDeleted
-        });
+      // Seal a block to allow the MSP to stop storing both buckets, but don't finalise it yet, store it to finalise later.
+      const block = await userApi.block.seal({ finaliseBlock: false });
 
-        // Assert that event for the MSP deleting the bucket was emitted.
-        await userApi.assert.eventPresent("fileSystem", "MspStopStoringBucketInsolventUser");
-      }
+      // Assert that both events for the MSP deleting the buckets were emitted.
+      const stopStoringEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "MspStopStoringBucketInsolventUser"
+      );
+      assert(
+        stopStoringEvents.length === 2,
+        "Expected two MspStopStoringBucketInsolventUser events"
+      );
 
       // Check that the bucket roots still exist since the blocks where they were deleted have not been finalised.
       const firstBucketRoot = await mspApi.rpc.storagehubclient.getForestRoot(firstBucketId);
@@ -396,13 +392,12 @@ describeMspNet(
         await mspApi.rpc.storagehubclient.isFileInFileStorage(secondFileKey);
       assert(secondFileInFileStorage.isFileFound, "Second file should still be in file storage");
 
-      // Finalise the blocks and check that the bucket roots are deleted.
-      for (const block of blockWithDeletedBucketIds) {
-        await mspApi.rpc.engine.finalizeBlock(block.blockHash);
+      // Finalise the block and check that the bucket roots are deleted.
+      await mspApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
 
-        // Wait until the bucket is deleted from the forest storage of the MSP.
-        await mspApi.wait.mspBucketDeletionCompleted(block.bucketId);
-      }
+      // Wait until the buckets are deleted from the forest storage of the MSP.
+      await mspApi.wait.mspBucketDeletionCompleted(firstBucketId);
+      await mspApi.wait.mspBucketDeletionCompleted(secondBucketId);
 
       // Wait until both file keys are not found in the file storage of the MSP.
       await mspApi.wait.fileDeletionFromFileStorage(firstFileKey);
