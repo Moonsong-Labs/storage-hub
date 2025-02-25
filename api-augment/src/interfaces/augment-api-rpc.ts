@@ -98,10 +98,12 @@ import type {
 } from "@polkadot/types/interfaces/system";
 import type { IExtrinsic, Observable } from "@polkadot/types/types";
 import type {
+  AddFilesToForestStorageResult,
   CheckpointChallenge,
   FileMetadata,
   GetFileFromFileStorageResult,
   LoadFileInStorageResult,
+  RemoveFilesFromForestStorageResult,
   SaveFileToDisk
 } from "@storagehub/api-augment/interfaces/storagehubclient";
 
@@ -1029,6 +1031,28 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
     };
     storagehubclient: {
       /**
+       * Add files to the forest storage. Useful when doing manual maintenance.
+       **/
+      addFilesToForestStorage: AugmentedRpc<
+        (
+          forest_key: Option<H256> | null | Uint8Array | H256 | string,
+          metadata_of_files_to_add:
+            | Vec<FileMetadata>
+            | (
+                | FileMetadata
+                | {
+                    owner?: any;
+                    bucket_id?: any;
+                    location?: any;
+                    file_size?: any;
+                    fingerprint?: any;
+                  }
+                | string
+                | Uint8Array
+              )[]
+        ) => Observable<AddFilesToForestStorageResult>
+      >;
+      /**
        * Add key to exclude list. Exclude type can be `file`, `user`, `bucket` and `fingerprint`.
        **/
       addToExcludeList: AugmentedRpc<
@@ -1132,6 +1156,21 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        * Remove keys of BCSV type for the Blockchain Service.
        **/
       removeBcsvKeys: AugmentedRpc<(keystore_path: Text | string) => Observable<ITuple<[]>>>;
+      /**
+       * Remove a file from the file storage. Useful when doing manual maintenance.
+       **/
+      removeFileFromFileStorage: AugmentedRpc<
+        (file_key: H256 | string | Uint8Array) => Observable<ITuple<[]>>
+      >;
+      /**
+       * Remove files from the forest storage. Useful when doing manual maintenance.
+       **/
+      removeFilesFromForestStorage: AugmentedRpc<
+        (
+          forest_key: Option<H256> | null | Uint8Array | H256 | string,
+          file_keys: Vec<H256> | (H256 | string | Uint8Array)[]
+        ) => Observable<RemoveFilesFromForestStorageResult>
+      >;
       /**
        * Remove key from exclude list
        **/

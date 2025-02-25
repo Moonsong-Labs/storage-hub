@@ -23,6 +23,16 @@ export const rpcDefinitions = {
       ],
       type: "LoadFileInStorageResult"
     },
+    removeFileFromFileStorage: {
+      description: "Remove a file from the file storage. Useful when doing manual maintenance.",
+      params: [
+        {
+          name: "file_key",
+          type: "H256"
+        }
+      ],
+      type: "()"
+    },
     saveFileToDisk: {
       description: "Save a file from the local storage to the disk.",
       params: [
@@ -36,6 +46,34 @@ export const rpcDefinitions = {
         }
       ],
       type: "SaveFileToDisk"
+    },
+    addFilesToForestStorage: {
+      description: "Add files to the forest storage. Useful when doing manual maintenance.",
+      params: [
+        {
+          name: "forest_key",
+          type: "Option<H256>"
+        },
+        {
+          name: "metadata_of_files_to_add",
+          type: "Vec<FileMetadata>"
+        }
+      ],
+      type: "AddFilesToForestStorageResult"
+    },
+    removeFilesFromForestStorage: {
+      description: "Remove files from the forest storage. Useful when doing manual maintenance.",
+      params: [
+        {
+          name: "forest_key",
+          type: "Option<H256>"
+        },
+        {
+          name: "file_keys",
+          type: "Vec<H256>"
+        }
+      ],
+      type: "RemoveFilesFromForestStorageResult"
     },
     getForestRoot: {
       description: "Get the root of the forest trie.",
