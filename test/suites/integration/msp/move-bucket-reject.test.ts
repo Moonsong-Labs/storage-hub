@@ -164,7 +164,11 @@ describeMspNet(
         throw new Error(`Expected ${source.length} NewStorageRequest events`);
       }
 
-      await userApi.wait.bspVolunteerInTxPool();
+      await userApi.wait.waitForTxInPool({
+        module: "fileSystem",
+        method: "bspVolunteer",
+        checkQuantity: matchedEvents.length * 2
+      });
 
       // Wait for the MSP to receive and store all files by polling until they are all in storage
       await waitFor({
