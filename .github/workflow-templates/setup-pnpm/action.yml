@@ -3,15 +3,15 @@ description: Installs pnpm and caches the pnpm store
 
 inputs:
   node_version:
-    description: 'Node.js version'
-    default: '22'
+    description: "Node.js version"
+    default: "22"
     required: false
 
 runs:
   using: composite
   steps:
     - name: Install Node.js
-      uses: actions/setup-node@v4
+      uses: useblacksmith/setup-node@v5
       with:
         node-version: ${{ inputs.node_version }}
 

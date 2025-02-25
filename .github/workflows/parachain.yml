@@ -27,7 +27,7 @@ on:
 
 jobs:
   setup:
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     outputs:
       node_changed: ${{ steps.node_check.outputs.changed }}
       image-tag: ${{ steps.set-tag.outputs.tag }}
@@ -63,15 +63,13 @@ jobs:
     needs: [setup]
     if: needs.setup.outputs.node_changed == 'true'
     name: "Build node image"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-32vcpu-ubuntu-2204
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: "0"
+      CARGO_INCREMENTAL: "1"
     steps:
       - uses: actions/checkout@v4
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.4
+      # - name: Run sccache-cache
+      #   uses: mozilla-actions/sccache-action@v0.0.4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           cache: false
@@ -82,6 +80,11 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
+      - name: Mount Cargo Target
+        uses: useblacksmith/stickydisk@v1
+        with:
+          key: ${{ github.repository }}-cargo-target
+          path: ./target
       - name: Build All
         # TODO: Make this only build the parachain node project
         run: cargo build --release
@@ -122,15 +125,13 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
       - name: Build and push
-        uses: docker/build-push-action@v5
+        uses: useblacksmith/build-push-action@v1
         with:
           context: .
           file: ./docker/storage-hub-node.Dockerfile
           push: true
           platforms: linux/amd64
           tags: ${{ steps.prep.outputs.tags }}
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
           labels: |
             org.opencontainers.image.title=${{ github.event.repository.name }}
             org.opencontainers.image.description=${{ github.event.repository.description }}
@@ -143,7 +144,7 @@ jobs:
   #   needs: [build_image, setup]
   #   if: always()
   #   name: "Test Simple Network"
-  #   runs-on: ubuntu-latest
+  #   runs-on: blacksmith-2vcpu-ubuntu-2204
   #   env:
   #     SH_IMAGE: ${{ needs.setup.outputs.image-tag }}
   #   defaults:
@@ -170,7 +171,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run Para & Relay Network Test"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -212,7 +213,7 @@ jobs:
     if: always()
     name: "Run Zombienet Tests"
     timeout-minutes: 30
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -247,7 +248,7 @@ jobs:
     timeout-minutes: 30
     if: always()
     name: "Run Dev Node Tests"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     strategy:
       fail-fast: false
       matrix:
@@ -297,7 +298,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run FullNet Tests"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -390,7 +391,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Run BSPNet Tests"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -480,7 +481,7 @@ jobs:
     needs: [build_image, setup]
     if: always()
     name: "Check Rust/TS bindings are up to date"
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-2vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
