@@ -1,5 +1,6 @@
 use std::{
     cmp::{min, Ordering},
+    collections::BTreeSet,
     future::Future,
     pin::Pin,
     time::Duration,
@@ -10,8 +11,9 @@ use frame_support::dispatch::DispatchInfo;
 use log::warn;
 use sc_client_api::BlockImportNotification;
 use shc_common::types::{
-    BlockNumber, BucketId, CustomChallenge, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
-    RejectedStorageRequestReason, StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
+    BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
+    MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput, RejectedStorageRequestReason,
+    StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::H256;
@@ -585,4 +587,48 @@ impl Ord for ForestStorageSnapshotInfo {
             }
         }
     }
+}
+
+/// A struct that holds the information to handle a BSP.
+///
+/// This struct implements all the needed logic to manage BSP specific functionality.
+#[derive(Debug, Clone)]
+pub struct BspHandler {
+    /// The BSP ID.
+    pub(crate) bsp_id: BackupStorageProviderId,
+    /// Pending submit proof requests. Note: this is not kept in the persistent state because of
+    /// various edge cases when restarting the node.
+    pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
+}
+
+impl BspHandler {
+    pub fn new(bsp_id: BackupStorageProviderId) -> Self {
+        Self {
+            bsp_id,
+            pending_submit_proof_requests: BTreeSet::new(),
+        }
+    }
+}
+/// A struct that holds the information to handle an MSP.
+///
+/// This struct implements all the needed logic to manage MSP specific functionality.
+#[derive(Debug, Clone)]
+pub struct MspHandler {
+    /// The MSP ID.
+    pub(crate) msp_id: MainStorageProviderId,
+}
+
+impl MspHandler {
+    pub fn new(msp_id: MainStorageProviderId) -> Self {
+        Self { msp_id }
+    }
+}
+
+/// An enum that represents the managed provider, either a BSP or an MSP.
+///
+/// The enum variants hold the handler for the managed provider (see [`BspHandler`] and [`MspHandler`]).
+#[derive(Debug, Clone)]
+pub enum ManagedProvider {
+    Bsp(BspHandler),
+    Msp(MspHandler),
 }

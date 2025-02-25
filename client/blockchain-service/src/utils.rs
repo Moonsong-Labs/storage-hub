@@ -3,6 +3,7 @@ use std::{cmp::max, sync::Arc, vec};
 use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
+use log::{debug, error, info, trace, warn};
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetProofSubmissionRecordError, ProofsDealerApi,
@@ -10,7 +11,6 @@ use pallet_proofs_dealer_runtime_api::{
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
-use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
@@ -325,7 +325,7 @@ where
 
         // Case: There is exactly one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
         let provider_id = *provider_ids_found.get(0).expect("There is exactly one Provider ID linked to any of the BCSV keys in this node's keystore; qed");
-        self.provider_id = Some(provider_id);
+        self.maybe_managed_provider = Some(provider_id);
     }
 
     /// Send an extrinsic to this node using an RPC call.
@@ -724,13 +724,13 @@ where
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         let mut next_event_data = None;
 
-        if self.provider_id.is_none() {
+        if self.maybe_managed_provider.is_none() {
             // If there's no Provider being managed, there's no point in checking for pending requests.
             return;
         }
 
         if let StorageProviderId::BackupStorageProvider(_) = self
-            .provider_id
+            .maybe_managed_provider
             .expect("Just checked that this node is managing a Provider; qed")
         {
             // If we have a submit proof request, prioritise it.
@@ -812,7 +812,7 @@ where
         }
 
         if let StorageProviderId::MainStorageProvider(_) = self
-            .provider_id
+            .maybe_managed_provider
             .expect("Just checked that this node is managing a Provider; qed")
         {
             // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending file deletion requests.
@@ -969,110 +969,6 @@ where
         }
     }
 
-    /// Emits a [`MultipleNewChallengeSeeds`] event with all the pending proof submissions for this provider.
-    /// This is used to catch up to the latest proof submissions that were missed due to a node restart.
-    /// Also, it can help to catch up to proofs in case there is a change in the BSP's stake (therefore
-    /// also a change in it's challenge period).
-    ///
-    /// IMPORTANT: This function takes into account whether a proof should be submitted for the current tick.
-    pub(crate) fn proof_submission_catch_up(
-        &self,
-        current_block_hash: &H256,
-        provider_id: &ProofsDealerProviderId,
-    ) {
-        // Get the current challenge period for this provider.
-        let challenge_period = match self
-            .client
-            .runtime_api()
-            .get_challenge_period(*current_block_hash, provider_id)
-        {
-            Ok(challenge_period_result) => match challenge_period_result {
-                Ok(challenge_period) => challenge_period,
-                Err(e) => match e {
-                    GetChallengePeriodError::ProviderNotRegistered => {
-                        debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
-                        return;
-                    }
-                    GetChallengePeriodError::InternalApiError => {
-                        error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting challenge period for Provider [{:?}]", provider_id);
-                        return;
-                    }
-                },
-            },
-            Err(e) => {
-                error!(target: LOG_TARGET, "Runtime API error while getting challenge period for Provider [{:?}]: {:?}", provider_id, e);
-                return;
-            }
-        };
-
-        // Get the current tick.
-        let current_tick = match self
-            .client
-            .runtime_api()
-            .get_current_tick(*current_block_hash)
-        {
-            Ok(current_tick) => current_tick,
-            Err(e) => {
-                error!(target: LOG_TARGET, "Runtime API error while getting current tick for Provider [{:?}]: {:?}", provider_id, e);
-                return;
-            }
-        };
-
-        // Advance by `challenge_period` ticks and add the seed to the list of challenge seeds.
-        let mut challenge_seeds = Vec::new();
-        let mut next_challenge_tick = match Self::get_next_challenge_tick_for_provider(
-            &self,
-            provider_id,
-        ) {
-            Ok(next_challenge_tick) => next_challenge_tick,
-            Err(e) => {
-                error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
-                return;
-            }
-        };
-        while next_challenge_tick <= current_tick {
-            // Get the seed for the challenge tick.
-            let seed = match self
-                .client
-                .runtime_api()
-                .get_challenge_seed(*current_block_hash, next_challenge_tick)
-            {
-                Ok(seed_result) => match seed_result {
-                    Ok(seed) => seed,
-                    Err(e) => match e {
-                        GetChallengeSeedError::TickBeyondLastSeedStored => {
-                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Tick [{:?}] is beyond last seed stored and this provider needs to submit a proof for it.", next_challenge_tick);
-                            return;
-                        }
-                        GetChallengeSeedError::TickIsInTheFuture => {
-                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Tick [{:?}] is in the future. This should never happen. \nThis is a bug. Please report it to the StorageHub team.", next_challenge_tick);
-                            return;
-                        }
-                        GetChallengeSeedError::InternalApiError => {
-                            error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting challenge seed for challenge tick [{:?}]: {:?}", next_challenge_tick, e);
-                            return;
-                        }
-                    },
-                },
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Runtime API error while getting challenges from seed for challenge tick [{:?}]: {:?}", next_challenge_tick, e);
-                    return;
-                }
-            };
-            challenge_seeds.push((next_challenge_tick, seed));
-            next_challenge_tick += challenge_period;
-        }
-
-        // Emit the `MultipleNewChallengeSeeds` event.
-        if challenge_seeds.len() > 0 {
-            trace!(target: LOG_TARGET, "Emitting MultipleNewChallengeSeeds event for provider [{:?}] with challenge seeds: {:?}", provider_id, challenge_seeds);
-            self.emit(MultipleNewChallengeSeeds {
-                provider_id: *provider_id,
-                seeds: challenge_seeds,
-            });
-        }
-    }
-
     /// Applies Forest root changes found in a [`TreeRoute`].
     ///
     /// This function can be used both for new blocks as well as for reorgs.
@@ -1155,7 +1051,7 @@ where
         // Preemptively getting the Buckets managed by this node, in case it is an MSP, so that we
         // do the query just once, instead of doing it for every event.
         let buckets_managed_by_msp = if let Some(StorageProviderId::MainStorageProvider(msp_id)) =
-            &self.provider_id
+            &self.maybe_managed_provider
         {
             self.client
                     .runtime_api()
@@ -1186,7 +1082,7 @@ where
                         ) => {
                             // This event is relevant in case the Provider managed is a BSP.
                             if let Some(StorageProviderId::BackupStorageProvider(bsp_id)) =
-                                &self.provider_id
+                                &self.maybe_managed_provider
                             {
                                 // Check if the `provider_id` is the BSP that this node is managing.
                                 if provider_id != *bsp_id {
@@ -1233,7 +1129,7 @@ where
                             // This event is relevant in case the Provider managed is an MSP.
                             // In which case the mutations are applied to a Bucket's Forest root.
                             if let Some(StorageProviderId::MainStorageProvider(_)) =
-                                &self.provider_id
+                                &self.maybe_managed_provider
                             {
                                 // Check that this MSP is managing at least one bucket.
                                 if buckets_managed_by_msp.is_none() {
