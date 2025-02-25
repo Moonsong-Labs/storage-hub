@@ -301,6 +301,20 @@ const STORAGE_PROVIDERS_V1: Record<string, DefinitionCall> = {
       }
     ],
     type: "Result<Vec<BucketId>, QueryBucketsForMspError>"
+  },
+  query_buckets_of_user_stored_by_msp: {
+    description: "Query the buckets stored by an MSP that belong to a specific user.",
+    params: [
+      {
+        name: "mspId",
+        type: "ProviderId"
+      },
+      {
+        name: "user",
+        type: "AccountId"
+      }
+    ],
+    type: "Result<Vec<H256>, QueryBucketsOfUserStoredByMspError>"
   }
 };
 
