@@ -1318,6 +1318,7 @@ import type {
 import type { XcmPaymentApiError } from "@polkadot/types/interfaces/xcmPaymentApi";
 import type { Error } from "@polkadot/types/interfaces/xcmRuntimeApi";
 import type {
+  AddFilesToForestStorageResult,
   BackupStorageProvider,
   BackupStorageProviderId,
   BucketId,
@@ -1352,6 +1353,7 @@ import type {
   QueryProviderMultiaddressesError,
   QueryStorageProviderCapacityError,
   RandomnessOutput,
+  RemoveFilesFromForestStorageResult,
   ReputationWeightType,
   SaveFileToDisk,
   ShouldRemoveFile,
@@ -1390,6 +1392,7 @@ declare module "@polkadot/types/types/registry" {
     ActiveGiltsTotal: ActiveGiltsTotal;
     ActiveIndex: ActiveIndex;
     ActiveRecovery: ActiveRecovery;
+    AddFilesToForestStorageResult: AddFilesToForestStorageResult;
     Address: Address;
     AliveContractInfo: AliveContractInfo;
     AllowedSlots: AllowedSlots;
@@ -2274,6 +2277,7 @@ declare module "@polkadot/types/types/registry" {
     RelayHash: RelayHash;
     Releases: Releases;
     Remark: Remark;
+    RemoveFilesFromForestStorageResult: RemoveFilesFromForestStorageResult;
     Renouncing: Renouncing;
     RentProjection: RentProjection;
     ReplacementTimes: ReplacementTimes;
