@@ -1244,7 +1244,10 @@ where
             );
 
             // Get the file metadata to insert into the bucket under the file key.
-            let file_metadata = storage_request_metadata.clone().to_file_metadata();
+            let file_metadata = storage_request_metadata
+                .clone()
+                .to_file_metadata()
+                .map_err(|_| Error::<T>::FileMetadataProcessingQueueFull)?;
 
             let chunk_challenges = Self::generate_chunk_challenges_on_sp_confirm(
                 msp_id,
@@ -1741,8 +1744,12 @@ where
             )?;
 
             // Get the file metadata to insert into the Provider's trie under the file key.
-            let file_metadata = storage_request_metadata.clone().to_file_metadata();
+            let file_metadata = storage_request_metadata
+                .clone()
+                .to_file_metadata()
+                .map_err(|_| Error::<T>::FileMetadataProcessingQueueFull)?;
             let encoded_trie_value = file_metadata.encode();
+
             expect_or_err!(
                 file_keys_and_metadata.try_push((file_key, encoded_trie_value)),
                 "Failed to push file key and metadata",
