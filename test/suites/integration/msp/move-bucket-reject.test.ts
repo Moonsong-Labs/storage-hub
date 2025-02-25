@@ -164,6 +164,8 @@ describeMspNet(
         throw new Error(`Expected ${source.length} NewStorageRequest events`);
       }
 
+      await userApi.wait.bspVolunteerInTxPool();
+
       // Wait for the MSP to receive and store all files by polling until they are all in storage
       await waitFor({
         lambda: async () => {
@@ -206,7 +208,10 @@ describeMspNet(
       // also prioritise a fast response, so if the Forest Write Lock is available, it will send
       // the first response it can immediately.
       await userApi.wait.mspResponseInTxPool();
+      // This includes BSP volunteers
       await userApi.block.seal();
+
+      await userApi.wait.bspStoredInTxPool();
 
       // Wait for the MSP to update its local forest root by polling until it matches the on-chain root
       await waitFor({
@@ -358,13 +363,10 @@ describeMspNet(
       await userApi.wait.waitForTxInPool({
         module: "fileSystem",
         method: "mspRespondMoveBucketRequest",
-        timeout: 45000 // Increased timeout to account for DB connection timeout
+        expectedEvent: "MoveBucketRejected",
+        timeout: 45000,
+        shouldSeal: true
       });
-
-      const { events } = await userApi.block.seal();
-
-      // Verify that the move request was rejected
-      assertEventPresent(userApi, "fileSystem", "MoveBucketRejected", events);
 
       // Resume postgres
       await postgresContainer.unpause();
@@ -410,20 +412,17 @@ describeMspNet(
       // Finalising the block in the BSP node as well, to trigger the reorg in the BSP node too.
       const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
 
-      // Wait for BSP node to have imported the finalised block built by the user node.
+      // Wait for MSP2 node to have imported the finalised block built by the user node.
       await msp2Api.wait.blockImported(finalisedBlockHash.toString());
       await msp2Api.block.finaliseBlock(finalisedBlockHash.toString());
 
       // Wait for the rejection response from MSP2
       await userApi.wait.waitForTxInPool({
         module: "fileSystem",
-        method: "mspRespondMoveBucketRequest"
+        method: "mspRespondMoveBucketRequest",
+        expectedEvent: "MoveBucketRejected",
+        shouldSeal: true
       });
-
-      const { events } = await userApi.block.seal();
-
-      // Verify that the move request was rejected
-      assertEventPresent(userApi, "fileSystem", "MoveBucketRejected", events);
     });
   }
 );
