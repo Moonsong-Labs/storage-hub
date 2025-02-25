@@ -56,7 +56,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
             return Err(FileMetadataError::InvalidFileSize);
         }
 
-        if fingerprint.as_ref().is_empty() {
+        if fingerprint.0.is_empty() {
             return Err(FileMetadataError::InvalidFingerprint);
         }
 
@@ -109,7 +109,6 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn last_chunk_id(&self) -> ChunkId {
-        // This will never underflow, as `FileMetadata::file_size` is always greater than 0 based on the validation in the constructor.
         ChunkId::new(self.chunks_count() - 1)
     }
 
@@ -306,8 +305,8 @@ impl<const H_LENGTH: usize> From<&[u8]> for Fingerprint<H_LENGTH> {
     }
 }
 
-impl<const H_LENGTH: usize> AsRef<[u8; H_LENGTH]> for Fingerprint<H_LENGTH> {
-    fn as_ref(&self) -> &[u8; H_LENGTH] {
+impl<const H_LENGTH: usize> AsRef<[u8]> for Fingerprint<H_LENGTH> {
+    fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }

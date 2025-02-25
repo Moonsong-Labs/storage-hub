@@ -276,7 +276,7 @@ where
             let bucket_id = H256::from_slice(metadata.bucket_id().as_ref());
             let location = sp_runtime::BoundedVec::truncate_from(metadata.location().clone());
             let owner = insolvent_user.clone();
-            let fingerprint = metadata.fingerprint().as_ref().into();
+            let fingerprint = metadata.fingerprint().as_hash().into();
             let size = metadata.file_size();
             let inclusion_forest_proof = fs
                 .read()

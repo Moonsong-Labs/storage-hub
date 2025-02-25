@@ -86,7 +86,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         <T::Hash as sp_core::Hasher>::Out: TryFrom<[u8; H_LENGTH]>,
     {
         // Convert the fingerprint from the proof to the output of the hasher.
-        let expected_root: &[u8; H_LENGTH] = self.file_metadata.fingerprint().as_ref();
+        let expected_root: &[u8; H_LENGTH] = &self.file_metadata.fingerprint().as_hash();
         let expected_root: <T::Hash as sp_core::Hasher>::Out = (*expected_root)
             .try_into()
             .map_err(|_| ProvenFileKeyError::FingerprintAndTrieHashMismatch)?;
