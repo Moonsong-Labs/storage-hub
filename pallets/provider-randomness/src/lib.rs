@@ -576,7 +576,6 @@ pub mod pallet {
             // The difference between the sets are the Providers that did not submit their seed commitments
             let missing_providers: Vec<ProviderIdFor<T>> = due_providers_for_current_tick
                 .difference(&providers_that_submitted)
-                .into_iter()
                 .cloned()
                 .collect();
 
@@ -620,12 +619,11 @@ pub mod pallet {
                     ProvidersToMarkAsSlashable::<T>::take(current_tick_to_process);
 
                 // If there are any, process them, consuming the weight used to do so
-                let should_advance_tick = if providers_to_mark.is_some() {
+                let should_advance_tick = if let Some(providers_to_mark) = providers_to_mark {
                     Self::process_providers_to_mark_as_slashable(
                         &mut weight_meter,
                         current_tick_to_process,
-                        providers_to_mark
-                            .expect("This option is some since we checked it before. qed"),
+                        providers_to_mark,
                     )
                 } else {
                     true
