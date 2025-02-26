@@ -74,7 +74,7 @@ where
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Deleting file {:?} for BSP {:?}",
+            "Deleting file {:x} for BSP {:?}",
             event.file_key,
             event.bsp_id
         );
@@ -94,7 +94,7 @@ where
         {
             warn!(
                 target: LOG_TARGET,
-                "FinalisedBspConfirmStoppedStoring applied and finalised for file key {:?}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by this BSP.",
+                "FinalisedBspConfirmStoppedStoring applied and finalised for file key {:x}, but file key is still in Forest. This can only happen if the same file key was added again after deleted by this BSP.",
                 event.file_key,
             );
         } else {
