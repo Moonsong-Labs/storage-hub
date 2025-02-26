@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::anyhow;
-use log::{error, info};
+use log::{debug, error};
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
@@ -26,7 +26,9 @@ pub struct CapacityRequestQueue {
     /// All requesters will be notified via the callback when the `CapacityChanged` event is processed
     /// in the block important notification pipeline. This list will be cleared subsequently.
     requests_waiting_for_inclusion: Vec<CapacityRequest>,
-    /// Total required capacity.
+    /// Total accumulated capacity required by the aggregate of all `pending_requests`.
+    ///
+    /// This is reset when the `pending_requests` is moved to `requests_waiting_for_inclusion` when they have been batched in a single transaction.
     total_required: StorageData,
     /// The last submitted transaction which `requests_waiting_for_inclusion` is waiting for.
     last_submitted_transaction: Option<SubmittedTransaction>,
@@ -276,7 +278,7 @@ where
         &mut self,
         block_number: BlockNumber,
     ) -> Result<(), anyhow::Error> {
-        info!(target: LOG_TARGET, "[process_capacity_requests] Processing capacity requests");
+        debug!(target: LOG_TARGET, "[process_capacity_requests] Processing capacity requests");
         let (current_block_hash, current_capacity, inner_provider_id) = match self
             .check_capacity_request_conditions()
             .await
@@ -295,12 +297,12 @@ where
 
         // Skip the process if there are no pending requests.
         if !capacity_manager_ref.has_pending_requests() {
-            info!(target: LOG_TARGET, "[process_capacity_requests] No pending requests, skipping");
+            debug!(target: LOG_TARGET, "[process_capacity_requests] No pending requests, skipping");
             return Ok(());
         }
 
         // Query earliest block to change capacity
-        info!(target: LOG_TARGET, "[process_capacity_requests] Querying earliest block to change capacity");
+        debug!(target: LOG_TARGET, "[process_capacity_requests] Querying earliest block to change capacity");
         let earliest_block = self
             .client
             .runtime_api()
@@ -311,8 +313,8 @@ where
             })
             .map_err(|e| anyhow!("Failed to query earliest block to change capacity: {:?}", e))?;
 
-        if block_number < earliest_block - 1 {
-            info!(target: LOG_TARGET, "[process_capacity_requests] Earliest block to change capacity: {:?}", earliest_block);
+        if block_number < earliest_block.saturating_sub(1) {
+            debug!(target: LOG_TARGET, "[process_capacity_requests] Earliest block to change capacity: {:?}", earliest_block);
             // Must wait until the earliest block to change capacity.
             return Ok(());
         }

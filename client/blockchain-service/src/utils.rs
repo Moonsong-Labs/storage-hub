@@ -214,7 +214,7 @@ where
         };
 
         // We can send the transaction 1 block before the earliest block to change capacity since it will be included in the next block.
-        if *block_number >= earliest_block - 1 {
+        if *block_number >= earliest_block.saturating_sub(1) {
             if let Err(e) = self.process_capacity_requests(*block_number).await {
                 error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to process capacity requests: {:?}", e);
             }
