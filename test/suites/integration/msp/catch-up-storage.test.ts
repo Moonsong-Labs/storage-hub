@@ -1,12 +1,5 @@
 import assert, { strictEqual } from "node:assert";
-import {
-  describeMspNet,
-  shUser,
-  type EnrichedBspApi,
-  waitFor,
-  sleep,
-  clearLogs
-} from "../../../util";
+import { describeMspNet, shUser, type EnrichedBspApi, waitFor, sleep } from "../../../util";
 
 describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
