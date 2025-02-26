@@ -109,7 +109,9 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn last_chunk_id(&self) -> ChunkId {
-        ChunkId::new(self.chunks_count() - 1)
+        // Chunks count should always be >= 1. This is assured by the checks in the constructor.
+        let last_chunk_idx = self.chunks_count().saturating_sub(1);
+        ChunkId::new(last_chunk_idx)
     }
 
     /// Calculates the size of a chunk at a given index.
@@ -134,7 +136,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     /// a `file_size = 0` is an invalid file.
     pub fn chunk_size_at(&self, chunk_idx: u64) -> usize {
         let remaining_size = self.file_size % CHUNK_SIZE;
-        if remaining_size == 0 || chunk_idx != self.chunks_count() - 1 {
+        if remaining_size == 0 || chunk_idx != self.last_chunk_id().as_u64() {
             CHUNK_SIZE as usize
         } else {
             remaining_size as usize
