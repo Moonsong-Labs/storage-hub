@@ -218,7 +218,7 @@ describeMspNet(
       await userApi.wait.waitForTxInPool({
         module: "fileSystem",
         method: "bspConfirmStoring",
-        checkQuantity: matchedEvents.length * 2
+        checkQuantity: matchedEvents.length
       });
 
       // Wait for the MSP to update its local forest root by polling until it matches the on-chain root
