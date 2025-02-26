@@ -13752,6 +13752,7 @@ dependencies = [
  "pallet-storage-providers",
  "parity-scale-codec",
  "polkadot-primitives 16.0.0",
+ "rocksdb",
  "sc-client-api",
  "sc-executor",
  "sc-network",

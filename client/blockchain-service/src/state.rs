@@ -2,16 +2,16 @@ use std::path::PathBuf;
 
 use log::info;
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
+use shc_common::typed_store::{
+    BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
+    ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf,
+    TypedDbContext, TypedRocksDB,
+};
 use shc_common::types::BlockNumber;
 
 use crate::events::{ProcessFileDeletionRequestData, ProcessMspRespondStoringRequestData};
 use crate::{
     events::{ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequestData},
-    typed_store::{
-        BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
-        ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf,
-        TypedDbContext, TypedRocksDB,
-    },
     types::{
         ConfirmStoringRequest, FileDeletionRequest, RespondStorageRequest,
         StopStoringForInsolventUserRequest,

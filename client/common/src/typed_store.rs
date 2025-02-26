@@ -1,9 +1,13 @@
 use codec::{Decode, Encode};
-use rocksdb::{AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, IteratorMode, WriteBatch, DB};
+use rocksdb::{
+    AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, Direction, IteratorMode, ReadOptions,
+    WriteBatch, DB,
+};
 use std::{
     cell::{Ref, RefCell},
     collections::BTreeMap,
     marker::PhantomData,
+    ops::RangeBounds,
 };
 
 pub trait DbCodec<T> {
@@ -138,6 +142,14 @@ pub trait ReadableRocks {
         cf: &impl AsColumnFamilyRef,
         mode: IteratorMode,
     ) -> impl Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'a;
+
+    /// Gets an iterator over the column family with custom read options.
+    fn iterator_cf_opt<'a>(
+        &'a self,
+        cf: &impl AsColumnFamilyRef,
+        mode: IteratorMode,
+        read_opts: ReadOptions,
+    ) -> impl Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'a;
 }
 
 /// A write-supporting interface of a RocksDB database.
@@ -230,6 +242,7 @@ impl<'r, R: WriteableRocks> Drop for BufferedWriteSupport<'r, R> {
     }
 }
 
+/// Implementation specific to BufferedWriteSupport
 impl<'r, R: WriteableRocks> TypedDbContext<'r, R, BufferedWriteSupport<'r, R>> {
     /// Explicitly flushes the current contents of the write buffer and clears the associated
     /// overlay.
@@ -284,31 +297,212 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
     }
 }
 
-impl<'r, 'o, 'w, CF: TypedCf, R: WriteableRocks>
-    TypedCfApi<'r, 'o, 'w, CF, R, BufferedWriteSupport<'r, R>>
-{
-    /// Upserts the new value at the given key.
-    pub fn put(&self, key: &CF::Key, value: &CF::Value) {
-        let raw_key = CF::KeyCodec::encode(key);
-        let raw_value = CF::ValueCodec::encode(value);
-        self.cf_overlay.put(raw_key.clone(), raw_value.clone());
-        self.write_support
-            .buffer
-            .put(self.cf.handle, raw_key, raw_value);
-    }
+impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 'o, 'w, CF, R, W> {
+    /// Iterates over a range of keys in the column family using Rust's range syntax.
+    /// This provides an ergonomic way to express all possible range queries.
+    ///
+    /// The method supports all standard Rust range types:
+    ///
+    /// # Examples:
+    /// - `iterate_with_range(key1..key2)` - Iterate from key1 to key2 (exclusive)
+    /// - `iterate_with_range(key1..=key2)` - Iterate from key1 to key2 (inclusive)
+    /// - `iterate_with_range(key1..)` - Iterate from key1 to the end
+    /// - `iterate_with_range(..key2)` - Iterate from the beginning to key2 (exclusive)
+    /// - `iterate_with_range(..=key2)` - Iterate from the beginning to key2 (inclusive)
+    /// - `iterate_with_range(..)` - Iterate over all keys
+    ///
+    /// For reverse iteration, you can compare the keys manually and use the appropriate range:
+    /// - To iterate from key1 to key2 in reverse (where key1 > key2): `iterate_with_range(key1..=key2)`
+    /// - To iterate from a key backwards to the beginning: `iterate_with_range(..=key)`
+    ///
+    /// The direction is automatically determined based on the comparison of the encoded keys.
+    pub fn iterate_with_range<Range>(
+        &'r self,
+        range: Range,
+    ) -> Box<dyn Iterator<Item = (CF::Key, CF::Value)> + 'r>
+    where
+        Range: RangeBounds<CF::Key>,
+    {
+        use std::ops::Bound;
 
-    /// Deletes the entry of the given key.
-    pub fn delete(&self, key: &CF::Key) {
-        let raw_key = CF::KeyCodec::encode(key);
-        self.cf_overlay.delete(raw_key.clone());
-        self.write_support.buffer.delete(self.cf.handle, raw_key);
-    }
+        match (range.start_bound(), range.end_bound()) {
+            (Bound::Included(start), Bound::Excluded(end)) => {
+                // Range: start..end
+                let from_encoded = CF::KeyCodec::encode(start);
+                let to_encoded = CF::KeyCodec::encode(end);
 
-    /// Iterates over the column family. This only supports `Start` mode and does not take the overlay into account.
-    pub fn iterate_without_overlay(&'r self) -> impl Iterator<Item = (CF::Key, CF::Value)> + 'r {
-        self.rocks
-            .iterator_cf(self.cf.handle, IteratorMode::Start)
-            .map(|(key, value)| (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value)))
+                // Compare the encoded bytes to determine direction
+                let direction = if from_encoded > to_encoded {
+                    Direction::Reverse
+                } else {
+                    Direction::Forward
+                };
+
+                let mut read_opts = ReadOptions::default();
+
+                // Set bounds based on direction
+                match direction {
+                    Direction::Forward => {
+                        read_opts.set_iterate_lower_bound(from_encoded.clone());
+                        read_opts.set_iterate_upper_bound(to_encoded);
+
+                        Box::new(
+                            self.rocks
+                                .iterator_cf_opt(
+                                    self.cf.handle,
+                                    IteratorMode::From(from_encoded.as_slice(), direction),
+                                    read_opts,
+                                )
+                                .map(|(key, value)| {
+                                    (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                                }),
+                        )
+                    }
+                    Direction::Reverse => {
+                        // For reverse iteration, we need to swap the bounds
+                        read_opts.set_iterate_lower_bound(to_encoded);
+                        read_opts.set_iterate_upper_bound(from_encoded.clone());
+
+                        Box::new(
+                            self.rocks
+                                .iterator_cf_opt(
+                                    self.cf.handle,
+                                    IteratorMode::From(from_encoded.as_slice(), direction),
+                                    read_opts,
+                                )
+                                .map(|(key, value)| {
+                                    (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                                }),
+                        )
+                    }
+                }
+            }
+            (Bound::Included(start), Bound::Included(end)) => {
+                // Range: start..=end
+                let from_encoded = CF::KeyCodec::encode(start);
+                let to_encoded = CF::KeyCodec::encode(end);
+
+                // Compare the encoded bytes to determine direction
+                let direction = if from_encoded > to_encoded {
+                    Direction::Reverse
+                } else {
+                    Direction::Forward
+                };
+
+                let mut read_opts = ReadOptions::default();
+
+                match direction {
+                    Direction::Forward => {
+                        // We need to handle this specially since RocksDB's upper bound is exclusive
+                        read_opts.set_iterate_lower_bound(from_encoded.clone());
+
+                        // For inclusive end, we need to make the upper bound the next possible key
+                        let mut end_bytes = to_encoded.clone();
+                        // Add a byte to make it the next possible key (to simulate inclusive end)
+                        end_bytes.push(0);
+                        read_opts.set_iterate_upper_bound(end_bytes);
+
+                        Box::new(
+                            self.rocks
+                                .iterator_cf_opt(
+                                    self.cf.handle,
+                                    IteratorMode::From(from_encoded.as_slice(), direction),
+                                    read_opts,
+                                )
+                                .map(|(key, value)| {
+                                    (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                                }),
+                        )
+                    }
+                    Direction::Reverse => {
+                        // For reverse iteration with inclusive end, we need to swap the bounds
+                        read_opts.set_iterate_lower_bound(to_encoded.clone());
+                        read_opts.set_iterate_upper_bound(from_encoded.clone());
+
+                        Box::new(
+                            self.rocks
+                                .iterator_cf_opt(
+                                    self.cf.handle,
+                                    IteratorMode::From(from_encoded.as_slice(), direction),
+                                    read_opts,
+                                )
+                                .map(|(key, value)| {
+                                    (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                                }),
+                        )
+                    }
+                }
+            }
+            (Bound::Included(start), Bound::Unbounded) => {
+                // Range: start..
+                let from_encoded = CF::KeyCodec::encode(start);
+                let mut read_opts = ReadOptions::default();
+                read_opts.set_iterate_lower_bound(from_encoded.clone());
+
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(
+                            self.cf.handle,
+                            IteratorMode::From(from_encoded.as_slice(), Direction::Forward),
+                            read_opts,
+                        )
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
+            (Bound::Unbounded, Bound::Excluded(end)) => {
+                // Range: ..end
+                let to_encoded = CF::KeyCodec::encode(end);
+                let mut read_opts = ReadOptions::default();
+                read_opts.set_iterate_upper_bound(to_encoded);
+
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(self.cf.handle, IteratorMode::Start, read_opts)
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
+            (Bound::Unbounded, Bound::Included(end)) => {
+                // Range: ..=end
+                // Similar to start..=end, but from the beginning
+                let end_encoded = CF::KeyCodec::encode(end);
+                let mut end_bytes = end_encoded.clone();
+                // Add a byte to make it the next possible key (to simulate inclusive end)
+                end_bytes.push(0);
+
+                let mut read_opts = ReadOptions::default();
+                read_opts.set_iterate_upper_bound(end_bytes);
+
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(self.cf.handle, IteratorMode::Start, read_opts)
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
+            (Bound::Unbounded, Bound::Unbounded) => {
+                // Range: ..
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(
+                            self.cf.handle,
+                            IteratorMode::Start,
+                            ReadOptions::default(),
+                        )
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
+            _ => {
+                // This should never happen with Rust's range types
+                panic!("Unsupported range bounds")
+            }
+        }
     }
 }
 
@@ -352,6 +546,17 @@ impl ReadableRocks for TypedRocksDB {
     ) -> impl Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'a {
         self.db
             .iterator_cf(cf, mode)
+            .map(|result| result.expect("DB iterator"))
+    }
+
+    fn iterator_cf_opt<'a>(
+        &'a self,
+        cf: &impl AsColumnFamilyRef,
+        mode: IteratorMode,
+        read_opts: ReadOptions,
+    ) -> impl Iterator<Item = (Box<[u8]>, Box<[u8]>)> + 'a {
+        self.db
+            .iterator_cf_opt(cf, read_opts, mode)
             .map(|result| result.expect("DB iterator"))
     }
 }
@@ -537,5 +742,31 @@ pub trait CFDequeAPI: ProvidesTypedDbSingleAccess {
 
     fn size(&self) -> u64 {
         self.right_index() - self.left_index()
+    }
+}
+
+// Add implementation for TypedCfApi with BufferedWriteSupport
+impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks>
+    TypedCfApi<'r, 'o, 'w, CF, R, BufferedWriteSupport<'r, R>>
+where
+    R: WriteableRocks,
+{
+    /// Updates the key with a value.
+    pub fn put(&self, key: &CF::Key, value: &CF::Value) {
+        let key_bytes = CF::KeyCodec::encode(key);
+        let value_bytes = CF::ValueCodec::encode(value);
+        self.write_support
+            .buffer
+            .put(self.cf.handle, key_bytes.clone(), value_bytes.clone());
+        self.cf_overlay.put(key_bytes, value_bytes);
+    }
+
+    /// Deletes the key.
+    pub fn delete(&self, key: &CF::Key) {
+        let key_bytes = CF::KeyCodec::encode(key);
+        self.write_support
+            .buffer
+            .delete(self.cf.handle, key_bytes.clone());
+        self.cf_overlay.delete(key_bytes);
     }
 }

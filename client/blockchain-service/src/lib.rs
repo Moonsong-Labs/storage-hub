@@ -3,7 +3,6 @@ pub mod events;
 pub mod handler;
 pub mod state;
 pub mod transaction;
-pub mod typed_store;
 pub mod types;
 pub mod utils;
 

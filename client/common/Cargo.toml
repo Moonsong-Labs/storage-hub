@@ -18,6 +18,7 @@ workspace = true
 anyhow = { workspace = true }
 bincode = { workspace = true }
 codec = { workspace = true }
+rocksdb = { workspace = true }
 serde = { workspace = true, default-features = true }
 trie-db = { workspace = true }
 lazy-static = { workspace = true }

@@ -39,6 +39,7 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
+    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
         BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId,
         TickNumber, BCSV_KEY_TYPE,
@@ -63,7 +64,6 @@ use crate::{
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     transaction::SubmittedTransaction,
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
         ForestStorageSnapshotInfo, MinimalBlockInfo, NewBlockNotificationKind,
         StopStoringForInsolventUserRequest, SubmitProofRequest,

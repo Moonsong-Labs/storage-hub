@@ -16,6 +16,7 @@ use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::get_events_at_block,
     consts::CURRENT_FOREST_KEY,
+    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
         BlockNumber, ForestRoot, ParachainClient, ProofsDealerProviderId, StorageProviderId,
         TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
@@ -51,7 +52,6 @@ use crate::{
         OngoingProcessMspRespondStorageRequestCf,
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{Extrinsic, MinimalBlockInfo, NewBlockNotificationKind, SendExtrinsicOptions, Tip},
     BlockchainService,
 };
