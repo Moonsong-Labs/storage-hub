@@ -389,6 +389,10 @@ where
         &mut self,
         files_metadata: &[FileMetadata],
     ) -> Result<Vec<HasherOutT<T>>, ErrorT<T>> {
+        if files_metadata.is_empty() {
+            return Ok(Vec::new());
+        }
+
         let mut file_keys = Vec::with_capacity(files_metadata.len());
 
         // Pre-check for existing keys
