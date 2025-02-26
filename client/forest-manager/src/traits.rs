@@ -25,6 +25,8 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
         challenged_key: Vec<HasherOutT<T>>,
     ) -> Result<ForestProof<T>, ErrorT<T>>;
     /// Insert files metadata and get back the file keys (hash of the metadata) that were inserted.
+    ///
+    /// If an empty vector is passed, the method will return an empty vector.
     fn insert_files_metadata(
         &mut self,
         files_metadata: &[FileMetadata],

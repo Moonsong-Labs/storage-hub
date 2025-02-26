@@ -75,7 +75,7 @@ where
         };
 
         // Convert the fingerprint from the proof to the output of the hasher.
-        let expected_root: &[u8; H_LENGTH] = &proof.file_metadata.fingerprint.into();
+        let expected_root: &[u8; H_LENGTH] = &proof.file_metadata.fingerprint().as_hash();
         let expected_root: Self::Commitment = expected_root
             .try_into()
             .map_err(|_| "Failed to convert fingerprint to a hasher output.")?;
