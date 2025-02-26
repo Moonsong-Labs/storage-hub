@@ -15,10 +15,7 @@ use sc_consensus_manual_seal::{
 };
 use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
-use shc_common::types::{
-    BackupStorageProviderId, BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf,
-    MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput,
-};
+use shc_common::types::*;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
 use sp_api::ProvideRuntimeApi;
@@ -73,6 +70,7 @@ where
             BlockNumber,
             ChunkId,
             BucketId,
+            StorageRequestMetadata,
         >,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
