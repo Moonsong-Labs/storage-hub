@@ -182,6 +182,21 @@ export const restartContainer = async (options: {
   await container.restart();
 };
 
+export const clearLogs = async (options: {
+  containerName: string;
+}) => {
+  const docker = new Docker();
+  const container = docker.getContainer(options.containerName);
+  const exec = await container.exec({
+    AttachStdout: true,
+    AttachStderr: true,
+    Cmd: ["sh", "-c", `> /var/lib/docker/containers/${options.containerName}/*.log`]
+  });
+
+  await exec.start({});
+  console.log(`Logs cleared for container ${options.containerName}`);
+};
+
 export const resumeContainer = async (options: {
   containerName: string;
 }) => {

@@ -1,5 +1,12 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, type EnrichedBspApi, waitFor, sleep } from "../../../util";
+import {
+  describeMspNet,
+  shUser,
+  type EnrichedBspApi,
+  waitFor,
+  sleep,
+  clearLogs
+} from "../../../util";
 
 describeMspNet(
   "MSP catching up with chain and volunteering for storage request",
@@ -30,6 +37,8 @@ describeMspNet(
       const bucketName = "trying-things";
 
       // Stop the msp container so it will be behind when we restart the node.
+      // TODO: clearLogs is not working, fix it.
+      await clearLogs({ containerName: "docker-sh-msp-1" });
       await userApi.docker.pauseContainer("docker-sh-msp-1");
 
       const newBucketEventEvent = await userApi.createBucket(bucketName);
@@ -73,23 +82,24 @@ describeMspNet(
       // Advancing 10 blocks to see if MSP catchup
       await userApi.block.skip(10);
 
+      // Closing mspApi gracefully before restarting the container
+      // IMPORTANT: If this is not done, the api connection cannot close properly and the test
+      // runner will hang.
+      await mspApi.disconnect();
+
+      // Restarting the MSP container. This will start the Substrate node from scratch.
       await userApi.docker.restartContainer({ containerName: "docker-sh-msp-1" });
 
-      await userApi.docker.waitForLog({
-        searchString: "💾 StorageHub's Blockchain Service starting up!",
-        containerName: "docker-sh-msp-1"
-      });
+      // TODO: Wait for the container logs of starting up
 
-      // IMPORTANT!!! DO NOT REMOVE!!! Need to wait for the container to be up again.
-      await sleep(10000);
+      // Creating a new MSP API to connect to the newly restarted container.
+      // TODO: Make this prettier
+      const maybeMspApi = await createApi("ws://127.0.0.1:9777");
+      assert(maybeMspApi, "MSP API not available");
+      const newMspApi = maybeMspApi;
 
-      // NOTE:
-      // We shouldn't have to recreate an API but any other attempt to reconnect failed
-      // Also had to guess for the port of MSP 1
-      await using newMspApi = await createApi("ws://127.0.0.1:9777");
-
-      // Required to trigger out of sync mode
-      await userApi.rpc.engine.createBlock(true, true);
+      // Waiting for the MSP node to be in sync with the chain.
+      await userApi.wait.bspCatchUpToChainTip(newMspApi);
 
       await userApi.docker.waitForLog({
         searchString: "🥱 Handling coming out of sync mode",
@@ -111,6 +121,7 @@ describeMspNet(
 
       await userApi.block.seal();
       await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
+      console.log("HELLO THERE");
     });
   }
 );
