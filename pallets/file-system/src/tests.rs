@@ -237,7 +237,7 @@ mod create_bucket_tests {
                         name,
                         collection_id: None,
                         private,
-                        value_prop_id: value_prop_id,
+                        value_prop_id,
                         root: <<Test as Config>::ProofDealer as shp_traits::ProofsDealerInterface>::MerkleHash::default(),
                     }
                     .into(),
@@ -358,7 +358,8 @@ mod delete_bucket_tests {
                                     FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
                                     4,
                                     BlakeTwo256::hash(&b"test".to_vec())
-                                ),
+                                )
+                                .unwrap(),
                                 proof: CompactProof {
                                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                 }
@@ -445,7 +446,8 @@ mod delete_bucket_tests {
                                         FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
                                         4,
                                         BlakeTwo256::hash(&b"test".to_vec())
-                                    ),
+                                    )
+                                    .unwrap(),
                                     proof: CompactProof {
                                         encoded_nodes: vec![H256::default().as_ref().to_vec()],
                                     }
@@ -621,7 +623,8 @@ mod delete_bucket_tests {
 									FileLocation::<Test>::try_from(b"test".to_vec()).unwrap(),
 									4,
 									BlakeTwo256::hash(&b"test".to_vec())
-								),
+								)
+								.unwrap(),
 								proof: CompactProof {
 									encoded_nodes: vec![H256::default().as_ref().to_vec()],
 								}
@@ -653,6 +656,7 @@ mod delete_bucket_tests {
 						4,
 						BlakeTwo256::hash(&b"test".to_vec())
 					)
+					.unwrap(),
 				));
 
 				// Remove the file from the bucket.
@@ -926,7 +930,8 @@ mod request_move_bucket {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Check bucket is stored by Charlie
                 assert!(Providers::is_bucket_stored_by_msp(
@@ -1990,7 +1995,8 @@ mod request_storage {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Assert that the storage was not updated
                 assert_eq!(file_system::StorageRequests::<Test>::get(file_key), None);
@@ -2196,7 +2202,7 @@ mod request_storage {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -2351,7 +2357,7 @@ mod request_storage {
                     file_1_location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -2391,7 +2397,7 @@ mod request_storage {
                     file_2_location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -2525,7 +2531,7 @@ mod request_storage {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Assert that the storage was updated
                 assert_eq!(
@@ -2553,7 +2559,7 @@ mod request_storage {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
                 let storage_request_ttl: TickNumber<Test> = storage_request_ttl.into();
@@ -2610,7 +2616,8 @@ mod request_storage {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 let expected_expiration_tick_number: u32 = StorageRequestTtl::<Test>::get();
                 let expected_expiration_tick_number: TickNumber<Test> =
@@ -2692,7 +2699,7 @@ mod request_storage {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let expected_expiration_tick_number: u32 = StorageRequestTtl::<Test>::get();
                 let expected_expiration_tick_number: TickNumber<Test> =
@@ -2823,7 +2830,8 @@ mod revoke_storage_request {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 assert_noop!(
                     FileSystem::revoke_storage_request(not_owner.clone(), file_key),
@@ -2875,7 +2883,7 @@ mod revoke_storage_request {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
                 let storage_request_ttl: TickNumber<Test> = storage_request_ttl.into();
@@ -2937,7 +2945,7 @@ mod revoke_storage_request {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Set storage request MSP to confirmed
                 StorageRequests::<Test>::mutate(file_key, |metadata| {
@@ -3009,7 +3017,8 @@ mod revoke_storage_request {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -3089,7 +3098,8 @@ mod revoke_storage_request {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -3190,7 +3200,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Simulate a BSP already confirming the storage request.
                 StorageRequests::<Test>::mutate(file_key, |storage_request| {
@@ -3245,7 +3255,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Simulate a BSP already confirming the storage request.
                 StorageRequests::<Test>::mutate(file_key, |storage_request| {
@@ -3314,7 +3324,8 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Compute the file key for the second file.
                 let second_file_key = FileSystem::compute_file_key(
@@ -3323,7 +3334,8 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3447,7 +3459,8 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     first_size,
                     first_fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Compute the file key for the second file.
                 let second_file_key = FileSystem::compute_file_key(
@@ -3456,7 +3469,8 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     second_size,
                     second_fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3596,7 +3610,8 @@ mod msp_respond_storage_request {
                     first_location.clone(),
                     first_size,
                     first_fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Compute the file key for the second file.
                 let second_file_key = FileSystem::compute_file_key(
@@ -3605,7 +3620,8 @@ mod msp_respond_storage_request {
                     second_location.clone(),
                     second_size,
                     second_fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Dispatch a storage request for the first file.
                 assert_ok!(FileSystem::issue_storage_request(
@@ -3752,7 +3768,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Ensure the storage request expiration item was added to the expiration queue
                 assert!(file_system::StorageRequestExpirations::<Test>::get(
@@ -3919,7 +3935,8 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 let not_msp = Keyring::Bob.to_account_id();
                 let not_msp_signed = RuntimeOrigin::signed(not_msp.clone());
@@ -3995,7 +4012,8 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 assert_noop!(
                     FileSystem::msp_respond_storage_requests_multiple_buckets(
@@ -4050,7 +4068,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Insert a storage request that is not expecting a MSP.
                 StorageRequests::<Test>::insert(
@@ -4125,7 +4143,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Insert a storage request that is not expecting a MSP.
                 StorageRequests::<Test>::insert(
@@ -4221,7 +4239,8 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Try to accept storing a file with a MSP that is not the one assigned to the file.
                 assert_noop!(
@@ -4290,7 +4309,8 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Accept storing the file.
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
@@ -4368,7 +4388,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Insert a storage request with the expected MSP but a bucket ID from another MSP.
                 // Note: this should never happen since `issue_storage_request` checks that the bucket ID
@@ -4446,7 +4466,7 @@ mod msp_respond_storage_request {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Insert a storage request for a MSP with not enough available capacity.
                 // Note: `issue_storage_request` checks that the MSP has enough available capacity, but it could happen
@@ -4547,7 +4567,8 @@ mod bsp_volunteer {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 assert_noop!(
                     FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
@@ -4572,7 +4593,8 @@ mod bsp_volunteer {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 assert_noop!(
                     FileSystem::bsp_volunteer(bsp_signed.clone(), file_key),
@@ -4629,7 +4651,8 @@ mod bsp_volunteer {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -4704,7 +4727,8 @@ mod bsp_volunteer {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -4769,7 +4793,8 @@ mod bsp_volunteer {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Set very high global weight so BSP does not have priority
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX);
@@ -4834,7 +4859,8 @@ mod bsp_volunteer {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Set a high enough global weight so BSP does not have priority
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX);
@@ -4908,7 +4934,8 @@ mod bsp_volunteer {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Dispatch BSP volunteer.
                 assert_noop!(
@@ -4964,7 +4991,8 @@ mod bsp_volunteer {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -5057,7 +5085,7 @@ mod bsp_volunteer {
                     location.clone(),
                     4,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -5189,7 +5217,8 @@ mod bsp_volunteer {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Set a high enough global weight so BSP does not have priority
                 pallet_storage_providers::GlobalBspsReputationWeight::<Test>::put(u32::MAX / 2);
@@ -5285,7 +5314,8 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
@@ -5322,7 +5352,8 @@ mod bsp_confirm {
                     location.clone(),
                     4,
                     H256::zero(),
-                );
+                )
+                .unwrap();
 
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
@@ -5391,7 +5422,8 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 assert_noop!(
                     FileSystem::bsp_confirm_storing(
@@ -5463,7 +5495,8 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 let msp_signed = RuntimeOrigin::signed(msp.clone());
                 assert_ok!(FileSystem::msp_respond_storage_requests_multiple_buckets(
@@ -5622,7 +5655,8 @@ mod bsp_confirm {
                         location.clone(),
                         size,
                         fingerprint,
-                    );
+                    )
+                    .unwrap();
 
                     file_keys.push(file_key);
 
@@ -5720,7 +5754,8 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -5813,7 +5848,8 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -5926,7 +5962,7 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -6005,7 +6041,7 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
 
@@ -6119,7 +6155,8 @@ mod bsp_confirm {
                             location.clone(),
                             size,
                             fingerprint,
-                        );
+                        )
+                        .unwrap();
 
                         file_key
                     })
@@ -6267,7 +6304,7 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -6421,7 +6458,7 @@ mod bsp_confirm {
                     location.clone(),
                     new_size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Advance a few ticks and dispatch BSP volunteer.
                 // Calculate in how many ticks the BSP can volunteer for the file
@@ -6554,7 +6591,7 @@ mod bsp_confirm {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Compute the expiration tick for the storage request to issue.
 				let current_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick();
@@ -6748,7 +6785,8 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Dispatch BSP stop storing.
                 assert_noop!(
@@ -6829,7 +6867,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -6905,7 +6943,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size - 1, // We change the size so the file key doesn't match the file's metadata
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Dispatch BSP stop storing.
                 assert_noop!(
@@ -6981,7 +7019,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -7136,7 +7174,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -7212,7 +7250,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
@@ -7306,7 +7344,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -7384,7 +7422,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
@@ -7518,7 +7556,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -7596,7 +7634,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 <Test as Config>::Currency::mint_into(
                     &bsp_account_id,
@@ -7717,7 +7755,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -7812,7 +7850,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
@@ -7973,7 +8011,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -8073,7 +8111,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Dispatch BSP request stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
@@ -8232,14 +8270,14 @@ mod bsp_stop_storing {
                     first_file_location.clone(),
                     size,
                     first_file_fingerprint,
-                );
+                ).unwrap();
 				let second_file_key = FileSystem::compute_file_key(
 					owner_account_id.clone(),
 					bucket_id,
 					second_file_location.clone(),
 					size,
 					second_file_fingerprint,
-				);
+				).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -8538,7 +8576,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -8586,7 +8624,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Dispatch BSP stop storing.
                 assert_ok!(FileSystem::bsp_request_stop_storing(
@@ -8698,7 +8736,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
@@ -8786,7 +8824,7 @@ mod bsp_stop_storing {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size,));
@@ -8901,7 +8939,8 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
@@ -8951,16 +8990,17 @@ mod delete_file_and_pending_deletions_tests {
                         owner_account_id.clone(),
                         bucket_id,
                         location.clone(),
-                        i as u64,
+                        i as u64 + 1,
                         fingerprint,
-                    );
+                    )
+                    .unwrap();
 
                     assert_ok!(FileSystem::delete_file(
                         owner_signed.clone(),
                         bucket_id,
                         file_key,
                         location.clone(),
-                        i as u64,
+                        i as u64 + 1,
                         fingerprint,
                         None,
                     ));
@@ -8972,7 +9012,8 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 assert_noop!(
                     FileSystem::delete_file(
@@ -9017,7 +9058,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
@@ -9116,7 +9157,8 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![vec![0]],
@@ -9174,7 +9216,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Issue storage request
                 assert_ok!(FileSystem::issue_storage_request(
@@ -9304,7 +9346,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
 				// Issue storage request
                 assert_ok!(FileSystem::issue_storage_request(
@@ -9489,7 +9531,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Delete file
                 assert_ok!(FileSystem::delete_file(
@@ -9626,7 +9668,7 @@ mod delete_file_and_pending_deletions_tests {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
 				// Issue storage request
                 assert_ok!(FileSystem::issue_storage_request(
@@ -9648,7 +9690,7 @@ mod delete_file_and_pending_deletions_tests {
 					location.clone(),
 					size,
 					other_fingerprint,
-				);
+				).unwrap();
                 assert_ok!(FileSystem::issue_storage_request(
                     owner_signed.clone(),
                     bucket_id,
@@ -9919,7 +9961,7 @@ mod compute_threshold {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
@@ -9979,7 +10021,7 @@ mod compute_threshold {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
@@ -10116,7 +10158,7 @@ mod compute_threshold {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_account_id = Keyring::Bob.to_account_id();
                 let bsp_signed = RuntimeOrigin::signed(bsp_account_id.clone());
@@ -10387,7 +10429,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -10468,7 +10510,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
 
@@ -10629,7 +10671,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file
                 let current_tick = ProofsDealer::get_current_tick();
@@ -10715,7 +10757,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Assert that the capacity used by the MSP was updated
                 assert_eq!(
@@ -10832,7 +10874,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -11121,7 +11163,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -11202,7 +11244,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
 
@@ -11299,7 +11341,8 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Try to stop storing for the insolvent user using another MSP account.
                 // To do this, we need to release the read lock on the Eve flag, wait until we can write the new
@@ -11389,7 +11432,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let bsp_id = Providers::get_provider_id(&bsp_account_id).unwrap();
 
@@ -11470,7 +11513,7 @@ mod stop_storing_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
 
@@ -11623,7 +11666,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file.
                 let current_tick = ProofsDealer::get_current_tick();
@@ -11826,7 +11869,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                ).unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file.
                 let current_tick = ProofsDealer::get_current_tick();
@@ -12105,7 +12148,8 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file.
                 let current_tick = ProofsDealer::get_current_tick();
@@ -12271,7 +12315,8 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                     location.clone(),
                     size,
                     fingerprint,
-                );
+                )
+                .unwrap();
 
                 // Calculate in how many ticks the BSP can volunteer for the file.
                 let current_tick = ProofsDealer::get_current_tick();

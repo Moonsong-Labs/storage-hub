@@ -1,5 +1,5 @@
 use codec::{Decode, Encode};
-use log::info;
+use log::{error, info};
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use std::collections::{HashMap, HashSet};
 use trie_db::TrieDBMutBuilder;
@@ -8,9 +8,12 @@ use shc_common::types::{
     Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
 
-use crate::traits::{
-    ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
-    FileStorageWriteOutcome,
+use crate::{
+    traits::{
+        ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
+        FileStorageWriteOutcome,
+    },
+    LOG_TARGET,
 };
 
 pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
@@ -201,19 +204,17 @@ where
             return Err(FileStorageError::IncompleteFile);
         }
 
-        if metadata.fingerprint
-            != file_data
-                .get_root()
-                .as_ref()
-                .try_into()
-                .expect("Hasher output mismatch!")
-        {
+        if metadata.fingerprint() != file_data.get_root().as_ref() {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        Ok(file_data
+        file_data
             .generate_proof(chunk_ids)?
-            .to_file_key_proof(metadata.clone()))
+            .to_file_key_proof(metadata.clone())
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToConstructFileKeyProof
+            })
     }
 
     fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
@@ -252,7 +253,7 @@ where
             .as_str(),
         );
 
-        if metadata.fingerprint != file_data.get_root().as_ref().into() {
+        if metadata.fingerprint() != file_data.get_root().as_ref() {
             return Ok(false);
         }
 
@@ -278,7 +279,7 @@ where
         // Initialize chunk count to 0
         self.chunk_counts.insert(key, 0);
 
-        let full_key = [metadata.bucket_id.as_slice(), key.as_ref()].concat();
+        let full_key = [metadata.bucket_id().as_slice(), key.as_ref()].concat();
         self.bucket_prefix_map.insert(full_key.try_into().unwrap());
 
         Ok(())
@@ -309,7 +310,7 @@ where
             panic!("Key already associated with File Data, but not with File Metadata. Possible inconsistency between them.");
         }
 
-        let full_key = [metadata.bucket_id.as_slice(), key.as_ref()].concat();
+        let full_key = [metadata.bucket_id().as_slice(), key.as_ref()].concat();
         self.bucket_prefix_map.insert(full_key.try_into().unwrap());
 
         Ok(())
@@ -363,7 +364,7 @@ where
 
         // If we have all the chunks, check if the file metadata fingerprint and the file trie
         // root matches.
-        if metadata.fingerprint != file_data.get_root().as_ref().into() {
+        if metadata.fingerprint() != file_data.get_root().as_ref() {
             return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
         }
 
@@ -616,13 +617,14 @@ mod tests {
         assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        let file_metadata = FileMetadata {
-            file_size: 32u64 * chunks.len() as u64,
-            fingerprint: file_trie.get_root().as_ref().into(),
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-            location: "location".to_string().into_bytes(),
-            bucket_id: [1u8; 32].to_vec(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            32u64 * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
 
         let key = file_metadata.file_key::<BlakeTwo256>();
         let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
@@ -663,13 +665,14 @@ mod tests {
         assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        let file_metadata = FileMetadata {
-            file_size: 32u64 * chunks.len() as u64,
-            fingerprint: file_trie.get_root().as_ref().into(),
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-            location: "location".to_string().into_bytes(),
-            bucket_id: [1u8; 32].to_vec(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            32u64 * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
 
         let key = file_metadata.file_key::<BlakeTwo256>();
         let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
@@ -717,13 +720,14 @@ mod tests {
         assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        let file_metadata = FileMetadata {
-            file_size: 1024u64 * chunks.len() as u64,
-            fingerprint: file_trie.get_root().as_ref().into(),
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-            location: "location".to_string().into_bytes(),
-            bucket_id: [1u8; 32].to_vec(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            1024u64 * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
 
         let key = file_metadata.file_key::<BlakeTwo256>();
         let mut file_storage = InMemoryFileStorage::<LayoutV1<BlakeTwo256>>::new();
@@ -766,13 +770,14 @@ mod tests {
             location: &str,
             bucket_id: [u8; 32],
         ) -> FileMetadata {
-            FileMetadata {
-                file_size: 1024u64 * 3,
-                fingerprint: file_trie.get_root().as_ref().into(),
-                owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-                location: location.to_string().into_bytes(),
-                bucket_id: bucket_id.to_vec(),
-            }
+            FileMetadata::new(
+                <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+                bucket_id.to_vec(),
+                location.to_string().into_bytes(),
+                1024u64 * 3,
+                file_trie.get_root().as_ref().into(),
+            )
+            .unwrap()
         }
 
         let chunks = vec![

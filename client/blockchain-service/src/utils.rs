@@ -1295,8 +1295,8 @@ where
                                     continue;
                                 }
 
-                                trace!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
-                                trace!(target: LOG_TARGET, "Mutations: {:?}", mutations);
+                                debug!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
+                                debug!(target: LOG_TARGET, "Mutations: {:?}", mutations);
 
                                 // Apply forest root changes to the BSP's Forest Storage.
                                 // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
@@ -1433,10 +1433,12 @@ where
         old_root: ForestRoot,
         new_root: ForestRoot,
     ) -> Result<()> {
+        debug!(target: LOG_TARGET, "Applying Forest mutations to Forest key [{:?}], reverting: {}, old root: {:?}, new root: {:?}", forest_key, revert, old_root, new_root);
+
         for (file_key, mutation) in mutations {
             // If we are reverting the Forest root changes, we need to revert the mutation.
             let mutation = if revert {
-                trace!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                debug!(target: LOG_TARGET, "Reverting mutation [{:?}] with file key [{:?}]", mutation, file_key);
                 match self.revert_mutation(mutation) {
                     Ok(mutation) => mutation,
                     Err(e) => {
@@ -1445,7 +1447,7 @@ where
                     }
                 }
             } else {
-                trace!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
+                debug!(target: LOG_TARGET, "Applying mutation [{:?}] with file key [{:?}]", mutation, file_key);
                 mutation.clone()
             };
 
@@ -1471,7 +1473,7 @@ where
 
         let local_new_root = fs.read().await.root();
 
-        trace!(target: LOG_TARGET, "Mutations applied. New local Forest root: {:?}", local_new_root);
+        debug!(target: LOG_TARGET, "Mutations applied. New local Forest root: {:?}", local_new_root);
 
         if revert {
             if old_root != local_new_root {
@@ -1517,12 +1519,12 @@ where
                 value: encoded_metadata,
             }) => {
                 // Metadata comes encoded, so we need to decode it first to apply the mutation and add it to the Forest.
-                let metadata = FileMetadata::decode(&mut &encoded_metadata[..]).map_err(|e| {
+                let metadata = <FileMetadata<{shp_constants::H_LENGTH}, {shp_constants::FILE_CHUNK_SIZE}, {shp_constants::FILE_SIZE_TO_CHALLENGES}> as Decode>::decode(&mut &encoded_metadata[..]).map_err(|e| {
                     error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to decode metadata from encoded metadata when applying mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
                     anyhow!("Failed to decode metadata from encoded metadata: {:?}", e)
                 })?;
 
-                fs.write()
+                let inserted_file_keys = fs.write()
                     .await
                     .insert_files_metadata(vec![metadata].as_slice()).map_err(|e| {
                         error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to apply mutation to Forest storage. This may result in a mismatch between the Forest root on-chain and in this node. \nThis is a critical bug. Please report it to the StorageHub team. \nError: {:?}", e);
@@ -1531,6 +1533,8 @@ where
                             e
                         )
                     })?;
+
+                debug!(target: LOG_TARGET, "Inserted file keys: {:?}", inserted_file_keys);
             }
             TrieMutation::Remove(_) => {
                 fs.write().await.delete_file_key(file_key).map_err(|e| {

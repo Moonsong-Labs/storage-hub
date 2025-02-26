@@ -171,7 +171,9 @@ export const ALL_TYPES: RegistryTypes = {
   },
   QueryConfirmChunksToProveForFileError: {
     _enum: {
-      ChallengedChunkToChunkIdError: null
+      ChallengedChunkToChunkIdError: null,
+      FailedToCreateFileMetadata: null,
+      FailedToGenerateChunkChallenges: null
     }
   },
   GetUsersWithDebtOverThresholdError: {

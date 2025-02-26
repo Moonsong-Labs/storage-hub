@@ -178,7 +178,7 @@ async function generateBenchmarkProofs() {
       await userApi.block.seal();
       await mspApi.wait.fileStorageComplete(fileMetadata.fileKey);
       await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
     }
 
     // Save the bucket ID for later use.
@@ -220,7 +220,7 @@ async function generateBenchmarkProofs() {
 
       await userApi.wait.bspVolunteer(1);
       await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
     }
 
     // Save the non-stored file keys for the MSP's bucket.

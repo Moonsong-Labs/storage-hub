@@ -165,16 +165,25 @@ pub struct FileProof {
 }
 
 impl FileProof {
-    pub fn to_file_key_proof(&self, file_metadata: FileMetadata) -> FileKeyProof {
+    pub fn to_file_key_proof(
+        &self,
+        file_metadata: FileMetadata,
+    ) -> Result<FileKeyProof, FileProofError> {
         FileKeyProof::new(
-            file_metadata.owner.clone(),
-            file_metadata.bucket_id.clone(),
-            file_metadata.location.clone(),
-            file_metadata.file_size,
-            file_metadata.fingerprint,
+            file_metadata.owner().clone(),
+            file_metadata.bucket_id().clone(),
+            file_metadata.location().clone(),
+            file_metadata.file_size(),
+            file_metadata.fingerprint().clone(),
             self.proof.clone(),
         )
+        .map_err(|_| FileProofError::InvalidFileMetadata)
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum FileProofError {
+    InvalidFileMetadata,
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]

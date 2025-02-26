@@ -1,7 +1,7 @@
 import type { ApiPromise } from "@polkadot/api";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { Event, EventRecord } from "@polkadot/types/interfaces";
+import type { Address, Event, EventRecord } from "@polkadot/types/interfaces";
 import type { Codec, IEventData, ISubmittableResult } from "@polkadot/types/types";
 import type { HexString } from "@polkadot/util/types";
 import type { after, afterEach, before, beforeEach, it } from "node:test";
@@ -404,4 +404,30 @@ export type SealBlockOptions = {
    * Defaults to true if not specified.
    */
   failOnExtrinsicNonInclusion?: boolean;
+};
+
+/**
+ * Options for the BSP Stored waiting utility function
+ */
+export type BspStoredOptions = {
+  /**
+   * The number of expected extrinsics.
+   */
+  expectedExts?: number;
+
+  /**
+   * The BSP Account ID that may be sending submit proof extrinsics.
+   */
+  bspAccount?: Address;
+
+  /**
+   * The timeout in milliseconds for the wait.
+   */
+  timeoutMs?: number;
+
+  /**
+   * Whether to seal a block after waiting for the transaction.
+   * Defaults to true if not specified.
+   */
+  sealBlock?: boolean;
 };
