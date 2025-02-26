@@ -414,7 +414,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "MSP: downloading file {:?}",
+            "MSP: downloading file {:x}",
             file_key,
         );
 

@@ -192,9 +192,9 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer for file_key {:?}, location {:?}, fingerprint {:?}",
+            "Initiating BSP volunteer for file_key {:x}, location 0x{}, fingerprint {:x}",
             event.file_key,
-            event.location,
+            hex::encode(event.location.as_slice()),
             event.fingerprint
         );
 
@@ -489,7 +489,7 @@ where
         if fs.read().await.contains_file_key(&event.file_key.into())? {
             info!(
                 target: LOG_TARGET,
-                "Skipping file key {:?} NewStorageRequest because we are already storing it.",
+                "Skipping file key {:x} NewStorageRequest because we are already storing it.",
                 event.file_key
             );
             return Ok(());
@@ -706,7 +706,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Waiting for tick {:?} to volunteer for file {:?}",
+            "Waiting for tick {:?} to volunteer for file {:x}",
             earliest_volunteer_tick,
             file_key
         );

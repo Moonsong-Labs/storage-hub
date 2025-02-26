@@ -286,7 +286,7 @@ where
                         Ok(r) => {
                             debug!(
                                 target: LOG_TARGET,
-                                "Successfully uploaded batch for file {:?} to peer {:?}",
+                                "Successfully uploaded batch for file fingerprint {:x} to peer {:?}",
                                 file_metadata.fingerprint,
                                 peer_id
                             );
@@ -295,7 +295,7 @@ where
                             if r.file_complete {
                                 info!(
                                     target: LOG_TARGET,
-                                    "Stopping file upload process. Peer {:?} has the entire file {:?}",
+                                    "Stopping file upload process. Peer {:?} has the entire file fingerprint {:x}",
                                     peer_id,
                                     file_metadata.fingerprint
                                 );
@@ -382,7 +382,7 @@ where
                         Ok(r) => {
                             debug!(
                                 target: LOG_TARGET,
-                                "Successfully uploaded final batch for file {:?} to peer {:?}",
+                                "Successfully uploaded final batch for file fingerprint {:x} to peer {:?}",
                                 file_metadata.fingerprint,
                                 peer_id
                             );
@@ -390,7 +390,7 @@ where
                             if r.file_complete {
                                 info!(
                                     target: LOG_TARGET,
-                                    "File upload complete. Peer {:?} has the entire file {:?}",
+                                    "File upload complete. Peer {:?} has the entire file fingerprint {:x}",
                                     peer_id,
                                     file_metadata.fingerprint
                                 );
@@ -427,7 +427,7 @@ where
             }
         }
 
-        info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
+        info!(target: LOG_TARGET, "Successfully sent file fingerprint {:x} to peer {:?}", file_metadata.fingerprint, peer_id);
         return Ok(());
     }
 }

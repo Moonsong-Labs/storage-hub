@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use shp_traits::{AsCompact, FileMetadataInterface};
 use sp_arithmetic::traits::SaturatedConversion;
 use sp_core::{crypto::AccountId32, H256};
+use sp_std::fmt;
 use sp_std::vec::Vec;
 
 /// A struct containing all the information about a file in StorageHub.
@@ -155,6 +156,14 @@ impl<const H_LENGTH: usize> AsRef<[u8; H_LENGTH]> for FileKey<H_LENGTH> {
     }
 }
 
+impl<const H_LENGTH: usize> fmt::LowerHex for FileKey<H_LENGTH> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let val = self.0;
+
+        write!(f, "0x{}", hex::encode(val))
+    }
+}
+
 /// A fingerprint is something that uniquely identifies the content of a file.
 /// In the context of this crate, a fingerprint is the root hash of a Merkle Patricia Trie
 /// of the merklised file.
@@ -218,6 +227,14 @@ impl<const H_LENGTH: usize> From<&[u8]> for Fingerprint<H_LENGTH> {
 impl<const H_LENGTH: usize> AsRef<[u8]> for Fingerprint<H_LENGTH> {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl<const H_LENGTH: usize> fmt::LowerHex for Fingerprint<H_LENGTH> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let val = self.0;
+
+        write!(f, "0x{}", hex::encode(val))
     }
 }
 
