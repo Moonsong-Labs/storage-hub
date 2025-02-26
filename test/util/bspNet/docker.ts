@@ -253,7 +253,7 @@ export const waitForLog = async (options: {
     const container = docker.getContainer(options.containerName);
 
     container.logs(
-      { follow: true, stdout: true, stderr: true, tail: undefined, timestamps: false },
+      { follow: true, stdout: true, stderr: true, tail: 10, timestamps: false }, // set tail default to 10 to get the 10 last lines of logs printed
       (err, stream) => {
         if (err) {
           return reject(err);

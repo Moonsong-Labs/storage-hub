@@ -38,7 +38,7 @@ describeMspNet(
 
       // Stop the msp container so it will be behind when we restart the node.
       // TODO: clearLogs is not working, fix it.
-      await clearLogs({ containerName: "docker-sh-msp-1" });
+      // await clearLogs({ containerName: "docker-sh-msp-1" });
       await userApi.docker.pauseContainer("docker-sh-msp-1");
 
       const newBucketEventEvent = await userApi.createBucket(bucketName);
@@ -91,15 +91,19 @@ describeMspNet(
       await userApi.docker.restartContainer({ containerName: "docker-sh-msp-1" });
 
       // TODO: Wait for the container logs of starting up
+      await userApi.docker.waitForLog({
+        searchString: "💤 Idle (3 peers)",
+        containerName: "docker-sh-msp-1"
+      });
+
+      // Doesn't work without this because there is no log that tell us when the websocket is ready
+      await sleep(5000);
 
       // Creating a new MSP API to connect to the newly restarted container.
-      // TODO: Make this prettier
-      const maybeMspApi = await createApi("ws://127.0.0.1:9777");
-      assert(maybeMspApi, "MSP API not available");
-      const newMspApi = maybeMspApi;
+      const newMspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
 
       // Waiting for the MSP node to be in sync with the chain.
-      await userApi.wait.bspCatchUpToChainTip(newMspApi);
+      await userApi.rpc.engine.createBlock(true, true);
 
       await userApi.docker.waitForLog({
         searchString: "🥱 Handling coming out of sync mode",
@@ -121,7 +125,9 @@ describeMspNet(
 
       await userApi.block.seal();
       await userApi.assert.eventPresent("fileSystem", "MspAcceptedStorageRequest");
-      console.log("HELLO THERE");
+
+      // IMPORTANT!! Without this the test suite never finish
+      newMspApi.disconnect();
     });
   }
 );
