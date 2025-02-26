@@ -57,7 +57,7 @@ where
         trace!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);
 
         let RemoteDownloadRequest {
-            chunk_id,
+            chunk_ids,
             request_id,
             bucket_id,
             ..
@@ -92,7 +92,7 @@ where
 
         // Generate the proof for the chunk (which also contains the chunk data itself).
         let generate_proof_result =
-            file_storage_read_lock.generate_proof(&event.file_key.into(), &vec![chunk_id]);
+            file_storage_read_lock.generate_proof(&event.file_key.into(), &chunk_ids);
 
         match generate_proof_result {
             Ok(file_key_proof) => {
@@ -103,7 +103,7 @@ where
                     .await?;
             }
             Err(error) => {
-                error!(target: LOG_TARGET, "Failed to generate proof for chunk id {:?} of file {:?}", chunk_id, event.file_key);
+                error!(target: LOG_TARGET, "Failed to generate proof for chunk id {:?} of file {:?}", chunk_ids, event.file_key);
                 return Err(anyhow::anyhow!("{:?}", error));
             }
         }

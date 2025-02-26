@@ -26,6 +26,9 @@ hex = { workspace = true, default-features = true }
 kvdb = { workspace = true }
 kvdb-rocksdb = { workspace = true }
 lazy-static = { workspace = true }
+ordered-float = { workspace = true }
+priority-queue = { workspace = true }
+rand = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
@@ -60,7 +63,6 @@ serde = { workspace = true, default-features = true }
 jsonrpsee = { features = ["server"], workspace = true }
 futures = { workspace = true }
 serde_json = { workspace = true }
-rand = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true, default-features = true }

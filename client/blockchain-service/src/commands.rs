@@ -29,11 +29,11 @@ use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use crate::{
     handler::BlockchainService,
-    transaction::{SubmittedTransaction, WatchTransactionError},
+    transaction::SubmittedTransaction,
     types::{
         ConfirmStoringRequest, Extrinsic, ExtrinsicResult, FileDeletionRequest, MinimalBlockInfo,
         RespondStorageRequest, RetryStrategy, SendExtrinsicOptions,
-        StopStoringForInsolventUserRequest, SubmitProofRequest,
+        StopStoringForInsolventUserRequest, SubmitProofRequest, WatchTransactionError,
     },
 };
 
@@ -852,7 +852,7 @@ where
                     warn!(target: LOG_TARGET, "Transaction failed: {:?}", err);
 
                     if let Some(ref should_retry) = retry_strategy.should_retry {
-                        if !should_retry().await {
+                        if !should_retry(err.clone()).await {
                             return Err(anyhow::anyhow!("Exhausted retry strategy"));
                         }
                     }

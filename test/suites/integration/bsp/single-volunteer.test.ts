@@ -121,8 +121,9 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     });
 
     // Wait for the BSP confirm extrinsic to be submitted to the TX pool
-    await userApi.wait.bspStoredInTxPool({
-      expectedExts: 1
+    await userApi.wait.bspStored({
+      expectedExts: 1,
+      sealBlock: false
     });
 
     // Seal the block with the confirm TX
@@ -281,7 +282,7 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     // and send the `bspConfirmStoring` extrinsic. The other two files will be queued.
     // Here we wait for the first `bspConfirmStoring` extrinsic to be submitted to the tx pool,
     // we seal the block and check for the `BspConfirmedStoring` event.
-    await userApi.wait.bspStored(1);
+    await userApi.wait.bspStored({ expectedExts: 1 });
 
     const {
       data: { confirmedFileKeys: bspConfirmRes_fileKeys, newRoot: bspConfirmRes_newRoot }
@@ -305,7 +306,7 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
 
     // After the previous block is processed by the BSP, the forest write lock is released and
     // the other pending `bspConfirmStoring` extrinsics are processed and batched into one extrinsic.
-    await userApi.wait.bspStored(1);
+    await userApi.wait.bspStored({ expectedExts: 1 });
 
     const {
       data: { confirmedFileKeys: bspConfirm2Res_fileKeys, newRoot: bspConfirm2Res_newRoot }

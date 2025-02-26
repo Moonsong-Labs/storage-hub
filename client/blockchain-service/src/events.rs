@@ -140,12 +140,22 @@ impl From<ProcessFileDeletionRequestData> for ForestWriteLockTaskData {
     }
 }
 
+/// Data required to build a proof to submit to the runtime.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct ProcessSubmitProofRequestData {
+    /// The Provider ID of the BSP that is submitting the proof.
     pub provider_id: ProofsDealerProviderId,
+    /// The tick for which the proof is being built.
+    ///
+    /// This tick should be the tick where [`Self::seed`] was generated.
     pub tick: BlockNumber,
+    /// The seed that was used to generate the challenges for this proof.
     pub seed: RandomnessOutput,
+    /// All the Forest challenges that the proof to generate has to respond to.
+    ///
+    /// This includes the [`Self::checkpoint_challenges`].
     pub forest_challenges: Vec<H256>,
+    /// The checkpoint challenges that the proof to generate has to respond to.
     pub checkpoint_challenges: Vec<CustomChallenge>,
 }
 
@@ -404,6 +414,17 @@ pub struct FinalisedProofSubmittedForPendingFileDeletionRequest {
 
 impl EventBusMessage for FinalisedProofSubmittedForPendingFileDeletionRequest {}
 
+/// Event emitted when a bucket move is confirmed on-chain and the download process should start.
+/// This event is emitted by the blockchain service when it receives a MoveBucketAccepted event
+/// and the current node is the new MSP.
+#[derive(Debug, Clone)]
+pub struct StartMovedBucketDownload {
+    pub bucket_id: BucketId,
+    pub value_prop_id: ValuePropId,
+}
+
+impl EventBusMessage for StartMovedBucketDownload {}
+
 /// The event bus provider for the BlockchainService actor.
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
@@ -438,6 +459,7 @@ pub struct BlockchainServiceEventBusProvider {
     file_deletion_request_event_bus: EventBus<FileDeletionRequest>,
     finalised_file_deletion_request_event_bus:
         EventBus<FinalisedProofSubmittedForPendingFileDeletionRequest>,
+    start_moved_bucket_download_event_bus: EventBus<StartMovedBucketDownload>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -469,6 +491,7 @@ impl BlockchainServiceEventBusProvider {
             notify_period_event_bus: EventBus::new(),
             file_deletion_request_event_bus: EventBus::new(),
             finalised_file_deletion_request_event_bus: EventBus::new(),
+            start_moved_bucket_download_event_bus: EventBus::new(),
         }
     }
 }
@@ -630,5 +653,11 @@ impl ProvidesEventBus<FinalisedProofSubmittedForPendingFileDeletionRequest>
 {
     fn event_bus(&self) -> &EventBus<FinalisedProofSubmittedForPendingFileDeletionRequest> {
         &self.finalised_file_deletion_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<StartMovedBucketDownload> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<StartMovedBucketDownload> {
+        &self.start_moved_bucket_download_event_bus
     }
 }

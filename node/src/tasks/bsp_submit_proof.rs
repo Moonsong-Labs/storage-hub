@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
@@ -12,14 +12,14 @@ use shc_blockchain_service::{
     events::{
         FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
     },
-    types::{RetryStrategy, SubmitProofRequest},
+    types::{RetryStrategy, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        BlockNumber, CustomChallenge, FileKey, KeyProof, KeyProofs, ProofsDealerProviderId, Proven,
-        RandomnessOutput, StorageProof,
+        BlockNumber, CustomChallenge, FileKey, ForestRoot, KeyProof, KeyProofs,
+        ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -271,7 +271,7 @@ where
 
         // This function is a check to see if we should continue to retry the submission of the proof.
         // If this proof submission is invalid, we should not retry it, and release the forest write lock.
-        let should_retry = move || {
+        let should_retry = move |error| {
             let cloned_sh_handler = Arc::clone(&cloned_sh_handler);
             let cloned_event = Arc::clone(&cloned_event);
             let cloned_forest_root = Arc::new(cloned_forest_root);
@@ -279,39 +279,12 @@ where
             // Check:
             // - If the proof is outdated.
             // - If the Forest root of the BSP has changed.
-            Box::pin(async move {
-                let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-                let is_proof_outdated =
-                    Self::check_if_proof_is_outdated(&cloned_sh_handler.blockchain, &cloned_event)
-                        .await
-                        .is_err();
-                let has_forest_root_changed = {
-                    let fs = cloned_sh_handler
-                        .forest_storage_handler
-                        .get(&current_forest_key)
-                        .await;
-
-                    match fs {
-                        Some(fs) => fs.read().await.root() != *cloned_forest_root,
-                        None => {
-                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get forest storage.");
-                            true
-                        }
-                    }
-                };
-
-                // If the proof is outdated, or the Forest root has changed, we should not retry.
-                if is_proof_outdated {
-                    warn!(target: LOG_TARGET, "❌ Proof to submit is outdated. Stop retrying.");
-                    return false;
-                };
-                if has_forest_root_changed {
-                    warn!(target: LOG_TARGET, "❌ Forest root has changed. Stop retrying.");
-                    return false;
-                };
-
-                true
-            }) as Pin<Box<dyn Future<Output = bool> + Send>>
+            Box::pin(Self::should_retry_submit_proof(
+                cloned_sh_handler.clone(),
+                cloned_event.clone(),
+                cloned_forest_root.clone(),
+                error,
+            )) as Pin<Box<dyn Future<Output = bool> + Send>>
         };
 
         // Attempt to submit the extrinsic with retries and tip increase.
@@ -415,6 +388,8 @@ where
         tick: BlockNumber,
         seed: RandomnessOutput,
     ) -> anyhow::Result<()> {
+        trace!(target: LOG_TARGET, "Queueing submit proof request for provider [{:?}] with tick [{:?}] and seed [{:?}]", provider_id, tick, seed);
+
         // Derive forest challenges from seed.
         let mut forest_challenges = self
             .derive_forest_challenges_from_seed(seed, provider_id)
@@ -567,7 +542,7 @@ where
         // Construct file key proofs for the challenges.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let file_key_proof = read_file_storage
-            .generate_proof(&file_key, &chunks_to_prove)
+            .generate_proof(&file_key, &HashSet::from_iter(chunks_to_prove))
             .map_err(|e| anyhow!("File is not in storage, or proof does not exist: {:?}", e))?;
         // Release the file storage read lock as soon as possible.
         drop(read_file_storage);
@@ -593,5 +568,58 @@ where
         drop(write_file_storage);
 
         Ok(())
+    }
+
+    /// Function to determine if a proof submission should be retried,
+    /// sending the same proof again.
+    ///
+    /// This function will return `true` if and only if the following conditions are met:
+    /// 1. The error is a timeout. Otherwise, it means that the transaction was not successful,
+    ///    in which case it is safer to let the BlockchainService eventually schedule a new
+    ///    proof submission from scratch.
+    /// 2. The proof is up to date, i.e. the Forest root has not changed, and the tick for
+    ///    which the proof was generated is still the tick this Provider should submit a proof for.
+    async fn should_retry_submit_proof(
+        sh_handler: Arc<StorageHubHandler<NT>>,
+        event: Arc<ProcessSubmitProofRequest>,
+        forest_root: Arc<ForestRoot>,
+        error: WatchTransactionError,
+    ) -> bool {
+        // We only retry sending THE SAME proof, if the error is a timeout.
+        match error {
+            WatchTransactionError::Timeout => {}
+            _ => return false,
+        }
+
+        let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+        let is_proof_outdated = Self::check_if_proof_is_outdated(&sh_handler.blockchain, &event)
+            .await
+            .is_err();
+        let has_forest_root_changed = {
+            let fs = sh_handler
+                .forest_storage_handler
+                .get(&current_forest_key)
+                .await;
+
+            match fs {
+                Some(fs) => fs.read().await.root() != *forest_root,
+                None => {
+                    error!(target: LOG_TARGET, "CRITICAL❗️❗️ Failed to get forest storage.");
+                    true
+                }
+            }
+        };
+
+        // If the proof is outdated, or the Forest root has changed, we should not retry.
+        if is_proof_outdated {
+            warn!(target: LOG_TARGET, "❌ Proof to submit is outdated. Stop retrying.");
+            return false;
+        };
+        if has_forest_root_changed {
+            warn!(target: LOG_TARGET, "❌ Forest root has changed. Stop retrying.");
+            return false;
+        };
+
+        true
     }
 }
