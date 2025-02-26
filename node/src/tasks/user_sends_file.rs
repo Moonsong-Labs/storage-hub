@@ -433,7 +433,6 @@ where
             }
         }
 
-
         info!(target: LOG_TARGET, "Successfully sent file fingerprint {:x} to peer {:?}", file_metadata.fingerprint, peer_id);
         Ok(())
     }
