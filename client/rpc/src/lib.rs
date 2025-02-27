@@ -36,6 +36,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{traits::Block as BlockT, AccountId32, Deserialize, KeyTypeId, Serialize};
+use sp_runtime_interface::pass_by::PassByInner;
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
@@ -124,9 +125,12 @@ pub enum RemoveFilesFromForestStorageResult {
 /// Provides an interface with the desired RPC method.
 /// Used by the `rpc` macro from `jsonrpsee`
 /// to generate the trait that is actually going to be implemented.
+///
+/// TODO: After adding maintenance mode, make some RPC calls (such as `remove_files_from_file_storage`)
+/// only available in maintenance mode.
 #[rpc(server, namespace = "storagehubclient")]
 pub trait StorageHubClientApi {
-    #[method(name = "loadFileInStorage")]
+    #[method(name = "loadFileInStorage", with_extensions)]
     async fn load_file_in_storage(
         &self,
         file_path: String,
@@ -135,14 +139,23 @@ pub trait StorageHubClientApi {
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult>;
 
-    /// Remove a file from the file storage.
+    /// Remove a list of files from the file storage.
     ///
     /// This is useful to allow BSPs and MSPs to manually adjust their file storage to match
     /// the state of the network if any inconsistencies are found.
-    #[method(name = "removeFileFromFileStorage")]
-    async fn remove_file_from_file_storage(&self, file_key: H256) -> RpcResult<()>;
+    #[method(name = "removeFilesFromFileStorage", with_extensions)]
+    async fn remove_files_from_file_storage(&self, file_key: Vec<H256>) -> RpcResult<()>;
 
-    #[method(name = "saveFileToDisk")]
+    /// Remove all files under a certain prefix from the file storage.
+    ///
+    /// This is useful to allow MSPs to manually adjust their file storage to match
+    /// the state of the network if any inconsistencies are found, allowing them
+    /// to remove all files that belong to a bucket without having to call `removeFileFromFileStorage`
+    /// for each file.
+    #[method(name = "removeFilesWithPrefixFromFileStorage", with_extensions)]
+    async fn remove_files_with_prefix_from_file_storage(&self, prefix: H256) -> RpcResult<()>;
+
+    #[method(name = "saveFileToDisk", with_extensions)]
     async fn save_file_to_disk(
         &self,
         file_key: H256,
@@ -156,7 +169,7 @@ pub trait StorageHubClientApi {
     ///
     /// In the case of an BSP node, the forest key is empty since it only maintains a single forest.
     /// In the case of an MSP node, the forest key is a bucket ID.
-    #[method(name = "addFilesToForestStorage")]
+    #[method(name = "addFilesToForestStorage", with_extensions)]
     async fn add_files_to_forest_storage(
         &self,
         forest_key: Option<H256>,
@@ -170,7 +183,7 @@ pub trait StorageHubClientApi {
     ///
     /// In the case of an BSP node, the forest key is empty since it only maintains a single forest.
     /// In the case of an MSP node, the forest key is a bucket ID.
-    #[method(name = "removeFilesFromForestStorage")]
+    #[method(name = "removeFilesFromForestStorage", with_extensions)]
     async fn remove_files_from_forest_storage(
         &self,
         forest_key: Option<H256>,
@@ -316,11 +329,15 @@ where
 {
     async fn load_file_in_storage(
         &self,
+        ext: &Extensions,
         file_path: String,
         location: String,
         owner: AccountId32,
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
 
@@ -397,13 +414,41 @@ where
         Ok(result)
     }
 
-    async fn remove_file_from_file_storage(&self, file_key: H256) -> RpcResult<()> {
+    async fn remove_files_from_file_storage(
+        &self,
+        ext: &Extensions,
+        file_keys: Vec<H256>,
+    ) -> RpcResult<()> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
         // Acquire a write lock for the file storage.
         let mut write_file_storage = self.file_storage.write().await;
 
-        // Remove the file from the file storage.
+        // Remove the files from the file storage.
+        for file_key in file_keys {
+            write_file_storage
+                .delete_file(&file_key)
+                .map_err(into_rpc_error)?;
+        }
+
+        Ok(())
+    }
+
+    async fn remove_files_with_prefix_from_file_storage(
+        &self,
+        ext: &Extensions,
+        prefix: H256,
+    ) -> RpcResult<()> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
+        // Acquire a write lock for the file storage.
+        let mut write_file_storage = self.file_storage.write().await;
+
+        // Remove all files with the given prefix from the file storage.
         write_file_storage
-            .delete_file(&file_key)
+            .delete_files_with_prefix(&prefix.inner())
             .map_err(into_rpc_error)?;
 
         Ok(())
@@ -411,9 +456,13 @@ where
 
     async fn save_file_to_disk(
         &self,
+        ext: &Extensions,
         file_key: H256,
         file_path: String,
     ) -> RpcResult<SaveFileToDisk> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
         // Acquire FileStorage read lock.
         let read_file_storage = self.file_storage.read().await;
 
@@ -464,9 +513,13 @@ where
 
     async fn add_files_to_forest_storage(
         &self,
+        ext: &Extensions,
         forest_key: Option<H256>,
         metadata_of_files_to_add: Vec<FileMetadata>,
     ) -> RpcResult<AddFilesToForestStorageResult> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
         let forest_key = match forest_key {
             Some(forest_key) => forest_key.as_ref().to_vec().into(),
             None => CURRENT_FOREST_KEY.to_vec().into(),
@@ -491,9 +544,13 @@ where
 
     async fn remove_files_from_forest_storage(
         &self,
+        ext: &Extensions,
         forest_key: Option<H256>,
         file_keys: Vec<H256>,
     ) -> RpcResult<RemoveFilesFromForestStorageResult> {
+        // Check if the execution is safe.
+        check_if_safe(ext)?;
+
         let forest_key = match forest_key {
             Some(forest_key) => forest_key.as_ref().to_vec().into(),
             None => CURRENT_FOREST_KEY.to_vec().into(),
