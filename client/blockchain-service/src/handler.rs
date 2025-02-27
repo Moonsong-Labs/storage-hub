@@ -141,6 +141,7 @@ where
     /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
     /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
     /// would be to send a [`MutexGuard`].
+    /// TODO: MOVE THIS INTO THE BSP/MSP HANDLER
     pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
@@ -800,18 +801,29 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .pending_confirm_storing_request_deque()
-                        .push_back(request);
-                    state_store_context.commit();
-                    // We check right away if we can process the request so we don't waste time.
-                    self.bsp_check_pending_forest_root_writes();
-                    match callback.send(Ok(())) {
+                    if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
+                        let state_store_context =
+                            self.persistent_state.open_rw_context_with_overlay();
+                        state_store_context
+                            .pending_confirm_storing_request_deque()
+                            .push_back(request);
+                        state_store_context.commit();
+                        // We check right away if we can process the request so we don't waste time.
+                        self.bsp_check_pending_forest_root_writes();
+                        match callback.send(Ok(())) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
+                    } else {
+                        error!(target: LOG_TARGET, "Received a QueueConfirmBspRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received a QueueConfirmBspRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team."))) {
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
                         }
+                    }
                     }
                 }
                 BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
@@ -851,35 +863,58 @@ where
                                 error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
                             }
                         }
+                    } else {
+                        error!(target: LOG_TARGET, "Received a QueueSubmitProofRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received a QueueSubmitProofRequest command while not managing a BSP. This should never happen. Please report it to the StorageHub team."))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
+                        }
                     }
                 }
                 BlockchainServiceCommand::QueueStopStoringForInsolventUserRequest {
                     request,
                     callback,
                 } => {
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .pending_stop_storing_for_insolvent_user_request_deque()
-                        .push_back(request);
-                    state_store_context.commit();
+                    if let Some(managed_bsp_or_msp) = &self.maybe_managed_provider {
+                        let state_store_context =
+                            self.persistent_state.open_rw_context_with_overlay();
+                        state_store_context
+                            .pending_stop_storing_for_insolvent_user_request_deque()
+                            .push_back(request);
+                        state_store_context.commit();
 
-                    // We check right away if we can process the request so we don't waste time.
-                    match &mut self.maybe_managed_provider {
-                        Some(ManagedProvider::Msp(_)) => {
-                            self.msp_check_pending_forest_root_writes();
-                        }
-                        Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_check_pending_forest_root_writes();
-                        }
-                        _ => {
-                            error!(target: LOG_TARGET, "Received a QueueStopStoringForInsolventUserRequest command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
-                        }
-                    }
+                        // We check right away if we can process the request so we don't waste time.
+                        match managed_bsp_or_msp {
+                            ManagedProvider::Bsp(_) => {
+                                self.bsp_check_pending_forest_root_writes();
 
-                    match callback.send(Ok(())) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                match callback.send(Ok(())) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                    }
+                                }
+                            }
+                            ManagedProvider::Msp(_) => {
+                                self.msp_check_pending_forest_root_writes();
+
+                                match callback.send(Ok(())) {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        error!(target: LOG_TARGET, "Received a QueueStopStoringForInsolventUserRequest command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received a QueueStopStoringForInsolventUserRequest command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
                         }
                     }
                 }
@@ -994,33 +1029,38 @@ where
                     forest_root_write_tx,
                     callback,
                 } => {
-                    // Release the forest root write "lock".
-                    let forest_root_write_result = forest_root_write_tx.send(()).map_err(|e| {
-                        error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team. \nError while sending the release message: {:?}", e);
-                        anyhow!(
-                            "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team."
-                        )
-                    });
+                    if let Some(managed_bsp_or_msp) = &self.maybe_managed_provider {
+                        // Release the forest root write "lock".
+                        let forest_root_write_result = forest_root_write_tx.send(()).map_err(|e| {
+                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team. \nError while sending the release message: {:?}", e);
+                            anyhow!("CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.")
+                        });
 
-                    // Check if there are any pending requests to use the forest root write lock.
-                    // If so, we give them the lock right away.
-                    if forest_root_write_result.is_ok() {
-                        match &mut self.maybe_managed_provider {
-                            Some(ManagedProvider::Msp(_)) => {
-                                self.msp_check_pending_forest_root_writes();
-                            }
-                            Some(ManagedProvider::Bsp(_)) => {
-                                self.bsp_check_pending_forest_root_writes();
-                            }
-                            _ => {
-                                error!(target: LOG_TARGET, "Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
+                        // Check if there are any pending requests to use the forest root write lock.
+                        // If so, we give them the lock right away.
+                        if forest_root_write_result.is_ok() {
+                            match managed_bsp_or_msp {
+                                ManagedProvider::Msp(_) => {
+                                    self.msp_check_pending_forest_root_writes();
+                                }
+                                ManagedProvider::Bsp(_) => {
+                                    self.bsp_check_pending_forest_root_writes();
+                                }
                             }
                         }
-                    }
-                    match callback.send(forest_root_write_result) {
-                        Ok(_) => {}
-                        Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
+                        match callback.send(forest_root_write_result) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
+                            }
+                        }
+                    } else {
+                        error!(target: LOG_TARGET, "Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
+                        match callback.send(Err(anyhow!("Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
+                            }
                         }
                     }
                 }
@@ -1240,7 +1280,7 @@ where
                 self.msp_init_block_processing(block_hash, block_number, tree_route);
             }
             None => {
-                warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
+                trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
             }
         }
 
@@ -1252,14 +1292,16 @@ where
         self.notify_tick_number(&block_hash);
 
         // Process pending requests that update the forest root.
-        match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(_)) => {
-                self.msp_check_pending_forest_root_writes();
-            }
+        match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
                 self.bsp_check_pending_forest_root_writes();
             }
-            _ => {}
+            Some(ManagedProvider::Msp(_)) => {
+                self.msp_check_pending_forest_root_writes();
+            }
+            None => {
+                trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
+            }
         }
         // Check that trigger an event every X amount of blocks (specified in config).
         self.check_for_notify(&block_number);
@@ -1271,6 +1313,7 @@ where
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
+                    // TODO: MOVE THESE INTO A FUNCTION.
                     match ev.event.clone() {
                         // New storage request event coming from pallet-file-system.
                         RuntimeEvent::FileSystem(
@@ -1452,7 +1495,7 @@ where
                         Some(ManagedProvider::Msp(_)) => {
                             self.msp_process_block_events(block_hash, ev.event.clone());
                         }
-                        _ => {}
+                        None => {}
                     }
                 }
             }
