@@ -9,13 +9,13 @@ use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
         AcceptedBspVolunteer, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
-        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
-        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
-        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
-        StartMovedBucketDownload, UserWithoutFunds,
+        FinalisedBucketMovedAway, FinalisedMspStoppedStoringBucket,
+        FinalisedProofSubmittedForPendingFileDeletionRequest, LastChargeableInfoUpdated,
+        MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested,
+        MoveBucketRequestedForMsp, MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod,
+        ProcessConfirmStoringRequest, ProcessFileDeletionRequest, ProcessMspRespondStoringRequest,
+        ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
+        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
     },
     BlockchainService,
 };
@@ -36,7 +36,7 @@ use crate::{
         bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
         bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
         bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-        msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
+        msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspRespondMoveBucketTask,
         msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
@@ -215,18 +215,25 @@ where
             .subscribe_to(&self.task_spawner, &self.blockchain, true);
         process_confirm_storing_request_event_bus_listener.start();
 
-        // MspStoppedStoringTask handles events for handling data deletion.
-        let msp_stopped_storing_task = MspStoppedStoringTask::new(self.clone());
-        // Subscribing to FinalisedMspStoppedStoringBucket event from the BlockchainService.
+        // Task that handles bucket deletion (both move and stop storing)
+        let msp_delete_bucket_task = MspDeleteBucketTask::new(self.clone());
+        // Subscribing to FinalisedMspStoppedStoringBucket event
         let finalised_msp_stopped_storing_bucket_event_bus_listener: EventBusListener<
             FinalisedMspStoppedStoringBucket,
             _,
-        > = msp_stopped_storing_task.clone().subscribe_to(
-            &self.task_spawner,
-            &self.blockchain,
-            true,
-        );
+        > = msp_delete_bucket_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain, true);
         finalised_msp_stopped_storing_bucket_event_bus_listener.start();
+
+        // Subscribing to FinalisedBucketMovedAway event
+        let finalised_bucket_moved_away_event_bus_listener: EventBusListener<
+            FinalisedBucketMovedAway,
+            _,
+        > = msp_delete_bucket_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain, true);
+        finalised_bucket_moved_away_event_bus_listener.start();
 
         // MspDeleteFileTask handles events for deleting individual files from an MSP.
         let msp_delete_file_task = MspDeleteFileTask::new(self.clone());

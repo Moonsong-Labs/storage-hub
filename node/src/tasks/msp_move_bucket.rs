@@ -1007,7 +1007,6 @@ impl BspPeerStats {
     ///
     /// The score is a weighted combination of the peer's success rate and average speed.
     /// The success rate is weighted more heavily (70%) compared to the average speed (30%).
-    ///
     fn get_score(&self) -> f64 {
         // Combine success rate and speed into a single score
         // Weight success rate more heavily (70%) compared to speed (30%)
