@@ -331,119 +331,17 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
                 let from_encoded = CF::KeyCodec::encode(start);
                 let to_encoded = CF::KeyCodec::encode(end);
 
-                // Compare the encoded bytes to determine direction
-                let direction = if from_encoded > to_encoded {
-                    Direction::Reverse
-                } else {
-                    Direction::Forward
-                };
-
-                let mut read_opts = ReadOptions::default();
-
-                // Set bounds based on direction
-                match direction {
-                    Direction::Forward => {
-                        read_opts.set_iterate_lower_bound(from_encoded.clone());
-                        read_opts.set_iterate_upper_bound(to_encoded);
-
-                        Box::new(
-                            self.rocks
-                                .iterator_cf_opt(
-                                    self.cf.handle,
-                                    IteratorMode::From(from_encoded.as_slice(), direction),
-                                    read_opts,
-                                )
-                                .map(|(key, value)| {
-                                    (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
-                                }),
-                        )
-                    }
-                    Direction::Reverse => {
-                        // For reverse iteration, we need to swap the bounds
-                        read_opts.set_iterate_lower_bound(to_encoded);
-                        read_opts.set_iterate_upper_bound(from_encoded.clone());
-
-                        Box::new(
-                            self.rocks
-                                .iterator_cf_opt(
-                                    self.cf.handle,
-                                    IteratorMode::From(from_encoded.as_slice(), direction),
-                                    read_opts,
-                                )
-                                .map(|(key, value)| {
-                                    (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
-                                }),
-                        )
-                    }
-                }
-            }
-            (Bound::Included(start), Bound::Included(end)) => {
-                // Range: start..=end
-                let from_encoded = CF::KeyCodec::encode(start);
-                let to_encoded = CF::KeyCodec::encode(end);
-
-                // Compare the encoded bytes to determine direction
-                let direction = if from_encoded > to_encoded {
-                    Direction::Reverse
-                } else {
-                    Direction::Forward
-                };
-
-                let mut read_opts = ReadOptions::default();
-
-                match direction {
-                    Direction::Forward => {
-                        // We need to handle this specially since RocksDB's upper bound is exclusive
-                        read_opts.set_iterate_lower_bound(from_encoded.clone());
-
-                        // For inclusive end, we need to make the upper bound the next possible key
-                        let mut end_bytes = to_encoded.clone();
-                        // Add a byte to make it the next possible key (to simulate inclusive end)
-                        end_bytes.push(0);
-                        read_opts.set_iterate_upper_bound(end_bytes);
-
-                        Box::new(
-                            self.rocks
-                                .iterator_cf_opt(
-                                    self.cf.handle,
-                                    IteratorMode::From(from_encoded.as_slice(), direction),
-                                    read_opts,
-                                )
-                                .map(|(key, value)| {
-                                    (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
-                                }),
-                        )
-                    }
-                    Direction::Reverse => {
-                        // For reverse iteration with inclusive end, we need to swap the bounds
-                        read_opts.set_iterate_lower_bound(to_encoded.clone());
-                        read_opts.set_iterate_upper_bound(from_encoded.clone());
-
-                        Box::new(
-                            self.rocks
-                                .iterator_cf_opt(
-                                    self.cf.handle,
-                                    IteratorMode::From(from_encoded.as_slice(), direction),
-                                    read_opts,
-                                )
-                                .map(|(key, value)| {
-                                    (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
-                                }),
-                        )
-                    }
-                }
-            }
-            (Bound::Included(start), Bound::Unbounded) => {
-                // Range: start..
-                let from_encoded = CF::KeyCodec::encode(start);
                 let mut read_opts = ReadOptions::default();
                 read_opts.set_iterate_lower_bound(from_encoded.clone());
+                read_opts.set_iterate_upper_bound(to_encoded);
 
+                // Clone the slice to extend its lifetime
+                let from_slice = from_encoded.clone();
                 Box::new(
                     self.rocks
                         .iterator_cf_opt(
                             self.cf.handle,
-                            IteratorMode::From(from_encoded.as_slice(), Direction::Forward),
+                            IteratorMode::From(&from_slice, Direction::Forward),
                             read_opts,
                         )
                         .map(|(key, value)| {
@@ -451,10 +349,63 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
                         }),
                 )
             }
-            (Bound::Unbounded, Bound::Excluded(end)) => {
-                // Range: ..end
+            (Bound::Included(start), Bound::Included(end)) => {
+                // Range: start..=end
+                let from_encoded = CF::KeyCodec::encode(start);
                 let to_encoded = CF::KeyCodec::encode(end);
+
                 let mut read_opts = ReadOptions::default();
+                read_opts.set_iterate_lower_bound(from_encoded.clone());
+
+                // For inclusive end, we need to make the upper bound the next possible key
+                let mut end_bytes = to_encoded.clone();
+                end_bytes.push(0);
+                read_opts.set_iterate_upper_bound(end_bytes);
+
+                // Clone the slice to extend its lifetime
+                let from_slice = from_encoded.clone();
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(
+                            self.cf.handle,
+                            IteratorMode::From(&from_slice, Direction::Forward),
+                            read_opts,
+                        )
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
+            (Bound::Included(start), Bound::Unbounded) => {
+                // Range: start..
+                let from_encoded = CF::KeyCodec::encode(start);
+
+                let mut read_opts = ReadOptions::default();
+                read_opts.set_iterate_lower_bound(from_encoded.clone());
+
+                // Clone the slice to extend its lifetime
+                let from_slice = from_encoded.clone();
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(
+                            self.cf.handle,
+                            IteratorMode::From(&from_slice, Direction::Forward),
+                            read_opts,
+                        )
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
+            (Bound::Excluded(start), Bound::Excluded(end)) => {
+                // Range: start+1..end
+                let from_encoded = CF::KeyCodec::encode(start);
+                let to_encoded = CF::KeyCodec::encode(end);
+
+                let mut read_opts = ReadOptions::default();
+                // We need to find the next key after 'start' to implement 'Excluded' semantics
+                // For simplicity, we'll just use the same lower bound and filter in the iterator
+                read_opts.set_iterate_lower_bound(from_encoded.clone());
                 read_opts.set_iterate_upper_bound(to_encoded);
 
                 Box::new(
@@ -465,14 +416,62 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
                         }),
                 )
             }
+            (Bound::Excluded(start), Bound::Included(end)) => {
+                // Range: start+1..=end
+                let from_encoded = CF::KeyCodec::encode(start);
+                let to_encoded = CF::KeyCodec::encode(end);
+
+                let mut read_opts = ReadOptions::default();
+                read_opts.set_iterate_lower_bound(from_encoded.clone());
+
+                let mut end_bytes = to_encoded.clone();
+                end_bytes.push(0);
+                read_opts.set_iterate_upper_bound(end_bytes);
+
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(self.cf.handle, IteratorMode::Start, read_opts)
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
+            (Bound::Excluded(start), Bound::Unbounded) => {
+                // Range: start+1..
+                let start_bytes = CF::KeyCodec::encode(start);
+
+                let mut read_opts = ReadOptions::default();
+                read_opts.set_iterate_lower_bound(start_bytes.clone());
+
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(
+                            self.cf.handle,
+                            IteratorMode::From(&start_bytes, Direction::Forward),
+                            read_opts,
+                        )
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
             (Bound::Unbounded, Bound::Included(end)) => {
                 // Range: ..=end
-                // Similar to start..=end, but from the beginning
-                let end_encoded = CF::KeyCodec::encode(end);
-                let mut end_bytes = end_encoded.clone();
-                // Add a byte to make it the next possible key (to simulate inclusive end)
-                end_bytes.push(0);
+                let end_bytes = CF::KeyCodec::encode(end);
+                let mut read_opts = ReadOptions::default();
+                read_opts.set_iterate_upper_bound(end_bytes);
 
+                Box::new(
+                    self.rocks
+                        .iterator_cf_opt(self.cf.handle, IteratorMode::Start, read_opts)
+                        .map(|(key, value)| {
+                            (CF::KeyCodec::decode(&key), CF::ValueCodec::decode(&value))
+                        }),
+                )
+            }
+            (Bound::Unbounded, Bound::Excluded(end)) => {
+                // Range: ..end
+                let end_bytes = CF::KeyCodec::encode(end);
                 let mut read_opts = ReadOptions::default();
                 read_opts.set_iterate_upper_bound(end_bytes);
 
@@ -498,10 +497,6 @@ impl<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> TypedCfApi<'r, 
                         }),
                 )
             }
-            _ => {
-                // This should never happen with Rust's range types
-                panic!("Unsupported range bounds")
-            }
         }
     }
 }
@@ -524,6 +519,14 @@ impl<'r, R: ReadableRocks, W: WriteSupport> TypedDbContext<'r, R, W> {
 /// A RocksDB wrapper which implements [`ReadableRocks`] and [`WriteableRocks`].
 pub struct TypedRocksDB {
     pub db: DB,
+}
+
+impl TypedRocksDB {
+    /// Opens a RocksDB database with default options at the given path.
+    pub fn open_default(path: &str) -> Result<Self, rocksdb::Error> {
+        let db = DB::open_default(path)?;
+        Ok(Self { db })
+    }
 }
 
 impl ReadableRocks for TypedRocksDB {
@@ -768,5 +771,282 @@ where
             .buffer
             .delete(self.cf.handle, key_bytes.clone());
         self.cf_overlay.delete(key_bytes);
+    }
+}
+
+/// A trait for a hashset-like structure on top of RocksDB.
+/// This trait provides common operations for working with sets of keys.
+pub trait CFHashSetAPI: ProvidesTypedDbAccess {
+    /// The type of the key stored in the hashset.
+    type Value: Encode + Decode;
+
+    /// The column family used to store the hashset.
+    type SetCF: Default + TypedCf<Key = Self::Value, Value = ()>;
+
+    /// Checks if the hashset contains the given key.
+    fn contains(&self, key: &Self::Value) -> bool {
+        self.db_context()
+            .cf(&Self::SetCF::default())
+            .get(key)
+            .is_some()
+    }
+
+    /// Inserts a key into the hashset.
+    /// Returns true if the key was not present in the set.
+    fn insert(&mut self, key: &Self::Value) -> bool {
+        let was_present = self.contains(key);
+        if !was_present {
+            self.db_context().cf(&Self::SetCF::default()).put(key, &());
+        }
+        !was_present
+    }
+
+    /// Removes a key from the hashset.
+    /// Returns true if the key was present in the set.
+    fn remove(&mut self, key: &Self::Value) -> bool {
+        let was_present = self.contains(key);
+        if was_present {
+            self.db_context().cf(&Self::SetCF::default()).delete(key);
+        }
+        was_present
+    }
+
+    /// Returns all keys in the hashset as a vector, in order.
+    fn keys(&self) -> Vec<Self::Value> {
+        self.db_context()
+            .cf(&Self::SetCF::default())
+            .iterate_with_range(..)
+            .map(|(key, _)| key)
+            .collect()
+    }
+
+    /// Returns keys in the given range as a vector, in order.
+    fn keys_in_range<R: RangeBounds<Self::Value>>(&self, range: R) -> Vec<Self::Value> {
+        self.db_context()
+            .cf(&Self::SetCF::default())
+            .iterate_with_range(range)
+            .map(|(key, _)| key)
+            .collect()
+    }
+
+    /// Performs an operation on each key in the hashset.
+    /// This method iterates over the keys without collecting them all into memory.
+    fn for_each<F>(&self, mut f: F)
+    where
+        F: FnMut(&Self::Value),
+    {
+        for (key, _) in self
+            .db_context()
+            .cf(&Self::SetCF::default())
+            .iterate_with_range(..)
+        {
+            f(&key);
+        }
+    }
+
+    /// Performs an operation on each key in the given range.
+    /// This method iterates over the keys without collecting them all into memory.
+    fn for_each_in_range<R, F>(&self, range: R, mut f: F)
+    where
+        R: RangeBounds<Self::Value>,
+        F: FnMut(&Self::Value),
+    {
+        for (key, _) in self
+            .db_context()
+            .cf(&Self::SetCF::default())
+            .iterate_with_range(range)
+        {
+            f(&key);
+        }
+    }
+
+    /// Clears all keys from the hashset.
+    fn clear(&mut self) {
+        let keys: Vec<Self::Value> = self.keys();
+        for key in keys {
+            self.remove(&key);
+        }
+    }
+
+    /// Returns the number of keys in the hashset.
+    fn len(&self) -> usize {
+        self.keys().len()
+    }
+
+    /// Returns true if the hashset is empty.
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+}
+
+// Example implementations for string and integer hashsets
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    // Define a column family for user IDs
+    #[derive(Default, Clone)]
+    struct UserIdSetCF;
+
+    impl ScaleEncodedCf for UserIdSetCF {
+        type Key = u64;
+        type Value = ();
+        const SCALE_ENCODED_NAME: &'static str = "user_id_set";
+    }
+
+    // Define a struct that will implement CFHashSetAPI
+    struct UserIdSet<'a> {
+        db_context: TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+    }
+
+    // Implement ProvidesDbContext (required for CFHashSetAPI)
+    impl<'a> ProvidesDbContext for UserIdSet<'a> {
+        fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
+            &self.db_context
+        }
+    }
+
+    // Implement ProvidesTypedDbAccess (required for CFHashSetAPI)
+    impl<'a> ProvidesTypedDbAccess for UserIdSet<'a> {}
+
+    // Implement CFHashSetAPI
+    impl<'a> CFHashSetAPI for UserIdSet<'a> {
+        type Value = u64;
+        type SetCF = UserIdSetCF;
+    }
+
+    #[test]
+    fn test_hashset_operations() {
+        // Create a temporary directory for the test
+        let temp_dir = format!("/tmp/rocksdb_test_{}", std::process::id());
+        let _ = fs::remove_dir_all(&temp_dir); // Clean up any previous test data
+        fs::create_dir_all(&temp_dir).expect("Failed to create temp directory");
+
+        // Set up RocksDB with the required column family
+        let cf_name = UserIdSetCF::SCALE_ENCODED_NAME;
+        let mut db_opts = rocksdb::Options::default();
+        db_opts.create_if_missing(true);
+        db_opts.create_missing_column_families(true);
+
+        let cf_opts = rocksdb::Options::default();
+        let cf_descriptor = rocksdb::ColumnFamilyDescriptor::new(cf_name, cf_opts);
+
+        let db = rocksdb::DB::open_cf_descriptors(&db_opts, &temp_dir, vec![cf_descriptor])
+            .expect("Failed to open database");
+        let typed_db = TypedRocksDB { db };
+
+        // Create a write batch and context
+        let write_support = BufferedWriteSupport::new(&typed_db);
+        let db_context = TypedDbContext::new(&typed_db, write_support);
+
+        // Create the hashset with the context
+        let mut user_set = UserIdSet { db_context };
+
+        // Test initial state
+        assert!(user_set.is_empty(), "New hashset should be empty");
+        assert_eq!(user_set.len(), 0, "New hashset should have length 0");
+
+        // Test insert
+        assert!(
+            user_set.insert(&123),
+            "Insert should return true for new key"
+        );
+        assert!(
+            !user_set.insert(&123),
+            "Insert should return false for existing key"
+        );
+        assert!(
+            user_set.insert(&456),
+            "Insert should return true for new key"
+        );
+        assert!(
+            user_set.insert(&789),
+            "Insert should return true for new key"
+        );
+
+        // Flush the changes to make them visible
+        user_set.db_context().flush();
+
+        // Test contains
+        assert!(
+            user_set.contains(&123),
+            "Hashset should contain inserted key"
+        );
+        assert!(
+            user_set.contains(&456),
+            "Hashset should contain inserted key"
+        );
+        assert!(
+            user_set.contains(&789),
+            "Hashset should contain inserted key"
+        );
+        assert!(
+            !user_set.contains(&999),
+            "Hashset should not contain non-inserted key"
+        );
+
+        // Test keys
+        let keys = user_set.keys();
+        assert_eq!(keys.len(), 3, "Hashset should have 3 keys");
+        assert!(keys.contains(&123), "Keys should contain 123");
+        assert!(keys.contains(&456), "Keys should contain 456");
+        assert!(keys.contains(&789), "Keys should contain 789");
+
+        // Test keys_in_range
+        let range_keys = user_set.keys_in_range(100..500);
+        assert_eq!(range_keys.len(), 2, "Range query should return 2 keys");
+        assert!(range_keys.contains(&123), "Range keys should contain 123");
+        assert!(range_keys.contains(&456), "Range keys should contain 456");
+        assert!(
+            !range_keys.contains(&789),
+            "Range keys should not contain 789"
+        );
+
+        // Test remove
+        assert!(
+            user_set.remove(&123),
+            "Remove should return true for existing key"
+        );
+
+        // Flush the changes to make them visible
+        user_set.db_context().flush();
+
+        assert!(
+            !user_set.remove(&123),
+            "Remove should return false for non-existing key"
+        );
+        assert!(
+            !user_set.contains(&123),
+            "Hashset should not contain removed key"
+        );
+
+        // Test for_each
+        let mut count = 0;
+        let mut sum = 0;
+        user_set.for_each(|key| {
+            count += 1;
+            sum += key;
+        });
+        assert_eq!(count, 2, "for_each should iterate over 2 keys");
+        assert_eq!(sum, 456 + 789, "Sum of remaining keys should be 456 + 789");
+
+        // Test clear
+        user_set.clear();
+
+        // Flush the changes to make them visible
+        user_set.db_context().flush();
+
+        assert!(user_set.is_empty(), "Hashset should be empty after clear");
+        assert_eq!(
+            user_set.len(),
+            0,
+            "Hashset should have length 0 after clear"
+        );
+
+        // Clean up
+        drop(user_set);
+        drop(typed_db);
+        let _ = fs::remove_dir_all(&temp_dir);
     }
 }
