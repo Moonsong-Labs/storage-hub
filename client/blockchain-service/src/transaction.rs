@@ -12,7 +12,7 @@ use tokio::sync::mpsc::Receiver;
 
 use crate::{
     commands::BlockchainServiceInterface,
-    types::{Extrinsic, ExtrinsicHash, ExtrinsicResult},
+    types::{Extrinsic, ExtrinsicHash, ExtrinsicResult, WatchTransactionError},
     BlockchainService,
 };
 
@@ -267,19 +267,4 @@ impl SubmittedTransaction {
             })?;
         Ok(extrinsic_in_block)
     }
-}
-
-#[derive(thiserror::Error, Debug)]
-pub enum WatchTransactionError {
-    #[error("Timeout waiting for transaction to be included in a block")]
-    Timeout,
-    #[error("Transaction watcher channel closed")]
-    WatcherChannelClosed,
-    #[error("Transaction failed. DispatchError: {dispatch_error}, DispatchInfo: {dispatch_info}")]
-    TransactionFailed {
-        dispatch_error: String,
-        dispatch_info: String,
-    },
-    #[error("Unexpected error: {0}")]
-    Internal(String),
 }

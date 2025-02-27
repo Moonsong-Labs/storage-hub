@@ -269,7 +269,7 @@ describeBspNet(
       // Checking volunteering and confirming for the high reputation BSP
       await userApi.wait.bspVolunteer(1);
       await bspApi.wait.fileStorageComplete(fileKey);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
 
       // Checking volunteering and confirming for the low reputation BSP
       // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
@@ -361,7 +361,7 @@ describeBspNet(
 
       await userApi.wait.bspVolunteer(1);
       await bspApi.wait.fileStorageComplete(fileKey);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
 
       // Then wait for the second BSP to volunteer and confirm storing the file
       // If a BSP can volunteer in tick X, it sends the extrinsic once it imports block with tick X - 1, so it gets included directly in tick X
@@ -369,7 +369,7 @@ describeBspNet(
 
       await userApi.wait.bspVolunteer(1);
       await bspTwoApi.wait.fileStorageComplete(fileKey);
-      await userApi.wait.bspStored(1);
+      await userApi.wait.bspStored({ expectedExts: 1 });
 
       await bspTwoApi.disconnect();
       await userApi.docker.stopContainer("sh-bsp-two");
