@@ -38,6 +38,7 @@ use sc_network::{
 };
 use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
+use serde::Deserialize;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{
@@ -46,11 +47,9 @@ use shc_common::types::{
 };
 use shp_file_metadata::ChunkId;
 
-use crate::events::RemoteUploadRequest;
-
 use super::{
     commands::{FileTransferServiceCommand, RequestError},
-    events::{FileTransferServiceEventBusProvider, RemoteDownloadRequest},
+    events::{FileTransferServiceEventBusProvider, RemoteDownloadRequest, RemoteUploadRequest},
     schema,
 };
 

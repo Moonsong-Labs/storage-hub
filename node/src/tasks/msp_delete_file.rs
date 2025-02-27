@@ -27,22 +27,17 @@ pub struct MspDeleteFileConfig {
     /// Maximum number of attempts to try submitting file deletion request
     pub max_try_count: u32,
     /// Maximum tip amount to use when submitting file deletion transactions
-    pub max_tip: u128,
+    pub max_tip: f64,
 }
 
 impl Default for MspDeleteFileConfig {
     fn default() -> Self {
         Self {
             max_try_count: 5, // Default value that was in command.rs
-            max_tip: 100,     // Default value that was in command.rs
+            max_tip: 100.0,   // Default value that was in command.rs
         }
     }
 }
-
-/// These constants are now configurable via provider.toml [provider.msp_delete_file] section
-/// Default values are specified in the Default implementation
-/// const MAX_DELETE_FILE_REQUEST_TRY_COUNT: u32 = 5;
-/// const MAX_DELETE_FILE_REQUEST_TIP: u128 = 100;
 
 /// MSP Delete File Task: Handles the whole flow of a file being deleted from an MSP.
 ///
@@ -103,7 +98,7 @@ where
     async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Queueing file deletion request for file_key {:?}",
+            "Queueing file deletion request for file_key {:x}",
             event.file_key
         );
 
@@ -218,7 +213,7 @@ where
                 call,
                 RetryStrategy::default()
                     .with_max_retries(max_try_count)
-                    .with_max_tip(max_tip as f64)
+                    .with_max_tip(max_tip)
                     .with_timeout(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
@@ -254,7 +249,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Successfully processed file deletion request for file_key {:?}",
+            "Successfully processed file deletion request for file_key {:x}",
             delete_file_request.file_key
         );
 
@@ -282,7 +277,7 @@ where
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Processing finalized file deletion request for file_key {:?}",
+            "Processing finalized file deletion request for file_key {:x}",
             event.file_key
         );
 
@@ -290,7 +285,7 @@ where
         if !event.proof_of_inclusion {
             info!(
                 target: LOG_TARGET,
-                "Skipping file deletion as no proof of inclusion was provided for file_key {:?}",
+                "Skipping file deletion as no proof of inclusion was provided for file_key {:x}",
                 event.file_key
             );
             return Ok(());

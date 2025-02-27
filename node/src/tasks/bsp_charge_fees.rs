@@ -14,7 +14,6 @@ use shc_blockchain_service::{
 use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
-use storage_hub_runtime::Balance;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -27,7 +26,7 @@ const LOG_TARGET: &str = "bsp-charge-fees-task";
 #[derive(Debug, Clone)]
 pub struct BspChargeFeesConfig {
     /// Minimum debt threshold for charging users
-    pub min_debt: Balance,
+    pub min_debt: u64,
 }
 
 impl Default for BspChargeFeesConfig {
@@ -37,10 +36,6 @@ impl Default for BspChargeFeesConfig {
         }
     }
 }
-
-/// This constant is now configurable via provider.toml [provider.bsp_charge_fees] section
-/// Default value is specified in the Default implementation
-/// const MIN_DEBT: Balance = 0;
 
 /// BSP Charge Fees Task: Handles the debt collection from users served by a BSP.
 ///
@@ -106,7 +101,7 @@ where
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(event.provider_id, self.config.min_debt)
+            .query_users_with_debt(event.provider_id, self.config.min_debt as u128)
             .await
             .map_err(|e| {
                 anyhow!(

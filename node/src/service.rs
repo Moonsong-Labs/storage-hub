@@ -254,17 +254,44 @@ where
                 .setup_storage_layer(storage_path.clone())
                 .with_retry_timeout(*extrinsic_retry_timeout)
                 .with_max_storage_capacity(*max_storage_capacity)
-                .with_jump_capacity(*jump_capacity)
-                // Add task-specific configurations
-                .with_msp_delete_file_options(msp_delete_file.clone())
-                .with_msp_charge_fees_options(msp_charge_fees.clone())
-                .with_msp_move_bucket_options(msp_move_bucket.clone())
-                .with_bsp_upload_file_options(bsp_upload_file.clone())
-                .with_bsp_move_bucket_options(bsp_move_bucket.clone())
-                .with_bsp_charge_fees_options(bsp_charge_fees.clone())
-                .with_bsp_submit_proof_options(bsp_submit_proof.clone())
-                .with_blockchain_service_options(blockchain_service.clone())
-                .with_file_transfer_service_options(file_transfer_service.clone());
+                .with_jump_capacity(*jump_capacity);
+
+            // Add task-specific configurations conditionally
+            if let Some(config) = msp_delete_file {
+                storage_hub_builder.with_msp_delete_file_config(config.clone());
+            }
+
+            if let Some(config) = msp_charge_fees {
+                storage_hub_builder.with_msp_charge_fees_config(config.clone());
+            }
+
+            if let Some(config) = msp_move_bucket {
+                storage_hub_builder.with_msp_move_bucket_config(config.clone());
+            }
+
+            if let Some(config) = bsp_upload_file {
+                storage_hub_builder.with_bsp_upload_file_config(config.clone());
+            }
+
+            if let Some(config) = bsp_move_bucket {
+                storage_hub_builder.with_bsp_move_bucket_config(config.clone());
+            }
+
+            if let Some(config) = bsp_charge_fees {
+                storage_hub_builder.with_bsp_charge_fees_config(config.clone());
+            }
+
+            if let Some(config) = bsp_submit_proof {
+                storage_hub_builder.with_bsp_submit_proof_config(config.clone());
+            }
+
+            if let Some(config) = blockchain_service {
+                storage_hub_builder.with_blockchain_service_config(config.clone());
+            }
+
+            if let Some(config) = file_transfer_service {
+                storage_hub_builder.with_file_transfer_service_config(config.clone());
+            }
 
             // Setup specific configuration for the MSP node.
             if *provider_type == ProviderType::Msp {

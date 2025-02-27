@@ -15,9 +15,13 @@ use crate::{
     cli::{Cli, ProviderType, RelayChainCli, StorageLayer, Subcommand},
     config,
     service::new_partial,
+    services::builder::{
+        BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions,
+        BspSubmitProofOptions, BspUploadFileOptions, FileTransferServiceOptions,
+        MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
+    },
 };
 
-// TODO: Have specific StorageHub role options (i.e. ProviderOptions, UserOptions).
 /// Configuration for the provider.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProviderOptions {
@@ -34,149 +38,39 @@ pub struct ProviderOptions {
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: u64,
     /// MSP charging fees frequency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msp_charging_period: Option<u32>,
 
     // Task-specific configuration options
     /// Configuration options for MSP delete file task.
-    #[serde(default)]
-    pub msp_delete_file: MspDeleteFileOptions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msp_delete_file: Option<MspDeleteFileOptions>,
     /// Configuration options for MSP charge fees task.
-    #[serde(default)]
-    pub msp_charge_fees: MspChargeFeesOptions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msp_charge_fees: Option<MspChargeFeesOptions>,
     /// Configuration options for MSP move bucket task.
-    #[serde(default)]
-    pub msp_move_bucket: MspMoveBucketOptions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msp_move_bucket: Option<MspMoveBucketOptions>,
     /// Configuration options for BSP upload file task.
-    #[serde(default)]
-    pub bsp_upload_file: BspUploadFileOptions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bsp_upload_file: Option<BspUploadFileOptions>,
     /// Configuration options for BSP move bucket task.
-    #[serde(default)]
-    pub bsp_move_bucket: BspMoveBucketOptions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bsp_move_bucket: Option<BspMoveBucketOptions>,
     /// Configuration options for BSP charge fees task.
-    #[serde(default)]
-    pub bsp_charge_fees: BspChargeFeesOptions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bsp_charge_fees: Option<BspChargeFeesOptions>,
     /// Configuration options for BSP submit proof task.
-    #[serde(default)]
-    pub bsp_submit_proof: BspSubmitProofOptions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bsp_submit_proof: Option<BspSubmitProofOptions>,
 
     // Service-specific configuration options
     /// Configuration options for blockchain service.
-    #[serde(default)]
-    pub blockchain_service: BlockchainServiceOptions,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blockchain_service: Option<BlockchainServiceOptions>,
     /// Configuration options for file transfer service.
-    #[serde(default)]
-    pub file_transfer_service: FileTransferServiceOptions,
-    // Add more grouped configuration options here as needed
-}
-
-/// Configuration options for the MSP Delete File task.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct MspDeleteFileOptions {
-    /// Maximum number of times to retry a file deletion request.
-    #[serde(default)]
-    pub max_try_count: Option<u32>,
-    /// Maximum tip amount to use when submitting a file deletion request extrinsic.
-    #[serde(default)]
-    pub max_tip: Option<u128>,
-}
-
-/// Configuration options for the MSP Charge Fees task.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct MspChargeFeesOptions {
-    /// Minimum debt threshold for charging users.
-    #[serde(default)]
-    pub min_debt: Option<u128>,
-}
-
-/// Configuration options for the MSP Move Bucket task.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct MspMoveBucketOptions {
-    /// Maximum number of times to retry a move bucket request.
-    #[serde(default)]
-    pub max_try_count: Option<u32>,
-    /// Maximum tip amount to use when submitting a move bucket request extrinsic.
-    #[serde(default)]
-    pub max_tip: Option<u128>,
-    /// Processing interval between batches of move bucket requests.
-    #[serde(default)]
-    pub processing_interval: Option<u64>,
-    /// Maximum batch size of move bucket requests to process at once.
-    #[serde(default)]
-    pub max_batch_size: Option<u32>,
-    /// Maximum number of parallel move bucket tasks.
-    #[serde(default)]
-    pub max_parallel_tasks: Option<u32>,
-    /// Maximum number of files to download in parallel.
-    #[serde(default)]
-    pub max_concurrent_file_downloads: Option<usize>,
-    /// Maximum number of chunks requests to do in parallel per file.
-    #[serde(default)]
-    pub max_concurrent_chunks_per_file: Option<usize>,
-    /// Maximum number of chunks to request in a single network request.
-    #[serde(default)]
-    pub max_chunks_per_request: Option<usize>,
-    /// Number of peers to select for each chunk download attempt (2 best + x random).
-    #[serde(default)]
-    pub chunk_request_peer_retry_attempts: Option<usize>,
-    /// Number of retries per peer for a single chunk request.
-    #[serde(default)]
-    pub download_retry_attempts: Option<usize>,
-}
-
-/// Configuration options for the BSP Upload File task.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct BspUploadFileOptions {
-    /// Maximum number of times to retry an upload file request.
-    #[serde(default)]
-    pub max_try_count: Option<u32>,
-    /// Maximum tip amount to use when submitting an upload file request extrinsic.
-    #[serde(default)]
-    pub max_tip: Option<u128>,
-}
-
-/// Configuration options for the BSP Move Bucket task.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct BspMoveBucketOptions {
-    /// Grace period in seconds to accept download requests after a bucket move is accepted.
-    #[serde(default)]
-    pub move_bucket_accepted_grace_period: Option<u64>,
-}
-
-/// Configuration options for the BSP Charge Fees task.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct BspChargeFeesOptions {
-    /// Minimum debt threshold for charging users.
-    #[serde(default)]
-    pub min_debt: Option<u128>,
-}
-
-/// Configuration options for the BSP Submit Proof task.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct BspSubmitProofOptions {
-    /// Maximum number of attempts to submit a proof.
-    #[serde(default)]
-    pub max_submission_attempts: Option<u32>,
-}
-
-/// Configuration options for the Blockchain Service.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct BlockchainServiceOptions {
-    // Reserved for future blockchain service configuration options
-}
-
-/// Configuration options for the File Transfer Service.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct FileTransferServiceOptions {
-    // Reserved for future file transfer service configuration options
-}
-
-/// Configuration for the indexer.
-#[derive(Debug, Clone, Deserialize)]
-pub struct IndexerOptions {
-    /// Whether to enable the indexer.
-    pub indexer: bool,
-    /// Postgres database URL.
-    pub database_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_transfer_service: Option<FileTransferServiceOptions>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

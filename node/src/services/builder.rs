@@ -1,6 +1,7 @@
 use async_channel::Receiver;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
+use serde::Deserialize;
 use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use std::{path::PathBuf, sync::Arc};
@@ -60,15 +61,15 @@ where
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
     // Configuration options for tasks and services
-    msp_delete_file_options: Option<MspDeleteFileConfig>,
-    msp_charge_fees_options: Option<MspChargeFeesConfig>,
-    msp_move_bucket_options: Option<MspMoveBucketConfig>,
-    bsp_upload_file_options: Option<BspUploadFileConfig>,
-    bsp_move_bucket_options: Option<BspMoveBucketConfig>,
-    bsp_charge_fees_options: Option<BspChargeFeesConfig>,
-    bsp_submit_proof_options: Option<BspSubmitProofConfig>,
-    blockchain_service_options: Option<BlockchainServiceConfig>,
-    file_transfer_service_options: Option<FileTransferServiceConfig>,
+    msp_delete_file_config: Option<MspDeleteFileConfig>,
+    msp_charge_fees_config: Option<MspChargeFeesConfig>,
+    msp_move_bucket_config: Option<MspMoveBucketConfig>,
+    bsp_upload_file_config: Option<BspUploadFileConfig>,
+    bsp_move_bucket_config: Option<BspMoveBucketConfig>,
+    bsp_charge_fees_config: Option<BspChargeFeesConfig>,
+    bsp_submit_proof_config: Option<BspSubmitProofConfig>,
+    blockchain_service_config: Option<BlockchainServiceConfig>,
+    file_transfer_service_config: Option<FileTransferServiceConfig>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -89,15 +90,15 @@ where
             extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
             indexer_db_pool: None,
             notify_period: None,
-            msp_delete_file_options: None,
-            msp_charge_fees_options: None,
-            msp_move_bucket_options: None,
-            bsp_upload_file_options: None,
-            bsp_move_bucket_options: None,
-            bsp_charge_fees_options: None,
-            bsp_submit_proof_options: None,
-            blockchain_service_options: None,
-            file_transfer_service_options: None,
+            msp_delete_file_config: None,
+            msp_charge_fees_config: None,
+            msp_move_bucket_config: None,
+            bsp_upload_file_config: None,
+            bsp_move_bucket_config: None,
+            bsp_charge_fees_config: None,
+            bsp_submit_proof_config: None,
+            blockchain_service_config: None,
+            file_transfer_service_config: None,
         }
     }
 
@@ -231,176 +232,140 @@ where
     }
 
     /// Set configuration options for the MSP delete file task.
-    pub fn with_msp_delete_file_options(
-        &mut self,
-        options: crate::command::MspDeleteFileOptions,
-    ) -> &mut Self {
-        let mut config = crate::tasks::msp_delete_file::MspDeleteFileConfig::default();
+    pub fn with_msp_delete_file_config(&mut self, config: MspDeleteFileOptions) -> &mut Self {
+        let mut msp_delete_file_config = MspDeleteFileConfig::default();
 
-        // Apply any non-None values from options to the config
-        if let Some(max_try_count) = options.max_try_count {
-            config.max_try_count = max_try_count;
+        if let Some(max_tip) = config.max_tip {
+            msp_delete_file_config.max_tip = max_tip;
         }
 
-        if let Some(max_tip) = options.max_tip {
-            config.max_tip = max_tip;
+        if let Some(max_try_count) = config.max_try_count {
+            msp_delete_file_config.max_try_count = max_try_count;
         }
 
-        self.msp_delete_file_options = Some(config);
+        self.msp_delete_file_config = Some(msp_delete_file_config);
         self
     }
 
     /// Set configuration options for the MSP charge fees task.
-    pub fn with_msp_charge_fees_options(
-        &mut self,
-        options: crate::command::MspChargeFeesOptions,
-    ) -> &mut Self {
-        let mut config = crate::tasks::msp_charge_fees::MspChargeFeesConfig::default();
+    pub fn with_msp_charge_fees_config(&mut self, config: MspChargeFeesOptions) -> &mut Self {
+        let mut msp_charge_fees_config = MspChargeFeesConfig::default();
 
-        // Apply any non-None values from options to the config
-        if let Some(min_debt) = options.min_debt {
-            config.min_debt = min_debt;
+        if let Some(min_debt) = config.min_debt {
+            msp_charge_fees_config.min_debt = min_debt;
         }
 
-        self.msp_charge_fees_options = Some(config);
+        self.msp_charge_fees_config = Some(msp_charge_fees_config);
         self
     }
 
     /// Set configuration options for the MSP move bucket task.
-    pub fn with_msp_move_bucket_options(
-        &mut self,
-        options: crate::command::MspMoveBucketOptions,
-    ) -> &mut Self {
-        let mut config = crate::tasks::msp_move_bucket::MspMoveBucketConfig::default();
+    pub fn with_msp_move_bucket_config(&mut self, config: MspMoveBucketOptions) -> &mut Self {
+        let mut msp_move_bucket_config = MspMoveBucketConfig::default();
 
-        // Apply any non-None values from options to the config
-        if let Some(max_concurrent_file_downloads) = options.max_concurrent_file_downloads {
-            config.max_concurrent_file_downloads = max_concurrent_file_downloads;
+        if let Some(max_try_count) = config.max_try_count {
+            msp_move_bucket_config.max_try_count = max_try_count;
         }
 
-        if let Some(max_concurrent_chunks_per_file) = options.max_concurrent_chunks_per_file {
-            config.max_concurrent_chunks_per_file = max_concurrent_chunks_per_file;
+        if let Some(max_tip) = config.max_tip {
+            msp_move_bucket_config.max_tip = max_tip;
         }
 
-        if let Some(max_chunks_per_request) = options.max_chunks_per_request {
-            config.max_chunks_per_request = max_chunks_per_request;
+        if let Some(processing_interval) = config.processing_interval {
+            msp_move_bucket_config.processing_interval = processing_interval;
         }
 
-        if let Some(chunk_request_peer_retry_attempts) = options.chunk_request_peer_retry_attempts {
-            config.chunk_request_peer_retry_attempts = chunk_request_peer_retry_attempts;
+        if let Some(max_concurrent_file_downloads) = config.max_concurrent_file_downloads {
+            msp_move_bucket_config.max_concurrent_file_downloads = max_concurrent_file_downloads;
         }
 
-        if let Some(download_retry_attempts) = options.download_retry_attempts {
-            config.download_retry_attempts = download_retry_attempts;
+        if let Some(max_concurrent_chunks_per_file) = config.max_concurrent_chunks_per_file {
+            msp_move_bucket_config.max_concurrent_chunks_per_file = max_concurrent_chunks_per_file;
         }
 
-        if let Some(max_try_count) = options.max_try_count {
-            config.max_try_count = max_try_count;
+        if let Some(max_chunks_per_request) = config.max_chunks_per_request {
+            msp_move_bucket_config.max_chunks_per_request = max_chunks_per_request;
         }
 
-        if let Some(max_tip) = options.max_tip {
-            config.max_tip = max_tip;
+        if let Some(chunk_request_peer_retry_attempts) = config.chunk_request_peer_retry_attempts {
+            msp_move_bucket_config.chunk_request_peer_retry_attempts =
+                chunk_request_peer_retry_attempts;
         }
 
-        if let Some(processing_interval) = options.processing_interval {
-            config.processing_interval = processing_interval;
+        if let Some(download_retry_attempts) = config.download_retry_attempts {
+            msp_move_bucket_config.download_retry_attempts = download_retry_attempts;
         }
 
-        if let Some(max_batch_size) = options.max_batch_size {
-            config.max_batch_size = max_batch_size;
-        }
-
-        if let Some(max_parallel_tasks) = options.max_parallel_tasks {
-            config.max_parallel_tasks = max_parallel_tasks;
-        }
-
-        self.msp_move_bucket_options = Some(config);
+        self.msp_move_bucket_config = Some(msp_move_bucket_config);
         self
     }
 
     /// Set configuration options for the BSP upload file task.
-    pub fn with_bsp_upload_file_options(
-        &mut self,
-        options: crate::command::BspUploadFileOptions,
-    ) -> &mut Self {
-        let mut config = crate::tasks::bsp_upload_file::BspUploadFileConfig::default();
+    pub fn with_bsp_upload_file_config(&mut self, config: BspUploadFileOptions) -> &mut Self {
+        let mut bsp_upload_file_config = BspUploadFileConfig::default();
 
-        // Apply any non-None values from options to the config
-        if let Some(max_try_count) = options.max_try_count {
-            config.max_try_count = max_try_count;
+        if let Some(max_try_count) = config.max_try_count {
+            bsp_upload_file_config.max_try_count = max_try_count;
         }
 
-        if let Some(max_tip) = options.max_tip {
-            config.max_tip = max_tip;
-        }
-
-        self.bsp_upload_file_options = Some(config);
+        self.bsp_upload_file_config = Some(bsp_upload_file_config);
         self
     }
 
     /// Set configuration options for the BSP move bucket task.
-    pub fn with_bsp_move_bucket_options(
-        &mut self,
-        options: crate::command::BspMoveBucketOptions,
-    ) -> &mut Self {
-        let mut config = crate::tasks::bsp_move_bucket::BspMoveBucketConfig::default();
+    pub fn with_bsp_move_bucket_config(&mut self, config: BspMoveBucketOptions) -> &mut Self {
+        let mut bsp_move_bucket_config = BspMoveBucketConfig::default();
 
-        // Apply any non-None values from options to the config
-        if let Some(move_bucket_accepted_grace_period) = options.move_bucket_accepted_grace_period {
-            config.move_bucket_accepted_grace_period = move_bucket_accepted_grace_period;
+        if let Some(move_bucket_accepted_grace_period) = config.move_bucket_accepted_grace_period {
+            bsp_move_bucket_config.move_bucket_accepted_grace_period =
+                move_bucket_accepted_grace_period;
         }
 
-        self.bsp_move_bucket_options = Some(config);
+        self.bsp_move_bucket_config = Some(bsp_move_bucket_config);
         self
     }
 
     /// Set configuration options for the BSP charge fees task.
-    pub fn with_bsp_charge_fees_options(
-        &mut self,
-        options: crate::command::BspChargeFeesOptions,
-    ) -> &mut Self {
-        let mut config = crate::tasks::bsp_charge_fees::BspChargeFeesConfig::default();
+    pub fn with_bsp_charge_fees_config(&mut self, config: BspChargeFeesOptions) -> &mut Self {
+        let mut bsp_charge_fees_config = BspChargeFeesConfig::default();
 
-        // Apply any non-None values from options to the config
-        if let Some(min_debt) = options.min_debt {
-            config.min_debt = min_debt;
+        if let Some(min_debt) = config.min_debt {
+            bsp_charge_fees_config.min_debt = min_debt;
         }
 
-        self.bsp_charge_fees_options = Some(config);
+        self.bsp_charge_fees_config = Some(bsp_charge_fees_config);
         self
     }
 
     /// Set configuration options for the BSP submit proof task.
-    pub fn with_bsp_submit_proof_options(
-        &mut self,
-        options: crate::command::BspSubmitProofOptions,
-    ) -> &mut Self {
-        let mut config = crate::tasks::bsp_submit_proof::BspSubmitProofConfig::default();
+    pub fn with_bsp_submit_proof_config(&mut self, config: BspSubmitProofOptions) -> &mut Self {
+        let mut bsp_submit_proof_config = BspSubmitProofConfig::default();
 
-        // Apply any non-None values from options to the config
-        if let Some(max_submission_attempts) = options.max_submission_attempts {
-            config.max_submission_attempts = max_submission_attempts;
+        if let Some(max_submission_attempts) = config.max_submission_attempts {
+            bsp_submit_proof_config.max_submission_attempts = max_submission_attempts;
         }
 
-        self.bsp_submit_proof_options = Some(config);
+        self.bsp_submit_proof_config = Some(bsp_submit_proof_config);
         self
     }
 
     /// Set configuration options for the blockchain service.
-    pub fn with_blockchain_service_options(
+    pub fn with_blockchain_service_config(
         &mut self,
-        options: crate::services::blockchain_service_config::BlockchainServiceConfig,
+        _config: BlockchainServiceOptions,
     ) -> &mut Self {
-        self.blockchain_service_options = Some(options);
+        let blockchain_service_config = BlockchainServiceConfig::default();
+        self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
 
     /// Set configuration options for the file transfer service.
-    pub fn with_file_transfer_service_options(
+    pub fn with_file_transfer_service_config(
         &mut self,
-        options: FileTransferServiceConfig,
+        _config: FileTransferServiceOptions,
     ) -> &mut Self {
-        self.file_transfer_service_options = Some(options);
+        let file_transfer_service_config = FileTransferServiceConfig::default();
+        self.file_transfer_service_config = Some(file_transfer_service_config);
         self
     }
 }
@@ -521,15 +486,15 @@ where
                     .expect("Max Storage Capacity not set"),
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
-                msp_delete_file: self.msp_delete_file_options.unwrap_or_default(),
-                msp_charge_fees: self.msp_charge_fees_options.unwrap_or_default(),
-                msp_move_bucket: self.msp_move_bucket_options.unwrap_or_default(),
-                bsp_upload_file: self.bsp_upload_file_options.unwrap_or_default(),
-                bsp_move_bucket: self.bsp_move_bucket_options.unwrap_or_default(),
-                bsp_charge_fees: self.bsp_charge_fees_options.unwrap_or_default(),
-                bsp_submit_proof: self.bsp_submit_proof_options.unwrap_or_default(),
-                blockchain_service: self.blockchain_service_options.unwrap_or_default(),
-                file_transfer_service: self.file_transfer_service_options.unwrap_or_default(),
+                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_config.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
+                file_transfer_service: self.file_transfer_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
         )
@@ -569,15 +534,15 @@ where
                     .expect("Max Storage Capacity not set"),
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
-                msp_delete_file: self.msp_delete_file_options.unwrap_or_default(),
-                msp_charge_fees: self.msp_charge_fees_options.unwrap_or_default(),
-                msp_move_bucket: self.msp_move_bucket_options.unwrap_or_default(),
-                bsp_upload_file: self.bsp_upload_file_options.unwrap_or_default(),
-                bsp_move_bucket: self.bsp_move_bucket_options.unwrap_or_default(),
-                bsp_charge_fees: self.bsp_charge_fees_options.unwrap_or_default(),
-                bsp_submit_proof: self.bsp_submit_proof_options.unwrap_or_default(),
-                blockchain_service: self.blockchain_service_options.unwrap_or_default(),
-                file_transfer_service: self.file_transfer_service_options.unwrap_or_default(),
+                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_config.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
+                file_transfer_service: self.file_transfer_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
         )
@@ -615,17 +580,104 @@ where
                 max_storage_capacity: 0,
                 jump_capacity: 0,
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
-                msp_delete_file: self.msp_delete_file_options.unwrap_or_default(),
-                msp_charge_fees: self.msp_charge_fees_options.unwrap_or_default(),
-                msp_move_bucket: self.msp_move_bucket_options.unwrap_or_default(),
-                bsp_upload_file: self.bsp_upload_file_options.unwrap_or_default(),
-                bsp_move_bucket: self.bsp_move_bucket_options.unwrap_or_default(),
-                bsp_charge_fees: self.bsp_charge_fees_options.unwrap_or_default(),
-                bsp_submit_proof: self.bsp_submit_proof_options.unwrap_or_default(),
-                blockchain_service: self.blockchain_service_options.unwrap_or_default(),
-                file_transfer_service: self.file_transfer_service_options.unwrap_or_default(),
+                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_config.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
+                file_transfer_service: self.file_transfer_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
         )
     }
+}
+
+/// Configuration options for the MSP Delete File task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspDeleteFileOptions {
+    /// Maximum number of times to retry a file deletion request.
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting a file deletion request extrinsic.
+    pub max_tip: Option<f64>,
+}
+
+/// Configuration options for the MSP Charge Fees task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspChargeFeesOptions {
+    /// Minimum debt threshold for charging users.
+    pub min_debt: Option<u64>,
+}
+
+/// Configuration options for the MSP Move Bucket task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspMoveBucketOptions {
+    /// Maximum number of times to retry a move bucket request.
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting a move bucket request extrinsic.
+    pub max_tip: Option<f64>,
+    /// Processing interval between batches of move bucket requests.
+    pub processing_interval: Option<u64>,
+    /// Maximum number of files to download in parallel.
+    pub max_concurrent_file_downloads: Option<usize>,
+    /// Maximum number of chunks requests to do in parallel per file.
+    pub max_concurrent_chunks_per_file: Option<usize>,
+    /// Maximum number of chunks to request in a single network request.
+    pub max_chunks_per_request: Option<usize>,
+    /// Number of peers to select for each chunk download attempt (2 best + x random).
+    pub chunk_request_peer_retry_attempts: Option<usize>,
+    /// Number of retries per peer for a single chunk request.
+    pub download_retry_attempts: Option<usize>,
+}
+
+/// Configuration options for the BSP Upload File task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspUploadFileOptions {
+    /// Maximum number of times to retry an upload file request.
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting an upload file request extrinsic.
+    pub max_tip: Option<f64>,
+}
+
+/// Configuration options for the BSP Move Bucket task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspMoveBucketOptions {
+    /// Grace period in seconds to accept download requests after a bucket move is accepted.
+    pub move_bucket_accepted_grace_period: Option<u64>,
+}
+
+/// Configuration options for the BSP Charge Fees task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspChargeFeesOptions {
+    /// Minimum debt threshold for charging users.
+    pub min_debt: Option<u64>,
+}
+
+/// Configuration options for the BSP Submit Proof task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspSubmitProofOptions {
+    /// Maximum number of attempts to submit a proof.
+    pub max_submission_attempts: Option<u32>,
+}
+/// Configuration options for the Blockchain Service.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BlockchainServiceOptions {
+    // Reserved for future blockchain service configuration options
+}
+
+/// Configuration options for the File Transfer Service.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct FileTransferServiceOptions {
+    // Reserved for future file transfer service configuration options
+}
+
+/// Configuration for the indexer.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct IndexerOptions {
+    /// Whether to enable the indexer.
+    pub indexer: bool,
+    /// Postgres database URL.
+    pub database_url: Option<String>,
 }

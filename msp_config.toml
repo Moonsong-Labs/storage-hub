@@ -1,12 +1,17 @@
 [provider]
-# other choices are 'msp' and 'user'
-provider_type = "bsp"
-# other choices are 'memory' and 'rocksdb'
+# MSP provider type
+provider_type = "msp"
+# Using memory storage layer for simplicity
 storage_layer = "memory"
+# Maximum storage capacity in bytes (4GB)
 max_storage_capacity = 4294967295
+# Jump capacity in bytes (1GB)
 jump_capacity = 1073741824
+# Extrinsic retry timeout in seconds
 extrinsic_retry_timeout = 60
+# Node key for identity
 node_key = "0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be"
+# Path to keystores
 keystore_path = "./docker/dev-keystores"
 
 # Configuration for the MSP Delete File task
@@ -14,7 +19,7 @@ keystore_path = "./docker/dev-keystores"
 # Maximum number of times to retry a file deletion request
 max_try_count = 5
 # Maximum tip amount to use when submitting a file deletion request extrinsic
-max_tip = 100
+max_tip = 100.0
 
 # Configuration for the MSP Charge Fees task
 [provider.msp_charge_fees]
@@ -26,13 +31,9 @@ min_debt = 0
 # Maximum number of times to retry move bucket operations
 max_try_count = 5
 # Maximum tip amount to use when submitting move bucket extrinsics
-max_tip = 100
+max_tip = 100.0
 # Interval in seconds for processing move bucket requests
 processing_interval = 60
-# Maximum number of bucket moves to process in a single batch
-max_batch_size = 10
-# Maximum number of parallel bucket move tasks
-max_parallel_tasks = 5
 # Maximum number of files to download in parallel
 max_concurrent_file_downloads = 5
 # Maximum number of chunks requests to do in parallel per file
@@ -44,28 +45,6 @@ chunk_request_peer_retry_attempts = 2
 # Number of retries per peer for a single chunk request
 download_retry_attempts = 3
 
-# Configuration for the BSP Upload File task
-[provider.bsp_upload_file]
-# Maximum number of times to retry file upload operations
-max_try_count = 5
-# Maximum tip amount to use when submitting file upload extrinsics
-max_tip = 100
-
-# Configuration for the BSP Move Bucket task
-[provider.bsp_move_bucket]
-# Grace period in seconds to accept download requests after a bucket move is accepted
-move_bucket_accepted_grace_period = 14400
-
-# Configuration for the BSP Charge Fees task
-[provider.bsp_charge_fees]
-# Minimum debt threshold for charging users
-min_debt = 0
-
-# Configuration for the BSP Submit Proof task
-[provider.bsp_submit_proof]
-# Maximum number of attempts to submit a proof
-max_submission_attempts = 5
-
 # Configuration for the Blockchain Service
 [provider.blockchain_service]
 # Currently no settings needed, reserved for future use
@@ -74,7 +53,8 @@ max_submission_attempts = 5
 [provider.file_transfer_service]
 # Currently no settings needed, reserved for future use
 
+# Optional indexer configuration
 [indexer]
-# set to true to enable the indexer
+# Set to true to enable the indexer
 indexer = true
 database_url = "postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"

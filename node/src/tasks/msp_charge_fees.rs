@@ -6,7 +6,6 @@ use shc_blockchain_service::{
 };
 use shc_common::types::{MaxUsersToCharge, StorageProviderId};
 use sp_core::Get;
-use storage_hub_runtime::Balance;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -19,7 +18,7 @@ const LOG_TARGET: &str = "msp-charge-fees-task";
 #[derive(Debug, Clone)]
 pub struct MspChargeFeesConfig {
     /// Minimum debt threshold for charging users
-    pub min_debt: Balance,
+    pub min_debt: u64,
 }
 
 impl Default for MspChargeFeesConfig {
@@ -29,10 +28,6 @@ impl Default for MspChargeFeesConfig {
         }
     }
 }
-
-// This constant is now configurable via provider.toml [provider.msp_charge_fees] section
-// Default value is specified in the Default implementation
-// const MIN_DEBT: Balance = 0;
 
 pub struct MspChargeFeesTask<NT>
 where
@@ -112,7 +107,7 @@ where
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(own_msp_id, self.config.min_debt)
+            .query_users_with_debt(own_msp_id, self.config.min_debt as u128)
             .await
             .map_err(|e| {
                 anyhow!(

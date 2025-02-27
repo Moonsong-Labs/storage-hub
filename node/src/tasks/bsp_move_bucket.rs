@@ -30,10 +30,6 @@ impl Default for BspMoveBucketConfig {
     }
 }
 
-/// This constant is now configurable via provider.toml [provider.bsp_move_bucket] section
-/// Default value is specified in the Default implementation
-/// const MOVE_BUCKET_ACCEPTED_GRACE_PERIOD_SECONDS: u64 = 4 * 60 * 60; // 4 hours
-
 /// Task that handles the [`MoveBucketRequested`], [`MoveBucketAccepted`], [`MoveBucketRejected`]
 /// and [`MoveBucketExpired`] events from the BSP point of view.
 pub struct BspMoveBucketTask<NT>
@@ -134,9 +130,10 @@ where
     async fn handle_event(&mut self, event: MoveBucketAccepted) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "MoveBucketAccepted: New MSP {:?} accepted move bucket request for bucket {:?}. Will keep accepting download requests for a window of time.",
-            event.msp_id,
-            event.bucket_id
+            "MoveBucketAccepted: New MSP {:?} accepted move bucket request for bucket {:?} from old MSP {:?}. Will keep accepting download requests for a window of time.",
+            event.new_msp_id,
+            event.bucket_id,
+            event.old_msp_id
         );
 
         self.storage_hub_handler
@@ -166,7 +163,7 @@ where
             target: LOG_TARGET,
             "MoveBucketRejected: BSP will no longer accept download requests for files in bucket {:?} from MSP {:?}",
             event.bucket_id,
-            event.msp_id
+            event.new_msp_id
         );
 
         self.storage_hub_handler

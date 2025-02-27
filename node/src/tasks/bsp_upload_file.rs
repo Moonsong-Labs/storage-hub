@@ -24,7 +24,7 @@ use shc_blockchain_service::{
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        Balance, FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
+        FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
@@ -33,7 +33,7 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
-use storage_hub_runtime::{StorageDataUnit, MILLIUNIT};
+use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -48,22 +48,17 @@ pub struct BspUploadFileConfig {
     /// Maximum number of times to retry an upload file request
     pub max_try_count: u32,
     /// Maximum tip amount to use when submitting an upload file request extrinsic
-    pub max_tip: u128,
+    pub max_tip: f64,
 }
 
 impl Default for BspUploadFileConfig {
     fn default() -> Self {
         Self {
-            max_try_count: 5, // Default value that was in command.rs
-            max_tip: 500,     // Default value that was in command.rs
+            max_try_count: 3,
+            max_tip: 500.0,
         }
     }
 }
-
-/// TODO: CONSTANTS
-const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
-/// TODO: CONSTANTS
-const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
 
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
@@ -137,9 +132,9 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer for file_key {:?}, location {:?}, fingerprint {:?}",
+            "Initiating BSP volunteer for file_key {:x}, location 0x{}, fingerprint {:x}",
             event.file_key,
-            event.location,
+            hex::encode(event.location.as_slice()),
             event.fingerprint
         );
 
@@ -288,10 +283,10 @@ where
                 Err(e) => {
                     let mut confirm_storing_request = confirm_storing_request.clone();
                     confirm_storing_request.increment_try_count();
-                    if confirm_storing_request.try_count > MAX_CONFIRM_STORING_REQUEST_TRY_COUNT {
+                    if confirm_storing_request.try_count > self.config.max_try_count {
                         error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key, e);
                     } else {
-                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, MAX_CONFIRM_STORING_REQUEST_TRY_COUNT);
+                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, self.config.max_try_count);
                         self.storage_hub_handler
                             .blockchain
                             .queue_confirm_bsp_request(confirm_storing_request)
@@ -325,10 +320,10 @@ where
                 _ => {
                     let mut confirm_storing_request = confirm_storing_request.clone();
                     confirm_storing_request.increment_try_count();
-                    if confirm_storing_request.try_count > MAX_CONFIRM_STORING_REQUEST_TRY_COUNT {
+                    if confirm_storing_request.try_count > self.config.max_try_count {
                         error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key);
                     } else {
-                        error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, confirm_storing_request.try_count, MAX_CONFIRM_STORING_REQUEST_TRY_COUNT);
+                        error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, confirm_storing_request.try_count, self.config.max_try_count);
                         self.storage_hub_handler
                             .blockchain
                             .queue_confirm_bsp_request(confirm_storing_request)
@@ -381,8 +376,8 @@ where
             .submit_extrinsic_with_retry(
                 call,
                 RetryStrategy::default()
-                    .with_max_retries(MAX_CONFIRM_STORING_REQUEST_TRY_COUNT)
-                    .with_max_tip(MAX_CONFIRM_STORING_REQUEST_TIP as f64)
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip)
                     .with_timeout(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
@@ -395,7 +390,7 @@ where
             .map_err(|e| {
                 anyhow!(
                     "Failed to confirm file after {} retries: {:?}",
-                    MAX_CONFIRM_STORING_REQUEST_TRY_COUNT,
+                    self.config.max_try_count,
                     e
                 )
             })?;
@@ -443,7 +438,7 @@ where
         if fs.read().await.contains_file_key(&event.file_key.into())? {
             info!(
                 target: LOG_TARGET,
-                "Skipping file key {:?} NewStorageRequest because we are already storing it.",
+                "Skipping file key {:x} NewStorageRequest because we are already storing it.",
                 event.file_key
             );
             return Ok(());
@@ -661,7 +656,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Waiting for tick {:?} to volunteer for file {:?}",
+            "Waiting for tick {:?} to volunteer for file {:x}",
             earliest_volunteer_tick,
             file_key
         );

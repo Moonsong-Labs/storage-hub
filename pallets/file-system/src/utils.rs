@@ -554,7 +554,7 @@ where
         sender: T::AccountId,
         bucket_id: BucketIdFor<T>,
         response: BucketMoveRequestResponse,
-    ) -> Result<(ProviderIdFor<T>, ValuePropId<T>), DispatchError> {
+    ) -> Result<(Option<ProviderIdFor<T>>, ProviderIdFor<T>, ValuePropId<T>), DispatchError> {
         let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
             .ok_or(Error::<T>::NotAMsp)?;
 
@@ -583,14 +583,14 @@ where
             Error::<T>::NotSelectedMsp
         );
 
+        // Get the previous MSP that was storing the bucket, if any.
+        let maybe_previous_msp_id =
+            <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
+
         // If the new MSP accepted storing the bucket...
         if response == BucketMoveRequestResponse::Accepted {
             // Get the current size of the bucket.
             let bucket_size = <T::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id)?;
-
-            // Get the previous MSP that was storing the bucket, if any.
-            let maybe_previous_msp_id =
-                <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
 
             // If another MSP was previously storing the bucket, update its used capacity to reflect the removal of the bucket.
             if let Some(previous_msp_id) = maybe_previous_msp_id {
@@ -621,7 +621,11 @@ where
             )?;
         }
 
-        Ok((msp_id, move_bucket_request_metadata.new_value_prop_id))
+        Ok((
+            maybe_previous_msp_id,
+            move_bucket_request_metadata.new_msp_id,
+            move_bucket_request_metadata.new_value_prop_id,
+        ))
     }
 
     /// Update the privacy of a bucket.

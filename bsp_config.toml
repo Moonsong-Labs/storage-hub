@@ -1,0 +1,51 @@
+[provider]
+# BSP provider type
+provider_type = "bsp"
+# Using memory storage layer for simplicity
+storage_layer = "memory"
+# Maximum storage capacity in bytes (4GB)
+max_storage_capacity = 4294967295
+# Jump capacity in bytes (1GB)
+jump_capacity = 1073741824
+# Extrinsic retry timeout in seconds
+extrinsic_retry_timeout = 60
+# Node key for identity
+node_key = "0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be"
+# Path to keystores
+keystore_path = "./docker/dev-keystores"
+
+# Configuration for the BSP Upload File task
+[provider.bsp_upload_file]
+# Maximum number of times to retry file upload operations
+max_try_count = 5
+# Maximum tip amount to use when submitting file upload extrinsics
+max_tip = 100.0
+
+# Configuration for the BSP Move Bucket task
+[provider.bsp_move_bucket]
+# Grace period in seconds to accept download requests after a bucket move is accepted
+move_bucket_accepted_grace_period = 14400
+
+# Configuration for the BSP Charge Fees task
+[provider.bsp_charge_fees]
+# Minimum debt threshold for charging users
+min_debt = 0
+
+# Configuration for the BSP Submit Proof task
+[provider.bsp_submit_proof]
+# Maximum number of attempts to submit a proof
+max_submission_attempts = 5
+
+# Configuration for the Blockchain Service
+[provider.blockchain_service]
+# Currently no settings needed, reserved for future use
+
+# Configuration for the File Transfer Service
+[provider.file_transfer_service]
+# Currently no settings needed, reserved for future use
+
+# Optional indexer configuration
+[indexer]
+# Set to true to enable the indexer
+indexer = true
+database_url = "postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"

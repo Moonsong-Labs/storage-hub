@@ -13816,6 +13816,7 @@ dependencies = [
  "sc-service",
  "sc-tracing",
  "sc-utils",
+ "serde",
  "shc-actors-framework",
  "shc-common",
  "shp-file-key-verifier",
@@ -13994,6 +13995,7 @@ dependencies = [
 name = "shp-file-metadata"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "num-bigint",
  "parity-scale-codec",
  "scale-info",
