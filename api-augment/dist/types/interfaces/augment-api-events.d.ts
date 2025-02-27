@@ -687,10 +687,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MoveBucketAccepted: AugmentedEvent<
         ApiType,
-        [bucketId: H256, mspId: H256, valuePropId: H256],
+        [bucketId: H256, oldMspId: Option<H256>, newMspId: H256, valuePropId: H256],
         {
           bucketId: H256;
-          mspId: H256;
+          oldMspId: Option<H256>;
+          newMspId: H256;
           valuePropId: H256;
         }
       >;
@@ -699,10 +700,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MoveBucketRejected: AugmentedEvent<
         ApiType,
-        [bucketId: H256, mspId: H256],
+        [bucketId: H256, oldMspId: Option<H256>, newMspId: H256],
         {
           bucketId: H256;
-          mspId: H256;
+          oldMspId: Option<H256>;
+          newMspId: H256;
         }
       >;
       /**

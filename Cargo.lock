@@ -13994,6 +13994,7 @@ dependencies = [
 name = "shp-file-metadata"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "num-bigint",
  "parity-scale-codec",
  "scale-info",
