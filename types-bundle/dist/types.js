@@ -22,6 +22,18 @@ export const ALL_TYPES = {
       IncompleteFile: "IncompleteFileStatus"
     }
   },
+  AddFilesToForestStorageResult: {
+    _enum: {
+      Success: null,
+      ForestNotFound: null
+    }
+  },
+  RemoveFilesFromForestStorageResult: {
+    _enum: {
+      Success: null,
+      ForestNotFound: null
+    }
+  },
   GetFileFromFileStorageResult: {
     _enum: {
       FileNotFound: null,
