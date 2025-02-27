@@ -327,7 +327,7 @@ impl<const H_LENGTH: usize> fmt::LowerHex for Fingerprint<H_LENGTH> {
         let val = self.0;
 
         write!(f, "0x{}", hex::encode(val))
-  }
+    }
 }
 
 impl<const H_LENGTH: usize> PartialEq<[u8]> for Fingerprint<H_LENGTH> {
