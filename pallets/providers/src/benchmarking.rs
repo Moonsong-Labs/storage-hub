@@ -578,7 +578,7 @@ mod benchmarks {
 
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
-        _(RawOrigin::Signed(user_account.clone()), msp_id.clone());
+        _(RawOrigin::Signed(user_account.clone()), msp_id);
 
         /*********** Post-benchmark checks: ***********/
         // Verify that the event of the MSP sign off was emitted

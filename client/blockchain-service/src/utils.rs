@@ -7,7 +7,9 @@ use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
-use pallet_storage_providers_runtime_api::StorageProvidersApi;
+use pallet_storage_providers_runtime_api::{
+    QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
+};
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_tracing::tracing::{debug, error, info, trace, warn};
@@ -117,6 +119,108 @@ where
 
         for key in keys_to_remove {
             self.wait_for_tick_request_by_number.remove(&key);
+        }
+    }
+
+    /// Sends back the result of the submitted transaction for all capacity requests waiting for inclusion if there is one.
+    ///
+    /// Begins another batch process of pending capacity requests if there are any and if
+    /// we are past the block at which the capacity can be increased.
+    pub(crate) async fn notify_capacity_manager(&mut self, block_number: &BlockNumber) {
+        if self.capacity_manager.is_none() {
+            return;
+        };
+
+        let current_block_hash = self.client.info().best_hash;
+
+        let provider_id = match self.provider_id {
+            Some(provider_id) => match provider_id {
+                StorageProviderId::MainStorageProvider(id)
+                | StorageProviderId::BackupStorageProvider(id) => id,
+            },
+            None => {
+                return;
+            }
+        };
+
+        let capacity_manager_ref = self
+            .capacity_manager
+            .as_ref()
+            .expect("Capacity manager should exist when calling this function");
+
+        // Send response to all callers waiting for their capacity request to be included in a block.
+        if capacity_manager_ref.has_requests_waiting_for_inclusion() {
+            if let Some(last_submitted_transaction) =
+                capacity_manager_ref.last_submitted_transaction()
+            {
+                // Check if extrinsic was included in the current block.
+                if let Ok(extrinsic) = self
+                    .get_extrinsic_from_block(current_block_hash, last_submitted_transaction.hash())
+                    .await
+                    .map_err(|e| anyhow::anyhow!("Failed to get extrinsic from block: {:?}", e))
+                {
+                    // Check if the extrinsic succeeded or failed.
+                    let result = extrinsic
+                        .events
+                        .iter()
+                        .find_map(|event| {
+                            if let RuntimeEvent::System(system_event) = &event.event {
+                                match system_event {
+                                    frame_system::Event::ExtrinsicSuccess { dispatch_info: _ } => {
+                                        Some(Ok(()))
+                                    }
+                                    frame_system::Event::ExtrinsicFailed {
+                                        dispatch_error,
+                                        dispatch_info: _,
+                                    } => {
+                                        Some(Err(format!("Extrinsic failed: {:?}", dispatch_error)))
+                                    }
+                                    _ => None,
+                                }
+                            } else {
+                                None
+                            }
+                        })
+                        .unwrap_or(Ok(()));
+
+                    // Notify all callers of the result.
+                    if let Some(capacity_manager) = self.capacity_manager.as_mut() {
+                        capacity_manager.complete_requests_waiting_for_inclusion(result);
+                    } else {
+                        error!(target: LOG_TARGET, "[notify_capacity_manager] Capacity manager not initialized");
+                    }
+                }
+            }
+        }
+
+        // We will only attempt to process the next batch of requests in the queue if there are no requests waiting for inclusion.
+        if self
+            .capacity_manager
+            .as_ref()
+            .unwrap()
+            .has_requests_waiting_for_inclusion()
+        {
+            return;
+        }
+
+        // Query earliest block to change capacity
+        let Ok(earliest_block) = self
+            .client
+            .runtime_api()
+            .query_earliest_change_capacity_block(current_block_hash, &provider_id)
+            .unwrap_or_else(|_| {
+                error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to query earliest block to change capacity");
+                Err(QueryEarliestChangeCapacityBlockError::InternalError)
+            })
+        else {
+            return;
+        };
+
+        // We can send the transaction 1 block before the earliest block to change capacity since it will be included in the next block.
+        if *block_number >= earliest_block.saturating_sub(1) {
+            if let Err(e) = self.process_capacity_requests(*block_number).await {
+                error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to process capacity requests: {:?}", e);
+            }
         }
     }
 

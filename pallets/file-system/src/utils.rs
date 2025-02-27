@@ -2837,9 +2837,9 @@ where
     }
 
     fn do_decode_generic_apply_delta_event_info(
-        encoded_event_info: &[u8],
+        mut encoded_event_info: &[u8],
     ) -> Result<BucketIdFor<T>, codec::Error> {
-        BucketIdFor::<T>::decode(&mut encoded_event_info.as_ref())
+        BucketIdFor::<T>::decode(&mut encoded_event_info)
     }
 }
 
