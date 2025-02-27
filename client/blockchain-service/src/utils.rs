@@ -143,7 +143,10 @@ where
             }
         };
 
-        let capacity_manager_ref = self.capacity_manager.as_ref().unwrap();
+        let capacity_manager_ref = self
+            .capacity_manager
+            .as_ref()
+            .expect("Capacity manager should exist when calling this function");
 
         // Send response to all callers waiting for their capacity request to be included in a block.
         if capacity_manager_ref.has_requests_waiting_for_inclusion() {
@@ -181,10 +184,10 @@ where
                         .unwrap_or(Ok(()));
 
                     // Notify all callers of the result.
-                    if let Err(e) = self.execute_with_capacity_manager(|manager| {
-                        manager.complete_requests_waiting_for_inclusion(result);
-                    }) {
-                        error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to complete requests waiting for inclusion: {:?}", e);
+                    if let Some(capacity_manager) = self.capacity_manager.as_mut() {
+                        capacity_manager.complete_requests_waiting_for_inclusion(result);
+                    } else {
+                        error!(target: LOG_TARGET, "[notify_capacity_manager] Capacity manager not initialized");
                     }
                 }
             }

@@ -23,8 +23,8 @@ pub struct CapacityRequestQueue {
     pending_requests: VecDeque<CapacityRequest>,
     /// Capacity requests bundled in a single transaction waiting to be included in a block.
     ///
-    /// All requesters will be notified via the callback when the `CapacityChanged` event is processed
-    /// in the block important notification pipeline. This list will be cleared subsequently.
+    /// All requesters will be notified via the callback when the transaction is included in the
+    /// block important notification pipeline. This list will be cleared subsequently.
     requests_waiting_for_inclusion: Vec<CapacityRequest>,
     /// Total accumulated capacity required by the aggregate of all `pending_requests`.
     ///
@@ -223,43 +223,17 @@ impl<FSH> BlockchainService<FSH>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
-    /// Helper method to temporarily take ownership of the capacity manager
-    pub(crate) fn execute_with_capacity_manager<F, R>(&mut self, f: F) -> Result<R, anyhow::Error>
-    where
-        F: FnOnce(&mut CapacityRequestQueue) -> R,
-    {
-        let mut manager = self
-            .capacity_manager
-            .take()
-            .ok_or_else(|| anyhow!("Capacity manager not initialized"))?;
-
-        let result = f(&mut manager);
-        self.capacity_manager = Some(manager);
-
-        Ok(result)
-    }
-
     /// Queue a capacity request.
     ///
     /// If the capacity request cannot be queued for any reason, the error will be sent back to the caller.
     pub(crate) async fn queue_capacity_request(&mut self, capacity_request: CapacityRequest) {
         match self.check_capacity_request_conditions().await {
             Ok((_, current_capacity, _)) => {
-                // Wrap in Option to control ownership
-                let mut request_opt = Some(capacity_request);
-
-                let result = self.execute_with_capacity_manager(|manager| {
-                    // Take ownership from the Option
-                    let request = request_opt.take().unwrap();
-                    manager.queue_capacity_request(request, current_capacity)
-                });
-
-                if let Err(e) = result {
-                    // If we still have the request (manager wasn't initialized), send error
-                    if let Some(request) = request_opt {
-                        request.send_result(Err(e));
-                    }
-                    // Else: request was successfully queued before an error occurred
+                if let Some(capacity_manager) = self.capacity_manager.as_mut() {
+                    capacity_manager.queue_capacity_request(capacity_request, current_capacity);
+                } else {
+                    capacity_request.send_result(Err(anyhow!("Capacity manager not initialized")));
+                    return;
                 }
             }
             Err(e) => {
@@ -334,31 +308,31 @@ where
         match self.send_extrinsic(call, Default::default()).await {
             Ok(output) => {
                 // Add all pending requests to the list of requests waiting for inclusion.
-                if let Err(e) = self.execute_with_capacity_manager(|manager| {
-                    manager.add_pending_requests_to_waiting_for_inclusion(
+                if let Some(capacity_manager) = self.capacity_manager.as_mut() {
+                    capacity_manager.add_pending_requests_to_waiting_for_inclusion(
                         SubmittedTransaction::new(output.receiver, output.hash, output.nonce),
                     );
-                }) {
-                    error!(target: LOG_TARGET, "Failed to add pending requests to waiting for inclusion: {:?}", e);
+                } else {
+                    error!(target: LOG_TARGET, "Capacity manager not initialized");
                 }
             }
             Err(e) => {
                 error!(target: LOG_TARGET, "Failed to send increase capacity extrinsic: {:?}", e);
                 // Notify all in-flight requests of the error
-                if let Err(e) = self.execute_with_capacity_manager(|manager| {
-                    manager.fail_requests(e.to_string());
-                }) {
-                    error!(target: LOG_TARGET, "Failed to notify in-flight requests of the error: {:?}", e);
+                if let Some(capacity_manager) = self.capacity_manager.as_mut() {
+                    capacity_manager.fail_requests(e.to_string());
+                } else {
+                    error!(target: LOG_TARGET, "Capacity manager not initialized");
                 }
             }
         };
 
         // Ensure the pending requests queue and total required capacity are reset so that
         // new capacity requests can be queued and tally up from 0 again.
-        if let Err(e) = self.execute_with_capacity_manager(|manager| {
-            manager.reset_queue();
-        }) {
-            error!(target: LOG_TARGET, "Failed to reset capacity manager: {:?}", e);
+        if let Some(capacity_manager) = self.capacity_manager.as_mut() {
+            capacity_manager.reset_queue();
+        } else {
+            error!(target: LOG_TARGET, "Capacity manager not initialized");
         }
 
         Ok(())

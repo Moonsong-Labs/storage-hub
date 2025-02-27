@@ -801,7 +801,6 @@ where
         let message = BlockchainServiceCommand::IncreaseCapacity { request, callback };
         self.send(message).await;
         let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
-        // This should receive a WatchTransaction so that the blockchain service can fire and forget
         rx.await.expect("Failed to wait for capacity increase")
     }
 

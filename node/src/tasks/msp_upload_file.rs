@@ -480,7 +480,7 @@ where
                     .max_capacity();
 
                 if max_storage_capacity <= current_capacity {
-                    let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
+                    let err_msg = "Reached maximum storage capacity limit. Unable to add more storage capacity.";
                     error!(
                         target: LOG_TARGET, "{}", err_msg
                     );
