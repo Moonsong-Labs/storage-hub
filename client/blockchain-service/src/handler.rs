@@ -80,12 +80,14 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 ///
 /// TODO: Define properly the number of blocks to come out of sync mode
 /// TODO: Make this configurable in the config file
+/// TODO: CONSTANTS
 pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
 
 /// On blocks that are multiples of this number, the blockchain service will trigger the catch
 /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
 ///
 /// TODO: Make this configurable in the config file
+/// TODO: CONSTANTS
 pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
 
 /// The maximum number of blocks from the past that will be processed for catching up the root
@@ -94,6 +96,7 @@ pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
 /// variant.
 ///
 /// TODO: Make this configurable in the config file
+/// TODO: CONSTANTS
 pub(crate) const MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES: BlockNumber = 10;
 
 /// The BlockchainService actor.
@@ -1033,39 +1036,6 @@ where
     fn get_event_bus_provider(&self) -> &Self::EventBusProvider {
         &self.event_bus_provider
     }
-}
-
-impl<FSH> BlockchainService<FSH>
-where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-{
-    /// Create a new [`BlockchainService`].
-    pub fn new(
-        client: Arc<ParachainClient>,
-        keystore: KeystorePtr,
-        rpc_handlers: Arc<RpcHandlers>,
-        forest_storage_handler: FSH,
-        rocksdb_root_path: impl Into<PathBuf>,
-        notify_period: Option<u32>,
-    ) -> Self {
-        Self {
-            event_bus_provider: BlockchainServiceEventBusProvider::new(),
-            client,
-            keystore,
-            rpc_handlers,
-            forest_storage_handler,
-            best_block: MinimalBlockInfo::default(),
-            nonce_counter: 0,
-            wait_for_block_request_by_number: BTreeMap::new(),
-            wait_for_tick_request_by_number: BTreeMap::new(),
-            provider_id: None,
-            forest_root_snapshots: BTreeMap::new(),
-            forest_root_write_lock: None,
-            persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
-            pending_submit_proof_requests: BTreeSet::new(),
-            notify_period,
-        }
-    }
 
     async fn handle_block_import_notification<Block>(
         &mut self,
@@ -1742,5 +1712,15 @@ where
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
+    }
+}
+
+/// Currently no configuration parameters, reserved for future use
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlockchainServiceConfig {}
+
+impl Default for BlockchainServiceConfig {
+    fn default() -> Self {
+        Self {}
     }
 }

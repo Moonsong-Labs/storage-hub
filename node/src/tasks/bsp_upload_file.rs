@@ -42,7 +42,27 @@ use crate::services::{
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
+/// Configuration for the BspUploadFileTask
+#[derive(Debug, Clone)]
+pub struct BspUploadFileConfig {
+    /// Maximum number of times to retry an upload file request
+    pub max_try_count: u32,
+    /// Maximum tip amount to use when submitting an upload file request extrinsic
+    pub max_tip: u128,
+}
+
+impl Default for BspUploadFileConfig {
+    fn default() -> Self {
+        Self {
+            max_try_count: 5, // Default value that was in command.rs
+            max_tip: 500,     // Default value that was in command.rs
+        }
+    }
+}
+
+/// TODO: CONSTANTS
 const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
+/// TODO: CONSTANTS
 const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
 
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
@@ -68,6 +88,8 @@ where
     storage_hub_handler: StorageHubHandler<NT>,
     file_key_cleanup: Option<H256>,
     capacity_queue: Arc<Mutex<u64>>,
+    /// Configuration for this task
+    config: BspUploadFileConfig,
 }
 
 impl<NT> Clone for BspUploadFileTask<NT>
@@ -79,7 +101,8 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
-            capacity_queue: Arc::clone(&self.capacity_queue),
+            capacity_queue: self.capacity_queue.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -91,9 +114,10 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
             file_key_cleanup: None,
-            capacity_queue: Arc::new(Mutex::new(0_u64)),
+            capacity_queue: Arc::new(Mutex::new(0u64)),
+            config: storage_hub_handler.provider_config.bsp_upload_file.clone(),
         }
     }
 }

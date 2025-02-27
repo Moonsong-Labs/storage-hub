@@ -30,7 +30,24 @@ use crate::services::{
 };
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
+
+/// TODO: CONSTANTS
 const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
+
+/// Configuration for the BspSubmitProofTask
+#[derive(Debug, Clone)]
+pub struct BspSubmitProofConfig {
+    /// Maximum number of attempts to submit a proof
+    pub max_submission_attempts: u32,
+}
+
+impl Default for BspSubmitProofConfig {
+    fn default() -> Self {
+        Self {
+            max_submission_attempts: 5, // Default value that was in command.rs
+        }
+    }
+}
 
 /// BSP Submit Proof Task: Handles the submission of proof for BSP (Backup Storage Provider) to the runtime.
 ///
@@ -63,6 +80,8 @@ where
     NT::FSH: BspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
+    /// Configuration for this task
+    config: BspSubmitProofConfig,
 }
 
 impl<NT> Clone for BspSubmitProofTask<NT>
@@ -73,6 +92,7 @@ where
     fn clone(&self) -> BspSubmitProofTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -84,7 +104,8 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
+            config: storage_hub_handler.provider_config.bsp_submit_proof.clone(),
         }
     }
 }

@@ -36,7 +36,8 @@ pub struct SubmittedTransaction {
     nonce: u32,
 }
 
-const NO_TIMEOUT_INTERVAL_WARNING: Duration = Duration::from_secs(60);
+/// TODO: CONSTANTS
+const DEFAULT_WATCH_TRANSACTION_TIMEOUT: Duration = Duration::from_secs(60);
 
 impl SubmittedTransaction {
     pub fn new(watcher: Receiver<String>, hash: H256, nonce: u32) -> Self {
@@ -177,7 +178,7 @@ impl SubmittedTransaction {
 
                     timeout - elapsed
                 }
-                None => NO_TIMEOUT_INTERVAL_WARNING,
+                None => DEFAULT_WATCH_TRANSACTION_TIMEOUT,
             };
 
             // Wait for either a new message from the watcher, or the timeout to be reached.
@@ -198,7 +199,7 @@ impl SubmittedTransaction {
                         }
                         None => {
                             // No timeout set, continue waiting.
-                            warn!(target: LOG_TARGET, "No timeout set and {:?} elapsed, continuing to wait for transaction to be included in a block.", NO_TIMEOUT_INTERVAL_WARNING);
+                            warn!(target: LOG_TARGET, "No timeout set and {:?} elapsed, continuing to wait for transaction to be included in a block.", DEFAULT_WATCH_TRANSACTION_TIMEOUT);
 
                             continue;
                         }
