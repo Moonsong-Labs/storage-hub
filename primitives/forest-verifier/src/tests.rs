@@ -23,12 +23,12 @@ const FILES_BASE_PATH: &str = "./tmp/";
 
 #[derive(Serialize, PartialEq, Debug)]
 struct FileMetadata<'a> {
-    user_id: &'a [u8],
-    bucket: &'a [u8],
-    file_id: &'a [u8],
-    size: u64,
+    pub user_id: &'a [u8],
+    pub bucket: &'a [u8],
+    pub file_id: &'a [u8],
+    pub size: u64,
     /// The fingerprint will always be 32 bytes since we are using BlakeTwo256.
-    fingerprint: [u8; 32],
+    pub fingerprint: [u8; 32],
 }
 
 /// Build a Merkle Patricia Forest Trie.

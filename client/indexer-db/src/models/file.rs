@@ -181,7 +181,7 @@ impl File {
 }
 
 impl File {
-    pub fn to_file_metadata(&self, onchain_bucket_id: Vec<u8>) -> FileMetadata {
+    pub fn to_file_metadata(&self, onchain_bucket_id: Vec<u8>) -> Result<FileMetadata, String> {
         FileMetadata::new(
             self.account.clone(),
             onchain_bucket_id,
@@ -189,5 +189,6 @@ impl File {
             self.size as u64,
             Fingerprint::from(self.fingerprint.as_slice()),
         )
+        .map_err(|_| "Invalid file metadata".to_string())
     }
 }

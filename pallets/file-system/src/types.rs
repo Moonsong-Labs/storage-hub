@@ -88,18 +88,22 @@ pub struct StorageRequestMetadata<T: Config> {
 impl<T: Config> StorageRequestMetadata<T> {
     pub fn to_file_metadata(
         self,
-    ) -> FileMetadata<
-        { shp_constants::H_LENGTH },
-        { shp_constants::FILE_CHUNK_SIZE },
-        { shp_constants::FILE_SIZE_TO_CHALLENGES },
+    ) -> Result<
+        FileMetadata<
+            { shp_constants::H_LENGTH },
+            { shp_constants::FILE_CHUNK_SIZE },
+            { shp_constants::FILE_SIZE_TO_CHALLENGES },
+        >,
+        DispatchError,
     > {
-        FileMetadata {
-            owner: self.owner.encode(),
-            bucket_id: self.bucket_id.as_ref().to_vec(),
-            location: self.location.to_vec(),
-            file_size: self.size.into() as u64,
-            fingerprint: self.fingerprint.as_ref().into(),
-        }
+        FileMetadata::new(
+            self.owner.encode(),
+            self.bucket_id.as_ref().to_vec(),
+            self.location.to_vec(),
+            self.size.into() as u64,
+            self.fingerprint.as_ref().into(),
+        )
+        .map_err(|_| Error::<T>::FailedToCreateFileMetadata.into())
     }
 }
 

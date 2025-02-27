@@ -683,13 +683,15 @@ pub mod pallet {
         /// Notifies that a bucket has been moved to a new MSP under a new value proposition.
         MoveBucketAccepted {
             bucket_id: BucketIdFor<T>,
-            msp_id: ProviderIdFor<T>,
+            old_msp_id: Option<ProviderIdFor<T>>,
+            new_msp_id: ProviderIdFor<T>,
             value_prop_id: ValuePropId<T>,
         },
         /// Notifies that a bucket move request has been rejected by the MSP.
         MoveBucketRejected {
             bucket_id: BucketIdFor<T>,
-            msp_id: ProviderIdFor<T>,
+            old_msp_id: Option<ProviderIdFor<T>>,
+            new_msp_id: ProviderIdFor<T>,
         },
         /// Notifies that a MSP has stopped storing a bucket.
         MspStoppedStoringBucket {
@@ -896,6 +898,10 @@ pub mod pallet {
         OperationNotAllowedForInsolventProvider,
         /// Operations not allowed while bucket is not being stored by an MSP
         OperationNotAllowedWhileBucketIsNotStoredByMsp,
+        /// Failed to compute file key
+        FailedToComputeFileKey,
+        /// Failed to create file metadata
+        FailedToCreateFileMetadata,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -974,19 +980,24 @@ pub mod pallet {
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
 
-            let (msp_id, value_prop_id) =
+            let (old_msp_id, new_msp_id, value_prop_id) =
                 Self::do_msp_respond_move_bucket_request(who.clone(), bucket_id, response.clone())?;
 
             match response {
                 BucketMoveRequestResponse::Accepted => {
                     Self::deposit_event(Event::MoveBucketAccepted {
                         bucket_id,
-                        msp_id,
+                        old_msp_id,
+                        new_msp_id,
                         value_prop_id,
                     });
                 }
                 BucketMoveRequestResponse::Rejected => {
-                    Self::deposit_event(Event::MoveBucketRejected { bucket_id, msp_id });
+                    Self::deposit_event(Event::MoveBucketRejected {
+                        bucket_id,
+                        old_msp_id,
+                        new_msp_id,
+                    });
                 }
             }
 
