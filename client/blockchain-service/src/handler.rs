@@ -21,6 +21,7 @@ use sp_runtime::{
     traits::{Header, Zero},
     AccountId32, SaturatedConversion,
 };
+use storage_hub_runtime::RuntimeEvent;
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -45,9 +46,9 @@ use shc_common::{
     },
 };
 use shp_file_metadata::FileKey;
-use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
+    capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
@@ -161,6 +162,10 @@ where
     ///
     /// This is meant to be used for periodic, low priority tasks.
     pub(crate) notify_period: Option<u32>,
+    /// Efficiently manages the capacity changes of storage providers.
+    ///
+    /// Only required if the node is running as a provider.
+    pub(crate) capacity_manager: Option<CapacityRequestQueue>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -964,6 +969,19 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::IncreaseCapacity { request, callback } => {
+                    // Create a new channel that will be used to notify completion
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+
+                    // The capacity manager handles sending the result back to the caller so we don't need to do anything here. Whether the transaction failed or succeeded, or if the capacity request was never queued, the result will be sent back through the channel by the capacity manager.
+                    self.queue_capacity_request(CapacityRequest::new(request, tx))
+                        .await;
+
+                    // Send the receiver back through the callback
+                    if let Err(e) = callback.send(rx) {
+                        error!(target: LOG_TARGET, "Failed to send capacity request receiver: {:?}", e);
+                    }
+                }
                 BlockchainServiceCommand::QueryMspIdOfBucketId {
                     bucket_id,
                     callback,
@@ -1070,6 +1088,7 @@ where
         forest_storage_handler: FSH,
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
+        capacity_request_queue: Option<CapacityRequestQueue>,
     ) -> Self {
         Self {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1087,6 +1106,7 @@ where
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
             notify_period,
+            capacity_manager: capacity_request_queue,
         }
     }
 
@@ -1256,6 +1276,9 @@ where
         // Notify all tasks waiting for this tick number (or lower).
         // It is not guaranteed that the tick number will increase at every block import.
         self.notify_tick_number(&block_hash);
+
+        // Notify the capacity manager that a new block has been imported.
+        self.notify_capacity_manager(&block_number).await;
 
         // Process pending requests that update the forest root.
         self.check_pending_forest_root_writes();

@@ -6,6 +6,7 @@ use shc_actors_framework::{
     event_bus::{EventBusListener, EventHandler},
 };
 use shc_blockchain_service::{
+    capacity_manager::CapacityConfig,
     events::{
         AcceptedBspVolunteer, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
         FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
@@ -26,7 +27,6 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
-use storage_hub_runtime::StorageDataUnit;
 
 use crate::{
     services::types::{
@@ -48,14 +48,10 @@ use crate::{
 /// Configuration parameters for Storage Providers.
 #[derive(Clone)]
 pub struct ProviderConfig {
-    /// Maximum storage capacity of the provider (bytes).
+    /// Configuration parameters necessary to run the capacity manager.
     ///
-    /// The Storage Provider will not request to increase its storage capacity beyond this value.
-    pub max_storage_capacity: StorageDataUnit,
-    /// Jump capacity (bytes).
-    ///
-    /// Storage capacity increases in jumps of this size.
-    pub jump_capacity: StorageDataUnit,
+    /// This is only required if running as a storage provider node.
+    pub capacity_config: CapacityConfig,
     /// The time in seconds to wait before retrying an extrinsic.
     pub extrinsic_retry_timeout: u64,
 }

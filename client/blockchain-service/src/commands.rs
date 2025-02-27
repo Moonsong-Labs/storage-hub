@@ -29,6 +29,7 @@ use shc_common::types::{
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use crate::{
+    capacity_manager::CapacityRequestData,
     handler::BlockchainService,
     transaction::SubmittedTransaction,
     types::{
@@ -201,6 +202,11 @@ pub enum BlockchainServiceCommand {
     QueueFileDeletionRequest {
         request: FileDeletionRequest,
         callback: tokio::sync::oneshot::Sender<Result<()>>,
+    },
+    IncreaseCapacity {
+        request: CapacityRequestData,
+        callback:
+            tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<Result<(), anyhow::Error>>>,
     },
     QueryBucketsOfUserStoredByMsp {
         msp_id: ProviderId,
@@ -378,6 +384,14 @@ pub trait BlockchainServiceInterface {
     ) -> Result<Option<Balance>>;
 
     async fn query_slash_amount_per_max_file_size(&self) -> Result<Balance>;
+
+    /// Queue a CapacityRequest to be processed.
+    ///
+    /// Batching capacity requests in a single transaction with other tasks requiring capacity
+    /// increases. This is potentially a long-running operation since it requires waiting for
+    /// the block at which the capacity can be increased. This is enforced by the runtime based on the
+    /// providers pallet configuration parameter `MinBlocksBetweenCapacityChanges`.
+    async fn increase_capacity(&self, request: CapacityRequestData) -> Result<()>;
 
     /// Helper function to check if an extrinsic failed or succeeded in a block.
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
@@ -794,6 +808,14 @@ where
         let message = BlockchainServiceCommand::QuerySlashAmountPerMaxFileSize { callback };
         self.send(message).await;
         rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    async fn increase_capacity(&self, request: CapacityRequestData) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::IncreaseCapacity { request, callback };
+        self.send(message).await;
+        let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
+        rx.await.expect("Failed to wait for capacity increase")
     }
 
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
