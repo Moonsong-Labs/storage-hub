@@ -56,7 +56,7 @@ use crate::{
     BlockchainService,
 };
 
-// TODO: Make this configurable in the config file
+/// TODO: CONSTANTS
 const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
 impl<FSH> BlockchainService<FSH>

@@ -216,6 +216,15 @@ where
             jump_capacity,
             extrinsic_retry_timeout,
             msp_charging_period,
+            msp_delete_file,
+            msp_charge_fees,
+            msp_move_bucket,
+            bsp_upload_file,
+            bsp_move_bucket,
+            bsp_charge_fees,
+            bsp_submit_proof,
+            blockchain_service,
+            file_transfer_service,
             ..
         }) => {
             info!(
@@ -245,7 +254,17 @@ where
                 .setup_storage_layer(storage_path.clone())
                 .with_retry_timeout(*extrinsic_retry_timeout)
                 .with_max_storage_capacity(*max_storage_capacity)
-                .with_jump_capacity(*jump_capacity);
+                .with_jump_capacity(*jump_capacity)
+                // Add task-specific configurations
+                .with_msp_delete_file_options(msp_delete_file.clone())
+                .with_msp_charge_fees_options(msp_charge_fees.clone())
+                .with_msp_move_bucket_options(msp_move_bucket.clone())
+                .with_bsp_upload_file_options(bsp_upload_file.clone())
+                .with_bsp_move_bucket_options(bsp_move_bucket.clone())
+                .with_bsp_charge_fees_options(bsp_charge_fees.clone())
+                .with_bsp_submit_proof_options(bsp_submit_proof.clone())
+                .with_blockchain_service_options(blockchain_service.clone())
+                .with_file_transfer_service_options(file_transfer_service.clone());
 
             // Setup specific configuration for the MSP node.
             if *provider_type == ProviderType::Msp {

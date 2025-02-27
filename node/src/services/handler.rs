@@ -16,11 +16,13 @@ use shc_blockchain_service::{
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
     },
+    handler::BlockchainServiceConfig,
     BlockchainService,
 };
 use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
+    handler::FileTransferServiceConfig,
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -33,12 +35,18 @@ use crate::{
         ShStorageLayer, UserRole,
     },
     tasks::{
-        bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
-        bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
-        bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-        msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspStoppedStoringTask,
-        msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspRespondMoveBucketTask,
-        msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
+        bsp_charge_fees::{BspChargeFeesConfig, BspChargeFeesTask},
+        bsp_delete_file::BspDeleteFileTask,
+        bsp_download_file::BspDownloadFileTask,
+        bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
+        bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
+        bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
+        msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
+        msp_delete_bucket::MspStoppedStoringTask,
+        msp_delete_file::{MspDeleteFileConfig, MspDeleteFileTask},
+        msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
+        msp_upload_file::MspUploadFileTask,
+        sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
     },
 };
@@ -56,6 +64,24 @@ pub struct ProviderConfig {
     pub jump_capacity: StorageDataUnit,
     /// The time in seconds to wait before retrying an extrinsic.
     pub extrinsic_retry_timeout: u64,
+    /// Configuration for MSP delete file task.
+    pub msp_delete_file: MspDeleteFileConfig,
+    /// Configuration for MSP charge fees task.
+    pub msp_charge_fees: MspChargeFeesConfig,
+    /// Configuration for MSP move bucket task.
+    pub msp_move_bucket: MspMoveBucketConfig,
+    /// Configuration for BSP upload file task.
+    pub bsp_upload_file: BspUploadFileConfig,
+    /// Configuration for BSP move bucket task.
+    pub bsp_move_bucket: BspMoveBucketConfig,
+    /// Configuration for BSP charge fees task.
+    pub bsp_charge_fees: BspChargeFeesConfig,
+    /// Configuration for BSP submit proof task.
+    pub bsp_submit_proof: BspSubmitProofConfig,
+    /// Configuration for blockchain service.
+    pub blockchain_service: BlockchainServiceConfig,
+    /// Configuration for file transfer service.
+    pub file_transfer_service: FileTransferServiceConfig,
 }
 
 /// Represents the handler for the Storage Hub service.

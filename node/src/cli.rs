@@ -3,7 +3,11 @@ use serde::{Deserialize, Deserializer};
 use std::{path::PathBuf, str::FromStr};
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::command::ProviderOptions;
+use crate::command::{
+    BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
+    BspUploadFileOptions, FileTransferServiceOptions, MspChargeFeesOptions, MspDeleteFileOptions,
+    MspMoveBucketOptions, ProviderOptions,
+};
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -153,6 +157,45 @@ pub struct ProviderConfigurations {
         ("provider_type", "msp"),
     ]))]
     pub msp_charging_period: Option<u32>,
+
+    // MSP Delete File options
+    /// Maximum number of times to retry a file deletion request.
+    #[clap(long, default_value = "5")]
+    pub msp_delete_file_max_try_count: u32,
+
+    /// Maximum tip amount to use when submitting a file deletion request extrinsic.
+    #[clap(long, default_value = "100")]
+    pub msp_delete_file_max_tip: u128,
+
+    // MSP Move Bucket options
+    /// Maximum number of times to retry a bucket move operation.
+    #[clap(long, default_value = "5")]
+    pub msp_move_bucket_max_try_count: u32,
+
+    /// Maximum tip amount to use when submitting a bucket move extrinsic.
+    #[clap(long, default_value = "100")]
+    pub msp_move_bucket_max_tip: u128,
+
+    /// Processing interval for bucket move operations (in seconds).
+    #[clap(long, default_value = "60")]
+    pub msp_move_bucket_processing_interval: u64,
+
+    /// Maximum batch size for bucket move operations.
+    #[clap(long, default_value = "10")]
+    pub msp_move_bucket_max_batch_size: u32,
+
+    /// Maximum number of parallel tasks for bucket move operations.
+    #[clap(long, default_value = "5")]
+    pub msp_move_bucket_max_parallel_tasks: u32,
+
+    // BSP Upload File options
+    /// Maximum number of times to retry a file upload operation.
+    #[clap(long, default_value = "5")]
+    pub bsp_upload_file_max_try_count: u32,
+
+    /// Maximum tip amount to use when submitting a file upload extrinsic.
+    #[clap(long, default_value = "100")]
+    pub bsp_upload_file_max_tip: u128,
 }
 
 impl ProviderConfigurations {
@@ -173,6 +216,28 @@ impl ProviderConfigurations {
             jump_capacity: self.jump_capacity,
             extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             msp_charging_period: self.msp_charging_period,
+            // New options
+            msp_delete_file: MspDeleteFileOptions {
+                max_try_count: self.msp_delete_file_max_try_count,
+                max_tip: self.msp_delete_file_max_tip,
+            },
+            msp_charge_fees: MspChargeFeesOptions::default(),
+            msp_move_bucket: MspMoveBucketOptions {
+                max_try_count: self.msp_move_bucket_max_try_count,
+                max_tip: self.msp_move_bucket_max_tip,
+                processing_interval: self.msp_move_bucket_processing_interval,
+                max_batch_size: self.msp_move_bucket_max_batch_size,
+                max_parallel_tasks: self.msp_move_bucket_max_parallel_tasks,
+            },
+            bsp_upload_file: BspUploadFileOptions {
+                max_try_count: self.bsp_upload_file_max_try_count,
+                max_tip: self.bsp_upload_file_max_tip,
+            },
+            bsp_move_bucket: BspMoveBucketOptions::default(),
+            bsp_charge_fees: BspChargeFeesOptions::default(),
+            bsp_submit_proof: BspSubmitProofOptions::default(),
+            blockchain_service: BlockchainServiceOptions::default(),
+            file_transfer_service: FileTransferServiceOptions::default(),
         }
     }
 }
@@ -266,7 +331,16 @@ pub struct Cli {
     pub provider_config: ProviderConfigurations,
 
     /// Provider configurations file path (allow to specify the provider configuration in a file instead of the cli)
-    #[clap(long, conflicts_with_all = ["provider", "provider_type", "max_storage_capacity", "jump_capacity", "storage_layer", "storage_path", "extrinsic_retry_timeout", "msp_charging_period"])]
+    #[clap(long, conflicts_with_all = [
+        "provider", "provider_type", "max_storage_capacity", "jump_capacity", 
+        "storage_layer", "storage_path", "extrinsic_retry_timeout", "msp_charging_period", 
+        "msp_delete_file_max_try_count", "msp_delete_file_max_tip",
+        "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", 
+        "msp_move_bucket_processing_interval", "msp_move_bucket_max_batch_size", 
+        "msp_move_bucket_max_parallel_tasks",
+        "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
+        "indexer", "database_url"
+    ])]
     pub provider_config_file: Option<String>,
 
     /// Indexer configurations

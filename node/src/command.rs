@@ -35,6 +35,148 @@ pub struct ProviderOptions {
     pub extrinsic_retry_timeout: u64,
     /// MSP charging fees frequency.
     pub msp_charging_period: Option<u32>,
+
+    // Task-specific configuration options
+    /// Configuration options for MSP delete file task.
+    #[serde(default)]
+    pub msp_delete_file: MspDeleteFileOptions,
+    /// Configuration options for MSP charge fees task.
+    #[serde(default)]
+    pub msp_charge_fees: MspChargeFeesOptions,
+    /// Configuration options for MSP move bucket task.
+    #[serde(default)]
+    pub msp_move_bucket: MspMoveBucketOptions,
+    /// Configuration options for BSP upload file task.
+    #[serde(default)]
+    pub bsp_upload_file: BspUploadFileOptions,
+    /// Configuration options for BSP move bucket task.
+    #[serde(default)]
+    pub bsp_move_bucket: BspMoveBucketOptions,
+    /// Configuration options for BSP charge fees task.
+    #[serde(default)]
+    pub bsp_charge_fees: BspChargeFeesOptions,
+    /// Configuration options for BSP submit proof task.
+    #[serde(default)]
+    pub bsp_submit_proof: BspSubmitProofOptions,
+
+    // Service-specific configuration options
+    /// Configuration options for blockchain service.
+    #[serde(default)]
+    pub blockchain_service: BlockchainServiceOptions,
+    /// Configuration options for file transfer service.
+    #[serde(default)]
+    pub file_transfer_service: FileTransferServiceOptions,
+    // Add more grouped configuration options here as needed
+}
+
+/// Configuration options for the MSP Delete File task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspDeleteFileOptions {
+    /// Maximum number of times to retry a file deletion request.
+    #[serde(default)]
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting a file deletion request extrinsic.
+    #[serde(default)]
+    pub max_tip: Option<u128>,
+}
+
+/// Configuration options for the MSP Charge Fees task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspChargeFeesOptions {
+    /// Minimum debt threshold for charging users.
+    #[serde(default)]
+    pub min_debt: Option<u128>,
+}
+
+/// Configuration options for the MSP Move Bucket task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspMoveBucketOptions {
+    /// Maximum number of times to retry a move bucket request.
+    #[serde(default)]
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting a move bucket request extrinsic.
+    #[serde(default)]
+    pub max_tip: Option<u128>,
+    /// Processing interval between batches of move bucket requests.
+    #[serde(default)]
+    pub processing_interval: Option<u64>,
+    /// Maximum batch size of move bucket requests to process at once.
+    #[serde(default)]
+    pub max_batch_size: Option<u32>,
+    /// Maximum number of parallel move bucket tasks.
+    #[serde(default)]
+    pub max_parallel_tasks: Option<u32>,
+    /// Maximum number of files to download in parallel.
+    #[serde(default)]
+    pub max_concurrent_file_downloads: Option<usize>,
+    /// Maximum number of chunks requests to do in parallel per file.
+    #[serde(default)]
+    pub max_concurrent_chunks_per_file: Option<usize>,
+    /// Maximum number of chunks to request in a single network request.
+    #[serde(default)]
+    pub max_chunks_per_request: Option<usize>,
+    /// Number of peers to select for each chunk download attempt (2 best + x random).
+    #[serde(default)]
+    pub chunk_request_peer_retry_attempts: Option<usize>,
+    /// Number of retries per peer for a single chunk request.
+    #[serde(default)]
+    pub download_retry_attempts: Option<usize>,
+}
+
+/// Configuration options for the BSP Upload File task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspUploadFileOptions {
+    /// Maximum number of times to retry an upload file request.
+    #[serde(default)]
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting an upload file request extrinsic.
+    #[serde(default)]
+    pub max_tip: Option<u128>,
+}
+
+/// Configuration options for the BSP Move Bucket task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspMoveBucketOptions {
+    /// Grace period in seconds to accept download requests after a bucket move is accepted.
+    #[serde(default)]
+    pub move_bucket_accepted_grace_period: Option<u64>,
+}
+
+/// Configuration options for the BSP Charge Fees task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspChargeFeesOptions {
+    /// Minimum debt threshold for charging users.
+    #[serde(default)]
+    pub min_debt: Option<u128>,
+}
+
+/// Configuration options for the BSP Submit Proof task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspSubmitProofOptions {
+    /// Maximum number of attempts to submit a proof.
+    #[serde(default)]
+    pub max_submission_attempts: Option<u32>,
+}
+
+/// Configuration options for the Blockchain Service.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BlockchainServiceOptions {
+    // Reserved for future blockchain service configuration options
+}
+
+/// Configuration options for the File Transfer Service.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct FileTransferServiceOptions {
+    // Reserved for future file transfer service configuration options
+}
+
+/// Configuration for the indexer.
+#[derive(Debug, Clone, Deserialize)]
+pub struct IndexerOptions {
+    /// Whether to enable the indexer.
+    pub indexer: bool,
+    /// Postgres database URL.
+    pub database_url: Option<String>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
@@ -247,6 +389,7 @@ pub fn run() -> Result<()> {
         }
         None => {
             let mut provider_options = None;
+            let mut indexer_options = None;
             let runner = cli.create_runner(&cli.run.normalize())?;
 
             // If we have a provider config file
@@ -254,12 +397,23 @@ pub fn run() -> Result<()> {
                 let config = config::read_config(&provider_config_file);
                 if let Some(c) = config {
                     provider_options = Some(c.provider);
+                    indexer_options = c.indexer;
                 };
             };
 
             // We then check cli (the cli doesn't allow to have both cli parameters and a config file so we should not have overlap here)
             if cli.provider_config.provider {
                 provider_options = Some(cli.provider_config.provider_options());
+            };
+
+            // Convert IndexerOptions to IndexerConfigurations if available
+            let indexer_config = if let Some(opts) = indexer_options {
+                crate::cli::IndexerConfigurations {
+                    indexer: opts.indexer,
+                    database_url: opts.database_url,
+                }
+            } else {
+                cli.indexer_config
             };
 
             runner.run_node_until_exit(|config| async move {
@@ -285,7 +439,7 @@ pub fn run() -> Result<()> {
 							crate::service::start_dev_node::<sc_network::NetworkWorker<_, _>>(
 								config,
 								provider_options,
-								cli.indexer_config,
+								indexer_config,
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -307,7 +461,7 @@ pub fn run() -> Result<()> {
 								polkadot_config,
 								collator_options,
 								provider_options,
-								cli.indexer_config,
+								indexer_config,
 								id,
 								hwbench,
 							)
@@ -321,7 +475,7 @@ pub fn run() -> Result<()> {
 							crate::service::start_dev_node::<sc_network::Litep2pNetworkBackend>(
 								config,
 								provider_options,
-								cli.indexer_config,
+								indexer_config,
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -343,7 +497,7 @@ pub fn run() -> Result<()> {
 								polkadot_config,
 								collator_options,
 								provider_options,
-								cli.indexer_config,
+								indexer_config,
 								id,
 								hwbench,
 							)

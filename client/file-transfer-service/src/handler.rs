@@ -789,3 +789,14 @@ impl FileTransferService {
         }
     }
 }
+
+/// Configuration for the file transfer service
+/// Currently no configuration parameters, reserved for future use
+#[derive(Debug, Clone, Deserialize)]
+pub struct FileTransferServiceConfig {}
+
+impl Default for FileTransferServiceConfig {
+    fn default() -> Self {
+        Self {}
+    }
+}

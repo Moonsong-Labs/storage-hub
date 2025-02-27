@@ -8,14 +8,26 @@ use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
-use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
+use shc_blockchain_service::{
+    handler::BlockchainServiceConfig, spawn_blockchain_service, BlockchainService,
+};
 use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
-use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
+use shc_file_transfer_service::{
+    handler::FileTransferServiceConfig, spawn_file_transfer_service, FileTransferService,
+};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::StorageHubClientRpcConfig;
 
+/// TODO: CONSTANTS
 const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 60;
+
+use crate::tasks::{
+    bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
+    bsp_submit_proof::BspSubmitProofConfig, bsp_upload_file::BspUploadFileConfig,
+    msp_charge_fees::MspChargeFeesConfig, msp_delete_file::MspDeleteFileConfig,
+    msp_move_bucket::MspMoveBucketConfig,
+};
 
 use super::{
     handler::{ProviderConfig, StorageHubHandler},
@@ -47,6 +59,16 @@ where
     extrinsic_retry_timeout: u64,
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
+    // Configuration options for tasks and services
+    msp_delete_file_options: Option<MspDeleteFileConfig>,
+    msp_charge_fees_options: Option<MspChargeFeesConfig>,
+    msp_move_bucket_options: Option<MspMoveBucketConfig>,
+    bsp_upload_file_options: Option<BspUploadFileConfig>,
+    bsp_move_bucket_options: Option<BspMoveBucketConfig>,
+    bsp_charge_fees_options: Option<BspChargeFeesConfig>,
+    bsp_submit_proof_options: Option<BspSubmitProofConfig>,
+    blockchain_service_options: Option<BlockchainServiceConfig>,
+    file_transfer_service_options: Option<FileTransferServiceConfig>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -67,6 +89,15 @@ where
             extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
             indexer_db_pool: None,
             notify_period: None,
+            msp_delete_file_options: None,
+            msp_charge_fees_options: None,
+            msp_move_bucket_options: None,
+            bsp_upload_file_options: None,
+            bsp_move_bucket_options: None,
+            bsp_charge_fees_options: None,
+            bsp_submit_proof_options: None,
+            blockchain_service_options: None,
+            file_transfer_service_options: None,
         }
     }
 
@@ -198,6 +229,180 @@ where
             keystore,
         )
     }
+
+    /// Set configuration options for the MSP delete file task.
+    pub fn with_msp_delete_file_options(
+        &mut self,
+        options: crate::command::MspDeleteFileOptions,
+    ) -> &mut Self {
+        let mut config = crate::tasks::msp_delete_file::MspDeleteFileConfig::default();
+
+        // Apply any non-None values from options to the config
+        if let Some(max_try_count) = options.max_try_count {
+            config.max_try_count = max_try_count;
+        }
+
+        if let Some(max_tip) = options.max_tip {
+            config.max_tip = max_tip;
+        }
+
+        self.msp_delete_file_options = Some(config);
+        self
+    }
+
+    /// Set configuration options for the MSP charge fees task.
+    pub fn with_msp_charge_fees_options(
+        &mut self,
+        options: crate::command::MspChargeFeesOptions,
+    ) -> &mut Self {
+        let mut config = crate::tasks::msp_charge_fees::MspChargeFeesConfig::default();
+
+        // Apply any non-None values from options to the config
+        if let Some(min_debt) = options.min_debt {
+            config.min_debt = min_debt;
+        }
+
+        self.msp_charge_fees_options = Some(config);
+        self
+    }
+
+    /// Set configuration options for the MSP move bucket task.
+    pub fn with_msp_move_bucket_options(
+        &mut self,
+        options: crate::command::MspMoveBucketOptions,
+    ) -> &mut Self {
+        let mut config = crate::tasks::msp_move_bucket::MspMoveBucketConfig::default();
+
+        // Apply any non-None values from options to the config
+        if let Some(max_concurrent_file_downloads) = options.max_concurrent_file_downloads {
+            config.max_concurrent_file_downloads = max_concurrent_file_downloads;
+        }
+
+        if let Some(max_concurrent_chunks_per_file) = options.max_concurrent_chunks_per_file {
+            config.max_concurrent_chunks_per_file = max_concurrent_chunks_per_file;
+        }
+
+        if let Some(max_chunks_per_request) = options.max_chunks_per_request {
+            config.max_chunks_per_request = max_chunks_per_request;
+        }
+
+        if let Some(chunk_request_peer_retry_attempts) = options.chunk_request_peer_retry_attempts {
+            config.chunk_request_peer_retry_attempts = chunk_request_peer_retry_attempts;
+        }
+
+        if let Some(download_retry_attempts) = options.download_retry_attempts {
+            config.download_retry_attempts = download_retry_attempts;
+        }
+
+        if let Some(max_try_count) = options.max_try_count {
+            config.max_try_count = max_try_count;
+        }
+
+        if let Some(max_tip) = options.max_tip {
+            config.max_tip = max_tip;
+        }
+
+        if let Some(processing_interval) = options.processing_interval {
+            config.processing_interval = processing_interval;
+        }
+
+        if let Some(max_batch_size) = options.max_batch_size {
+            config.max_batch_size = max_batch_size;
+        }
+
+        if let Some(max_parallel_tasks) = options.max_parallel_tasks {
+            config.max_parallel_tasks = max_parallel_tasks;
+        }
+
+        self.msp_move_bucket_options = Some(config);
+        self
+    }
+
+    /// Set configuration options for the BSP upload file task.
+    pub fn with_bsp_upload_file_options(
+        &mut self,
+        options: crate::command::BspUploadFileOptions,
+    ) -> &mut Self {
+        let mut config = crate::tasks::bsp_upload_file::BspUploadFileConfig::default();
+
+        // Apply any non-None values from options to the config
+        if let Some(max_try_count) = options.max_try_count {
+            config.max_try_count = max_try_count;
+        }
+
+        if let Some(max_tip) = options.max_tip {
+            config.max_tip = max_tip;
+        }
+
+        self.bsp_upload_file_options = Some(config);
+        self
+    }
+
+    /// Set configuration options for the BSP move bucket task.
+    pub fn with_bsp_move_bucket_options(
+        &mut self,
+        options: crate::command::BspMoveBucketOptions,
+    ) -> &mut Self {
+        let mut config = crate::tasks::bsp_move_bucket::BspMoveBucketConfig::default();
+
+        // Apply any non-None values from options to the config
+        if let Some(move_bucket_accepted_grace_period) = options.move_bucket_accepted_grace_period {
+            config.move_bucket_accepted_grace_period = move_bucket_accepted_grace_period;
+        }
+
+        self.bsp_move_bucket_options = Some(config);
+        self
+    }
+
+    /// Set configuration options for the BSP charge fees task.
+    pub fn with_bsp_charge_fees_options(
+        &mut self,
+        options: crate::command::BspChargeFeesOptions,
+    ) -> &mut Self {
+        let mut config = crate::tasks::bsp_charge_fees::BspChargeFeesConfig::default();
+
+        // Apply any non-None values from options to the config
+        if let Some(min_debt) = options.min_debt {
+            config.min_debt = min_debt;
+        }
+
+        self.bsp_charge_fees_options = Some(config);
+        self
+    }
+
+    /// Set configuration options for the BSP submit proof task.
+    pub fn with_bsp_submit_proof_options(
+        &mut self,
+        options: crate::command::BspSubmitProofOptions,
+    ) -> &mut Self {
+        let mut config = crate::tasks::bsp_submit_proof::BspSubmitProofConfig::default();
+
+        // Apply any non-None values from options to the config
+        if let Some(max_submission_attempts) = options.max_submission_attempts {
+            config.max_submission_attempts = max_submission_attempts;
+        }
+
+        self.bsp_submit_proof_options = Some(config);
+        self
+    }
+
+    /// Set configuration options for the blockchain service.
+    pub fn with_blockchain_service_options(
+        &mut self,
+        options: crate::services::blockchain_service_config::BlockchainServiceConfig,
+    ) -> &mut Self {
+        self.blockchain_service_options = Some(options);
+        self
+    }
+
+    /// Set configuration options for the file transfer service.
+    pub fn with_file_transfer_service_options(
+        &mut self,
+        options: FileTransferServiceConfig,
+    ) -> &mut Self {
+        self.file_transfer_service_options = Some(options);
+        self
+    }
 }
 
 /// Abstraction trait to build the Storage Layer of a [`ShNodeType`].
@@ -316,6 +521,15 @@ where
                     .expect("Max Storage Capacity not set"),
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+                msp_delete_file: self.msp_delete_file_options.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_options.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_options.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_options.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_options.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_options.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_options.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_options.unwrap_or_default(),
+                file_transfer_service: self.file_transfer_service_options.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
         )
@@ -355,6 +569,15 @@ where
                     .expect("Max Storage Capacity not set"),
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+                msp_delete_file: self.msp_delete_file_options.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_options.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_options.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_options.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_options.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_options.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_options.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_options.unwrap_or_default(),
+                file_transfer_service: self.file_transfer_service_options.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
         )
@@ -392,6 +615,15 @@ where
                 max_storage_capacity: 0,
                 jump_capacity: 0,
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+                msp_delete_file: self.msp_delete_file_options.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_options.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_options.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_options.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_options.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_options.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_options.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_options.unwrap_or_default(),
+                file_transfer_service: self.file_transfer_service_options.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
         )

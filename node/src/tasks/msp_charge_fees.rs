@@ -14,7 +14,25 @@ use crate::services::{
 };
 
 const LOG_TARGET: &str = "msp-charge-fees-task";
-const MIN_DEBT: Balance = 0;
+
+/// Configuration for the MspChargeFeesTask
+#[derive(Debug, Clone)]
+pub struct MspChargeFeesConfig {
+    /// Minimum debt threshold for charging users
+    pub min_debt: Balance,
+}
+
+impl Default for MspChargeFeesConfig {
+    fn default() -> Self {
+        Self {
+            min_debt: 0, // Default value that was in command.rs
+        }
+    }
+}
+
+// This constant is now configurable via provider.toml [provider.msp_charge_fees] section
+// Default value is specified in the Default implementation
+// const MIN_DEBT: Balance = 0;
 
 pub struct MspChargeFeesTask<NT>
 where
@@ -22,6 +40,8 @@ where
     NT::FSH: MspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
+    /// Configuration for this task
+    config: MspChargeFeesConfig,
 }
 
 impl<NT> Clone for MspChargeFeesTask<NT>
@@ -32,6 +52,7 @@ where
     fn clone(&self) -> MspChargeFeesTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -43,7 +64,8 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
+            config: storage_hub_handler.provider_config.msp_charge_fees.clone(),
         }
     }
 }
@@ -90,7 +112,7 @@ where
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(own_msp_id, MIN_DEBT)
+            .query_users_with_debt(own_msp_id, self.config.min_debt)
             .await
             .map_err(|e| {
                 anyhow!(
