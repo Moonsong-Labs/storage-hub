@@ -11,6 +11,9 @@ use sp_core::{crypto::AccountId32, H256};
 use sp_std::fmt;
 use sp_std::vec::Vec;
 
+/// Maximum number of chunks a Storage Provider would need to prove for a file.
+const MAX_CHUNKS_TO_CHECK: u32 = 10;
+
 /// A struct containing all the information about a file in StorageHub.
 ///
 /// It also provides utility functions like calculating the number of chunks in a file,
@@ -20,16 +23,13 @@ use sp_std::vec::Vec;
 )]
 pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
-    pub owner: Vec<u8>,
-    pub bucket_id: Vec<u8>,
-    pub location: Vec<u8>,
+    owner: Vec<u8>,
+    bucket_id: Vec<u8>,
+    location: Vec<u8>,
     #[codec(compact)]
-    pub file_size: u64,
-    pub fingerprint: Fingerprint<H_LENGTH>,
+    file_size: u64,
+    fingerprint: Fingerprint<H_LENGTH>,
 }
-
-/// Maximum number of chunks a Storage Provider would need to prove for a file.
-const MAX_CHUNKS_TO_CHECK: u32 = 10;
 
 impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
     FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
@@ -40,14 +40,54 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         location: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, FileMetadataError> {
+        if owner.is_empty() {
+            return Err(FileMetadataError::InvalidOwner);
+        }
+
+        if bucket_id.is_empty() {
+            return Err(FileMetadataError::InvalidBucketId);
+        }
+
+        if location.is_empty() {
+            return Err(FileMetadataError::InvalidLocation);
+        }
+
+        if size == 0 {
+            return Err(FileMetadataError::InvalidFileSize);
+        }
+
+        if fingerprint.0.is_empty() {
+            return Err(FileMetadataError::InvalidFingerprint);
+        }
+
+        Ok(Self {
             owner,
             bucket_id,
             location,
             file_size: size,
             fingerprint,
-        }
+        })
+    }
+
+    pub fn owner(&self) -> &Vec<u8> {
+        &self.owner
+    }
+
+    pub fn bucket_id(&self) -> &Vec<u8> {
+        &self.bucket_id
+    }
+
+    pub fn location(&self) -> &Vec<u8> {
+        &self.location
+    }
+
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+
+    pub fn fingerprint(&self) -> &Fingerprint<H_LENGTH> {
+        &self.fingerprint
     }
 
     pub fn file_key<T: sp_core::Hasher>(&self) -> T::Out {
@@ -70,7 +110,9 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn last_chunk_id(&self) -> ChunkId {
-        ChunkId::new(self.chunks_count() - 1)
+        // Chunks count should always be >= 1. This is assured by the checks in the constructor.
+        let last_chunk_idx = self.chunks_count().saturating_sub(1);
+        ChunkId::new(last_chunk_idx)
     }
 
     /// Calculates the size of a chunk at a given index.
@@ -95,7 +137,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     /// a `file_size = 0` is an invalid file.
     pub fn chunk_size_at(&self, chunk_idx: u64) -> usize {
         let remaining_size = self.file_size % CHUNK_SIZE;
-        if remaining_size == 0 || chunk_idx != self.chunks_count() - 1 {
+        if remaining_size == 0 || chunk_idx != self.last_chunk_id().as_u64() {
             CHUNK_SIZE as usize
         } else {
             remaining_size as usize
@@ -113,6 +155,15 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     pub fn is_valid_chunk_size(&self, chunk_idx: u64, chunk_size: usize) -> bool {
         self.chunk_size_at(chunk_idx) == chunk_size
     }
+}
+
+#[derive(Debug)]
+pub enum FileMetadataError {
+    InvalidOwner,
+    InvalidBucketId,
+    InvalidLocation,
+    InvalidFileSize,
+    InvalidFingerprint,
 }
 
 /// Interface for encoding and decoding FileMetadata, used by the runtime.
@@ -276,6 +327,12 @@ impl<const H_LENGTH: usize> fmt::LowerHex for Fingerprint<H_LENGTH> {
         let val = self.0;
 
         write!(f, "0x{}", hex::encode(val))
+  }
+}
+
+impl<const H_LENGTH: usize> PartialEq<[u8]> for Fingerprint<H_LENGTH> {
+    fn eq(&self, other: &[u8]) -> bool {
+        self.0 == other
     }
 }
 

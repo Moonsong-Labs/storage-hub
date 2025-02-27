@@ -90,6 +90,8 @@ pub enum FileStorageError {
     FailedToAddEntityFromExcludeList,
     /// Trying to parse unknown exclude type.
     ErrorParsingExcludeType,
+    /// Failed to get file key proof from file metadata.
+    FailedToConstructFileKeyProof,
 }
 
 #[derive(Debug)]

@@ -896,6 +896,10 @@ pub mod pallet {
         OperationNotAllowedForInsolventProvider,
         /// Operations not allowed while bucket is not being stored by an MSP
         OperationNotAllowedWhileBucketIsNotStoredByMsp,
+        /// Failed to compute file key
+        FailedToComputeFileKey,
+        /// Failed to create file metadata
+        FailedToCreateFileMetadata,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

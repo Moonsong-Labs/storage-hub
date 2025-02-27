@@ -529,7 +529,7 @@ where
         T: TrieLayout + Send + Sync + 'static,
         DB: KeyValueDB + 'static,
     {
-        let b_fingerprint = metadata.fingerprint.as_ref();
+        let b_fingerprint = metadata.fingerprint().as_ref();
         let h_fingerprint =
             convert_raw_bytes_to_hasher_out::<T>(b_fingerprint.to_vec()).map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
@@ -628,7 +628,7 @@ where
         let mut transaction = DBTransaction::new();
         transaction.put(
             Column::Roots.into(),
-            metadata.fingerprint.as_ref(),
+            metadata.fingerprint().as_ref(),
             new_partial_root.as_ref(),
         );
 
@@ -660,17 +660,12 @@ where
             return Ok(FileStorageWriteOutcome::FileIncomplete);
         }
 
-        let current_fingerprint = file_trie.get_root().as_ref().try_into().map_err(|_| {
-            error!(target: LOG_TARGET, "Failed to convert root to fingerprint");
-            FileStorageWriteError::FailedToParseFingerprint
-        })?;
-
         // Verify that the final root matches the expected fingerprint
-        if metadata.fingerprint != current_fingerprint {
+        if metadata.fingerprint() != file_trie.get_root().as_ref() {
             error!(
                 target: LOG_TARGET,
                 "Fingerprint mismatch. Expected: {:?}, got: {:?}",
-                metadata.fingerprint,
+                metadata.fingerprint(),
                 file_trie.get_root()
             );
             return Err(FileStorageWriteError::FingerprintAndStoredFileMismatch);
@@ -689,13 +684,7 @@ where
 
         let file_trie = self.get_file_trie(&metadata)?;
 
-        if metadata.fingerprint
-            != file_trie
-                .get_root()
-                .as_ref()
-                .try_into()
-                .expect("Hasher output mismatch!")
-        {
+        if metadata.fingerprint() != file_trie.get_root().as_ref() {
             return Ok(false);
         }
 
@@ -724,7 +713,7 @@ where
         // Stores an empty root to allow for later initialization of the trie.
         transaction.put(
             Column::Roots.into(),
-            metadata.fingerprint.as_ref(),
+            metadata.fingerprint().as_ref(),
             empty_root.as_ref(),
         );
         // Initialize chunk count to 0
@@ -770,7 +759,7 @@ where
         // if the file is complete, key and value will be equal.
         transaction.put(
             Column::Roots.into(),
-            metadata.fingerprint.as_ref(),
+            metadata.fingerprint().as_ref(),
             file_data.get_root().as_ref(),
         );
 
@@ -792,9 +781,10 @@ where
         );
 
         let bucket_prefixed_file_key = metadata
-            .bucket_id
-            .into_iter()
-            .chain(file_key.as_ref().into_iter().cloned())
+            .bucket_id()
+            .iter()
+            .copied()
+            .chain(file_key.as_ref().iter().copied())
             .collect::<Vec<_>>();
 
         // Store the key prefixed by bucket id
@@ -855,19 +845,17 @@ where
             return Err(FileStorageError::IncompleteFile);
         }
 
-        if metadata.fingerprint
-            != file_trie
-                .get_root()
-                .as_ref()
-                .try_into()
-                .expect("Hasher output mismatch!")
-        {
+        if metadata.fingerprint() != file_trie.get_root().as_ref() {
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        Ok(file_trie
+        file_trie
             .generate_proof(chunk_ids)?
-            .to_file_key_proof(metadata.clone()))
+            .to_file_key_proof(metadata.clone())
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToConstructFileKeyProof
+            })
     }
 
     /// Deletes a file and all its associated data.
@@ -876,7 +864,7 @@ where
             .get_metadata(file_key)?
             .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let b_fingerprint = metadata.fingerprint.as_ref();
+        let b_fingerprint = metadata.fingerprint().as_ref();
         let h_fingerprint =
             convert_raw_bytes_to_hasher_out::<T>(b_fingerprint.to_vec()).map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
@@ -897,9 +885,10 @@ where
         transaction.delete(Column::ChunkCount.into(), file_key.as_ref());
 
         let bucket_prefixed_file_key = metadata
-            .bucket_id
-            .into_iter()
-            .chain(file_key.as_ref().iter().cloned())
+            .bucket_id()
+            .iter()
+            .copied()
+            .chain(file_key.as_ref().iter().copied())
             .collect::<Vec<_>>();
         transaction.delete(
             Column::BucketPrefix.into(),
@@ -1221,13 +1210,14 @@ mod tests {
             file_trie.write_chunk(chunk_id, chunk).unwrap();
         }
 
-        let file_metadata = FileMetadata {
-            file_size: FILE_CHUNK_SIZE * chunks.len() as u64,
-            fingerprint: file_trie.get_root().as_ref().into(),
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-            location: "location".to_string().into_bytes(),
-            bucket_id: [1u8; 32].to_vec(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            FILE_CHUNK_SIZE * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
 
         let key = file_metadata.file_key::<BlakeTwo256>();
         let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
@@ -1283,13 +1273,14 @@ mod tests {
         assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        let file_metadata = FileMetadata {
-            file_size: 32u64 * chunks.len() as u64,
-            fingerprint: file_trie.get_root().as_ref().into(),
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-            location: "location".to_string().into_bytes(),
-            bucket_id: [1u8; 32].to_vec(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            32u64 * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
 
         let key = file_metadata.file_key::<BlakeTwo256>();
         let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
@@ -1336,13 +1327,14 @@ mod tests {
         assert_eq!(stored_chunks_count(&file_trie).unwrap(), 3);
         assert!(file_trie.get_chunk(&chunk_ids[2]).is_ok());
 
-        let file_metadata = FileMetadata {
-            file_size: 32u64 * chunks.len() as u64,
-            fingerprint: file_trie.get_root().as_ref().into(),
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-            location: "location".to_string().into_bytes(),
-            bucket_id: [1u8; 32].to_vec(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            32u64 * chunks.len() as u64,
+            file_trie.get_root().as_ref().into(),
+        )
+        .unwrap();
 
         let key = file_metadata.file_key::<BlakeTwo256>();
         let mut file_storage = RocksDbFileStorage::<LayoutV1<BlakeTwo256>, InMemory>::new(storage);
@@ -1399,13 +1391,15 @@ mod tests {
 
         let chunk_ids_set: HashSet<ChunkId> = chunk_ids.iter().cloned().collect();
 
-        let file_metadata = FileMetadata {
-            file_size: 1024u64 * chunks.len() as u64,
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+            [1u8; 32].to_vec(),
+            "location".to_string().into_bytes(),
+            1024u64 * chunks.len() as u64,
             fingerprint,
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-            location: "location".to_string().into_bytes(),
-            bucket_id: [1u8; 32].to_vec(),
-        };
+        )
+        .unwrap();
+
         let key = file_metadata.file_key::<BlakeTwo256>();
 
         let mut file_storage =
@@ -1495,13 +1489,14 @@ mod tests {
             }
 
             // Create metadata for the file, including bucket ID, location, and owner.
-            let file_metadata = FileMetadata {
-                file_size: 32u64 * chunks.len() as u64,
-                fingerprint: file_trie.get_root().as_ref().into(),
-                owner: <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
-                location: location.to_string().into_bytes(),
-                bucket_id: bucket_id.to_vec(),
-            };
+            let file_metadata = FileMetadata::new(
+                <AccountId32 as AsRef<[u8]>>::as_ref(&AccountId32::new([0u8; 32])).to_vec(),
+                bucket_id.to_vec(),
+                location.to_string().into_bytes(),
+                32u64 * chunks.len() as u64,
+                file_trie.get_root().as_ref().into(),
+            )
+            .unwrap();
 
             let key = file_metadata.file_key::<BlakeTwo256>();
 

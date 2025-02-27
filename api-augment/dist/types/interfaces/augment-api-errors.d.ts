@@ -227,6 +227,14 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ExpectedNonInclusionProof: AugmentedError<ApiType>;
       /**
+       * Failed to compute file key
+       **/
+      FailedToComputeFileKey: AugmentedError<ApiType>;
+      /**
+       * Failed to create file metadata
+       **/
+      FailedToCreateFileMetadata: AugmentedError<ApiType>;
+      /**
        * Failed to decode threshold.
        **/
       FailedToDecodeThreshold: AugmentedError<ApiType>;

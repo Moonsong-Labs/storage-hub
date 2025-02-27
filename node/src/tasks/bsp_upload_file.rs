@@ -426,13 +426,14 @@ where
         }
 
         // Construct file metadata.
-        let metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size as u64,
-            fingerprint: event.fingerprint,
-            location: event.location.to_vec(),
-        };
+        let metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            event.bucket_id.as_ref().to_vec(),
+            event.location.to_vec(),
+            event.size as u64,
+            event.fingerprint,
+        )
+        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
 
         let own_provider_id = self
             .storage_hub_handler
@@ -777,12 +778,12 @@ where
             .ok_or_else(|| anyhow!("File metadata not found"))?;
 
         // Verify that the fingerprint in the proof matches the expected file fingerprint
-        let expected_fingerprint = file_metadata.fingerprint;
-        if event.file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+        let expected_fingerprint = file_metadata.fingerprint();
+        if event.file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
             error!(
                 target: LOG_TARGET,
                 "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
-                file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint
+                file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint()
             );
             return Err(anyhow!("Fingerprint mismatch"));
         }
