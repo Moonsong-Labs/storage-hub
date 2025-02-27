@@ -221,5 +221,11 @@ export const ALL_TYPES: RegistryTypes = {
       BucketNotFound: null,
       InternalApiError: null
     }
+  },
+  QueryBucketsOfUserStoredByMspError: {
+    _enum: {
+      NotAnMsp: null,
+      InternalError: null
+    }
   }
 };

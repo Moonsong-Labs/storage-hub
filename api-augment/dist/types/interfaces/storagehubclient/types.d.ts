@@ -180,6 +180,12 @@ export interface QueryBucketsForMspError extends Enum {
   readonly isInternalError: boolean;
   readonly type: "ProviderNotRegistered" | "InternalError";
 }
+/** @name QueryBucketsOfUserStoredByMspError */
+export interface QueryBucketsOfUserStoredByMspError extends Enum {
+  readonly isNotAnMsp: boolean;
+  readonly isInternalError: boolean;
+  readonly type: "NotAnMsp" | "InternalError";
+}
 /** @name QueryConfirmChunksToProveForFileError */
 export interface QueryConfirmChunksToProveForFileError extends Enum {
   readonly isChallengedChunkToChunkIdError: boolean;

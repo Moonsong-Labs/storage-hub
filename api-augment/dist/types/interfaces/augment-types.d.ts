@@ -1345,6 +1345,7 @@ import type {
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
   QueryBucketsForMspError,
+  QueryBucketsOfUserStoredByMspError,
   QueryConfirmChunksToProveForFileError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
@@ -2222,6 +2223,7 @@ declare module "@polkadot/types/types/registry" {
     QueryAvailableStorageCapacityError: QueryAvailableStorageCapacityError;
     QueryBspConfirmChunksToProveForFileError: QueryBspConfirmChunksToProveForFileError;
     QueryBucketsForMspError: QueryBucketsForMspError;
+    QueryBucketsOfUserStoredByMspError: QueryBucketsOfUserStoredByMspError;
     QueryConfirmChunksToProveForFileError: QueryConfirmChunksToProveForFileError;
     QueryEarliestChangeCapacityBlockError: QueryEarliestChangeCapacityBlockError;
     QueryFileEarliestVolunteerBlockError: QueryFileEarliestVolunteerBlockError;

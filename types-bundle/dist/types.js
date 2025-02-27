@@ -219,6 +219,12 @@ export const ALL_TYPES = {
       BucketNotFound: null,
       InternalApiError: null
     }
+  },
+  QueryBucketsOfUserStoredByMspError: {
+    _enum: {
+      NotAnMsp: null,
+      InternalError: null
+    }
   }
 };
 //# sourceMappingURL=types.js.map
