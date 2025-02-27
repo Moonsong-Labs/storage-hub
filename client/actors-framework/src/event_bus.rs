@@ -1,10 +1,11 @@
 use anyhow::Result;
 use sc_tracing::tracing::{error, warn};
-use tokio::sync::broadcast;
+use std::sync::Arc;
+use tokio::sync::{broadcast, Semaphore};
 
 use crate::{
     actor::{Actor, ActorHandle, TaskSpawner},
-    constants::MAX_PENDING_EVENTS,
+    constants::{MAX_PENDING_EVENTS, MAX_TASKS_EVENTS},
 };
 
 pub trait EventBusMessage: Clone + Send + 'static {}
@@ -79,6 +80,7 @@ pub struct EventBusListener<T: EventBusMessage, E: EventHandler<T>> {
     spawner: TaskSpawner,
     receiver: broadcast::Receiver<T>,
     event_handler: E,
+    semaphore: Arc<Semaphore>,
     // Indicate if the event is critical or not and if the receiver can drop it safely or have to panic.
     critical: bool,
 }
@@ -94,6 +96,7 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
             spawner: spawner.with_group("event-handler-worker"),
             event_handler,
             receiver,
+            semaphore: Arc::new(Semaphore::new(MAX_TASKS_EVENTS)),
             critical,
         }
     }
@@ -103,13 +106,18 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
             match self.receiver.recv().await {
                 Ok(event) => {
                     let mut cloned_event_handler = self.event_handler.clone();
+                    let permit = Arc::clone(&self.semaphore)
+                        .acquire_owned()
+                        .await
+                        .expect("To acquire the permit");
                     self.spawner.spawn(async move {
                         match cloned_event_handler.handle_event(event).await {
                             Ok(_) => {}
                             Err(error) => {
                                 warn!("Task ended with error: {:?}", error);
                             }
-                        }
+                        };
+                        drop(permit);
                     });
                 }
                 Err(broadcast::error::RecvError::Lagged(_)) if self.critical => {
