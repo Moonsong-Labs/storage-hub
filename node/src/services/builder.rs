@@ -1,4 +1,5 @@
 use async_channel::Receiver;
+use log::info;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
 use serde::Deserialize;
@@ -14,14 +15,11 @@ use shc_blockchain_service::{
 };
 use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
-use shc_file_transfer_service::{
-    handler::FileTransferServiceConfig, spawn_file_transfer_service, FileTransferService,
-};
+use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::StorageHubClientRpcConfig;
 
-/// TODO: CONSTANTS
-const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 60;
+const LOG_TARGET: &str = "storage_hub_builder";
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
@@ -57,7 +55,6 @@ where
     forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
     max_storage_capacity: Option<StorageDataUnit>,
     jump_capacity: Option<StorageDataUnit>,
-    extrinsic_retry_timeout: u64,
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
     // Configuration options for tasks and services
@@ -69,7 +66,6 @@ where
     bsp_charge_fees_config: Option<BspChargeFeesConfig>,
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig>,
-    file_transfer_service_config: Option<FileTransferServiceConfig>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -87,7 +83,6 @@ where
             forest_storage_handler: None,
             max_storage_capacity: None,
             jump_capacity: None,
-            extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
             indexer_db_pool: None,
             notify_period: None,
             msp_delete_file_config: None,
@@ -98,7 +93,6 @@ where
             bsp_charge_fees_config: None,
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
-            file_transfer_service_config: None,
         }
     }
 
@@ -143,14 +137,6 @@ where
     /// its on-chain capacity by 1k units.
     pub fn with_jump_capacity(&mut self, jump_capacity: Option<StorageDataUnit>) -> &mut Self {
         self.jump_capacity = jump_capacity;
-        self
-    }
-
-    /// Set the timeout for retrying extrinsics.
-    ///
-    /// The default value is `60` seconds.
-    pub fn with_retry_timeout(&mut self, extrinsic_retry_timeout: u64) -> &mut Self {
-        self.extrinsic_retry_timeout = extrinsic_retry_timeout;
         self
     }
 
@@ -352,20 +338,15 @@ where
     /// Set configuration options for the blockchain service.
     pub fn with_blockchain_service_config(
         &mut self,
-        _config: BlockchainServiceOptions,
+        config: BlockchainServiceOptions,
     ) -> &mut Self {
-        let blockchain_service_config = BlockchainServiceConfig::default();
-        self.blockchain_service_config = Some(blockchain_service_config);
-        self
-    }
+        let mut blockchain_service_config = BlockchainServiceConfig::default();
 
-    /// Set configuration options for the file transfer service.
-    pub fn with_file_transfer_service_config(
-        &mut self,
-        _config: FileTransferServiceOptions,
-    ) -> &mut Self {
-        let file_transfer_service_config = FileTransferServiceConfig::default();
-        self.file_transfer_service_config = Some(file_transfer_service_config);
+        if let Some(extrinsic_retry_timeout) = config.extrinsic_retry_timeout {
+            blockchain_service_config.extrinsic_retry_timeout = extrinsic_retry_timeout;
+        }
+
+        self.blockchain_service_config = Some(blockchain_service_config);
         self
     }
 }
@@ -459,7 +440,7 @@ where
     <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
 {
     fn build(self) -> StorageHubHandler<(BspProvider, S)> {
-        StorageHubHandler::new(
+        let handler = StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -485,7 +466,6 @@ where
                     .max_storage_capacity
                     .expect("Max Storage Capacity not set"),
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
                 msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
                 msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
                 msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
@@ -494,10 +474,13 @@ where
                 bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
                 bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
-                file_transfer_service: self.file_transfer_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
-        )
+        );
+
+        info!(target: LOG_TARGET, "StorageHubHandler configurations: {:?}", handler);
+
+        handler
     }
 }
 
@@ -507,7 +490,7 @@ where
     <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
 {
     fn build(self) -> StorageHubHandler<(MspProvider, S)> {
-        StorageHubHandler::new(
+        let handler = StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -533,7 +516,6 @@ where
                     .max_storage_capacity
                     .expect("Max Storage Capacity not set"),
                 jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
                 msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
                 msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
                 msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
@@ -542,10 +524,13 @@ where
                 bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
                 bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
-                file_transfer_service: self.file_transfer_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
-        )
+        );
+
+        info!(target: LOG_TARGET, "StorageHubHandler configurations: {:?}", handler);
+
+        handler
     }
 }
 
@@ -556,7 +541,7 @@ where
         ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer)> {
-        StorageHubHandler::new(
+        let handler = StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -579,7 +564,6 @@ where
             ProviderConfig {
                 max_storage_capacity: 0,
                 jump_capacity: 0,
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
                 msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
                 msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
                 msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
@@ -588,10 +572,13 @@ where
                 bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
                 bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
-                file_transfer_service: self.file_transfer_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
-        )
+        );
+
+        info!(target: LOG_TARGET, "StorageHubHandler configurations: {:?}", handler);
+
+        handler
     }
 }
 
@@ -664,13 +651,8 @@ pub struct BspSubmitProofOptions {
 /// Configuration options for the Blockchain Service.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct BlockchainServiceOptions {
-    // Reserved for future blockchain service configuration options
-}
-
-/// Configuration options for the File Transfer Service.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct FileTransferServiceOptions {
-    // Reserved for future file transfer service configuration options
+    /// Extrinsic retry timeout in seconds.
+    pub extrinsic_retry_timeout: Option<u64>,
 }
 
 /// Configuration for the indexer.

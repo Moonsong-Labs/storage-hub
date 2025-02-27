@@ -17,8 +17,8 @@ use crate::{
     service::new_partial,
     services::builder::{
         BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions,
-        BspSubmitProofOptions, BspUploadFileOptions, FileTransferServiceOptions,
-        MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
+        BspSubmitProofOptions, BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions,
+        MspMoveBucketOptions,
     },
 };
 
@@ -35,13 +35,9 @@ pub struct ProviderOptions {
     pub max_storage_capacity: Option<StorageDataUnit>,
     /// Jump capacity (bytes).
     pub jump_capacity: Option<StorageDataUnit>,
-    /// Extrinsic retry timeout in seconds.
-    pub extrinsic_retry_timeout: u64,
     /// MSP charging fees frequency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msp_charging_period: Option<u32>,
-
-    // Task-specific configuration options
     /// Configuration options for MSP delete file task.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msp_delete_file: Option<MspDeleteFileOptions>,
@@ -63,14 +59,9 @@ pub struct ProviderOptions {
     /// Configuration options for BSP submit proof task.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bsp_submit_proof: Option<BspSubmitProofOptions>,
-
-    // Service-specific configuration options
     /// Configuration options for blockchain service.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub blockchain_service: Option<BlockchainServiceOptions>,
-    /// Configuration options for file transfer service.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_transfer_service: Option<FileTransferServiceOptions>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

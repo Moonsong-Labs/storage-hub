@@ -38,11 +38,7 @@ max_submission_attempts = 5
 
 # Configuration for the Blockchain Service
 [provider.blockchain_service]
-# Currently no settings needed, reserved for future use
-
-# Configuration for the File Transfer Service
-[provider.file_transfer_service]
-# Currently no settings needed, reserved for future use
+extrinsic_retry_timeout = 60
 
 # Optional indexer configuration
 [indexer]

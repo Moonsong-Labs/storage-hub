@@ -217,6 +217,7 @@ where
                     .with_timeout(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
+                            .blockchain_service
                             .extrinsic_retry_timeout,
                     ))
                     .retry_only_if_timeout(),

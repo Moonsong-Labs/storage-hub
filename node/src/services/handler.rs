@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    fmt::{self, Debug},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 
 use shc_actors_framework::{
@@ -23,7 +26,6 @@ use shc_blockchain_service::{
 use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest},
-    handler::FileTransferServiceConfig,
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -54,7 +56,7 @@ use crate::{
 };
 
 /// Configuration parameters for Storage Providers.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ProviderConfig {
     /// Maximum storage capacity of the provider (bytes).
     ///
@@ -64,8 +66,6 @@ pub struct ProviderConfig {
     ///
     /// Storage capacity increases in jumps of this size.
     pub jump_capacity: StorageDataUnit,
-    /// The time in seconds to wait before retrying an extrinsic.
-    pub extrinsic_retry_timeout: u64,
     /// Configuration for MSP delete file task.
     pub msp_delete_file: MspDeleteFileConfig,
     /// Configuration for MSP charge fees task.
@@ -82,8 +82,6 @@ pub struct ProviderConfig {
     pub bsp_submit_proof: BspSubmitProofConfig,
     /// Configuration for blockchain service.
     pub blockchain_service: BlockchainServiceConfig,
-    /// Configuration for file transfer service.
-    pub file_transfer_service: FileTransferServiceConfig,
 }
 
 /// Represents the handler for the Storage Hub service.
@@ -105,6 +103,17 @@ where
     pub provider_config: ProviderConfig,
     /// The indexer database pool.
     pub indexer_db_pool: Option<DbPool>,
+}
+
+impl<NT> Debug for StorageHubHandler<NT>
+where
+    NT: ShNodeType,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StorageHubHandler")
+            .field("provider_config", &self.provider_config)
+            .finish()
+    }
 }
 
 impl<NT> Clone for StorageHubHandler<NT>

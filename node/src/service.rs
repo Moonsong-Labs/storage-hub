@@ -214,7 +214,6 @@ where
             storage_path,
             max_storage_capacity,
             jump_capacity,
-            extrinsic_retry_timeout,
             msp_charging_period,
             msp_delete_file,
             msp_charge_fees,
@@ -224,7 +223,6 @@ where
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
-            file_transfer_service,
             ..
         }) => {
             info!(
@@ -252,45 +250,35 @@ where
             // Setup the `ShStorageLayer` and additional configuration parameters.
             storage_hub_builder
                 .setup_storage_layer(storage_path.clone())
-                .with_retry_timeout(*extrinsic_retry_timeout)
                 .with_max_storage_capacity(*max_storage_capacity)
                 .with_jump_capacity(*jump_capacity);
 
-            // Add task-specific configurations conditionally
-            if let Some(config) = msp_delete_file {
-                storage_hub_builder.with_msp_delete_file_config(config.clone());
+            if let Some(c) = msp_delete_file {
+                storage_hub_builder.with_msp_delete_file_config(c.clone());
             }
 
-            if let Some(config) = msp_charge_fees {
-                storage_hub_builder.with_msp_charge_fees_config(config.clone());
+            if let Some(c) = msp_charge_fees {
+                storage_hub_builder.with_msp_charge_fees_config(c.clone());
             }
 
-            if let Some(config) = msp_move_bucket {
-                storage_hub_builder.with_msp_move_bucket_config(config.clone());
+            if let Some(c) = msp_move_bucket {
+                storage_hub_builder.with_msp_move_bucket_config(c.clone());
             }
 
-            if let Some(config) = bsp_upload_file {
-                storage_hub_builder.with_bsp_upload_file_config(config.clone());
+            if let Some(c) = bsp_upload_file {
+                storage_hub_builder.with_bsp_upload_file_config(c.clone());
             }
 
-            if let Some(config) = bsp_move_bucket {
-                storage_hub_builder.with_bsp_move_bucket_config(config.clone());
+            if let Some(c) = bsp_move_bucket {
+                storage_hub_builder.with_bsp_move_bucket_config(c.clone());
             }
 
-            if let Some(config) = bsp_charge_fees {
-                storage_hub_builder.with_bsp_charge_fees_config(config.clone());
+            if let Some(c) = bsp_charge_fees {
+                storage_hub_builder.with_bsp_charge_fees_config(c.clone());
             }
 
-            if let Some(config) = bsp_submit_proof {
-                storage_hub_builder.with_bsp_submit_proof_config(config.clone());
-            }
-
-            if let Some(config) = blockchain_service {
-                storage_hub_builder.with_blockchain_service_config(config.clone());
-            }
-
-            if let Some(config) = file_transfer_service {
-                storage_hub_builder.with_file_transfer_service_config(config.clone());
+            if let Some(c) = bsp_submit_proof {
+                storage_hub_builder.with_bsp_submit_proof_config(c.clone());
             }
 
             // Setup specific configuration for the MSP node.
@@ -298,6 +286,10 @@ where
                 storage_hub_builder
                     .with_notify_period(*msp_charging_period)
                     .with_indexer_db_pool(maybe_db_pool);
+            }
+
+            if let Some(c) = blockchain_service {
+                storage_hub_builder.with_blockchain_service_config(c.clone());
             }
 
             // Get the RPC configuration to use for this StorageHub node client.

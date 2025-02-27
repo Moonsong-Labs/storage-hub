@@ -6,8 +6,9 @@ use storage_hub_runtime::StorageDataUnit;
 use crate::{
     command::ProviderOptions,
     services::builder::{
-        BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions, BspUploadFileOptions,
-        MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
+        BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions,
+        BspSubmitProofOptions, BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions,
+        MspMoveBucketOptions,
     },
 };
 
@@ -122,14 +123,22 @@ pub struct ProviderConfigurations {
     pub provider_type: Option<ProviderType>,
 
     /// Maximum storage capacity of the provider (bytes).
-    #[clap(long, required_if_eq_any([
+    #[clap(long, required_if_eq_all([
         ("provider", "true"),
+        ("provider_type", "msp"),
+    ]), required_if_eq_all([
+        ("provider", "true"),
+        ("provider_type", "bsp"),
     ]))]
     pub max_storage_capacity: Option<StorageDataUnit>,
 
     /// Jump capacity (bytes).
-    #[clap(long, required_if_eq_any([
+    #[clap(long, required_if_eq_all([
         ("provider", "true"),
+        ("provider_type", "msp"),
+    ]), required_if_eq_all([
+        ("provider", "true"),
+        ("provider_type", "bsp"),
     ]))]
     pub jump_capacity: Option<StorageDataUnit>,
 
@@ -149,7 +158,7 @@ pub struct ProviderConfigurations {
 
     /// Extrinsic retry timeout in seconds.
     #[clap(long, default_value = "60")]
-    pub extrinsic_retry_timeout: u64,
+    pub extrinsic_retry_timeout: Option<u64>,
 
     /// MSP charging fees period (in blocks).
     /// Setting it to 600 with a block every 6 seconds will charge user every hour.
@@ -464,6 +473,13 @@ impl ProviderConfigurations {
             }
         }
 
+        let mut blockchain_service = None;
+        if let Some(extrinsic_retry_timeout) = self.extrinsic_retry_timeout {
+            let mut default_config = BlockchainServiceOptions::default();
+            default_config.extrinsic_retry_timeout = Some(extrinsic_retry_timeout);
+            blockchain_service = Some(default_config);
+        }
+
         ProviderOptions {
             provider_type,
             storage_layer: self
@@ -473,7 +489,6 @@ impl ProviderConfigurations {
             storage_path: self.storage_path.clone(),
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
-            extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             msp_charging_period: self.msp_charging_period,
             msp_delete_file,
             msp_charge_fees,
@@ -482,8 +497,7 @@ impl ProviderConfigurations {
             bsp_move_bucket,
             bsp_charge_fees,
             bsp_submit_proof,
-            blockchain_service: None, // Default to None as we don't set this from CLI
-            file_transfer_service: None, // Default to None as we don't set this from CLI
+            blockchain_service,
         }
     }
 }

@@ -38,7 +38,6 @@ use sc_network::{
 };
 use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
-use serde::Deserialize;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{
@@ -786,16 +785,5 @@ impl FileTransferService {
             // Update the expiration to check.
             bucket_to_check = self.bucket_allow_list_grace_period_time.first();
         }
-    }
-}
-
-/// Configuration for the file transfer service
-/// Currently no configuration parameters, reserved for future use
-#[derive(Debug, Clone, Deserialize)]
-pub struct FileTransferServiceConfig {}
-
-impl Default for FileTransferServiceConfig {
-    fn default() -> Self {
-        Self {}
     }
 }

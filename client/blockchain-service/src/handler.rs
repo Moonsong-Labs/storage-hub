@@ -167,6 +167,20 @@ where
     pub(crate) notify_period: Option<u32>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlockchainServiceConfig {
+    /// Extrinsic retry timeout in seconds.
+    pub extrinsic_retry_timeout: u64,
+}
+
+impl Default for BlockchainServiceConfig {
+    fn default() -> Self {
+        Self {
+            extrinsic_retry_timeout: 60,
+        }
+    }
+}
+
 /// Event loop for the BlockchainService actor.
 pub struct BlockchainServiceEventLoop<FSH>
 where
@@ -1784,16 +1798,5 @@ where
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
-    }
-}
-
-/// Configuration for the blockchain service
-/// Currently no configuration parameters, reserved for future use
-#[derive(Debug, Clone, Deserialize)]
-pub struct BlockchainServiceConfig {}
-
-impl Default for BlockchainServiceConfig {
-    fn default() -> Self {
-        Self {}
     }
 }
