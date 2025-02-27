@@ -16,8 +16,9 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetCheckpointChallengesError, GetProofSubmissionRecordError,
 };
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsOfUserStoredByMspError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
@@ -206,6 +207,12 @@ pub enum BlockchainServiceCommand {
         request: CapacityRequestData,
         callback:
             tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<Result<(), anyhow::Error>>>,
+    },
+    QueryBucketsOfUserStoredByMsp {
+        msp_id: ProviderId,
+        user: AccountId,
+        callback:
+            tokio::sync::oneshot::Sender<Result<Vec<BucketId>, QueryBucketsOfUserStoredByMspError>>,
     },
 }
 
@@ -409,6 +416,13 @@ pub trait BlockchainServiceInterface {
         &self,
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
     ) -> Result<()>;
+
+    /// Helper function to query all the buckets stored by an MSP that belong to a specific user.
+    async fn query_buckets_of_user_stored_by_msp(
+        &self,
+        msp_id: ProviderId,
+        user: AccountId,
+    ) -> Result<Vec<BucketId>, QueryBucketsOfUserStoredByMspError>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -920,6 +934,22 @@ where
         let (callback, rx) = tokio::sync::oneshot::channel();
         let message = BlockchainServiceCommand::ReleaseForestRootWriteLock {
             forest_root_write_tx,
+            callback,
+        };
+        self.send(message).await;
+        rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.")
+    }
+
+    /// Helper function to query all the buckets stored by an MSP that belong to a specific user.
+    async fn query_buckets_of_user_stored_by_msp(
+        &self,
+        msp_id: ProviderId,
+        user: AccountId,
+    ) -> Result<Vec<BucketId>, QueryBucketsOfUserStoredByMspError> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        let message = BlockchainServiceCommand::QueryBucketsOfUserStoredByMsp {
+            msp_id,
+            user,
             callback,
         };
         self.send(message).await;
