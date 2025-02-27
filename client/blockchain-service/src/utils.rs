@@ -800,159 +800,28 @@ where
             trace!(target: LOG_TARGET, "Applying Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
         }
 
-        // Preemptively getting the Buckets managed by this node, in case it is an MSP, so that we
-        // do the query just once, instead of doing it for every event.
-        let buckets_managed_by_msp = if let Some(StorageProviderId::MainStorageProvider(msp_id)) =
-            &self.maybe_managed_provider
-        {
-            self.client
-                    .runtime_api()
-                    .query_buckets_for_msp(block.hash, msp_id)
-                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", msp_id, e))
-                    .ok()
-                    .and_then(|api_result| {
-                        api_result
-                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", msp_id, e))
-                            .ok()
-                    })
-        } else {
-            None
-        };
-
         // Process the events in the block, specifically those that are related to the Forest root changes.
         match get_events_at_block(&self.client, &block.hash) {
             Ok(events) => {
                 for ev in events {
-                    match ev.event.clone() {
-                        RuntimeEvent::ProofsDealer(
-                            pallet_proofs_dealer::Event::MutationsAppliedForProvider {
-                                provider_id,
-                                mutations,
-                                old_root,
-                                new_root,
-                            },
-                        ) => {
-                            // This event is relevant in case the Provider managed is a BSP.
-                            if let Some(StorageProviderId::BackupStorageProvider(bsp_id)) =
-                                &self.maybe_managed_provider
-                            {
-                                // Check if the `provider_id` is the BSP that this node is managing.
-                                if provider_id != *bsp_id {
-                                    debug!(target: LOG_TARGET, "Provider ID [{:?}] is not the BSP ID [{:?}] that this node is managing. Skipping mutations applied event.", provider_id, bsp_id);
-                                    continue;
-                                }
-
-                                debug!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
-                                debug!(target: LOG_TARGET, "Mutations: {:?}", mutations);
-
-                                // Apply forest root changes to the BSP's Forest Storage.
-                                // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
-                                // and not to the File Storage.
-                                // This is because if in a future block built on top of this one, the BSP needs to provide
-                                // a proof, it will be against the Forest root with this change applied.
-                                // For file deletions, we will remove the file from the File Storage only after finality is reached.
-                                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                                let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-                                if let Err(e) = self
-                                    .apply_forest_mutations_and_verify_root(
-                                        current_forest_key,
-                                        &mutations,
-                                        revert,
-                                        old_root,
-                                        new_root,
-                                    )
-                                    .await
-                                {
-                                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for BSP [{:?}]. \nError: {:?}", provider_id, e);
-                                    return;
-                                };
-
-                                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
+                    if let Some(managed_provider) = &self.maybe_managed_provider {
+                        match managed_provider {
+                            ManagedProvider::Bsp(_) => {
+                                self.bsp_process_forest_root_changing_events(
+                                    ev.event.clone(),
+                                    revert,
+                                )
+                                .await;
+                            }
+                            ManagedProvider::Msp(_) => {
+                                self.msp_process_forest_root_changing_events(
+                                    &block.hash,
+                                    ev.event.clone(),
+                                    revert,
+                                )
+                                .await;
                             }
                         }
-                        RuntimeEvent::ProofsDealer(
-                            pallet_proofs_dealer::Event::MutationsApplied {
-                                mutations,
-                                old_root,
-                                new_root,
-                                event_info,
-                            },
-                        ) => {
-                            // This event is relevant in case the Provider managed is an MSP.
-                            // In which case the mutations are applied to a Bucket's Forest root.
-                            if let Some(StorageProviderId::MainStorageProvider(_)) =
-                                &self.maybe_managed_provider
-                            {
-                                // Check that this MSP is managing at least one bucket.
-                                if buckets_managed_by_msp.is_none() {
-                                    debug!(target: LOG_TARGET, "MSP is not managing any buckets. Skipping mutations applied event.");
-                                    continue;
-                                }
-                                let buckets_managed_by_msp = buckets_managed_by_msp
-                                    .as_ref()
-                                    .expect("Just checked that this is not None; qed");
-                                if buckets_managed_by_msp.is_empty() {
-                                    debug!(target: LOG_TARGET, "Buckets managed by MSP is an empty vector. Skipping mutations applied event.");
-                                    continue;
-                                }
-
-                                // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
-                                // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
-                                // in the `event_info` field.
-                                if event_info.is_none() {
-                                    error!(target: LOG_TARGET, "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated. This should never happen. This is a bug. Please report it to the StorageHub team.");
-                                    continue;
-                                }
-                                let event_info =
-                                    event_info.expect("Just checked that this is not None; qed");
-                                let bucket_id = match self
-                                    .client
-                                    .runtime_api()
-                                    .decode_generic_apply_delta_event_info(block.hash, event_info)
-                                {
-                                    Ok(runtime_api_result) => match runtime_api_result {
-                                        Ok(bucket_id) => bucket_id,
-                                        Err(e) => {
-                                            error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
-                                            continue;
-                                        }
-                                    },
-                                    Err(e) => {
-                                        error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
-                                        continue;
-                                    }
-                                };
-
-                                // Check if Bucket is managed by this MSP.
-                                if !buckets_managed_by_msp.contains(&bucket_id) {
-                                    debug!(target: LOG_TARGET, "Bucket [{:?}] is not managed by this MSP. Skipping mutations applied event.", bucket_id);
-                                    continue;
-                                }
-
-                                // Apply forest root changes to the Bucket's Forest Storage.
-                                // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
-                                // and not to the File Storage.
-                                // For file deletions, we will remove the file from the File Storage only after finality is reached.
-                                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                                let bucket_forest_key = bucket_id.as_ref().to_vec();
-                                if let Err(e) = self
-                                    .apply_forest_mutations_and_verify_root(
-                                        bucket_forest_key,
-                                        &mutations,
-                                        revert,
-                                        old_root,
-                                        new_root,
-                                    )
-                                    .await
-                                {
-                                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
-                                    return;
-                                };
-
-                                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
-                            }
-                        }
-                        _ => {}
                     }
                 }
             }
@@ -972,7 +841,7 @@ where
     /// Forest root will be verified against the `new_root` Forest root.
     ///
     /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`.
-    async fn apply_forest_mutations_and_verify_root(
+    pub(crate) async fn apply_forest_mutations_and_verify_root(
         &self,
         forest_key: Vec<u8>,
         mutations: &[(H256, TrieMutation)],

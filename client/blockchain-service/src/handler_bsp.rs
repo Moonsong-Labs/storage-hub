@@ -1,16 +1,18 @@
-use log::{debug, error, trace};
+use log::{debug, error, info, trace};
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi;
 use pallet_proofs_dealer_runtime_api::{GetChallengePeriodError, GetChallengeSeedError};
 use sc_client_api::HeaderBackend;
-use shc_actors_framework::actor::Actor;
-use shc_common::types::{BlockNumber, MaxBatchConfirmStorageRequests};
-use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
 use sp_core::{Get, H256};
 use sp_runtime::traits::Zero;
 use storage_hub_runtime::RuntimeEvent;
 use tokio::sync::oneshot::error::TryRecvError;
+
+use shc_actors_framework::actor::Actor;
+use shc_common::consts::CURRENT_FOREST_KEY;
+use shc_common::types::{BlockNumber, MaxBatchConfirmStorageRequests};
+use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::events::{
     BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
@@ -382,6 +384,65 @@ where
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
             self.emit_forest_write_event(event_data);
+        }
+    }
+
+    pub(crate) async fn bsp_process_forest_root_changing_events(
+        &self,
+        event: RuntimeEvent,
+        revert: bool,
+    ) {
+        let managed_bsp_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => &bsp_handler.bsp_id,
+            _ => {
+                error!(target: LOG_TARGET, "`bsp_process_forest_root_changing_events` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        match event {
+            RuntimeEvent::ProofsDealer(
+                pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                    provider_id,
+                    mutations,
+                    old_root,
+                    new_root,
+                },
+            ) => {
+                // Check if the `provider_id` is the BSP that this node is managing.
+                if provider_id != *managed_bsp_id {
+                    debug!(target: LOG_TARGET, "Provider ID [{:?}] is not the BSP ID [{:?}] that this node is managing. Skipping mutations applied event.", provider_id, managed_bsp_id);
+                    return;
+                }
+
+                debug!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
+                debug!(target: LOG_TARGET, "Mutations: {:?}", mutations);
+
+                // Apply forest root changes to the BSP's Forest Storage.
+                // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
+                // and not to the File Storage.
+                // This is because if in a future block built on top of this one, the BSP needs to provide
+                // a proof, it will be against the Forest root with this change applied.
+                // For file deletions, we will remove the file from the File Storage only after finality is reached.
+                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+                let current_forest_key = CURRENT_FOREST_KEY.to_vec();
+                if let Err(e) = self
+                    .apply_forest_mutations_and_verify_root(
+                        current_forest_key,
+                        &mutations,
+                        revert,
+                        old_root,
+                        new_root,
+                    )
+                    .await
+                {
+                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for BSP [{:?}]. \nError: {:?}", provider_id, e);
+                    return;
+                };
+
+                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
+            }
+            _ => {}
         }
     }
 

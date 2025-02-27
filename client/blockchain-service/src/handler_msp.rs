@@ -1,12 +1,16 @@
-use log::{error, trace};
+use log::{debug, error, info, trace};
 use sc_client_api::HeaderBackend;
-use shc_actors_framework::actor::Actor;
-use shc_common::types::BlockNumber;
-use shc_forest_manager::traits::ForestStorageHandler;
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
 use storage_hub_runtime::RuntimeEvent;
+use sp_api::ProvideRuntimeApi;
 use tokio::sync::oneshot::error::TryRecvError;
+
+use shc_actors_framework::actor::Actor;
+use shc_common::types::{BlockHash, BlockNumber};
+use shc_forest_manager::traits::ForestStorageHandler;
+use pallet_file_system_runtime_api::FileSystemApi;
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 
 use crate::{
     events::{
@@ -328,6 +332,113 @@ where
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
             self.emit_forest_write_event(event_data);
+        }
+    }
+
+    pub(crate) async fn msp_process_forest_root_changing_events(
+        &self,
+        block_hash: &BlockHash,
+        event: RuntimeEvent,
+        revert: bool,
+    ) {
+        let managed_msp_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
+            _ => {
+                error!(target: LOG_TARGET, "`msp_process_forest_root_changing_events` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        // Preemptively getting the Buckets managed by this MSP, so that we do the query just once,
+        // instead of doing it for every event.
+        let buckets_managed_by_msp = 
+            self.client
+                    .runtime_api()
+                    .query_buckets_for_msp(*block_hash, managed_msp_id)
+                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                    .ok()
+                    .and_then(|api_result| {
+                        api_result
+                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", managed_msp_id, e))
+                            .ok()
+                    });
+
+        match event {
+            RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
+                mutations,
+                old_root,
+                new_root,
+                event_info,
+            }) => {
+                // The mutations are applied to a Bucket's Forest root.
+                // Check that this MSP is managing at least one bucket.
+                if buckets_managed_by_msp.is_none() {
+                    debug!(target: LOG_TARGET, "MSP is not managing any buckets. Skipping mutations applied event.");
+                    return;
+                }
+                let buckets_managed_by_msp = buckets_managed_by_msp
+                    .as_ref()
+                    .expect("Just checked that this is not None; qed");
+                if buckets_managed_by_msp.is_empty() {
+                    debug!(target: LOG_TARGET, "Buckets managed by MSP is an empty vector. Skipping mutations applied event.");
+                    return;
+                }
+
+                // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
+                // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
+                // in the `event_info` field.
+                if event_info.is_none() {
+                    error!(target: LOG_TARGET, "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated. This should never happen. This is a bug. Please report it to the StorageHub team.");
+                    return;
+                }
+                let event_info = event_info.expect("Just checked that this is not None; qed");
+                let bucket_id = match self
+                    .client
+                    .runtime_api()
+                    .decode_generic_apply_delta_event_info(*block_hash, event_info)
+                {
+                    Ok(runtime_api_result) => match runtime_api_result {
+                        Ok(bucket_id) => bucket_id,
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
+                            return;
+                        }
+                    },
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
+                        return;
+                    }
+                };
+
+                // Check if Bucket is managed by this MSP.
+                if !buckets_managed_by_msp.contains(&bucket_id) {
+                    debug!(target: LOG_TARGET, "Bucket [{:?}] is not managed by this MSP. Skipping mutations applied event.", bucket_id);
+                    return;
+                }
+
+                // Apply forest root changes to the Bucket's Forest Storage.
+                // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
+                // and not to the File Storage.
+                // For file deletions, we will remove the file from the File Storage only after finality is reached.
+                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
+                let bucket_forest_key = bucket_id.as_ref().to_vec();
+                if let Err(e) = self
+                    .apply_forest_mutations_and_verify_root(
+                        bucket_forest_key,
+                        &mutations,
+                        revert,
+                        old_root,
+                        new_root,
+                    )
+                    .await
+                {
+                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
+                    return;
+                };
+
+                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
+            }
+            _ => {}
         }
     }
 }
