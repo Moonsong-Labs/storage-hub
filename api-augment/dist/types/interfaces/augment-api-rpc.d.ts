@@ -1202,10 +1202,10 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
        **/
       removeBcsvKeys: AugmentedRpc<(keystore_path: Text | string) => Observable<ITuple<[]>>>;
       /**
-       * Remove a file from the file storage. Useful when doing manual maintenance.
+       * Remove a list of files from the file storage. Useful when doing manual maintenance.
        **/
-      removeFileFromFileStorage: AugmentedRpc<
-        (file_key: H256 | string | Uint8Array) => Observable<ITuple<[]>>
+      removeFilesFromFileStorage: AugmentedRpc<
+        (file_keys: Vec<H256> | (H256 | string | Uint8Array)[]) => Observable<ITuple<[]>>
       >;
       /**
        * Remove files from the forest storage. Useful when doing manual maintenance.
@@ -1215,6 +1215,12 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
           forest_key: Option<H256> | null | Uint8Array | H256 | string,
           file_keys: Vec<H256> | (H256 | string | Uint8Array)[]
         ) => Observable<RemoveFilesFromForestStorageResult>
+      >;
+      /**
+       * Remove all files under a prefix from the file storage. Useful when doing manual maintenance.
+       **/
+      removeFilesWithPrefixFromFileStorage: AugmentedRpc<
+        (prefix: H256 | string | Uint8Array) => Observable<ITuple<[]>>
       >;
       /**
        * Remove key from exclude list

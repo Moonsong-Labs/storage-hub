@@ -23,11 +23,23 @@ export const rpcDefinitions = {
       ],
       type: "LoadFileInStorageResult"
     },
-    removeFileFromFileStorage: {
-      description: "Remove a file from the file storage. Useful when doing manual maintenance.",
+    removeFilesFromFileStorage: {
+      description:
+        "Remove a list of files from the file storage. Useful when doing manual maintenance.",
       params: [
         {
-          name: "file_key",
+          name: "file_keys",
+          type: "Vec<H256>"
+        }
+      ],
+      type: "()"
+    },
+    removeFilesWithPrefixFromFileStorage: {
+      description:
+        "Remove all files under a prefix from the file storage. Useful when doing manual maintenance.",
+      params: [
+        {
+          name: "prefix",
           type: "H256"
         }
       ],
