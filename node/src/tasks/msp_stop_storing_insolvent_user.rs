@@ -138,7 +138,7 @@ where
 
                     // Spawn a task to stop storing the bucket.
                     tokio::spawn(async move {
-                        // Try to acquire the semaphore. This is done to avoid having more concurrent tasks that the set limit.
+                        // Try to acquire the semaphore. This is done to avoid having more concurrent tasks than the set limit.
                         let _permit = semaphore
                             .acquire()
                             .await
