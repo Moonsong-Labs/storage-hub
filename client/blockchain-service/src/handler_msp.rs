@@ -58,14 +58,18 @@ where
         match event {
             RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
                 bucket_id,
-                msp_id,
+                old_msp_id: _,
+                new_msp_id,
                 value_prop_id,
             }) => {
-                // As an MSP, this node is interested in the event only if this node is the new MSP.
-                if managed_msp_id == &msp_id {
+                // As an MSP, this node is interested in the *imported* event if
+                // this node is the new MSP - to start downloading the bucket.
+                // Otherwise, ignore the event. Check finalised events for the old
+                // MSP branch.
+                if managed_msp_id == &new_msp_id {
                     self.emit(StartMovedBucketDownload {
-                        bucket_id: bucket_id,
-                        value_prop_id: value_prop_id,
+                        bucket_id,
+                        value_prop_id,
                     });
                 }
             }
