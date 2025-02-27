@@ -1,9 +1,7 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{
-    commands::BlockchainServiceInterface, events::NotifyPeriod, types::SendExtrinsicOptions,
-};
+use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NotifyPeriod};
 use shc_common::types::{MaxUsersToCharge, StorageProviderId};
 use sp_core::Get;
 
@@ -131,7 +129,7 @@ where
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, SendExtrinsicOptions::default())
+                .send_extrinsic(call, Default::default())
                 .await;
 
             match charging_result {

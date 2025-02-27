@@ -3,6 +3,7 @@
 // std
 use futures::{Stream, StreamExt};
 use log::info;
+use shc_blockchain_service::capacity_manager::CapacityConfig;
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
 use std::{cell::RefCell, env, path::PathBuf, sync::Arc, time::Duration};
@@ -250,8 +251,11 @@ where
             // Setup the `ShStorageLayer` and additional configuration parameters.
             storage_hub_builder
                 .setup_storage_layer(storage_path.clone())
-                .with_max_storage_capacity(*max_storage_capacity)
-                .with_jump_capacity(*jump_capacity);
+                .with_retry_timeout(*extrinsic_retry_timeout)
+                .with_capacity_config(Some(CapacityConfig::new(
+                    max_storage_capacity.unwrap_or_default(),
+                    jump_capacity.unwrap_or_default(),
+                )));
 
             if let Some(c) = msp_delete_file {
                 storage_hub_builder.with_msp_delete_file_config(c.clone());

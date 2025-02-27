@@ -6,7 +6,6 @@ use log::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface, events::MultipleNewChallengeSeeds,
-    types::SendExtrinsicOptions,
 };
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
@@ -70,7 +69,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, SendExtrinsicOptions::default())
+            .send_extrinsic(call, Default::default())
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler
