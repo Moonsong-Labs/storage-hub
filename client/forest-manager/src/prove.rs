@@ -10,8 +10,8 @@ use crate::{
 /// by attempting to find leaves that are exact matches or close neighbors to the challenged key.
 ///
 /// # Arguments
-/// * `trie` - A trie data structure from which an iterator is created.
-/// * `challenged_file_key` - The key for which the proof is being constructed. This function
+/// - `trie` - A trie data structure from which an iterator is created.
+/// - `challenged_file_key` - The key for which the proof is being constructed. This function
 ///   will seek this key within the trie to determine relational nodes.
 ///
 /// # Returns

@@ -25,7 +25,7 @@ pub trait Actor: Sized {
 
     /// Handles a message received by the actor.
     ///
-    /// * `message` - The message to be handled.
+    /// - `message` - The message to be handled.
     ///
     fn handle_message(
         &mut self,
@@ -47,8 +47,8 @@ pub trait Actor: Sized {
 pub trait ActorEventLoop<T: Actor> {
     /// Creates a new instance of the event loop.
     ///
-    /// * `actor` - The actor instance.
-    /// * `receiver` - The receiver for the actor's messages.
+    /// - `actor` - The actor instance.
+    /// - `receiver` - The receiver for the actor's messages.
     ///
     fn new(actor: T, receiver: sc_utils::mpsc::TracingUnboundedReceiver<T::Message>) -> Self;
 
