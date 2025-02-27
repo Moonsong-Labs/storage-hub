@@ -429,8 +429,8 @@ pub struct StartMovedBucketDownload {
 impl EventBusMessage for StartMovedBucketDownload {}
 
 /// Event emitted when a bucket is moved away from the current MSP to a new MSP.
-/// This event is emitted by the blockchain service when it receives a MoveBucketAccepted event
-/// and the current node is the old MSP that is losing the bucket.
+/// This event is emitted by the Blockchain Service when it processes a MoveBucketAccepted event
+/// on-chain, in a finalised block, and the current node is the old MSP that is losing the bucket.
 #[derive(Debug, Clone)]
 pub struct FinalisedBucketMovedAway {
     pub bucket_id: BucketId,
