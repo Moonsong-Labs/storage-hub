@@ -86,7 +86,8 @@ describeMspNet(
       // TODO: Wait for the container logs of starting up
       await userApi.docker.waitForLog({
         searchString: "💤 Idle (3 peers)",
-        containerName: "docker-sh-msp-1"
+        containerName: "docker-sh-msp-1",
+        tail: 10
       });
 
       // Doesn't work without this because there is no log that tell us when the websocket is ready

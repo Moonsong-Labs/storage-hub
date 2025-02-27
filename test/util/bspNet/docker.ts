@@ -247,13 +247,14 @@ export const waitForLog = async (options: {
   searchString: string;
   containerName: string;
   timeout?: number;
+  tail?: number;
 }): Promise<string> => {
   return new Promise((resolve, reject) => {
     const docker = new Docker();
     const container = docker.getContainer(options.containerName);
 
     container.logs(
-      { follow: true, stdout: true, stderr: true, tail: 10, timestamps: false }, // set tail default to 10 to get the 10 last lines of logs printed
+      { follow: true, stdout: true, stderr: true, tail: options.tail, timestamps: false }, // set tail default to 10 to get the 10 last lines of logs printed
       (err, stream) => {
         if (err) {
           return reject(err);
