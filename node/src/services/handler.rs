@@ -7,8 +7,8 @@ use shc_actors_framework::{
 };
 use shc_blockchain_service::{
     events::{
-        AcceptedBspVolunteer, BucketMovedAway, FileDeletionRequest,
-        FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        AcceptedBspVolunteer, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
+        FinalisedBucketMovedAway, FinalisedMspStoppedStoringBucket,
         FinalisedProofSubmittedForPendingFileDeletionRequest, LastChargeableInfoUpdated,
         MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested,
         MoveBucketRequestedForMsp, MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod,
@@ -230,12 +230,14 @@ where
             .subscribe_to(&self.task_spawner, &self.blockchain, true);
         finalised_msp_stopped_storing_bucket_event_bus_listener.start();
 
-        // Subscribing to BucketMovedAway event
-        let bucket_moved_away_event_bus_listener: EventBusListener<BucketMovedAway, _> =
-            msp_delete_bucket_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        bucket_moved_away_event_bus_listener.start();
+        // Subscribing to FinalisedBucketMovedAway event
+        let finalised_bucket_moved_away_event_bus_listener: EventBusListener<
+            FinalisedBucketMovedAway,
+            _,
+        > = msp_delete_bucket_task
+            .clone()
+            .subscribe_to(&self.task_spawner, &self.blockchain, true);
+        finalised_bucket_moved_away_event_bus_listener.start();
 
         // MspDeleteFileTask handles events for deleting individual files from an MSP.
         let msp_delete_file_task = MspDeleteFileTask::new(self.clone());

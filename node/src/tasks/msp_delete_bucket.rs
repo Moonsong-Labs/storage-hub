@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::events::{BucketMovedAway, FinalisedMspStoppedStoringBucket};
+use shc_blockchain_service::events::{FinalisedBucketMovedAway, FinalisedMspStoppedStoringBucket};
 use shc_common::types::BucketId;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -56,36 +56,14 @@ where
             storage_hub_handler,
         }
     }
-
-    /// Deletes all files in a bucket and removes the bucket's forest storage
-    async fn delete_bucket(&mut self, bucket_id: &BucketId) -> anyhow::Result<()> {
-        self.storage_hub_handler
-            .file_storage
-            .write()
-            .await
-            .delete_files_with_prefix(
-                &bucket_id
-                    .as_ref()
-                    .try_into()
-                    .map_err(|_| anyhow!("Invalid bucket id"))?,
-            )
-            .map_err(|e| anyhow!("Failed to delete files with prefix: {:?}", e))?;
-
-        self.storage_hub_handler
-            .forest_storage_handler
-            .remove_forest_storage(&bucket_id.as_ref().to_vec())
-            .await;
-
-        Ok(())
-    }
 }
 
-impl<NT> EventHandler<BucketMovedAway> for MspDeleteBucketTask<NT>
+impl<NT> EventHandler<FinalisedBucketMovedAway> for MspDeleteBucketTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
 {
-    async fn handle_event(&mut self, event: BucketMovedAway) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: FinalisedBucketMovedAway) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: bucket {:?} moved to MSP {:?}, starting cleanup",
@@ -144,6 +122,34 @@ where
             "MSP: successfully deleted bucket {:?} after stop storing",
             event.bucket_id,
         );
+
+        Ok(())
+    }
+}
+
+impl<NT> MspDeleteBucketTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    /// Deletes all files in a bucket and removes the bucket's forest storage
+    async fn delete_bucket(&mut self, bucket_id: &BucketId) -> anyhow::Result<()> {
+        self.storage_hub_handler
+            .file_storage
+            .write()
+            .await
+            .delete_files_with_prefix(
+                &bucket_id
+                    .as_ref()
+                    .try_into()
+                    .map_err(|_| anyhow!("Invalid bucket id"))?,
+            )
+            .map_err(|e| anyhow!("Failed to delete files with prefix: {:?}", e))?;
+
+        self.storage_hub_handler
+            .forest_storage_handler
+            .remove_forest_storage(&bucket_id.as_ref().to_vec())
+            .await;
 
         Ok(())
     }

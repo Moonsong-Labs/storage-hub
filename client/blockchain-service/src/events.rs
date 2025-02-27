@@ -422,13 +422,13 @@ impl EventBusMessage for StartMovedBucketDownload {}
 /// This event is emitted by the blockchain service when it receives a MoveBucketAccepted event
 /// and the current node is the old MSP that is losing the bucket.
 #[derive(Debug, Clone)]
-pub struct BucketMovedAway {
+pub struct FinalisedBucketMovedAway {
     pub bucket_id: BucketId,
     pub old_msp_id: ProviderId,
     pub new_msp_id: ProviderId,
 }
 
-impl EventBusMessage for BucketMovedAway {}
+impl EventBusMessage for FinalisedBucketMovedAway {}
 
 /// The event bus provider for the BlockchainService actor.
 ///
@@ -465,7 +465,7 @@ pub struct BlockchainServiceEventBusProvider {
     finalised_file_deletion_request_event_bus:
         EventBus<FinalisedProofSubmittedForPendingFileDeletionRequest>,
     start_moved_bucket_download_event_bus: EventBus<StartMovedBucketDownload>,
-    bucket_moved_away_event_bus: EventBus<BucketMovedAway>,
+    finalised_bucket_moved_away_event_bus: EventBus<FinalisedBucketMovedAway>,
 }
 
 impl BlockchainServiceEventBusProvider {
@@ -498,7 +498,7 @@ impl BlockchainServiceEventBusProvider {
             file_deletion_request_event_bus: EventBus::new(),
             finalised_file_deletion_request_event_bus: EventBus::new(),
             start_moved_bucket_download_event_bus: EventBus::new(),
-            bucket_moved_away_event_bus: EventBus::new(),
+            finalised_bucket_moved_away_event_bus: EventBus::new(),
         }
     }
 }
@@ -669,8 +669,8 @@ impl ProvidesEventBus<StartMovedBucketDownload> for BlockchainServiceEventBusPro
     }
 }
 
-impl ProvidesEventBus<BucketMovedAway> for BlockchainServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<BucketMovedAway> {
-        &self.bucket_moved_away_event_bus
+impl ProvidesEventBus<FinalisedBucketMovedAway> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<FinalisedBucketMovedAway> {
+        &self.finalised_bucket_moved_away_event_bus
     }
 }

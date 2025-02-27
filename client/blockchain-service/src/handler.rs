@@ -51,7 +51,7 @@ use crate::{
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
-        BucketMovedAway, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
+        FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
         FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
         FinalisedTrieRemoveMutationsApplied, LastChargeableInfoUpdated, MoveBucketAccepted,
         MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
@@ -1437,9 +1437,10 @@ where
                                         value_prop_id,
                                     });
                                 }
-                                // As an MSP, this node is interested in the event if:
-                                // 1. This node is the new MSP - to start downloading the bucket
-                                // 2. This node is the old MSP - to clean up the bucket
+                                // As an MSP, this node is interested in the *imported* event if
+                                // this node is the new MSP - to start downloading the bucket.
+                                // Otherwise, ignore the event. Check finalised events for the old
+                                // MSP branch.
                                 Some(StorageProviderId::MainStorageProvider(own_msp_id)) => {
                                     if own_msp_id == new_msp_id {
                                         // We are the new MSP, start downloading
@@ -1447,15 +1448,6 @@ where
                                             bucket_id,
                                             value_prop_id,
                                         });
-                                    } else {
-                                        if old_msp_id == Some(own_msp_id) {
-                                            // We are the old MSP, emit event to clean up
-                                            self.emit(BucketMovedAway {
-                                                bucket_id,
-                                                old_msp_id: own_msp_id,
-                                                new_msp_id: new_msp_id,
-                                            });
-                                        }
                                     }
                                 }
                                 // Otherwise, ignore the event.
@@ -1709,6 +1701,32 @@ where
                                 }
                                 // Otherwise, ignore the event.
                                 _ => {}
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketAccepted {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                                value_prop_id: _,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is the old MSP,
+                            // in which case we should clean up the bucket.
+                            // Note: we do this in finality to ensure we don't lose data in case
+                            // of a reorg.
+                            if let Some(StorageProviderId::MainStorageProvider(own_msp_id)) =
+                                &self.provider_id
+                            {
+                                if let Some(old_msp_id) = old_msp_id {
+                                if own_msp_id == &old_msp_id {
+                                    self.emit(FinalisedBucketMovedAway {
+                                            bucket_id,
+                                            old_msp_id,
+                                            new_msp_id,
+                                        });
+                                    }
+                                }
                             }
                         }
                         // Ignore all other events.
