@@ -41,7 +41,7 @@ use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     types::{
         BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId,
-        TickNumber, BCSV_KEY_TYPE,
+        StorageRequestMetadata, TickNumber, BCSV_KEY_TYPE,
     },
 };
 use shp_file_metadata::FileKey;
@@ -377,6 +377,28 @@ where
                             .or_insert_with(Vec::new)
                             .push(tx);
                     }
+
+                    match callback.send(rx) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Block message receiver sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send block message receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::WaitForNumBlocks {
+                    number_of_blocks,
+                    callback,
+                } => {
+                    let current_block_number = self.client.info().best_number;
+
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+
+                    self.wait_for_block_request_by_number
+                        .entry(current_block_number + number_of_blocks)
+                        .or_insert_with(Vec::new)
+                        .push(tx);
 
                     match callback.send(rx) {
                         Ok(_) => {
@@ -1196,9 +1218,43 @@ where
                 // TODO: Send events to check that this node has a Forest Storage for the BSP that it manages.
                 // TODO: Catch up to Forest root writes in the BSP Forest.
             }
-            Some(StorageProviderId::MainStorageProvider(_msp_id)) => {
+            Some(StorageProviderId::MainStorageProvider(msp_id)) => {
                 // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
                 // TODO: Catch up to Forest root writes in the Bucket's Forests.
+
+                info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
+
+                let storage_requests: BTreeMap<H256, StorageRequestMetadata> = match self
+                    .client
+                    .runtime_api()
+                    .pending_storage_requests_by_msp(block_hash, msp_id)
+                {
+                    Ok(sr) => sr,
+                    Err(_) => {
+                        // If querying for pending storage requests fail, do not try to answer them
+                        warn!(target: LOG_TARGET, "Failed to get pending storage request");
+                        return;
+                    }
+                };
+
+                info!(
+                    "We have {} pending storage requests",
+                    storage_requests.len()
+                );
+
+                // loop over each pending storage requests to start a new storage request task for the MSP
+                for (file_key, sr) in storage_requests {
+                    self.emit(NewStorageRequest {
+                        who: sr.owner,
+                        file_key: file_key.into(),
+                        bucket_id: sr.bucket_id,
+                        location: sr.location,
+                        fingerprint: Fingerprint::from(sr.fingerprint.as_bytes()),
+                        size: sr.size,
+                        user_peer_ids: sr.user_peer_ids,
+                        expires_at: sr.expires_at,
+                    })
+                }
             }
             None => {
                 warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
