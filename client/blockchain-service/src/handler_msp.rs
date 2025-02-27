@@ -197,35 +197,52 @@ where
             return;
         }
 
-        if let Some(mut rx) = self.forest_root_write_lock.take() {
-            // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
-            match rx.try_recv() {
-                // If the channel is empty, means we still need to wait for the current task to finish.
-                Err(TryRecvError::Empty) => {
-                    // If we have a task writing to the runtime, we don't want to start another one.
-                    self.forest_root_write_lock = Some(rx);
-                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
-                    return;
-                }
-                Ok(_) => {
-                    trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
-                }
-                Err(TryRecvError::Closed) => {
-                    error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
-                }
+        match &self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(_)) => {}
+            _ => {
+                error!(target: LOG_TARGET, "`msp_check_pending_forest_root_writes` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
             }
+        };
 
-            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-            state_store_context
-                .access_value(&OngoingProcessFileDeletionRequestCf)
-                .delete();
-            state_store_context
-                .access_value(&OngoingProcessMspRespondStorageRequestCf)
-                .delete();
-            state_store_context
-                .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                .delete();
-            state_store_context.commit();
+        // This is done in a closure to avoid borrowing `self` immutably and then mutably.
+        // Inside of this closure, we borrow `self` mutably when taking ownership of the lock.
+        {
+            let forest_root_write_lock = match &mut self.maybe_managed_provider {
+                Some(ManagedProvider::Msp(msp_handler)) => &mut msp_handler.forest_root_write_lock,
+                _ => unreachable!("We just checked this is a MSP"),
+            };
+
+            if let Some(mut rx) = forest_root_write_lock.take() {
+                // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
+                match rx.try_recv() {
+                    // If the channel is empty, means we still need to wait for the current task to finish.
+                    Err(TryRecvError::Empty) => {
+                        // If we have a task writing to the runtime, we don't want to start another one.
+                        *forest_root_write_lock = Some(rx);
+                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                        return;
+                    }
+                    Ok(_) => {
+                        trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
+                    }
+                    Err(TryRecvError::Closed) => {
+                        error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
+                    }
+                }
+
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessFileDeletionRequestCf)
+                    .delete();
+                state_store_context
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                    .delete();
+                state_store_context
+                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .delete();
+                state_store_context.commit();
+            }
         }
 
         // At this point we know that the lock is released and we can start processing new requests.
@@ -236,14 +253,6 @@ where
             // If there's no Provider being managed, there's no point in checking for pending requests.
             return;
         }
-
-        match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(_)) => {}
-            _ => {
-                error!(target: LOG_TARGET, "`msp_check_pending_forest_root_writes` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
-            }
-        };
 
         // We prioritize file deletion requests over respond storing requests since MSPs cannot charge
         // any users while there are pending file deletion requests.

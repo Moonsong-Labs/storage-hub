@@ -235,38 +235,6 @@ where
             return;
         }
 
-        if let Some(mut rx) = self.forest_root_write_lock.take() {
-            // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
-            match rx.try_recv() {
-                // If the channel is empty, means we still need to wait for the current task to finish.
-                Err(TryRecvError::Empty) => {
-                    // If we have a task writing to the runtime, we don't want to start another one.
-                    self.forest_root_write_lock = Some(rx);
-                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
-                    return;
-                }
-                Ok(_) => {
-                    trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
-                }
-                Err(TryRecvError::Closed) => {
-                    error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
-                }
-            }
-
-            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-            state_store_context
-                .access_value(&OngoingProcessConfirmStoringRequestCf)
-                .delete();
-            state_store_context
-                .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                .delete();
-            state_store_context.commit();
-        }
-
-        // At this point we know that the lock is released and we can start processing new requests.
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        let mut next_event_data = None;
-
         // Verify we have a BSP handler.
         let managed_bsp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
@@ -275,6 +243,47 @@ where
                 return;
             }
         };
+
+        // This is done in a closure to avoid borrowing `self` immutably and then mutably.
+        // Inside of this closure, we borrow `self` mutably when taking ownership of the lock.
+        {
+            let forest_root_write_lock = match &mut self.maybe_managed_provider {
+                Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
+                _ => unreachable!("We just checked this is a BSP"),
+            };
+
+            if let Some(mut rx) = forest_root_write_lock.take() {
+                // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
+                match rx.try_recv() {
+                    // If the channel is empty, means we still need to wait for the current task to finish.
+                    Err(TryRecvError::Empty) => {
+                        // If we have a task writing to the runtime, we don't want to start another one.
+                        *forest_root_write_lock = Some(rx);
+                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                        return;
+                    }
+                    Ok(_) => {
+                        trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
+                    }
+                    Err(TryRecvError::Closed) => {
+                        error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
+                    }
+                }
+
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessConfirmStoringRequestCf)
+                    .delete();
+                state_store_context
+                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .delete();
+                state_store_context.commit();
+            }
+        }
+
+        // At this point we know that the lock is released and we can start processing new requests.
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut next_event_data = None;
 
         // Process proof requests one at a time, releasing the mutable borrow between iterations.
         // This is because when matching on `maybe_managed_provider`, we need to borrow it mutably

@@ -92,11 +92,6 @@ pub type StorageHubEventsVec = Vec<
     >,
 >;
 
-pub enum EitherBucketOrBspId {
-    Bucket(BucketId),
-    Bsp(BackupStorageProviderId),
-}
-
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;
 

@@ -1,8 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use anyhow::anyhow;
 use futures::prelude::*;
@@ -36,10 +32,7 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    types::{
-        BlockNumber, EitherBucketOrBspId, FileKey, Fingerprint, ParachainClient, TickNumber,
-        BCSV_KEY_TYPE,
-    },
+    types::{BlockNumber, FileKey, Fingerprint, ParachainClient, TickNumber, BCSV_KEY_TYPE},
 };
 use storage_hub_runtime::RuntimeEvent;
 
@@ -57,8 +50,8 @@ use crate::{
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
-        BspHandler, ForestStorageSnapshotInfo, ManagedProvider, MinimalBlockInfo,
-        NewBlockNotificationKind, StopStoringForInsolventUserRequest,
+        BspHandler, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
+        StopStoringForInsolventUserRequest,
     },
 };
 
@@ -127,22 +120,6 @@ where
     /// Can be a BSP or an MSP.
     /// This is initialised when the node is in sync.
     pub(crate) maybe_managed_provider: Option<ManagedProvider>,
-    /// A map of [`EitherBucketOrBspId`] to the Forest Storage snapshots.
-    ///
-    /// [`EitherBucketOrBspId`] can be a BSP or the buckets that an MSP has.
-    /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
-    /// Each BSP or Bucket can have multiple Forest Storage snapshots.
-    /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
-    #[allow(dead_code)]
-    pub(crate) forest_root_snapshots:
-        BTreeMap<EitherBucketOrBspId, BTreeSet<ForestStorageSnapshotInfo>>,
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
-    ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    /// TODO: MOVE THIS INTO THE BSP/MSP HANDLER
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
     /// Notify period value to know when to trigger the NotifyPeriod event.
@@ -1112,8 +1089,6 @@ where
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
             maybe_managed_provider: None,
-            forest_root_snapshots: BTreeMap::new(),
-            forest_root_write_lock: None,
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             notify_period,
         }
