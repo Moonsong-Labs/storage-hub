@@ -127,13 +127,13 @@ pub fn fetch_file_key_for_inclusion_proof() -> Vec<u8> {
 
 #[rustfmt::skip]
 pub fn fetch_file_key_metadata_for_inclusion_proof() -> FileMetadata<{shp_constants::H_LENGTH}, {shp_constants::FILE_CHUNK_SIZE}, {shp_constants::FILE_SIZE_TO_CHALLENGES}> {
-	FileMetadata {
-		owner: {{file_key_metadata_inclusion_proof_owner}},
-		bucket_id: {{file_key_metadata_inclusion_proof_bucket_id}},
-		location: {{file_key_metadata_inclusion_proof_location}},
-		file_size: {{file_key_metadata_inclusion_proof_file_size}},
-		fingerprint: {{file_key_metadata_inclusion_proof_fingerprint}}
-	}
+	FileMetadata::new(
+		{{file_key_metadata_inclusion_proof_owner}},
+		{{file_key_metadata_inclusion_proof_bucket_id}},
+		{{file_key_metadata_inclusion_proof_location}},
+		{{file_key_metadata_inclusion_proof_file_size}},
+		{{file_key_metadata_inclusion_proof_fingerprint}}
+	).unwrap()
 }
 
 #[rustfmt::skip]

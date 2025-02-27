@@ -55,7 +55,7 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer mock for file key: {:?}",
+            "Initiating BSP volunteer mock for file key: {:x}",
             event.file_key
         );
 

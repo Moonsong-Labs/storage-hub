@@ -1375,6 +1375,89 @@ where
                             }
                         }
                         RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRejected {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketRejected {
+                                    bucket_id,
+                                    old_msp_id,
+                                    new_msp_id,
+                                });
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketAccepted {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                                value_prop_id,
+                            },
+                        ) => {
+                            match self.provider_id {
+                                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                                Some(StorageProviderId::BackupStorageProvider(_)) => {
+                                    self.emit(MoveBucketAccepted {
+                                        bucket_id,
+                                        old_msp_id,
+                                        new_msp_id,
+                                        value_prop_id,
+                                    });
+                                }
+                                // As an MSP, this node is interested in the *imported* event if
+                                // this node is the new MSP - to start downloading the bucket.
+                                // Otherwise, ignore the event. Check finalised events for the old
+                                // MSP branch.
+                                Some(StorageProviderId::MainStorageProvider(own_msp_id)) => {
+                                    if own_msp_id == new_msp_id {
+                                        // We are the new MSP, start downloading
+                                        self.emit(StartMovedBucketDownload {
+                                            bucket_id,
+                                            value_prop_id,
+                                        });
+                                    }
+                                }
+                                // Otherwise, ignore the event.
+                                _ => {}
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequestExpired { bucket_id },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(_)) =
+                                &self.provider_id
+                            {
+                                self.emit(MoveBucketExpired { bucket_id });
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_bsp_id == &bsp_id {
+                                    self.emit(BspConfirmStoppedStoring {
+                                        bsp_id,
+                                        file_key: file_key.into(),
+                                        new_root,
+                                    });
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
                             pallet_file_system::Event::AcceptedBspVolunteer {
                                 bsp_id,
                                 bucket_id,
@@ -1459,6 +1542,150 @@ where
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
                     match ev.event.clone() {
+                        RuntimeEvent::ProofsDealer(
+                            pallet_proofs_dealer::Event::MutationsAppliedForProvider {
+                                provider_id,
+                                mutations,
+                                old_root: _,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                // We only emit the event if the Provider ID is the one that this node is managing.
+                                if provider_id == *managed_bsp_id {
+                                    self.emit(FinalisedTrieRemoveMutationsApplied {
+                                        provider_id,
+                                        mutations: mutations.clone().into(),
+                                        new_root,
+                                    })
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MspStoppedStoringBucket {
+                                msp_id,
+                                owner,
+                                bucket_id,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                if msp_id == *managed_msp_id {
+                                    self.emit(FinalisedMspStoppedStoringBucket {
+                                        msp_id,
+                                        owner,
+                                        bucket_id,
+                                    })
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_bsp_id == &bsp_id {
+                                    self.emit(FinalisedBspConfirmStoppedStoring {
+                                        bsp_id,
+                                        file_key: file_key.into(),
+                                        new_root,
+                                    });
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
+                                msp_id,
+                                user,
+                                file_key,
+                                file_size,
+                                bucket_id,
+                                proof_of_inclusion,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                // Only emit the event if the MSP provided a proof of inclusion, meaning the file key was deleted from the bucket's forest.
+                                if managed_msp_id == &msp_id && proof_of_inclusion {
+                                    self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
+                                        user,
+                                        file_key: file_key.into(),
+                                        file_size: file_size.into(),
+                                        bucket_id,
+                                        msp_id,
+                                        proof_of_inclusion,
+                                    });
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequested {
+                                who: _,
+                                bucket_id,
+                                new_msp_id,
+                                new_value_prop_id,
+                            },
+                        ) => {
+                            match self.provider_id {
+                                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                                Some(StorageProviderId::BackupStorageProvider(_)) => {
+                                    self.emit(MoveBucketRequested {
+                                        bucket_id,
+                                        new_msp_id,
+                                    });
+                                }
+                                // As an MSP, this node is interested in the event only if this node is the new MSP.
+                                Some(StorageProviderId::MainStorageProvider(msp_id))
+                                    if msp_id == new_msp_id =>
+                                {
+                                    self.emit(MoveBucketRequestedForMsp {
+                                        bucket_id,
+                                        value_prop_id: new_value_prop_id,
+                                    });
+                                }
+                                // Otherwise, ignore the event.
+                                _ => {}
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketAccepted {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                                value_prop_id: _,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is the old MSP,
+                            // in which case we should clean up the bucket.
+                            // Note: we do this in finality to ensure we don't lose data in case
+                            // of a reorg.
+                            if let Some(StorageProviderId::MainStorageProvider(own_msp_id)) =
+                                &self.provider_id
+                            {
+                                if let Some(old_msp_id) = old_msp_id {
+                                if own_msp_id == &old_msp_id {
+                                    self.emit(FinalisedBucketMovedAway {
+                                            bucket_id,
+                                            old_msp_id,
+                                            new_msp_id,
+                                        });
+                                    }
+                                }
+                            }
+                        }
                         // Ignore all other events.
                         _ => {}
                     }

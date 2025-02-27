@@ -108,9 +108,9 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Registering user peer for file_key {:?}, location {:?}, fingerprint {:?}",
+            "Registering user peer for file_key {:x}, location 0x{}, fingerprint {:x}",
             event.file_key,
-            event.location,
+            hex::encode(event.location.as_slice()),
             event.fingerprint
         );
 
@@ -223,7 +223,7 @@ where
         for respond in &event.data.respond_storing_requests {
             info!(target: LOG_TARGET, "Processing respond storing request.");
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
-                Ok(Some(metadata)) => H256(metadata.bucket_id.try_into().unwrap()),
+                Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
                     error!(target: LOG_TARGET, "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", respond.file_key);
                     continue;
@@ -415,13 +415,14 @@ where
         }
 
         // Construct file metadata.
-        let metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size as u64,
-            fingerprint: event.fingerprint,
-            location: event.location.to_vec(),
-        };
+        let metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            event.bucket_id.as_ref().to_vec(),
+            event.location.to_vec(),
+            event.size as u64,
+            event.fingerprint,
+        )
+        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
 
         // Get the file key.
         let file_key: FileKey = metadata
@@ -630,7 +631,7 @@ where
             .get_metadata(&file_key)
         {
             Ok(metadata) => match metadata {
-                Some(metadata) => H256(metadata.bucket_id.try_into().unwrap()),
+                Some(metadata) => H256::from_slice(metadata.bucket_id().as_ref()),
                 None => {
                     let err_msg = format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key);
                     error!(target: LOG_TARGET, err_msg);
@@ -654,12 +655,12 @@ where
         };
 
         // Verify that the fingerprint in the proof matches the expected file fingerprint
-        let expected_fingerprint = file_metadata.fingerprint;
-        if event.file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+        let expected_fingerprint = file_metadata.fingerprint();
+        if event.file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
             error!(
                 target: LOG_TARGET,
                 "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
-                file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint
+                file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint()
             );
             return Err(anyhow!("Fingerprint mismatch"));
         }
@@ -938,7 +939,7 @@ where
     }
 
     async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
+        info!(target: LOG_TARGET, "File upload complete (file_key {:x})", file_key);
 
         // Unregister the file from the file transfer service.
         self.storage_hub_handler

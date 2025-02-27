@@ -16,6 +16,7 @@ targets = ["x86_64-unknown-linux-gnu"]
 
 [dependencies]
 codec = { workspace = true }
+hex = { workspace = true }
 num-bigint = { workspace = true }
 scale-info = { workspace = true }
 serde = { workspace = true }
@@ -30,9 +31,7 @@ sp-arithmetic = { workspace = true }
 
 [features]
 default = ["std"]
-runtime-benchmarks = [
-    "shp-traits/runtime-benchmarks",
-]
+runtime-benchmarks = ["shp-traits/runtime-benchmarks"]
 std = [
     "codec/std",
     "scale-info/std",
@@ -40,6 +39,4 @@ std = [
     "sp-core/std",
     "sp-std/std",
 ]
-try-runtime = [
-    "shp-traits/try-runtime",
-]
+try-runtime = ["shp-traits/try-runtime"]

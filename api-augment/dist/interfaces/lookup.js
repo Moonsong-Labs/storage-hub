@@ -1619,12 +1619,14 @@ export default {
       },
       MoveBucketAccepted: {
         bucketId: "H256",
-        mspId: "H256",
+        oldMspId: "Option<H256>",
+        newMspId: "H256",
         valuePropId: "H256"
       },
       MoveBucketRejected: {
         bucketId: "H256",
-        mspId: "H256"
+        oldMspId: "Option<H256>",
+        newMspId: "H256"
       },
       MspStoppedStoringBucket: {
         mspId: "H256",
@@ -1682,7 +1684,7 @@ export default {
     }
   },
   /**
-   * Lookup140: pallet_proofs_dealer::pallet::Event<T>
+   * Lookup141: pallet_proofs_dealer::pallet::Event<T>
    **/
   PalletProofsDealerEvent: {
     _enum: {
@@ -1734,34 +1736,34 @@ export default {
     }
   },
   /**
-   * Lookup141: pallet_proofs_dealer::types::Proof<T>
+   * Lookup142: pallet_proofs_dealer::types::Proof<T>
    **/
   PalletProofsDealerProof: {
     forestProof: "SpTrieStorageProofCompactProof",
     keyProofs: "BTreeMap<H256, PalletProofsDealerKeyProof>"
   },
   /**
-   * Lookup142: sp_trie::storage_proof::CompactProof
+   * Lookup143: sp_trie::storage_proof::CompactProof
    **/
   SpTrieStorageProofCompactProof: {
     encodedNodes: "Vec<Bytes>"
   },
   /**
-   * Lookup145: pallet_proofs_dealer::types::KeyProof<T>
+   * Lookup146: pallet_proofs_dealer::types::KeyProof<T>
    **/
   PalletProofsDealerKeyProof: {
     proof: "ShpFileKeyVerifierFileKeyProof",
     challengeCount: "u32"
   },
   /**
-   * Lookup146: shp_file_key_verifier::types::FileKeyProof
+   * Lookup147: shp_file_key_verifier::types::FileKeyProof
    **/
   ShpFileKeyVerifierFileKeyProof: {
     fileMetadata: "ShpFileMetadataFileMetadata",
     proof: "SpTrieStorageProofCompactProof"
   },
   /**
-   * Lookup147: shp_file_metadata::FileMetadata
+   * Lookup148: shp_file_metadata::FileMetadata
    **/
   ShpFileMetadataFileMetadata: {
     owner: "Bytes",
@@ -1771,18 +1773,18 @@ export default {
     fingerprint: "ShpFileMetadataFingerprint"
   },
   /**
-   * Lookup148: shp_file_metadata::Fingerprint
+   * Lookup149: shp_file_metadata::Fingerprint
    **/
   ShpFileMetadataFingerprint: "[u8;32]",
   /**
-   * Lookup152: pallet_proofs_dealer::types::CustomChallenge<T>
+   * Lookup153: pallet_proofs_dealer::types::CustomChallenge<T>
    **/
   PalletProofsDealerCustomChallenge: {
     key: "H256",
     shouldRemoveKey: "bool"
   },
   /**
-   * Lookup156: shp_traits::TrieMutation
+   * Lookup157: shp_traits::TrieMutation
    **/
   ShpTraitsTrieMutation: {
     _enum: {
@@ -1791,19 +1793,19 @@ export default {
     }
   },
   /**
-   * Lookup157: shp_traits::TrieAddMutation
+   * Lookup158: shp_traits::TrieAddMutation
    **/
   ShpTraitsTrieAddMutation: {
     value: "Bytes"
   },
   /**
-   * Lookup158: shp_traits::TrieRemoveMutation
+   * Lookup159: shp_traits::TrieRemoveMutation
    **/
   ShpTraitsTrieRemoveMutation: {
     maybeValue: "Option<Bytes>"
   },
   /**
-   * Lookup160: pallet_randomness::pallet::Event<T>
+   * Lookup161: pallet_randomness::pallet::Event<T>
    **/
   PalletRandomnessEvent: {
     _enum: {
@@ -1815,7 +1817,7 @@ export default {
     }
   },
   /**
-   * Lookup161: pallet_payment_streams::pallet::Event<T>
+   * Lookup162: pallet_payment_streams::pallet::Event<T>
    **/
   PalletPaymentStreamsEvent: {
     _enum: {
@@ -1883,7 +1885,7 @@ export default {
     }
   },
   /**
-   * Lookup163: pallet_bucket_nfts::pallet::Event<T>
+   * Lookup164: pallet_bucket_nfts::pallet::Event<T>
    **/
   PalletBucketNftsEvent: {
     _enum: {
@@ -1904,7 +1906,7 @@ export default {
     }
   },
   /**
-   * Lookup164: pallet_nfts::pallet::Event<T, I>
+   * Lookup165: pallet_nfts::pallet::Event<T, I>
    **/
   PalletNftsEvent: {
     _enum: {
@@ -2105,7 +2107,7 @@ export default {
     }
   },
   /**
-   * Lookup168: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
+   * Lookup169: pallet_nfts::types::AttributeNamespace<sp_core::crypto::AccountId32>
    **/
   PalletNftsAttributeNamespace: {
     _enum: {
@@ -2116,20 +2118,20 @@ export default {
     }
   },
   /**
-   * Lookup170: pallet_nfts::types::PriceWithDirection<Amount>
+   * Lookup171: pallet_nfts::types::PriceWithDirection<Amount>
    **/
   PalletNftsPriceWithDirection: {
     amount: "u128",
     direction: "PalletNftsPriceDirection"
   },
   /**
-   * Lookup171: pallet_nfts::types::PriceDirection
+   * Lookup172: pallet_nfts::types::PriceDirection
    **/
   PalletNftsPriceDirection: {
     _enum: ["Send", "Receive"]
   },
   /**
-   * Lookup172: pallet_nfts::types::PalletAttributes<CollectionId>
+   * Lookup173: pallet_nfts::types::PalletAttributes<CollectionId>
    **/
   PalletNftsPalletAttributes: {
     _enum: {
@@ -2138,7 +2140,7 @@ export default {
     }
   },
   /**
-   * Lookup173: pallet_parameters::pallet::Event<T>
+   * Lookup174: pallet_parameters::pallet::Event<T>
    **/
   PalletParametersEvent: {
     _enum: {
@@ -2150,7 +2152,7 @@ export default {
     }
   },
   /**
-   * Lookup174: storage_hub_runtime::configs::runtime_params::RuntimeParametersKey
+   * Lookup175: storage_hub_runtime::configs::runtime_params::RuntimeParametersKey
    **/
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey: {
     _enum: {
@@ -2158,7 +2160,7 @@ export default {
     }
   },
   /**
-   * Lookup175: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersKey
+   * Lookup176: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersKey
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: {
     _enum: [
@@ -2195,133 +2197,133 @@ export default {
     ]
   },
   /**
-   * Lookup176: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize
+   * Lookup177: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: "Null",
   /**
-   * Lookup177: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod
+   * Lookup178: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod: "Null",
   /**
-   * Lookup178: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod
+   * Lookup179: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: "Null",
   /**
-   * Lookup179: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinChallengePeriod
+   * Lookup180: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinChallengePeriod
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod: "Null",
   /**
-   * Lookup180: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage
+   * Lookup181: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage:
     "Null",
   /**
-   * Lookup181: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage
+   * Lookup182: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage:
     "Null",
   /**
-   * Lookup182: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MostlyStablePrice
+   * Lookup183: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MostlyStablePrice
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice: "Null",
   /**
-   * Lookup183: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaxPrice
+   * Lookup184: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaxPrice
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice: "Null",
   /**
-   * Lookup184: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinPrice
+   * Lookup185: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinPrice
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice: "Null",
   /**
-   * Lookup185: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UpperExponentFactor
+   * Lookup186: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UpperExponentFactor
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor: "Null",
   /**
-   * Lookup186: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::LowerExponentFactor
+   * Lookup187: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::LowerExponentFactor
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: "Null",
   /**
-   * Lookup187: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate
+   * Lookup188: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate: "Null",
   /**
-   * Lookup188: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::IdealUtilisationRate
+   * Lookup189: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::IdealUtilisationRate
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate: "Null",
   /**
-   * Lookup189: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::DecayRate
+   * Lookup190: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::DecayRate
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate: "Null",
   /**
-   * Lookup190: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut
+   * Lookup191: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut: "Null",
   /**
-   * Lookup191: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut
+   * Lookup192: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut: "Null",
   /**
-   * Lookup192: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::BspStopStoringFilePenalty
+   * Lookup193: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::BspStopStoringFilePenalty
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty: "Null",
   /**
-   * Lookup193: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ProviderTopUpTtl
+   * Lookup194: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ProviderTopUpTtl
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl: "Null",
   /**
-   * Lookup194: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::BasicReplicationTarget
+   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::BasicReplicationTarget
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget: "Null",
   /**
-   * Lookup195: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StandardReplicationTarget
+   * Lookup196: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StandardReplicationTarget
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget: "Null",
   /**
-   * Lookup196: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::HighSecurityReplicationTarget
+   * Lookup197: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::HighSecurityReplicationTarget
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget:
     "Null",
   /**
-   * Lookup197: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SuperHighSecurityReplicationTarget
+   * Lookup198: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SuperHighSecurityReplicationTarget
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget:
     "Null",
   /**
-   * Lookup198: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget
+   * Lookup199: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget:
     "Null",
   /**
-   * Lookup199: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaxReplicationTarget
+   * Lookup200: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaxReplicationTarget
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget: "Null",
   /**
-   * Lookup200: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold
+   * Lookup201: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold:
     "Null",
   /**
-   * Lookup201: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StorageRequestTtl
+   * Lookup202: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StorageRequestTtl
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl: "Null",
   /**
-   * Lookup202: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring
+   * Lookup203: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring: "Null",
   /**
-   * Lookup203: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinSeedPeriod
+   * Lookup204: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinSeedPeriod
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod: "Null",
   /**
-   * Lookup204: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StakeToSeedPeriod
+   * Lookup205: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StakeToSeedPeriod
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod: "Null",
   /**
-   * Lookup205: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UpfrontTicksToPay
+   * Lookup206: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UpfrontTicksToPay
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay: "Null",
   /**
-   * Lookup207: storage_hub_runtime::configs::runtime_params::RuntimeParametersValue
+   * Lookup208: storage_hub_runtime::configs::runtime_params::RuntimeParametersValue
    **/
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue: {
     _enum: {
@@ -2330,7 +2332,7 @@ export default {
     }
   },
   /**
-   * Lookup208: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersValue
+   * Lookup209: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersValue
    **/
   StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: {
     _enum: {
@@ -2367,7 +2369,7 @@ export default {
     }
   },
   /**
-   * Lookup210: frame_system::Phase
+   * Lookup211: frame_system::Phase
    **/
   FrameSystemPhase: {
     _enum: {
@@ -2377,21 +2379,21 @@ export default {
     }
   },
   /**
-   * Lookup213: frame_system::LastRuntimeUpgradeInfo
+   * Lookup214: frame_system::LastRuntimeUpgradeInfo
    **/
   FrameSystemLastRuntimeUpgradeInfo: {
     specVersion: "Compact<u32>",
     specName: "Text"
   },
   /**
-   * Lookup215: frame_system::CodeUpgradeAuthorization<T>
+   * Lookup216: frame_system::CodeUpgradeAuthorization<T>
    **/
   FrameSystemCodeUpgradeAuthorization: {
     codeHash: "H256",
     checkVersion: "bool"
   },
   /**
-   * Lookup216: frame_system::pallet::Call<T>
+   * Lookup217: frame_system::pallet::Call<T>
    **/
   FrameSystemCall: {
     _enum: {
@@ -2436,7 +2438,7 @@ export default {
     }
   },
   /**
-   * Lookup219: frame_system::limits::BlockWeights
+   * Lookup220: frame_system::limits::BlockWeights
    **/
   FrameSystemLimitsBlockWeights: {
     baseBlock: "SpWeightsWeightV2Weight",
@@ -2444,7 +2446,7 @@ export default {
     perClass: "FrameSupportDispatchPerDispatchClassWeightsPerClass"
   },
   /**
-   * Lookup220: frame_support::dispatch::PerDispatchClass<frame_system::limits::WeightsPerClass>
+   * Lookup221: frame_support::dispatch::PerDispatchClass<frame_system::limits::WeightsPerClass>
    **/
   FrameSupportDispatchPerDispatchClassWeightsPerClass: {
     normal: "FrameSystemLimitsWeightsPerClass",
@@ -2452,7 +2454,7 @@ export default {
     mandatory: "FrameSystemLimitsWeightsPerClass"
   },
   /**
-   * Lookup221: frame_system::limits::WeightsPerClass
+   * Lookup222: frame_system::limits::WeightsPerClass
    **/
   FrameSystemLimitsWeightsPerClass: {
     baseExtrinsic: "SpWeightsWeightV2Weight",
@@ -2461,13 +2463,13 @@ export default {
     reserved: "Option<SpWeightsWeightV2Weight>"
   },
   /**
-   * Lookup223: frame_system::limits::BlockLength
+   * Lookup224: frame_system::limits::BlockLength
    **/
   FrameSystemLimitsBlockLength: {
     max: "FrameSupportDispatchPerDispatchClassU32"
   },
   /**
-   * Lookup224: frame_support::dispatch::PerDispatchClass<T>
+   * Lookup225: frame_support::dispatch::PerDispatchClass<T>
    **/
   FrameSupportDispatchPerDispatchClassU32: {
     normal: "u32",
@@ -2475,14 +2477,14 @@ export default {
     mandatory: "u32"
   },
   /**
-   * Lookup225: sp_weights::RuntimeDbWeight
+   * Lookup226: sp_weights::RuntimeDbWeight
    **/
   SpWeightsRuntimeDbWeight: {
     read: "u64",
     write: "u64"
   },
   /**
-   * Lookup226: sp_version::RuntimeVersion
+   * Lookup227: sp_version::RuntimeVersion
    **/
   SpVersionRuntimeVersion: {
     specName: "Text",
@@ -2495,7 +2497,7 @@ export default {
     stateVersion: "u8"
   },
   /**
-   * Lookup231: frame_system::pallet::Error<T>
+   * Lookup232: frame_system::pallet::Error<T>
    **/
   FrameSystemError: {
     _enum: [
@@ -2511,7 +2513,7 @@ export default {
     ]
   },
   /**
-   * Lookup233: cumulus_pallet_parachain_system::unincluded_segment::Ancestor<primitive_types::H256>
+   * Lookup234: cumulus_pallet_parachain_system::unincluded_segment::Ancestor<primitive_types::H256>
    **/
   CumulusPalletParachainSystemUnincludedSegmentAncestor: {
     usedBandwidth: "CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth",
@@ -2519,7 +2521,7 @@ export default {
     consumedGoAheadSignal: "Option<PolkadotPrimitivesV8UpgradeGoAhead>"
   },
   /**
-   * Lookup234: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
+   * Lookup235: cumulus_pallet_parachain_system::unincluded_segment::UsedBandwidth
    **/
   CumulusPalletParachainSystemUnincludedSegmentUsedBandwidth: {
     umpMsgCount: "u32",
@@ -2527,7 +2529,7 @@ export default {
     hrmpOutgoing: "BTreeMap<u32, CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate>"
   },
   /**
-   * Lookup236: cumulus_pallet_parachain_system::unincluded_segment::HrmpChannelUpdate
+   * Lookup237: cumulus_pallet_parachain_system::unincluded_segment::HrmpChannelUpdate
    **/
   CumulusPalletParachainSystemUnincludedSegmentHrmpChannelUpdate: {
     msgCount: "u32",
@@ -4712,7 +4714,9 @@ export default {
       "RootNotUpdated",
       "NoPrivacyChange",
       "OperationNotAllowedForInsolventProvider",
-      "OperationNotAllowedWhileBucketIsNotStoredByMsp"
+      "OperationNotAllowedWhileBucketIsNotStoredByMsp",
+      "FailedToComputeFileKey",
+      "FailedToCreateFileMetadata"
     ]
   },
   /**
