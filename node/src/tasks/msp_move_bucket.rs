@@ -215,7 +215,9 @@ where
                         .await
                         .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
 
-                    let file_metadata = file.to_file_metadata(bucket_id.as_ref().to_vec());
+                    let file_metadata = file
+                        .to_file_metadata(bucket_id.as_ref().to_vec())
+                        .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
                     let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
                     // Get BSP peer IDs and register them
@@ -363,7 +365,9 @@ where
 
         // Try to insert all files before accepting the request
         for file in &files {
-            let file_metadata = file.to_file_metadata(bucket.clone());
+            let file_metadata = file
+                .to_file_metadata(bucket.clone())
+                .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
             self.storage_hub_handler
@@ -677,14 +681,14 @@ where
             .map_err(|e| anyhow!("Failed to decode file key proof: {:?}", e))?;
 
         // Verify fingerprint
-        let expected_fingerprint = file_metadata.fingerprint;
-        if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+        let expected_fingerprint = file_metadata.fingerprint();
+        if file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
             let mut peer_manager = peer_manager.write().await;
             peer_manager.record_failure(peer_id);
             return Err(anyhow!(
                 "Fingerprint mismatch. Expected: {:?}, got: {:?}",
                 expected_fingerprint,
-                file_key_proof.file_metadata.fingerprint
+                file_key_proof.file_metadata.fingerprint()
             ));
         }
 
@@ -872,7 +876,9 @@ where
         file: &shc_indexer_db::models::File,
         bucket: &BucketId,
     ) -> anyhow::Result<()> {
-        let file_metadata = file.to_file_metadata(bucket.as_ref().to_vec());
+        let file_metadata = file
+            .to_file_metadata(bucket.as_ref().to_vec())
+            .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
         let chunks_count = file_metadata.chunks_count();
 
@@ -1062,7 +1068,6 @@ impl BspPeerStats {
     ///
     /// The score is a weighted combination of the peer's success rate and average speed.
     /// The success rate is weighted more heavily (70%) compared to the average speed (30%).
-    ///
     fn get_score(&self) -> f64 {
         // Combine success rate and speed into a single score
         // Weight success rate more heavily (70%) compared to speed (30%)

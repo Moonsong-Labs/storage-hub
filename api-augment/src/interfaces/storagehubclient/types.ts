@@ -215,7 +215,12 @@ export interface QueryBucketsForMspError extends Enum {
 /** @name QueryConfirmChunksToProveForFileError */
 export interface QueryConfirmChunksToProveForFileError extends Enum {
   readonly isChallengedChunkToChunkIdError: boolean;
-  readonly type: "ChallengedChunkToChunkIdError";
+  readonly isFailedToCreateFileMetadata: boolean;
+  readonly isFailedToGenerateChunkChallenges: boolean;
+  readonly type:
+    | "ChallengedChunkToChunkIdError"
+    | "FailedToCreateFileMetadata"
+    | "FailedToGenerateChunkChallenges";
 }
 
 /** @name QueryEarliestChangeCapacityBlockError */

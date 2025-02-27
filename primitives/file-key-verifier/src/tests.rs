@@ -60,16 +60,17 @@ where
         String::from_utf8(file_name.to_vec()).unwrap()
     );
 
-    let file_metadata = FileMetadata {
-        owner: user_id.to_vec(),
-        bucket_id: bucket.to_vec(),
-        location: file_path.as_bytes().to_vec(),
+    let file_metadata = FileMetadata::new(
+        user_id.to_vec(),
+        bucket.to_vec(),
+        file_path.as_bytes().to_vec(),
         file_size,
-        fingerprint: fingerprint
+        fingerprint
             .as_ref()
             .try_into()
             .expect("slice with incorrect length"),
-    };
+    )
+    .expect("Failed to create file metadata");
 
     let file_key = file_metadata.file_key::<T::Hash>();
 
@@ -168,7 +169,7 @@ fn generate_challenges<T: TrieLayout>(
 fn generate_trie_works() {
     let (memdb, _file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     let trie = TrieDBBuilder::<LayoutV1<BlakeTwo256>>::new(&memdb, &root).build();
 
@@ -193,7 +194,7 @@ fn generate_trie_works() {
 fn commitment_verifier_many_challenges_success() {
     let (memdb, file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
@@ -253,7 +254,7 @@ fn commitment_verifier_many_challenges_success() {
 fn commitment_verifier_many_challenges_random_file_success() {
     let (memdb, file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(true, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
@@ -312,7 +313,7 @@ fn commitment_verifier_many_challenges_random_file_success() {
 fn commitment_verifier_many_challenges_keccak_success() {
     let (memdb, file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<Keccak256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<Keccak256> = Recorder::default();
@@ -371,7 +372,7 @@ fn commitment_verifier_many_challenges_keccak_success() {
 fn commitment_verifier_many_challenges_one_chunk_success() {
     let (memdb, file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, CHUNK_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
@@ -431,7 +432,7 @@ fn commitment_verifier_many_challenges_one_chunk_success() {
 fn commitment_verifier_many_challenges_two_chunks_success() {
     let (memdb, file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, CHUNK_SIZE + 1);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
@@ -491,7 +492,7 @@ fn commitment_verifier_many_challenges_two_chunks_success() {
 fn commitment_verifier_no_challenges_failure() {
     let (memdb, file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
@@ -545,7 +546,7 @@ fn commitment_verifier_no_challenges_failure() {
 fn commitment_verifier_wrong_number_of_challenges_failure() {
     let (memdb, file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
@@ -601,7 +602,7 @@ fn commitment_verifier_wrong_number_of_challenges_failure() {
 fn commitment_verifier_wrong_file_key_failure() {
     let (memdb, _file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
@@ -657,14 +658,14 @@ fn commitment_verifier_wrong_file_key_failure() {
 fn commitment_verifier_wrong_file_key_no_compact_encoding_failure() {
     let (memdb, _file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     let file_key = BlakeTwo256::hash(
         &[
-            &file_metadata.owner.encode(),
-            &file_metadata.location.encode(),
-            &file_metadata.file_size.encode(),
-            &file_metadata.fingerprint.encode(),
+            &file_metadata.owner().encode(),
+            &file_metadata.location().encode(),
+            &file_metadata.file_size().encode(),
+            &file_metadata.fingerprint().encode(),
         ]
         .into_iter()
         .flatten()
@@ -726,14 +727,14 @@ fn commitment_verifier_wrong_file_key_no_compact_encoding_failure() {
 fn commitment_verifier_wrong_file_key_vec_fingerprint_failure() {
     let (memdb, _file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     let file_key = BlakeTwo256::hash(
         &[
-            &file_metadata.owner.encode(),
-            &file_metadata.location.encode(),
-            &AsCompact(file_metadata.file_size).encode(),
-            &file_metadata.fingerprint.as_hash().to_vec().encode(),
+            &file_metadata.owner().encode(),
+            &file_metadata.location().encode(),
+            &AsCompact(file_metadata.file_size()).encode(),
+            &file_metadata.fingerprint().as_hash().to_vec().encode(),
         ]
         .into_iter()
         .flatten()
@@ -794,14 +795,14 @@ fn commitment_verifier_wrong_file_key_vec_fingerprint_failure() {
 fn commitment_verifier_wrong_file_key_encoding_as_bytes_failure() {
     let (memdb, _file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     let file_key = BlakeTwo256::hash(
         &[
-            &file_metadata.owner,
-            &file_metadata.location,
-            &file_metadata.file_size.to_be_bytes().to_vec(),
-            &file_metadata.fingerprint.as_hash().to_vec(),
+            &file_metadata.owner(),
+            &file_metadata.location(),
+            &file_metadata.file_size().to_be_bytes().to_vec(),
+            &file_metadata.fingerprint().as_hash().to_vec(),
         ]
         .into_iter()
         .flatten()
@@ -895,10 +896,17 @@ fn commitment_verifier_empty_proof_failure() {
 
 #[test]
 fn commitment_verifier_empty_fingerprint_failure() {
-    let (_memdb, _file_key, mut file_metadata) =
+    let (_memdb, _file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
 
-    file_metadata.fingerprint = Fingerprint::default();
+    let file_metadata = FileMetadata::new(
+        file_metadata.owner().clone(),
+        file_metadata.bucket_id().clone(),
+        file_metadata.location().clone(),
+        file_metadata.file_size(),
+        Fingerprint::default(),
+    )
+    .unwrap();
 
     let file_key = file_metadata.file_key::<BlakeTwo256>();
 
@@ -912,11 +920,9 @@ fn commitment_verifier_empty_fingerprint_failure() {
     let proof = CompactProof {
         encoded_nodes: vec![],
     };
+
     let file_key_proof = FileKeyProof {
-        file_metadata: FileMetadata {
-            fingerprint: Fingerprint::default(),
-            ..file_metadata
-        },
+        file_metadata,
         proof,
     };
 
@@ -936,7 +942,7 @@ fn commitment_verifier_empty_fingerprint_failure() {
 fn commitment_verifier_challenge_missing_from_proof_failure() {
     let (memdb, file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, FILE_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
     // This recorder is used to record accessed keys in the trie and later generate a proof for them.
     let recorder: Recorder<BlakeTwo256> = Recorder::default();
@@ -993,11 +999,18 @@ fn commitment_verifier_challenge_missing_from_proof_failure() {
 
 #[test]
 fn commitment_verifier_challenge_with_none_value_failure() {
-    let (memdb, _file_key, mut file_metadata) =
+    let (memdb, _file_key, file_metadata) =
         build_merkle_patricia_trie::<LayoutV1<BlakeTwo256>>(false, 2 * CHUNK_SIZE);
-    let root = file_metadata.fingerprint.as_hash().into();
+    let root = file_metadata.fingerprint().as_hash().into();
 
-    file_metadata.file_size = FILE_SIZE;
+    let file_metadata = FileMetadata::new(
+        file_metadata.owner().clone(),
+        file_metadata.bucket_id().clone(),
+        file_metadata.location().clone(),
+        FILE_SIZE,
+        file_metadata.fingerprint().clone(),
+    )
+    .unwrap();
 
     let file_key = file_metadata.file_key::<BlakeTwo256>();
 

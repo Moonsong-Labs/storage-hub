@@ -1295,7 +1295,8 @@ mod users {
             file_location.clone(),
             size,
             file_fingerprint.clone(),
-        );
+        )
+        .unwrap();
         MockParachain::execute_with(|| {
             let destination: Location = (Parent, Parachain(SH_PARA_ID)).into();
             let parachain_peer_id: BoundedVec<
@@ -1679,7 +1680,8 @@ mod users {
             file_location.clone(),
             size,
             file_fingerprint.clone(),
-        );
+        )
+        .unwrap();
         MockParachain::execute_with(|| {
             let destination: Location = (Parent, Parachain(SH_PARA_ID)).into();
             let parachain_peer_id: BoundedVec<
@@ -1788,7 +1790,7 @@ mod users {
                     bucket_id: bucket_id.clone(),
                     file_key: file_key.clone(),
                     location: file_location.clone(),
-                    size: size,
+                    size,
                     fingerprint: file_fingerprint.clone(),
                     maybe_inclusion_forest_proof: None,
                 });

@@ -387,13 +387,15 @@ where
         }
 
         // Build StorageHub's [`FileMetadata`]
-        let file_metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
-            bucket_id: bucket_id.as_ref().to_vec(),
-            file_size: fs_metadata.len(),
-            fingerprint: root.as_ref().into(),
-            location: location.clone().into(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
+            bucket_id.as_ref().to_vec(),
+            location.clone().into(),
+            fs_metadata.len(),
+            root.as_ref().into(),
+        )
+        .map_err(into_rpc_error)?;
+
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
         // Acquire FileStorage write lock.
