@@ -632,3 +632,12 @@ pub enum ManagedProvider {
     Bsp(BspHandler),
     Msp(MspHandler),
 }
+
+impl ManagedProvider {
+    pub fn new(provider_id: StorageProviderId) -> Self {
+        match provider_id {
+            StorageProviderId::BackupStorageProvider(bsp_id) => Self::Bsp(BspHandler::new(bsp_id)),
+            StorageProviderId::MainStorageProvider(msp_id) => Self::Msp(MspHandler::new(msp_id)),
+        }
+    }
+}

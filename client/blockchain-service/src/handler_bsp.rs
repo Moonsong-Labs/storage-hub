@@ -3,19 +3,25 @@ use pallet_proofs_dealer_runtime_api::ProofsDealerApi;
 use pallet_proofs_dealer_runtime_api::{GetChallengePeriodError, GetChallengeSeedError};
 use sc_client_api::HeaderBackend;
 use shc_actors_framework::actor::Actor;
-use shc_common::types::BlockNumber;
+use shc_common::types::{BlockNumber, MaxBatchConfirmStorageRequests};
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::H256;
+use sp_core::{Get, H256};
 use sp_runtime::traits::Zero;
 use storage_hub_runtime::RuntimeEvent;
+use tokio::sync::oneshot::error::TryRecvError;
 
 use crate::events::{
     BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
-    FinalisedTrieRemoveMutationsApplied, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-    MoveBucketRequested,
+    FinalisedTrieRemoveMutationsApplied, ForestWriteLockTaskData, MoveBucketAccepted,
+    MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, ProcessConfirmStoringRequestData,
+    ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequestData,
 };
+use crate::state::{
+    OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+};
+use crate::typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess};
 use crate::{
     events::MultipleNewChallengeSeeds,
     handler::{CHECK_FOR_PENDING_PROOFS_PERIOD, LOG_TARGET},
@@ -205,6 +211,168 @@ where
             }
             // Ignore all other events.
             _ => {}
+        }
+    }
+
+    /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
+    ///
+    /// The priority is given by:
+    /// 1. `SubmitProofRequest` over...
+    /// 2. `ConfirmStoringRequest` over...
+    /// 3. `StopStoringForInsolventUserRequest`.
+    ///
+    /// This function is called every time a new block is imported and after each request is queued.
+    ///
+    /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
+    pub(crate) fn bsp_check_pending_forest_root_writes(&mut self) {
+        let client_best_hash = self.client.info().best_hash;
+        let client_best_number = self.client.info().best_number;
+
+        // Skip if the latest processed block doesn't match the current best block
+        if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
+        {
+            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
+            return;
+        }
+
+        if let Some(mut rx) = self.forest_root_write_lock.take() {
+            // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
+            match rx.try_recv() {
+                // If the channel is empty, means we still need to wait for the current task to finish.
+                Err(TryRecvError::Empty) => {
+                    // If we have a task writing to the runtime, we don't want to start another one.
+                    self.forest_root_write_lock = Some(rx);
+                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
+                    return;
+                }
+                Ok(_) => {
+                    trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
+                }
+                Err(TryRecvError::Closed) => {
+                    error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
+                }
+            }
+
+            let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+            state_store_context
+                .access_value(&OngoingProcessConfirmStoringRequestCf)
+                .delete();
+            state_store_context
+                .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                .delete();
+            state_store_context.commit();
+        }
+
+        // At this point we know that the lock is released and we can start processing new requests.
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let mut next_event_data = None;
+
+        // Verify we have a BSP handler.
+        let managed_bsp_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
+            _ => {
+                error!(target: LOG_TARGET, "`bsp_check_pending_forest_root_writes` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        // Process proof requests one at a time, releasing the mutable borrow between iterations.
+        // This is because when matching on `maybe_managed_provider`, we need to borrow it mutably
+        // to remove the request from the pending list. This mutable borrow is released after used
+        // and before needing to borrow immutably again when calling `self.get_next_challenge_tick_for_provider`.
+        'submit_proof_requests_loop: loop {
+            // Get the next request if any. Mutable borrow of `maybe_managed_provider` is released after use.
+            let request = match &mut self.maybe_managed_provider {
+                Some(ManagedProvider::Bsp(bsp_handler)) => {
+                    bsp_handler.pending_submit_proof_requests.pop_first()
+                }
+                _ => unreachable!("We just checked this is a BSP"),
+            };
+
+            // If there is no request, break the loop.
+            let Some(request) = request else { break };
+
+            // Check if the proof is still the next one to be submitted.
+            let next_challenge_tick = match self
+                .get_next_challenge_tick_for_provider(&managed_bsp_id)
+            {
+                Ok(next_challenge_tick) => next_challenge_tick,
+                Err(e) => {
+                    error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", managed_bsp_id, e);
+                    break 'submit_proof_requests_loop;
+                }
+            };
+
+            // This is to avoid starting a new task if the proof is not the next one to be submitted.
+            if next_challenge_tick != request.tick {
+                // If the proof is not the next one to be submitted, we can skip it
+                trace!(target: LOG_TARGET, "Proof for tick [{:?}] is not the next one to be submitted. Skipping it.", request.tick);
+                continue 'submit_proof_requests_loop;
+            }
+
+            // If the proof is still the next one to be submitted, we can process it.
+            trace!(target: LOG_TARGET, "Proof for tick [{:?}] is the next one to be submitted. Processing it.", request.tick);
+            next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
+                ProcessSubmitProofRequestData {
+                    seed: request.seed,
+                    provider_id: request.provider_id,
+                    tick: request.tick,
+                    forest_challenges: request.forest_challenges,
+                    checkpoint_challenges: request.checkpoint_challenges,
+                },
+            ));
+
+            // Exit the loop since we have found the next proof to be submitted.
+            break 'submit_proof_requests_loop;
+        }
+
+        // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
+        if next_event_data.is_none() {
+            let max_batch_confirm = <MaxBatchConfirmStorageRequests as Get<u32>>::get();
+
+            // Batch multiple confirm file storing taking the runtime maximum.
+            let mut confirm_storing_requests = Vec::new();
+            for _ in 0..max_batch_confirm {
+                if let Some(request) = state_store_context
+                    .pending_confirm_storing_request_deque()
+                    .pop_front()
+                {
+                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
+                    confirm_storing_requests.push(request);
+                } else {
+                    break;
+                }
+            }
+
+            // If we have at least 1 confirm storing request, send the process event.
+            if confirm_storing_requests.len() > 0 {
+                next_event_data = Some(
+                    ProcessConfirmStoringRequestData {
+                        confirm_storing_requests,
+                    }
+                    .into(),
+                );
+            }
+        }
+
+        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
+        if next_event_data.is_none() {
+            if let Some(request) = state_store_context
+                .pending_stop_storing_for_insolvent_user_request_deque()
+                .pop_front()
+            {
+                next_event_data = Some(
+                    ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
+                );
+            }
+        }
+
+        // Commit the state store context.
+        state_store_context.commit();
+
+        // If there is any event data to process, emit the event.
+        if let Some(event_data) = next_event_data {
+            self.emit_forest_write_event(event_data);
         }
     }
 

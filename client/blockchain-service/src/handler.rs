@@ -806,7 +806,7 @@ where
                         .push_back(request);
                     state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
-                    self.check_pending_forest_root_writes();
+                    self.bsp_check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
                         Ok(_) => {}
                         Err(e) => {
@@ -821,7 +821,7 @@ where
                         .push_back(request);
                     state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
-                    self.check_pending_forest_root_writes();
+                    self.msp_check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
                         Ok(_) => {}
                         Err(e) => {
@@ -844,7 +844,7 @@ where
                         }
 
                         // We check right away if we can process the request so we don't waste time.
-                        self.check_pending_forest_root_writes();
+                        self.bsp_check_pending_forest_root_writes();
                         match callback.send(Ok(())) {
                             Ok(_) => {}
                             Err(e) => {
@@ -862,8 +862,20 @@ where
                         .pending_stop_storing_for_insolvent_user_request_deque()
                         .push_back(request);
                     state_store_context.commit();
+
                     // We check right away if we can process the request so we don't waste time.
-                    self.check_pending_forest_root_writes();
+                    match &mut self.maybe_managed_provider {
+                        Some(ManagedProvider::Msp(_)) => {
+                            self.msp_check_pending_forest_root_writes();
+                        }
+                        Some(ManagedProvider::Bsp(_)) => {
+                            self.bsp_check_pending_forest_root_writes();
+                        }
+                        _ => {
+                            error!(target: LOG_TARGET, "Received a QueueStopStoringForInsolventUserRequest command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
+                        }
+                    }
+
                     match callback.send(Ok(())) {
                         Ok(_) => {}
                         Err(e) => {
@@ -993,9 +1005,18 @@ where
                     // Check if there are any pending requests to use the forest root write lock.
                     // If so, we give them the lock right away.
                     if forest_root_write_result.is_ok() {
-                        self.check_pending_forest_root_writes();
+                        match &mut self.maybe_managed_provider {
+                            Some(ManagedProvider::Msp(_)) => {
+                                self.msp_check_pending_forest_root_writes();
+                            }
+                            Some(ManagedProvider::Bsp(_)) => {
+                                self.bsp_check_pending_forest_root_writes();
+                            }
+                            _ => {
+                                error!(target: LOG_TARGET, "Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
+                            }
+                        }
                     }
-
                     match callback.send(forest_root_write_result) {
                         Ok(_) => {}
                         Err(e) => {
@@ -1010,7 +1031,7 @@ where
                         .push_back(request);
                     state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
-                    self.check_pending_forest_root_writes();
+                    self.msp_check_pending_forest_root_writes();
                     match callback.send(Ok(())) {
                         Ok(_) => {}
                         Err(e) => {
@@ -1231,8 +1252,15 @@ where
         self.notify_tick_number(&block_hash);
 
         // Process pending requests that update the forest root.
-        self.check_pending_forest_root_writes();
-
+        match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(_)) => {
+                self.msp_check_pending_forest_root_writes();
+            }
+            Some(ManagedProvider::Bsp(_)) => {
+                self.bsp_check_pending_forest_root_writes();
+            }
+            _ => {}
+        }
         // Check that trigger an event every X amount of blocks (specified in config).
         self.check_for_notify(&block_number);
 
