@@ -676,7 +676,9 @@ where
 
         // Validate chunk size
         let chunk_idx = chunk_id.as_u64();
-        let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx);
+        let expected_chunk_size = file_metadata
+            .chunk_size_at(chunk_idx)
+            .map_err(|e| anyhow!("Failed to get chunk size for chunk {}: {:?}", chunk_idx, e))?;
 
         if chunk_data.len() != expected_chunk_size {
             return Err(anyhow!(
