@@ -24,6 +24,18 @@ export const ALL_TYPES: RegistryTypes = {
       IncompleteFile: "IncompleteFileStatus"
     }
   },
+  AddFilesToForestStorageResult: {
+    _enum: {
+      Success: null,
+      ForestNotFound: null
+    }
+  },
+  RemoveFilesFromForestStorageResult: {
+    _enum: {
+      Success: null,
+      ForestNotFound: null
+    }
+  },
   GetFileFromFileStorageResult: {
     _enum: {
       FileNotFound: null,
@@ -208,6 +220,12 @@ export const ALL_TYPES: RegistryTypes = {
     _enum: {
       BucketNotFound: null,
       InternalApiError: null
+    }
+  },
+  QueryBucketsOfUserStoredByMspError: {
+    _enum: {
+      NotAnMsp: null,
+      InternalError: null
     }
   }
 };

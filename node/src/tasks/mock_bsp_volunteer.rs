@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::types::SendExtrinsicOptions;
 use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
 use sp_core::H256;
 
@@ -55,7 +54,7 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Initiating BSP volunteer mock for file key: {:?}",
+            "Initiating BSP volunteer mock for file key: {:x}",
             event.file_key
         );
 
@@ -67,7 +66,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, SendExtrinsicOptions::default())
+            .send_extrinsic(call, Default::default())
             .await?
             .with_timeout(Duration::from_secs(
                 self.storage_hub_handler

@@ -13936,6 +13936,7 @@ dependencies = [
  "sp-core 34.0.0",
  "sp-keystore 0.40.0",
  "sp-runtime 39.0.5",
+ "sp-runtime-interface 28.0.0",
  "sp-trie 29.0.0",
  "tokio",
 ]
@@ -13994,6 +13995,7 @@ dependencies = [
 name = "shp-file-metadata"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "num-bigint",
  "parity-scale-codec",
  "scale-info",

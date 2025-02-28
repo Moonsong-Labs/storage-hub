@@ -16,8 +16,8 @@ use frame_support::{
 use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_storage_providers_runtime_api::{
     GetBspInfoError, GetStakeError, QueryAvailableStorageCapacityError, QueryBucketsForMspError,
-    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
-    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
+    QueryBucketsOfUserStoredByMspError, QueryEarliestChangeCapacityBlockError,
+    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
 };
 use shp_constants::GIGAUNIT;
 use shp_traits::{
@@ -2796,6 +2796,28 @@ where
         Ok(MainStorageProviderIdsToBuckets::<T>::iter_prefix(msp_id)
             .map(|(bucket_id, _)| bucket_id)
             .collect())
+    }
+
+    pub fn query_buckets_of_user_stored_by_msp(
+        msp_id: &ProviderIdFor<T>,
+        user: &T::AccountId,
+    ) -> Result<Vec<BucketId<T>>, QueryBucketsOfUserStoredByMspError> {
+        if !Self::is_msp(msp_id) {
+            return Err(QueryBucketsOfUserStoredByMspError::NotAnMsp);
+        }
+
+        // Get all buckets that have this MSP as their provider and belong to the user
+        let buckets: Vec<BucketId<T>> = Buckets::<T>::iter()
+            .filter_map(|(bucket_id, bucket)| {
+                if bucket.msp_id == Some(*msp_id) && bucket.user_id == *user {
+                    Some(bucket_id)
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        Ok(buckets)
     }
 }
 
