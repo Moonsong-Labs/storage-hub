@@ -169,7 +169,9 @@ export const ALL_TYPES = {
   },
   QueryConfirmChunksToProveForFileError: {
     _enum: {
-      ChallengedChunkToChunkIdError: null
+      ChallengedChunkToChunkIdError: null,
+      FailedToCreateFileMetadata: null,
+      FailedToGenerateChunkChallenges: null
     }
   },
   GetUsersWithDebtOverThresholdError: {
@@ -204,6 +206,12 @@ export const ALL_TYPES = {
     _enum: {
       BucketNotFound: null,
       InternalApiError: null
+    }
+  },
+  QueryBucketsOfUserStoredByMspError: {
+    _enum: {
+      NotAnMsp: null,
+      InternalError: null
     }
   }
 };

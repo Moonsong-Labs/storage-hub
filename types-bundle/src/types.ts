@@ -171,7 +171,9 @@ export const ALL_TYPES: RegistryTypes = {
   },
   QueryConfirmChunksToProveForFileError: {
     _enum: {
-      ChallengedChunkToChunkIdError: null
+      ChallengedChunkToChunkIdError: null,
+      FailedToCreateFileMetadata: null,
+      FailedToGenerateChunkChallenges: null
     }
   },
   GetUsersWithDebtOverThresholdError: {
@@ -206,6 +208,12 @@ export const ALL_TYPES: RegistryTypes = {
     _enum: {
       BucketNotFound: null,
       InternalApiError: null
+    }
+  },
+  QueryBucketsOfUserStoredByMspError: {
+    _enum: {
+      NotAnMsp: null,
+      InternalError: null
     }
   }
 };

@@ -80,11 +80,11 @@ where
         // If we have a bucket ID in the request, check if the file bucket matches the bucket ID in
         // the request.
         if let Some(bucket_id) = bucket_id {
-            if file_metadata.bucket_id != bucket_id.as_ref().to_vec() {
+            if file_metadata.bucket_id() != bucket_id.as_ref() {
                 error!(
                     target: LOG_TARGET,
                     "File bucket mismatch for file {:?}: expected {:?}, got {:?}",
-                    event.file_key, file_metadata.bucket_id, bucket_id
+                    event.file_key, file_metadata.bucket_id(), bucket_id
                 );
                 return Err(anyhow::anyhow!("File bucket mismatch"));
             }

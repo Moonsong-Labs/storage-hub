@@ -13721,6 +13721,7 @@ dependencies = [
  "shc-actors-framework",
  "shc-common",
  "shc-forest-manager",
+ "shp-constants",
  "shp-file-key-verifier",
  "shp-file-metadata",
  "sp-api 34.0.0",
@@ -13995,6 +13996,7 @@ dependencies = [
 name = "shp-file-metadata"
 version = "0.1.0"
 dependencies = [
+ "hex",
  "num-bigint",
  "parity-scale-codec",
  "scale-info",

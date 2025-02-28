@@ -44,7 +44,11 @@ export interface SealedBlock {
  */
 export const extendFork = async (
   api: ApiPromise,
-  options: { parentBlockHash: string; amountToExtend: number; verbose?: boolean }
+  options: {
+    parentBlockHash: string;
+    amountToExtend: number;
+    verbose?: boolean;
+  }
 ) => {
   let parentBlockHash: string = options.parentBlockHash;
   let parentHeight = (await api.rpc.chain.getHeader(parentBlockHash)).number.toNumber();
@@ -135,7 +139,9 @@ export const sealBlock = async (
       if (call.isSigned) {
         hash = await call.send();
       } else {
-        hash = await call.signAndSend(signer || alice, { nonce: nonceToUse + i });
+        hash = await call.signAndSend(signer || alice, {
+          nonce: nonceToUse + i
+        });
       }
 
       // Poll for the transaction to be included in the pending extrinsics, or error out in 2 seconds
@@ -300,7 +306,7 @@ export const skipBlocksUntilBspCanChangeCapacity: (
         `\tSkipping to block #${blockToAdvanceTo} to go beyond MinBlocksBetweenCapacityChanges`
       );
     await advanceToBlock(api, {
-      blockNumber: blockToAdvanceTo,
+      blockNumber: blockToAdvanceTo - 1,
       verbose: false,
       watchForBspProofs: [bspId.toString()]
     });

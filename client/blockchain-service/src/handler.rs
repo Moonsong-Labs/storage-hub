@@ -21,6 +21,7 @@ use sp_runtime::{
     traits::{Header, Zero},
     AccountId32, SaturatedConversion,
 };
+use storage_hub_runtime::RuntimeEvent;
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -32,9 +33,9 @@ use pallet_proofs_dealer_runtime_api::{
     ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
-    StorageProvidersApi,
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsOfUserStoredByMspError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
@@ -46,13 +47,14 @@ use shc_common::{
     },
 };
 use shp_file_metadata::FileKey;
-use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
+    capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
     events::{
         AcceptedBspVolunteer, BlockchainServiceEventBusProvider, BspConfirmStoppedStoring,
-        FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedMspStoppedStoringBucket,
+        FileDeletionRequest, FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         FinalisedProofSubmittedForPendingFileDeletionRequest, FinalisedTrieRemoveMutationsApplied,
         LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
         MoveBucketRequested, MoveBucketRequestedForMsp, NewStorageRequest, SlashableProvider,
@@ -160,6 +162,10 @@ where
     ///
     /// This is meant to be used for periodic, low priority tasks.
     pub(crate) notify_period: Option<u32>,
+    /// Efficiently manages the capacity changes of storage providers.
+    ///
+    /// Only required if the node is running as a provider.
+    pub(crate) capacity_manager: Option<CapacityRequestQueue>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -963,6 +969,19 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::IncreaseCapacity { request, callback } => {
+                    // Create a new channel that will be used to notify completion
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+
+                    // The capacity manager handles sending the result back to the caller so we don't need to do anything here. Whether the transaction failed or succeeded, or if the capacity request was never queued, the result will be sent back through the channel by the capacity manager.
+                    self.queue_capacity_request(CapacityRequest::new(request, tx))
+                        .await;
+
+                    // Send the receiver back through the callback
+                    if let Err(e) = callback.send(rx) {
+                        error!(target: LOG_TARGET, "Failed to send capacity request receiver: {:?}", e);
+                    }
+                }
                 BlockchainServiceCommand::QueryMspIdOfBucketId {
                     bucket_id,
                     callback,
@@ -982,6 +1001,29 @@ where
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send back MSP ID: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryBucketsOfUserStoredByMsp {
+                    msp_id,
+                    user,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let buckets = self
+                        .client
+                        .runtime_api()
+                        .query_buckets_of_user_stored_by_msp(current_block_hash, &msp_id, &user)
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
+                            Err(QueryBucketsOfUserStoredByMspError::InternalError)
+                        });
+
+                    match callback.send(buckets) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back buckets: {:?}", e);
                         }
                     }
                 }
@@ -1006,7 +1048,7 @@ where
                     match callback.send(forest_root_write_result) {
                         Ok(_) => {}
                         Err(e) => {
-                            error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
+                            error!(target: LOG_TARGET, "Failed to send back forest root write result: {:?}", e);
                         }
                     }
                 }
@@ -1046,6 +1088,7 @@ where
         forest_storage_handler: FSH,
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
+        capacity_request_queue: Option<CapacityRequestQueue>,
     ) -> Self {
         Self {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1063,6 +1106,7 @@ where
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             pending_submit_proof_requests: BTreeSet::new(),
             notify_period,
+            capacity_manager: capacity_request_queue,
         }
     }
 
@@ -1233,6 +1277,9 @@ where
         // It is not guaranteed that the tick number will increase at every block import.
         self.notify_tick_number(&block_hash);
 
+        // Notify the capacity manager that a new block has been imported.
+        self.notify_capacity_manager(&block_number).await;
+
         // Process pending requests that update the forest root.
         self.check_pending_forest_root_writes();
 
@@ -1401,35 +1448,53 @@ where
                             }
                         }
                         RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::MoveBucketRejected { bucket_id, msp_id },
+                            pallet_file_system::Event::MoveBucketRejected {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                            },
                         ) => {
                             // This event is relevant in case the Provider managed is a BSP.
                             if let Some(StorageProviderId::BackupStorageProvider(_)) =
                                 &self.provider_id
                             {
-                                self.emit(MoveBucketRejected { bucket_id, msp_id });
+                                self.emit(MoveBucketRejected {
+                                    bucket_id,
+                                    old_msp_id,
+                                    new_msp_id,
+                                });
                             }
                         }
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::MoveBucketAccepted {
                                 bucket_id,
-                                msp_id,
+                                old_msp_id,
+                                new_msp_id,
                                 value_prop_id,
                             },
                         ) => {
                             match self.provider_id {
                                 // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
                                 Some(StorageProviderId::BackupStorageProvider(_)) => {
-                                    self.emit(MoveBucketAccepted { bucket_id, msp_id });
-                                }
-                                // As an MSP, this node is interested in the event only if this node is the new MSP.
-                                Some(StorageProviderId::MainStorageProvider(own_msp_id))
-                                    if own_msp_id == msp_id =>
-                                {
-                                    self.emit(StartMovedBucketDownload {
+                                    self.emit(MoveBucketAccepted {
                                         bucket_id,
+                                        old_msp_id,
+                                        new_msp_id,
                                         value_prop_id,
                                     });
+                                }
+                                // As an MSP, this node is interested in the *imported* event if
+                                // this node is the new MSP - to start downloading the bucket.
+                                // Otherwise, ignore the event. Check finalised events for the old
+                                // MSP branch.
+                                Some(StorageProviderId::MainStorageProvider(own_msp_id)) => {
+                                    if own_msp_id == new_msp_id {
+                                        // We are the new MSP, start downloading
+                                        self.emit(StartMovedBucketDownload {
+                                            bucket_id,
+                                            value_prop_id,
+                                        });
+                                    }
                                 }
                                 // Otherwise, ignore the event.
                                 _ => {}
@@ -1608,6 +1673,21 @@ where
                                 }
                             }
                         }
+						RuntimeEvent::FileSystem(pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+							msp_id,
+							owner: _,
+							bucket_id
+						}) => {
+							// This event is relevant in case the Provider managed is the MSP of the event.
+							if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) = &self.provider_id {
+								if msp_id == *managed_msp_id {
+									self.emit(FinalisedMspStopStoringBucketInsolventUser {
+										msp_id,
+										bucket_id
+									})
+								}
+							}
+						}
                         RuntimeEvent::FileSystem(
                             pallet_file_system::Event::BspConfirmStoppedStoring {
                                 bsp_id,
@@ -1682,6 +1762,32 @@ where
                                 }
                                 // Otherwise, ignore the event.
                                 _ => {}
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketAccepted {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                                value_prop_id: _,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is the old MSP,
+                            // in which case we should clean up the bucket.
+                            // Note: we do this in finality to ensure we don't lose data in case
+                            // of a reorg.
+                            if let Some(StorageProviderId::MainStorageProvider(own_msp_id)) =
+                                &self.provider_id
+                            {
+                                if let Some(old_msp_id) = old_msp_id {
+                                if own_msp_id == &old_msp_id {
+                                    self.emit(FinalisedBucketMovedAway {
+                                            bucket_id,
+                                            old_msp_id,
+                                            new_msp_id,
+                                        });
+                                    }
+                                }
                             }
                         }
                         // Ignore all other events.

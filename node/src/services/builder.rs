@@ -4,11 +4,12 @@ use sc_service::RpcHandlers;
 use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use std::{path::PathBuf, sync::Arc};
-use storage_hub_runtime::StorageDataUnit;
 use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
-use shc_blockchain_service::{spawn_blockchain_service, BlockchainService};
+use shc_blockchain_service::{
+    capacity_manager::CapacityConfig, spawn_blockchain_service, BlockchainService,
+};
 use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
@@ -42,8 +43,7 @@ where
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
     forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
-    max_storage_capacity: Option<StorageDataUnit>,
-    jump_capacity: Option<StorageDataUnit>,
+    capacity_config: Option<CapacityConfig>,
     extrinsic_retry_timeout: u64,
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
@@ -62,8 +62,7 @@ where
             storage_path: None,
             file_storage: None,
             forest_storage_handler: None,
-            max_storage_capacity: None,
-            jump_capacity: None,
+            capacity_config: None,
             extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
             indexer_db_pool: None,
             notify_period: None,
@@ -95,22 +94,8 @@ where
     ///
     /// The node will not increase its on-chain capacity above this value.
     /// This is meant to reflect the actual physical storage capacity of the node.
-    pub fn with_max_storage_capacity(
-        &mut self,
-        max_storage_capacity: Option<StorageDataUnit>,
-    ) -> &mut Self {
-        self.max_storage_capacity = max_storage_capacity;
-        self
-    }
-
-    /// Set the jump capacity.
-    ///
-    /// The jump capacity is the amount of storage that the node will increase in its on-chain
-    /// capacity by adding more stake. For example, if the jump capacity is set to 1k, and the
-    /// node needs 100 units of storage more to store a file, the node will automatically increase
-    /// its on-chain capacity by 1k units.
-    pub fn with_jump_capacity(&mut self, jump_capacity: Option<StorageDataUnit>) -> &mut Self {
-        self.jump_capacity = jump_capacity;
+    pub fn with_capacity_config(&mut self, capacity_config: Option<CapacityConfig>) -> &mut Self {
+        self.capacity_config = capacity_config;
         self
     }
 
@@ -154,6 +139,9 @@ where
             .forest_storage_handler
             .clone()
             .expect("Just checked that this is not None; qed");
+
+        let capacity_config = self.capacity_config.clone();
+
         let blockchain_service_handle = spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH>(
             self.task_spawner
                 .as_ref()
@@ -164,6 +152,7 @@ where
             forest_storage_handler,
             rocksdb_root_path,
             self.notify_period,
+            capacity_config,
         )
         .await;
 
@@ -311,10 +300,7 @@ where
                 .expect("Forest Storage Handler not set.")
                 .clone(),
             ProviderConfig {
-                max_storage_capacity: self
-                    .max_storage_capacity
-                    .expect("Max Storage Capacity not set"),
-                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
+                capacity_config: self.capacity_config.expect("Capacity Config not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
@@ -350,10 +336,7 @@ where
                 .expect("Forest Storage Handler not set.")
                 .clone(),
             ProviderConfig {
-                max_storage_capacity: self
-                    .max_storage_capacity
-                    .expect("Max Storage Capacity not set"),
-                jump_capacity: self.jump_capacity.expect("Jump Capacity not set"),
+                capacity_config: self.capacity_config.expect("Capacity Config not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
@@ -389,8 +372,7 @@ where
             <(UserRole, NoStorageLayer) as ShNodeType>::FSH::new(),
             // Not used by the user role
             ProviderConfig {
-                max_storage_capacity: 0,
-                jump_capacity: 0,
+                capacity_config: CapacityConfig::new(0, 0),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
