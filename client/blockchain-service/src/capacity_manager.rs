@@ -154,7 +154,7 @@ impl CapacityRequestQueue {
 }
 
 /// Configuration parameters determining values for capacity increases.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CapacityConfig {
     /// Maximum storage capacity of the provider in bytes.
     ///

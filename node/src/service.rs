@@ -251,7 +251,6 @@ where
             // Setup the `ShStorageLayer` and additional configuration parameters.
             storage_hub_builder
                 .setup_storage_layer(storage_path.clone())
-                .with_retry_timeout(*extrinsic_retry_timeout)
                 .with_capacity_config(Some(CapacityConfig::new(
                     max_storage_capacity.unwrap_or_default(),
                     jump_capacity.unwrap_or_default(),
