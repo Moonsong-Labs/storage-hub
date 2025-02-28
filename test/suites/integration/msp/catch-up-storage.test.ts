@@ -24,7 +24,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("MSP accept storage request after catching up with blockchain and user properly retry sending file", async () => {
+    it("MSP accept storage request after catching up with blockchain and user properly retry sending file", { timeout: 50000 }, async () => {
       const source = "res/whatsup.jpg";
       const destination = "test/smile.jpg";
       const bucketName = "trying-things";
@@ -91,10 +91,12 @@ describeMspNet(
       });
 
       // Doesn't work without this because there is no log that tell us when the websocket is ready
-      await sleep(5000);
+      await sleep(15000);
 
       // Creating a new MSP API to connect to the newly restarted container.
       const newMspApi = await createApi(`ws://127.0.0.1:${userApi.shConsts.NODE_INFOS.msp1.port}`);
+
+      console.log("Connected");
 
       // Waiting for the MSP node to be in sync with the chain.
       await userApi.rpc.engine.createBlock(true, true);
