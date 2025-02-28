@@ -1186,14 +1186,16 @@ where
     ///
     /// Steps:
     /// 1. Sync the latest nonce, used to sign extrinsics (see [`Self::sync_nonce`]).
-    /// 2. Get the Provider ID linked to keys in this node's keystore (see [`Self::get_provider_id`]).
+    /// 2. Get the Provider ID linked to keys in this node's keystore, and set it as
+    /// the Provider ID that this node is managing (see [`Self::sync_provider_id`]).
     fn init_block_processing(&mut self, block_hash: &H256) {
         // We query the [`BlockchainService`] account nonce at this height
         // and update our internal counter if it's smaller than the result.
         self.sync_nonce(&block_hash);
 
-        // Get Provider ID linked to keys in this node's keystore.
-        self.get_provider_id(&block_hash);
+        // Get Provider ID linked to keys in this node's keystore and set it
+        // as the Provider ID that this node is managing.
+        self.sync_provider_id(&block_hash);
     }
 
     /// Handle the situation after the node comes out of syncing mode (i.e. hasn't processed many of the last blocks).

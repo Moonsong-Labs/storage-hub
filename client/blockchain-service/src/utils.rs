@@ -373,7 +373,7 @@ where
     /// IMPORTANT! If there is more than one [`BCSV_KEY_TYPE`] key in this node's keystore, linked to
     /// different Provider IDs, this function will panic. In other words, this node doesn't support
     /// managing multiple Providers at once.
-    pub(crate) fn get_provider_id(&mut self, block_hash: &H256) {
+    pub(crate) fn sync_provider_id(&mut self, block_hash: &H256) {
         let mut provider_ids_found = Vec::new();
         for key in self.keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
             let maybe_provider_id = match self
