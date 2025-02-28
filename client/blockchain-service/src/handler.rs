@@ -5,15 +5,14 @@ use futures::prelude::*;
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
-use sc_network::Multiaddr;
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
-use sp_keystore::{Keystore, KeystorePtr};
-use sp_runtime::{traits::Header, AccountId32, SaturatedConversion};
+use sp_keystore::KeystorePtr;
+use sp_runtime::{traits::Header, SaturatedConversion};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -32,16 +31,12 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    types::{BlockNumber, FileKey, Fingerprint, ParachainClient, TickNumber, BCSV_KEY_TYPE},
+    types::{BlockNumber, ParachainClient, TickNumber},
 };
-use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
     commands::BlockchainServiceCommand,
-    events::{
-        AcceptedBspVolunteer, BlockchainServiceEventBusProvider, LastChargeableInfoUpdated,
-        NewStorageRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
-    },
+    events::BlockchainServiceEventBusProvider,
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
         OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
@@ -50,7 +45,7 @@ use crate::{
     transaction::SubmittedTransaction,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
-        BspHandler, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
+        ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
         StopStoringForInsolventUserRequest,
     },
 };
@@ -1281,186 +1276,14 @@ where
         // Check that trigger an event every X amount of blocks (specified in config).
         self.check_for_notify(&block_number);
 
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         // Get events from storage.
         // TODO: Handle the `pallet-cr-randomness` events here, if/when we start using them.
         match get_events_at_block(&self.client, block_hash) {
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
-                    // TODO: MOVE THESE INTO A FUNCTION.
-                    match ev.event.clone() {
-                        // New storage request event coming from pallet-file-system.
-                        RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::NewStorageRequest {
-                                who,
-                                file_key,
-                                bucket_id,
-                                location,
-                                fingerprint,
-                                size,
-                                peer_ids,
-                                expires_at,
-                            },
-                        ) => self.emit(NewStorageRequest {
-                            who,
-                            file_key: FileKey::from(file_key.as_ref()),
-                            bucket_id,
-                            location,
-                            fingerprint: fingerprint.as_ref().into(),
-                            size,
-                            user_peer_ids: peer_ids,
-                            expires_at,
-                        }),
-                        // A Provider's challenge cycle has been initialised.
-                        RuntimeEvent::ProofsDealer(
-                            pallet_proofs_dealer::Event::NewChallengeCycleInitialised {
-                                current_tick: _,
-                                next_challenge_deadline: _,
-                                provider: provider_id,
-                                maybe_provider_account,
-                            },
-                        ) => {
-                            // This node only cares if the Provider account matches one of the accounts in the keystore.
-                            if let Some(account) = maybe_provider_account {
-                                let account: Vec<u8> =
-                                    <sp_runtime::AccountId32 as AsRef<[u8; 32]>>::as_ref(&account)
-                                        .to_vec();
-                                if self.keystore.has_keys(&[(account.clone(), BCSV_KEY_TYPE)]) {
-                                    // If so, add the Provider ID to the list of Providers that this node is monitoring.
-                                    info!(target: LOG_TARGET, "🔑 New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
 
-                                    // Managing more than one Provider is not supported, so if this node is already managing another Provider, emit a warning
-                                    // and stop managing it, in favour of the new Provider.
-                                    if let Some(managed_provider) = &self.maybe_managed_provider {
-                                        let managed_provider_id = match managed_provider {
-                                            ManagedProvider::Bsp(bsp_handler) => {
-                                                &bsp_handler.bsp_id
-                                            }
-                                            ManagedProvider::Msp(msp_handler) => {
-                                                &msp_handler.msp_id
-                                            }
-                                        };
-                                        if managed_provider_id != &provider_id {
-                                            warn!(target: LOG_TARGET, "🔄 This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", managed_provider, provider_id);
-                                        }
-                                    }
-
-                                    // Only BSPs can be challenged, therefore this is a BSP.
-                                    self.maybe_managed_provider =
-                                        Some(ManagedProvider::Bsp(BspHandler::new(provider_id)));
-                                }
-                            }
-                        }
-                        // A provider has been marked as slashable.
-                        RuntimeEvent::ProofsDealer(
-                            pallet_proofs_dealer::Event::SlashableProvider {
-                                provider,
-                                next_challenge_deadline,
-                            },
-                        ) => self.emit(SlashableProvider {
-                            provider,
-                            next_challenge_deadline,
-                        }),
-                        // The last chargeable info of a provider has been updated
-                        RuntimeEvent::PaymentStreams(
-                            pallet_payment_streams::Event::LastChargeableInfoUpdated {
-                                provider_id,
-                                last_chargeable_tick,
-                                last_chargeable_price_index,
-                            },
-                        ) => {
-                            if let Some(managed_provider_id) = &self.maybe_managed_provider {
-                                // We only emit the event if the Provider ID is the one that this node is managing.
-                                // It's irrelevant if the Provider ID is a MSP or a BSP.
-                                let managed_provider_id = match managed_provider_id {
-                                    ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                                    ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                                };
-                                if provider_id == *managed_provider_id {
-                                    self.emit(LastChargeableInfoUpdated {
-                                        provider_id: provider_id,
-                                        last_chargeable_tick: last_chargeable_tick,
-                                        last_chargeable_price_index: last_chargeable_price_index,
-                                    })
-                                }
-                            }
-                        }
-                        // A user has been flagged as without funds in the runtime
-                        RuntimeEvent::PaymentStreams(
-                            pallet_payment_streams::Event::UserWithoutFunds { who },
-                        ) => {
-                            self.emit(UserWithoutFunds { who });
-                        }
-                        // A file was correctly deleted from a user without funds
-                        RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::SpStopStoringInsolventUser {
-                                sp_id,
-                                file_key,
-                                owner,
-                                location,
-                                new_root,
-                            },
-                        ) => {
-                            if let Some(managed_provider_id) = &self.maybe_managed_provider {
-                                // We only emit the event if the Provider ID is the one that this node is managing.
-                                // It's irrelevant if the Provider ID is a MSP or a BSP.
-                                let managed_provider_id = match managed_provider_id {
-                                    ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                                    ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                                };
-                                if sp_id == *managed_provider_id {
-                                    self.emit(SpStopStoringInsolventUser {
-                                        sp_id,
-                                        file_key: file_key.into(),
-                                        owner,
-                                        location,
-                                        new_root,
-                                    })
-                                }
-                            }
-                        }
-                        // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
-                        RuntimeEvent::FileSystem(
-                            pallet_file_system::Event::AcceptedBspVolunteer {
-                                bsp_id,
-                                bucket_id,
-                                location,
-                                fingerprint,
-                                multiaddresses,
-                                owner,
-                                size,
-                            },
-                        ) if owner
-                            == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) =>
-                        {
-                            // This event should only be of any use if a node is run by as a user.
-                            if self.maybe_managed_provider.is_none() {
-                                log::info!(
-                                    target: LOG_TARGET,
-                                    "AcceptedBspVolunteer event for BSP ID: {:?}",
-                                    bsp_id
-                                );
-
-                                // We try to convert the types coming from the runtime into our expected types.
-                                let fingerprint: Fingerprint = fingerprint.as_bytes().into();
-
-                                let multiaddress_vec: Vec<Multiaddr> =
-                                    convert_raw_multiaddresses_to_multiaddr(multiaddresses);
-
-                                self.emit(AcceptedBspVolunteer {
-                                    bsp_id,
-                                    bucket_id,
-                                    location,
-                                    fingerprint,
-                                    multiaddresses: multiaddress_vec,
-                                    owner,
-                                    size,
-                                })
-                            }
-                        }
-                        _ => {}
-                    }
+                    self.process_common_events(ev.event.clone());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
@@ -1470,7 +1293,10 @@ where
                         Some(ManagedProvider::Msp(_)) => {
                             self.msp_process_block_events(block_hash, ev.event.clone());
                         }
-                        None => {}
+                        None => {
+                            // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
+                            self.process_test_user_events(ev.event.clone());
+                        }
                     }
                 }
             }
@@ -1482,6 +1308,8 @@ where
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
+
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         state_store_context
             .access_value(&LastProcessedBlockNumberCf)
             .write(block_number);
