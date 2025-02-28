@@ -13770,6 +13770,7 @@ dependencies = [
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2409)",
  "sp-trie 29.0.0",
  "storage-hub-runtime",
+ "tempfile",
  "thiserror 1.0.69",
  "trie-db 0.29.1",
 ]

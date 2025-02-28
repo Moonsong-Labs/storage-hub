@@ -60,6 +60,9 @@ pallet-payment-streams = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-storage-providers = { workspace = true }
 
+[dev-dependencies]
+tempfile = "3.8"
+
 [features]
 default = ["std"]
 std = [

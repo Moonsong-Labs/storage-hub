@@ -862,7 +862,7 @@ pub trait CFHashSetAPI: ProvidesTypedDbAccess {
 
     /// Clears all keys from the hashset.
     fn clear(&mut self) {
-        let keys: Vec<Self::Value> = self.keys();
+        let keys: Vec<_> = self.keys();
         for key in keys {
             self.remove(&key);
         }
@@ -879,174 +879,969 @@ pub trait CFHashSetAPI: ProvidesTypedDbAccess {
     }
 }
 
-// Example implementations for string and integer hashsets
+/// A composite key that combines a primary key and a value for efficient range queries
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CompositeKey<K, V> {
+    pub key: K,
+    pub value: V,
+}
+
+impl<K: Encode, V: Encode> Encode for CompositeKey<K, V> {
+    fn encode(&self) -> Vec<u8> {
+        // Encode key and value separately, then concatenate
+        let mut result = self.key.encode();
+        result.extend(self.value.encode());
+        result
+    }
+}
+
+impl<K: Decode, V: Decode> Decode for CompositeKey<K, V> {
+    fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
+        // This is a simplified implementation that assumes we can decode the key and value
+        // from the input stream. In a real implementation, we would need to know the boundary
+        // between the key and value.
+        let key = K::decode(input)?;
+        let value = V::decode(input)?;
+        Ok(CompositeKey { key, value })
+    }
+}
+
+/// A trait for a hashmap-like structure on top of RocksDB that supports efficient range queries within keys.
+/// This implementation uses a composite key approach where the key and value are combined into a single key,
+/// and the actual value stored is empty (unit type).
+pub trait CFRangeMapAPI: ProvidesTypedDbAccess {
+    /// The type of the key stored in the hashmap.
+    type Key: Encode + Decode + Clone + PartialEq + Eq + PartialOrd + Ord;
+
+    /// The type of the value elements stored for each key.
+    /// The Default trait is required for creating empty values in range queries.
+    type Value: Encode + Decode + Clone + PartialEq + Eq + PartialOrd + Ord + Default;
+
+    /// The column family used to store the hashmap.
+    type MapCF: Default + TypedCf<Key = CompositeKey<Self::Key, Self::Value>, Value = ()>;
+
+    /// Checks if the hashmap contains the given key.
+    fn contains_key(&self, key: &Self::Key) -> bool {
+        // Create a range that only includes the specific key
+        let start = CompositeKey {
+            key: key.clone(),
+            value: Self::Value::default(),
+        };
+        let mut end_key = key.clone();
+        // This assumes we can increment the last byte to get the next key
+        let end_bytes = end_key.encode();
+        if let Some(last) = end_bytes.last().cloned() {
+            let mut new_end = end_bytes.clone();
+            *new_end.last_mut().unwrap() = last.wrapping_add(1);
+            end_key = Self::Key::decode(&mut &new_end[..]).unwrap_or(end_key);
+        }
+        let end = CompositeKey {
+            key: end_key,
+            value: Self::Value::default(),
+        };
+
+        // Check if there's at least one entry for this key
+        self.db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(start..end)
+            .next()
+            .is_some()
+    }
+
+    /// Checks if the hashmap contains the given key-value pair.
+    fn contains(&self, key: &Self::Key, value: &Self::Value) -> bool {
+        let composite_key = CompositeKey {
+            key: key.clone(),
+            value: value.clone(),
+        };
+        self.db_context()
+            .cf(&Self::MapCF::default())
+            .get(&composite_key)
+            .is_some()
+    }
+
+    /// Inserts a key-value pair into the hashmap.
+    /// Returns true if the pair was not present in the map.
+    fn insert(&self, key: &Self::Key, value: Self::Value) -> bool {
+        let composite_key = CompositeKey {
+            key: key.clone(),
+            value,
+        };
+        if self
+            .db_context()
+            .cf(&Self::MapCF::default())
+            .get(&composite_key)
+            .is_some()
+        {
+            return false;
+        }
+        self.db_context()
+            .cf(&Self::MapCF::default())
+            .put(&composite_key, &());
+        true
+    }
+
+    /// Removes a specific key-value pair from the hashmap.
+    /// Returns true if the pair was found and removed.
+    fn remove(&self, key: &Self::Key, value: &Self::Value) -> bool {
+        let composite_key = CompositeKey {
+            key: key.clone(),
+            value: value.clone(),
+        };
+        if self
+            .db_context()
+            .cf(&Self::MapCF::default())
+            .get(&composite_key)
+            .is_none()
+        {
+            return false;
+        }
+        self.db_context()
+            .cf(&Self::MapCF::default())
+            .delete(&composite_key);
+        true
+    }
+
+    /// Removes all values for a specific key.
+    /// Returns the number of values removed.
+    fn remove_key(&self, key: &Self::Key) -> usize {
+        let start = CompositeKey {
+            key: key.clone(),
+            value: Self::Value::default(),
+        };
+        let mut end_key = key.clone();
+        // This assumes we can increment the last byte to get the next key
+        let end_bytes = end_key.encode();
+        if let Some(last) = end_bytes.last().cloned() {
+            let mut new_end = end_bytes.clone();
+            *new_end.last_mut().unwrap() = last.wrapping_add(1);
+            end_key = Self::Key::decode(&mut &new_end[..]).unwrap_or(end_key);
+        }
+        let end = CompositeKey {
+            key: end_key,
+            value: Self::Value::default(),
+        };
+
+        // Use a batched approach to avoid loading everything into memory at once
+        const BATCH_SIZE: usize = 1000;
+        let mut total_removed = 0;
+
+        loop {
+            let values: Vec<_> = self
+                .db_context()
+                .cf(&Self::MapCF::default())
+                .iterate_with_range(start.clone()..end.clone())
+                .take(BATCH_SIZE)
+                .map(|(k, _)| k)
+                .collect();
+
+            if values.is_empty() {
+                break;
+            }
+
+            let batch_size = values.len();
+            for composite_key in values {
+                self.db_context()
+                    .cf(&Self::MapCF::default())
+                    .delete(&composite_key);
+            }
+
+            total_removed += batch_size;
+
+            // Flush after each batch to ensure changes are visible
+            self.db_context().flush();
+        }
+
+        total_removed
+    }
+
+    /// Returns all keys in the hashmap.
+    fn keys(&self) -> Vec<Self::Key> {
+        let mut result = Vec::new();
+        let mut current_key: Option<Self::Key> = None;
+
+        for (composite_key, _) in self
+            .db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(..)
+        {
+            if current_key.as_ref() != Some(&composite_key.key) {
+                current_key = Some(composite_key.key.clone());
+                result.push(composite_key.key);
+            }
+        }
+
+        result
+    }
+
+    /// Returns all values for a specific key.
+    fn values_for_key(&self, key: &Self::Key) -> Vec<Self::Value> {
+        // Create a range that only includes the specific key
+        let start = CompositeKey {
+            key: key.clone(),
+            value: Self::Value::default(),
+        };
+        let mut end_key = key.clone();
+        // This assumes we can increment the last byte to get the next key
+        let end_bytes = end_key.encode();
+        if let Some(last) = end_bytes.last().cloned() {
+            let mut new_end = end_bytes.clone();
+            *new_end.last_mut().unwrap() = last.wrapping_add(1);
+            end_key = Self::Key::decode(&mut &new_end[..]).unwrap_or(end_key);
+        }
+        let end = CompositeKey {
+            key: end_key,
+            value: Self::Value::default(),
+        };
+
+        // Only iterate over the range for this specific key
+        self.db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(start..end)
+            .map(|(composite_key, _)| composite_key.value)
+            .collect()
+    }
+
+    /// Returns values for a specific key within a given range.
+    /// Uses the streaming iterator internally for efficiency.
+    fn values_in_range<R>(&self, key: &Self::Key, range: R) -> Vec<Self::Value>
+    where
+        R: RangeBounds<Self::Value>,
+    {
+        use std::ops::Bound;
+
+        let start_bound = match range.start_bound() {
+            Bound::Included(v) => Bound::Included(CompositeKey {
+                key: key.clone(),
+                value: v.clone(),
+            }),
+            Bound::Excluded(v) => Bound::Excluded(CompositeKey {
+                key: key.clone(),
+                value: v.clone(),
+            }),
+            Bound::Unbounded => Bound::Included(CompositeKey {
+                key: key.clone(),
+                value: Self::Value::default(),
+            }),
+        };
+
+        let mut end_key = key.clone();
+        let end_bytes = end_key.encode();
+        if let Some(last) = end_bytes.last().cloned() {
+            let mut new_end = end_bytes.clone();
+            *new_end.last_mut().unwrap() = last.wrapping_add(1);
+            end_key = Self::Key::decode(&mut &new_end[..]).unwrap_or(end_key);
+        }
+
+        let end_bound = match range.end_bound() {
+            Bound::Included(v) => Bound::Included(CompositeKey {
+                key: key.clone(),
+                value: v.clone(),
+            }),
+            Bound::Excluded(v) => Bound::Excluded(CompositeKey {
+                key: key.clone(),
+                value: v.clone(),
+            }),
+            Bound::Unbounded => Bound::Excluded(CompositeKey {
+                key: end_key,
+                value: Self::Value::default(),
+            }),
+        };
+
+        let range = (start_bound, end_bound);
+
+        self.db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(range)
+            .map(|(k, _)| k.value)
+            .collect()
+    }
+
+    /// Performs an operation on each value for a specific key.
+    fn for_each_value<F>(&self, key: &Self::Key, mut f: F)
+    where
+        F: FnMut(&Self::Value),
+    {
+        let start = CompositeKey {
+            key: key.clone(),
+            value: Self::Value::default(),
+        };
+        let mut end_key = key.clone();
+        // This assumes we can increment the last byte to get the next key
+        let end_bytes = end_key.encode();
+        if let Some(last) = end_bytes.last().cloned() {
+            let mut new_end = end_bytes.clone();
+            *new_end.last_mut().unwrap() = last.wrapping_add(1);
+            end_key = Self::Key::decode(&mut &new_end[..]).unwrap_or(end_key);
+        }
+        let end = CompositeKey {
+            key: end_key,
+            value: Self::Value::default(),
+        };
+
+        for (composite_key, _) in self
+            .db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(start..end)
+        {
+            f(&composite_key.value);
+        }
+    }
+
+    /// Performs an operation on each value for a specific key within a given range.
+    fn for_each_value_in_range<R, F>(&self, key: &Self::Key, range: R, mut f: F)
+    where
+        R: RangeBounds<Self::Value>,
+        F: FnMut(&Self::Value),
+    {
+        use std::ops::Bound;
+
+        let start_bound = match range.start_bound() {
+            Bound::Included(v) => Bound::Included(CompositeKey {
+                key: key.clone(),
+                value: v.clone(),
+            }),
+            Bound::Excluded(v) => Bound::Excluded(CompositeKey {
+                key: key.clone(),
+                value: v.clone(),
+            }),
+            Bound::Unbounded => Bound::Included(CompositeKey {
+                key: key.clone(),
+                value: Self::Value::default(),
+            }),
+        };
+
+        let mut end_key = key.clone();
+        let end_bytes = end_key.encode();
+        if let Some(last) = end_bytes.last().cloned() {
+            let mut new_end = end_bytes.clone();
+            *new_end.last_mut().unwrap() = last.wrapping_add(1);
+            end_key = Self::Key::decode(&mut &new_end[..]).unwrap_or(end_key);
+        }
+
+        let end_bound = match range.end_bound() {
+            Bound::Included(v) => Bound::Included(CompositeKey {
+                key: key.clone(),
+                value: v.clone(),
+            }),
+            Bound::Excluded(v) => Bound::Excluded(CompositeKey {
+                key: key.clone(),
+                value: v.clone(),
+            }),
+            Bound::Unbounded => Bound::Excluded(CompositeKey {
+                key: end_key,
+                value: Self::Value::default(),
+            }),
+        };
+
+        let range = (start_bound, end_bound);
+
+        for (composite_key, _) in self
+            .db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(range)
+        {
+            f(&composite_key.value);
+        }
+    }
+
+    /// Returns the number of keys in the hashmap.
+    fn len(&self) -> usize {
+        let mut count = 0;
+        let mut current_key: Option<Self::Key> = None;
+
+        // Count unique keys without collecting them
+        for (composite_key, _) in self
+            .db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(..)
+        {
+            if current_key.as_ref() != Some(&composite_key.key) {
+                current_key = Some(composite_key.key.clone());
+                count += 1;
+            }
+        }
+
+        count
+    }
+
+    /// Returns true if the hashmap is empty.
+    fn is_empty(&self) -> bool {
+        self.db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(..)
+            .next()
+            .is_none()
+    }
+
+    /// Returns the number of values for a specific key.
+    fn values_len(&self, key: &Self::Key) -> usize {
+        // Create a range that only includes the specific key
+        let start = CompositeKey {
+            key: key.clone(),
+            value: Self::Value::default(),
+        };
+        let mut end_key = key.clone();
+        // This assumes we can increment the last byte to get the next key
+        let end_bytes = end_key.encode();
+        if let Some(last) = end_bytes.last().cloned() {
+            let mut new_end = end_bytes.clone();
+            *new_end.last_mut().unwrap() = last.wrapping_add(1);
+            end_key = Self::Key::decode(&mut &new_end[..]).unwrap_or(end_key);
+        }
+        let end = CompositeKey {
+            key: end_key,
+            value: Self::Value::default(),
+        };
+
+        // Count values without collecting them
+        self.db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(start..end)
+            .count()
+    }
+
+    /// Clears all key-value pairs from the hashmap.
+    fn clear(&self) {
+        // Use a batched approach to avoid loading everything into memory at once
+        const BATCH_SIZE: usize = 1000;
+
+        loop {
+            let keys: Vec<_> = self
+                .db_context()
+                .cf(&Self::MapCF::default())
+                .iterate_with_range(..)
+                .take(BATCH_SIZE)
+                .map(|(k, _)| k)
+                .collect();
+
+            if keys.is_empty() {
+                break;
+            }
+
+            for composite_key in keys {
+                self.db_context()
+                    .cf(&Self::MapCF::default())
+                    .delete(&composite_key);
+            }
+
+            // Flush after each batch to ensure changes are visible
+            self.db_context().flush();
+        }
+    }
+
+    /// Performs an operation on each unique key in the hashmap.
+    /// This is more efficient than collecting all keys and then iterating.
+    fn for_each_key<F>(&self, mut f: F)
+    where
+        F: FnMut(&Self::Key),
+    {
+        let mut current_key: Option<Self::Key> = None;
+
+        for (composite_key, _) in self
+            .db_context()
+            .cf(&Self::MapCF::default())
+            .iterate_with_range(..)
+        {
+            if current_key.as_ref() != Some(&composite_key.key) {
+                current_key = Some(composite_key.key.clone());
+                f(&composite_key.key);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use codec::{Decode, Encode};
+    use rocksdb::{ColumnFamilyDescriptor, Options};
+    use tempfile::tempdir;
 
-    // Define a column family for user IDs
-    #[derive(Default, Clone)]
-    struct UserIdSetCF;
+    // Define test types for our RangeMap
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Encode, Decode)]
+    struct TestKey(u32);
 
-    impl ScaleEncodedCf for UserIdSetCF {
-        type Key = u64;
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    struct TestValue(u32);
+
+    impl Default for TestValue {
+        // This implementation is required for the CFRangeMapAPI trait
+        // which uses Default::default() for empty values in range queries
+        fn default() -> Self {
+            TestValue(0)
+        }
+    }
+
+    impl Encode for TestValue {
+        fn encode(&self) -> Vec<u8> {
+            self.0.encode()
+        }
+    }
+
+    impl Decode for TestValue {
+        fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
+            let value = u32::decode(input)?;
+            Ok(TestValue(value))
+        }
+    }
+
+    // Define column family for our test
+    struct TestRangeMapCF;
+
+    impl Default for TestRangeMapCF {
+        fn default() -> Self {
+            Self
+        }
+    }
+
+    impl TypedCf for TestRangeMapCF {
+        type Key = CompositeKey<TestKey, TestValue>;
         type Value = ();
-        const SCALE_ENCODED_NAME: &'static str = "user_id_set";
+
+        type KeyCodec = ScaleDbCodec;
+        type ValueCodec = ScaleDbCodec;
+
+        const NAME: &'static str = "test_range_map_cf";
     }
 
-    // Define a struct that will implement CFHashSetAPI
-    struct UserIdSet<'a> {
-        db_context: TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+    // Define our test struct that implements CFRangeMapAPI
+    struct TestRangeMap<'db> {
+        db_context: TypedDbContext<'db, TypedRocksDB, BufferedWriteSupport<'db, TypedRocksDB>>,
     }
 
-    // Implement ProvidesDbContext (required for CFHashSetAPI)
-    impl<'a> ProvidesDbContext for UserIdSet<'a> {
+    impl<'db> ProvidesDbContext for TestRangeMap<'db> {
         fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
             &self.db_context
         }
     }
 
-    // Implement ProvidesTypedDbAccess (required for CFHashSetAPI)
-    impl<'a> ProvidesTypedDbAccess for UserIdSet<'a> {}
+    impl<'db> ProvidesTypedDbAccess for TestRangeMap<'db> {}
 
-    // Implement CFHashSetAPI
-    impl<'a> CFHashSetAPI for UserIdSet<'a> {
-        type Value = u64;
-        type SetCF = UserIdSetCF;
+    impl<'db> CFRangeMapAPI for TestRangeMap<'db> {
+        type Key = TestKey;
+        type Value = TestValue;
+        type MapCF = TestRangeMapCF;
+    }
+
+    // Helper function to create a test database and range map
+    fn setup_test_range_map() -> (tempfile::TempDir, TestRangeMap<'static>) {
+        // Create a temporary directory for the database
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        // Open the database with the test column family
+        let mut opts = Options::default();
+        opts.create_if_missing(true);
+        opts.create_missing_column_families(true);
+
+        let cf_descriptor = ColumnFamilyDescriptor::new(TestRangeMapCF::NAME, Options::default());
+        let db = DB::open_cf_descriptors(&opts, path, vec![cf_descriptor]).unwrap();
+
+        // We need to leak the DB to extend its lifetime
+        let db_box = Box::new(TypedRocksDB { db });
+        let typed_db = Box::leak(db_box);
+
+        // Create a buffered write support
+        let write_support = BufferedWriteSupport::new(typed_db);
+
+        // Create a database context
+        let db_context = TypedDbContext::new(typed_db, write_support);
+
+        // Create our test range map
+        let range_map = TestRangeMap { db_context };
+
+        (temp_dir, range_map)
     }
 
     #[test]
-    fn test_hashset_operations() {
-        // Create a temporary directory for the test
-        let temp_dir = format!("/tmp/rocksdb_test_{}", std::process::id());
-        let _ = fs::remove_dir_all(&temp_dir); // Clean up any previous test data
-        fs::create_dir_all(&temp_dir).expect("Failed to create temp directory");
+    fn test_range_map_basic_operations() {
+        let (_temp_dir, range_map) = setup_test_range_map();
 
-        // Set up RocksDB with the required column family
-        let cf_name = UserIdSetCF::SCALE_ENCODED_NAME;
-        let mut db_opts = rocksdb::Options::default();
-        db_opts.create_if_missing(true);
-        db_opts.create_missing_column_families(true);
+        // Test basic operations
+        let key1 = TestKey(1);
+        let value1 = TestValue(10);
+        let value2 = TestValue(20);
+        let value3 = TestValue(30);
 
-        let cf_opts = rocksdb::Options::default();
-        let cf_descriptor = rocksdb::ColumnFamilyDescriptor::new(cf_name, cf_opts);
+        // Initially the map should be empty
+        assert!(range_map.is_empty());
+        assert_eq!(range_map.len(), 0);
 
-        let db = rocksdb::DB::open_cf_descriptors(&db_opts, &temp_dir, vec![cf_descriptor])
-            .expect("Failed to open database");
-        let typed_db = TypedRocksDB { db };
-
-        // Create a write batch and context
-        let write_support = BufferedWriteSupport::new(&typed_db);
-        let db_context = TypedDbContext::new(&typed_db, write_support);
-
-        // Create the hashset with the context
-        let mut user_set = UserIdSet { db_context };
-
-        // Test initial state
-        assert!(user_set.is_empty(), "New hashset should be empty");
-        assert_eq!(user_set.len(), 0, "New hashset should have length 0");
-
-        // Test insert
-        assert!(
-            user_set.insert(&123),
-            "Insert should return true for new key"
-        );
-        assert!(
-            !user_set.insert(&123),
-            "Insert should return false for existing key"
-        );
-        assert!(
-            user_set.insert(&456),
-            "Insert should return true for new key"
-        );
-        assert!(
-            user_set.insert(&789),
-            "Insert should return true for new key"
-        );
+        // Insert some values
+        assert!(range_map.insert(&key1, value1.clone()));
+        assert!(range_map.insert(&key1, value2.clone()));
+        assert!(range_map.insert(&key1, value3.clone()));
 
         // Flush the changes to make them visible
-        user_set.db_context().flush();
+        range_map.db_context.flush();
 
-        // Test contains
-        assert!(
-            user_set.contains(&123),
-            "Hashset should contain inserted key"
-        );
-        assert!(
-            user_set.contains(&456),
-            "Hashset should contain inserted key"
-        );
-        assert!(
-            user_set.contains(&789),
-            "Hashset should contain inserted key"
-        );
-        assert!(
-            !user_set.contains(&999),
-            "Hashset should not contain non-inserted key"
-        );
+        // Check contains
+        assert!(range_map.contains_key(&key1));
+        assert!(range_map.contains(&key1, &value1));
+        assert!(range_map.contains(&key1, &value2));
+        assert!(range_map.contains(&key1, &value3));
 
-        // Test keys
-        let keys = user_set.keys();
-        assert_eq!(keys.len(), 3, "Hashset should have 3 keys");
-        assert!(keys.contains(&123), "Keys should contain 123");
-        assert!(keys.contains(&456), "Keys should contain 456");
-        assert!(keys.contains(&789), "Keys should contain 789");
+        // Check values for key
+        let values = range_map.values_for_key(&key1);
+        assert_eq!(values.len(), 3);
+        assert!(values.contains(&value1));
+        assert!(values.contains(&value2));
+        assert!(values.contains(&value3));
 
-        // Test keys_in_range
-        let range_keys = user_set.keys_in_range(100..500);
-        assert_eq!(range_keys.len(), 2, "Range query should return 2 keys");
-        assert!(range_keys.contains(&123), "Range keys should contain 123");
-        assert!(range_keys.contains(&456), "Range keys should contain 456");
-        assert!(
-            !range_keys.contains(&789),
-            "Range keys should not contain 789"
-        );
+        // Test range queries
+        let values_range = range_map.values_in_range(&key1, value1.clone()..value3.clone());
+        assert_eq!(values_range.len(), 2);
+        assert!(values_range.contains(&value1));
+        assert!(values_range.contains(&value2));
 
-        // Test remove
-        assert!(
-            user_set.remove(&123),
-            "Remove should return true for existing key"
-        );
+        // Test removal
+        assert!(range_map.remove(&key1, &value2));
+        range_map.db_context.flush();
+        assert!(!range_map.contains(&key1, &value2));
+
+        // Check values after removal
+        let values = range_map.values_for_key(&key1);
+        assert_eq!(values.len(), 2);
+        assert!(values.contains(&value1));
+        assert!(values.contains(&value3));
+
+        // Test remove_key
+        assert_eq!(range_map.remove_key(&key1), 2);
+        range_map.db_context.flush();
+        assert!(!range_map.contains_key(&key1));
+        assert!(range_map.is_empty());
+    }
+
+    #[test]
+    fn test_range_map_multiple_keys() {
+        let (_temp_dir, range_map) = setup_test_range_map();
+
+        // Test with multiple keys
+        let key1 = TestKey(1);
+        let key2 = TestKey(2);
+
+        // Insert values for key1
+        range_map.insert(&key1, TestValue(10));
+        range_map.insert(&key1, TestValue(20));
+
+        // Insert values for key2
+        range_map.insert(&key2, TestValue(30));
+        range_map.insert(&key2, TestValue(40));
 
         // Flush the changes to make them visible
-        user_set.db_context().flush();
+        range_map.db_context.flush();
 
-        assert!(
-            !user_set.remove(&123),
-            "Remove should return false for non-existing key"
-        );
-        assert!(
-            !user_set.contains(&123),
-            "Hashset should not contain removed key"
-        );
+        // Check keys
+        let keys = range_map.keys();
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&key1));
+        assert!(keys.contains(&key2));
 
-        // Test for_each
+        // Check values for each key
+        let values1 = range_map.values_for_key(&key1);
+        assert_eq!(values1.len(), 2);
+        assert!(values1.contains(&TestValue(10)));
+        assert!(values1.contains(&TestValue(20)));
+
+        let values2 = range_map.values_for_key(&key2);
+        assert_eq!(values2.len(), 2);
+        assert!(values2.contains(&TestValue(30)));
+        assert!(values2.contains(&TestValue(40)));
+
+        // Test for_each_value
         let mut count = 0;
-        let mut sum = 0;
-        user_set.for_each(|key| {
-            count += 1;
-            sum += key;
+        range_map.for_each_value(&key1, |_| count += 1);
+        assert_eq!(count, 2);
+
+        // Test for_each_value_in_range
+        let mut values = Vec::new();
+        range_map.for_each_value_in_range(&key2, TestValue(30)..=TestValue(40), |v| {
+            values.push(v.clone())
         });
-        assert_eq!(count, 2, "for_each should iterate over 2 keys");
-        assert_eq!(sum, 456 + 789, "Sum of remaining keys should be 456 + 789");
+        assert_eq!(values.len(), 2);
 
         // Test clear
-        user_set.clear();
+        range_map.clear();
+        range_map.db_context.flush();
+        assert!(range_map.is_empty());
+        assert_eq!(range_map.len(), 0);
+    }
 
-        // Flush the changes to make them visible
-        user_set.db_context().flush();
+    #[test]
+    fn test_range_map_duplicate_inserts() {
+        let (_temp_dir, range_map) = setup_test_range_map();
 
-        assert!(user_set.is_empty(), "Hashset should be empty after clear");
-        assert_eq!(
-            user_set.len(),
-            0,
-            "Hashset should have length 0 after clear"
-        );
+        let key = TestKey(1);
+        let value = TestValue(10);
 
-        // Clean up
-        drop(user_set);
-        drop(typed_db);
-        let _ = fs::remove_dir_all(&temp_dir);
+        // First insert should succeed
+        assert!(range_map.insert(&key, value.clone()));
+        range_map.db_context.flush();
+
+        // Second insert of the same key-value pair should fail
+        assert!(!range_map.insert(&key, value.clone()));
+        range_map.db_context.flush();
+
+        // Check that there's still only one value
+        assert_eq!(range_map.values_for_key(&key).len(), 1);
+    }
+
+    #[test]
+    fn test_range_map_empty_operations() {
+        let (_temp_dir, range_map) = setup_test_range_map();
+
+        let key = TestKey(1);
+        let value = TestValue(10);
+
+        // Operations on empty map
+        assert!(!range_map.contains_key(&key));
+        assert!(!range_map.contains(&key, &value));
+        assert!(range_map.values_for_key(&key).is_empty());
+        assert!(range_map
+            .values_in_range(&key, TestValue(0)..TestValue(100))
+            .is_empty());
+
+        // Removing from empty map
+        assert!(!range_map.remove(&key, &value));
+        assert_eq!(range_map.remove_key(&key), 0);
+
+        // Empty map properties
+        assert!(range_map.is_empty());
+        assert_eq!(range_map.len(), 0);
+        assert_eq!(range_map.values_len(&key), 0);
+
+        // for_each on empty map
+        let mut count = 0;
+        range_map.for_each_value(&key, |_| count += 1);
+        assert_eq!(count, 0);
+
+        // for_each_in_range on empty map
+        let mut count = 0;
+        range_map.for_each_value_in_range(&key, TestValue(0)..TestValue(100), |_| count += 1);
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_range_map_range_queries() {
+        let (_temp_dir, range_map) = setup_test_range_map();
+
+        let key = TestKey(1);
+
+        // Insert values 10 through 100 in steps of 10
+        for i in 1..=10 {
+            range_map.insert(&key, TestValue(i * 10));
+        }
+        range_map.db_context.flush();
+
+        // Test inclusive range
+        let values = range_map.values_in_range(&key, TestValue(20)..=TestValue(50));
+        assert_eq!(values.len(), 4); // 20, 30, 40, 50
+        assert!(values.contains(&TestValue(20)));
+        assert!(values.contains(&TestValue(30)));
+        assert!(values.contains(&TestValue(40)));
+        assert!(values.contains(&TestValue(50)));
+
+        // Test exclusive range
+        let values = range_map.values_in_range(&key, TestValue(20)..TestValue(50));
+        assert_eq!(values.len(), 3); // 20, 30, 40
+        assert!(values.contains(&TestValue(20)));
+        assert!(values.contains(&TestValue(30)));
+        assert!(values.contains(&TestValue(40)));
+        assert!(!values.contains(&TestValue(50)));
+
+        // Test unbounded start
+        let values = range_map.values_in_range(&key, ..TestValue(30));
+        assert_eq!(values.len(), 2); // 10, 20
+        assert!(values.contains(&TestValue(10)));
+        assert!(values.contains(&TestValue(20)));
+        assert!(!values.contains(&TestValue(30))); // Exclusive upper bound
+
+        // Test inclusive unbounded start
+        let values = range_map.values_in_range(&key, ..=TestValue(30));
+        assert_eq!(values.len(), 3); // 10, 20, 30
+        assert!(values.contains(&TestValue(10)));
+        assert!(values.contains(&TestValue(20)));
+        assert!(values.contains(&TestValue(30)));
+
+        // Test unbounded end
+        let values = range_map.values_in_range(&key, TestValue(80)..);
+        assert_eq!(values.len(), 3); // 80, 90, 100
+        assert!(values.contains(&TestValue(80)));
+        assert!(values.contains(&TestValue(90)));
+        assert!(values.contains(&TestValue(100)));
+
+        // Test full range
+        let values = range_map.values_in_range(&key, ..);
+        assert_eq!(values.len(), 10); // All values
+
+        // Test for_each_value_in_range with different range types
+        let mut values = Vec::new();
+        range_map.for_each_value_in_range(&key, TestValue(60)..=TestValue(80), |v| {
+            values.push(v.clone())
+        });
+        assert_eq!(values.len(), 3); // 60, 70, 80
+        assert!(values.contains(&TestValue(60)));
+        assert!(values.contains(&TestValue(70)));
+        assert!(values.contains(&TestValue(80)));
+    }
+
+    #[test]
+    fn test_range_map_edge_cases() {
+        let (_temp_dir, range_map) = setup_test_range_map();
+
+        // Test with minimum and maximum values
+        let key = TestKey(u32::MAX);
+        let min_value = TestValue(u32::MIN);
+        let max_value = TestValue(u32::MAX);
+
+        range_map.insert(&key, min_value.clone());
+        range_map.insert(&key, max_value.clone());
+        range_map.db_context.flush();
+
+        assert!(range_map.contains(&key, &min_value));
+        assert!(range_map.contains(&key, &max_value));
+
+        // Test with adjacent keys
+        let key1 = TestKey(100);
+        let key2 = TestKey(101);
+
+        range_map.insert(&key1, TestValue(1));
+        range_map.insert(&key2, TestValue(2));
+        range_map.db_context.flush();
+
+        assert_eq!(range_map.values_for_key(&key1).len(), 1);
+        assert_eq!(range_map.values_for_key(&key2).len(), 1);
+
+        // Test removing non-existent values
+        assert!(!range_map.remove(&key1, &TestValue(999)));
+        assert!(!range_map.remove(&TestKey(999), &TestValue(1)));
+
+        // Test with empty range
+        let values = range_map.values_in_range(&key1, TestValue(2)..TestValue(1));
+        assert!(values.is_empty());
+
+        // Test with point range (single value)
+        let values = range_map.values_in_range(&key1, TestValue(1)..=TestValue(1));
+        assert_eq!(values.len(), 1);
+        assert!(values.contains(&TestValue(1)));
+    }
+
+    #[test]
+    fn test_range_map_persistence() {
+        // This test verifies that data persists across database connections
+        let temp_dir = tempdir().unwrap();
+        let path = temp_dir.path().to_str().unwrap();
+
+        // First connection
+        {
+            let mut opts = Options::default();
+            opts.create_if_missing(true);
+            opts.create_missing_column_families(true);
+
+            let cf_descriptor =
+                ColumnFamilyDescriptor::new(TestRangeMapCF::NAME, Options::default());
+            let db = DB::open_cf_descriptors(&opts, path, vec![cf_descriptor]).unwrap();
+            let typed_db = TypedRocksDB { db };
+
+            let write_support = BufferedWriteSupport::new(&typed_db);
+            let db_context = TypedDbContext::new(&typed_db, write_support);
+            let range_map = TestRangeMap { db_context };
+
+            // Insert some data
+            range_map.insert(&TestKey(1), TestValue(10));
+            range_map.insert(&TestKey(1), TestValue(20));
+            range_map.insert(&TestKey(2), TestValue(30));
+
+            // Flush to ensure data is written to disk
+            range_map.db_context.flush();
+
+            // DB will be closed when it goes out of scope
+        }
+
+        // Second connection
+        {
+            let opts = Options::default();
+            let cf_descriptor =
+                ColumnFamilyDescriptor::new(TestRangeMapCF::NAME, Options::default());
+            let db = DB::open_cf_descriptors(&opts, path, vec![cf_descriptor]).unwrap();
+            let typed_db = TypedRocksDB { db };
+
+            let write_support = BufferedWriteSupport::new(&typed_db);
+            let db_context = TypedDbContext::new(&typed_db, write_support);
+            let range_map = TestRangeMap { db_context };
+
+            // Verify data persisted
+            assert!(range_map.contains(&TestKey(1), &TestValue(10)));
+            assert!(range_map.contains(&TestKey(1), &TestValue(20)));
+            assert!(range_map.contains(&TestKey(2), &TestValue(30)));
+
+            // Verify counts
+            assert_eq!(range_map.values_for_key(&TestKey(1)).len(), 2);
+            assert_eq!(range_map.values_for_key(&TestKey(2)).len(), 1);
+
+            // Add more data
+            range_map.insert(&TestKey(3), TestValue(40));
+            range_map.db_context.flush();
+        }
+
+        // Third connection to verify second connection's changes
+        {
+            let opts = Options::default();
+            let cf_descriptor =
+                ColumnFamilyDescriptor::new(TestRangeMapCF::NAME, Options::default());
+            let db = DB::open_cf_descriptors(&opts, path, vec![cf_descriptor]).unwrap();
+            let typed_db = TypedRocksDB { db };
+
+            let write_support = BufferedWriteSupport::new(&typed_db);
+            let db_context = TypedDbContext::new(&typed_db, write_support);
+            let range_map = TestRangeMap { db_context };
+
+            // Verify all data including the new addition
+            assert!(range_map.contains(&TestKey(1), &TestValue(10)));
+            assert!(range_map.contains(&TestKey(1), &TestValue(20)));
+            assert!(range_map.contains(&TestKey(2), &TestValue(30)));
+            assert!(range_map.contains(&TestKey(3), &TestValue(40)));
+
+            // Clean up
+            range_map.clear();
+            range_map.db_context.flush();
+            assert!(range_map.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_range_map_concurrent_operations() {
+        let (_temp_dir, range_map) = setup_test_range_map();
+
+        // Insert a large number of values
+        for i in 0..100 {
+            range_map.insert(&TestKey(i), TestValue(i));
+        }
+        range_map.db_context.flush();
+
+        // Verify all values were inserted
+        for i in 0..100 {
+            assert!(range_map.contains(&TestKey(i), &TestValue(i)));
+        }
+
+        // Remove every other value
+        for i in (0..100).step_by(2) {
+            assert!(range_map.remove(&TestKey(i), &TestValue(i)));
+        }
+        range_map.db_context.flush();
+
+        // Verify correct values remain
+        for i in 0..100 {
+            if i % 2 == 0 {
+                assert!(!range_map.contains(&TestKey(i), &TestValue(i)));
+            } else {
+                assert!(range_map.contains(&TestKey(i), &TestValue(i)));
+            }
+        }
+
+        // Count remaining keys
+        let keys = range_map.keys();
+        assert_eq!(keys.len(), 50); // Only odd-numbered keys remain
     }
 }
