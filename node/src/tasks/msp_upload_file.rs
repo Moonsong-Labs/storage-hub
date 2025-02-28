@@ -1,6 +1,5 @@
 use anyhow::anyhow;
 use std::{
-    cmp::max,
     collections::{HashMap, HashSet},
     str::FromStr,
     time::Duration,
@@ -8,9 +7,8 @@ use std::{
 
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::types::{
-    MspRespondStorageRequest, RespondStorageRequest, SendExtrinsicOptions,
-};
+use shc_blockchain_service::capacity_manager::CapacityRequestData;
+use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
@@ -28,7 +26,6 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
-use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::types::ShNodeType;
 use crate::services::{handler::StorageHubHandler, types::MspForestStorageHandlerT};
@@ -108,9 +105,9 @@ where
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Registering user peer for file_key {:?}, location {:?}, fingerprint {:?}",
+            "Registering user peer for file_key {:x}, location 0x{}, fingerprint {:x}",
             event.file_key,
-            event.location,
+            hex::encode(event.location.as_slice()),
             event.fingerprint
         );
 
@@ -223,7 +220,7 @@ where
         for respond in &event.data.respond_storing_requests {
             info!(target: LOG_TARGET, "Processing respond storing request.");
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
-                Ok(Some(metadata)) => H256(metadata.bucket_id.try_into().unwrap()),
+                Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
                 Ok(None) => {
                     error!(target: LOG_TARGET, "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", respond.file_key);
                     continue;
@@ -325,7 +322,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, SendExtrinsicOptions::default())
+            .send_extrinsic(call, Default::default())
             .await?
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -415,13 +412,14 @@ where
         }
 
         // Construct file metadata.
-        let metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size as u64,
-            fingerprint: event.fingerprint,
-            location: event.location.to_vec(),
-        };
+        let metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            event.bucket_id.as_ref().to_vec(),
+            event.location.to_vec(),
+            event.size as u64,
+            event.fingerprint,
+        )
+        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
 
         // Get the file key.
         let file_key: FileKey = metadata
@@ -457,47 +455,15 @@ where
             if available_capacity < event.size {
                 warn!(
                     target: LOG_TARGET,
-                    "Insufficient storage capacity to accept file: {:?}",
+                    "Insufficient storage capacity to volunteer for file key: {:?}",
                     event.file_key
                 );
 
+                // Check that the BSP has not reached the maximum storage capacity.
                 let current_capacity = self
                     .storage_hub_handler
                     .blockchain
                     .query_storage_provider_capacity(own_msp_id)
-                    .await
-                    .map_err(|e| {
-                        let err_msg = format!("Failed to query storage provider capacity: {:?}", e);
-                        error!(
-                            target: LOG_TARGET,
-                            err_msg
-                        );
-                        anyhow::anyhow!(err_msg)
-                    })?;
-
-                let max_storage_capacity = self
-                    .storage_hub_handler
-                    .provider_config
-                    .max_storage_capacity;
-
-                if max_storage_capacity == current_capacity {
-                    let err_msg = "Reached maximum storage capacity limit. Unable to add more more storage capacity.";
-                    warn!(
-                        target: LOG_TARGET, err_msg
-                    );
-                    return Err(anyhow::anyhow!(err_msg));
-                }
-
-                let new_capacity = self.calculate_capacity(&event, current_capacity)?;
-
-                let call = storage_hub_runtime::RuntimeCall::Providers(
-                    pallet_storage_providers::Call::change_capacity { new_capacity },
-                );
-
-                let earliest_change_capacity_block = self
-                    .storage_hub_handler
-                    .blockchain
-                    .query_earliest_change_capacity_block(own_msp_id)
                     .await
                     .map_err(|e| {
                         error!(
@@ -507,25 +473,24 @@ where
                         anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
                     })?;
 
-                // Wait for the earliest block where the capacity can be changed.
-                self.storage_hub_handler
-                    .blockchain
-                    .wait_for_block(earliest_change_capacity_block)
-                    .await?;
+                let max_storage_capacity = self
+                    .storage_hub_handler
+                    .provider_config
+                    .capacity_config
+                    .max_capacity();
+
+                if max_storage_capacity <= current_capacity {
+                    let err_msg = "Reached maximum storage capacity limit. Unable to add more storage capacity.";
+                    error!(
+                        target: LOG_TARGET, "{}", err_msg
+                    );
+                    return Err(anyhow::anyhow!(err_msg));
+                }
 
                 self.storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, SendExtrinsicOptions::default())
-                    .await?
-                    .with_timeout(Duration::from_secs(60))
-                    .watch_for_success(&self.storage_hub_handler.blockchain)
+                    .increase_capacity(CapacityRequestData::new(event.size))
                     .await?;
-
-                info!(
-                    target: LOG_TARGET,
-                    "Increased storage capacity to {:?} bytes",
-                    new_capacity
-                );
 
                 let available_capacity = self
                     .storage_hub_handler
@@ -533,11 +498,13 @@ where
                     .query_available_storage_capacity(own_msp_id)
                     .await
                     .map_err(|e| {
+                        let err_msg =
+                            format!("Failed to query available storage capacity: {:?}", e);
                         error!(
                             target: LOG_TARGET,
-                            "Failed to query available storage capacity: {:?}", e
+                            err_msg
                         );
-                        anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
+                        anyhow::anyhow!(err_msg)
                     })?;
 
                 // Reject storage request if the new available capacity is still less than the file size.
@@ -563,7 +530,7 @@ where
 
                     self.storage_hub_handler
                         .blockchain
-                        .send_extrinsic(call, SendExtrinsicOptions::default())
+                        .send_extrinsic(call, Default::default())
                         .await?
                         .with_timeout(Duration::from_secs(60))
                         .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -630,7 +597,7 @@ where
             .get_metadata(&file_key)
         {
             Ok(metadata) => match metadata {
-                Some(metadata) => H256(metadata.bucket_id.try_into().unwrap()),
+                Some(metadata) => H256::from_slice(metadata.bucket_id().as_ref()),
                 None => {
                     let err_msg = format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key);
                     error!(target: LOG_TARGET, err_msg);
@@ -654,12 +621,12 @@ where
         };
 
         // Verify that the fingerprint in the proof matches the expected file fingerprint
-        let expected_fingerprint = file_metadata.fingerprint;
-        if event.file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+        let expected_fingerprint = file_metadata.fingerprint();
+        if event.file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
             error!(
                 target: LOG_TARGET,
                 "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
-                file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint
+                file_key, expected_fingerprint, event.file_key_proof.file_metadata.fingerprint()
             );
             return Err(anyhow!("Fingerprint mismatch"));
         }
@@ -720,7 +687,9 @@ where
         // Process each proven chunk in the batch
         for chunk in proven {
             let chunk_idx = chunk.key.as_u64();
-            let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx);
+            let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx).map_err(|e| {
+                anyhow!("Failed to get chunk size for chunk {}: {:?}", chunk_idx, e)
+            })?;
 
             if chunk.data.len() != expected_chunk_size {
                 error!(
@@ -874,7 +843,7 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, SendExtrinsicOptions::default())
+            .send_extrinsic(call, Default::default())
             .await?
             .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
@@ -884,37 +853,6 @@ where
         self.unregister_file(*file_key).await?;
 
         Ok(())
-    }
-
-    /// Calculate the new capacity after adding the required capacity for the file.
-    ///
-    /// The new storage capacity will be increased by the jump capacity until it reaches the
-    /// `max_storage_capacity`.
-    ///
-    /// The `max_storage_capacity` is returned if the new capacity exceeds it.
-    fn calculate_capacity(
-        &mut self,
-        event: &NewStorageRequest,
-        current_capacity: StorageDataUnit,
-    ) -> Result<StorageDataUnit, anyhow::Error> {
-        let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = event.size.div_ceil(jump_capacity);
-        let jumps = max(jumps_needed, 1);
-        let bytes_to_add = jumps * jump_capacity;
-        let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
-            anyhow::anyhow!(
-                "Reached maximum storage capacity limit. Skipping volunteering for file."
-            )
-        })?;
-
-        let max_storage_capacity = self
-            .storage_hub_handler
-            .provider_config
-            .max_storage_capacity;
-
-        let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
-
-        Ok(new_capacity)
     }
 
     async fn unregister_file(&self, file_key: H256) -> anyhow::Result<()> {
@@ -938,7 +876,7 @@ where
     }
 
     async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
-        info!(target: LOG_TARGET, "File upload complete ({:?})", file_key);
+        info!(target: LOG_TARGET, "File upload complete (file_key {:x})", file_key);
 
         // Unregister the file from the file transfer service.
         self.storage_hub_handler

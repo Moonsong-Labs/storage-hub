@@ -8,7 +8,11 @@ use serde::{Deserialize, Serialize};
 use shp_traits::{AsCompact, FileMetadataInterface};
 use sp_arithmetic::traits::SaturatedConversion;
 use sp_core::{crypto::AccountId32, H256};
+use sp_std::fmt;
 use sp_std::vec::Vec;
+
+/// Maximum number of chunks a Storage Provider would need to prove for a file.
+const MAX_CHUNKS_TO_CHECK: u32 = 10;
 
 /// A struct containing all the information about a file in StorageHub.
 ///
@@ -19,16 +23,13 @@ use sp_std::vec::Vec;
 )]
 pub struct FileMetadata<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
 {
-    pub owner: Vec<u8>,
-    pub bucket_id: Vec<u8>,
-    pub location: Vec<u8>,
+    owner: Vec<u8>,
+    bucket_id: Vec<u8>,
+    location: Vec<u8>,
     #[codec(compact)]
-    pub file_size: u64,
-    pub fingerprint: Fingerprint<H_LENGTH>,
+    file_size: u64,
+    fingerprint: Fingerprint<H_LENGTH>,
 }
-
-/// Maximum number of chunks a Storage Provider would need to prove for a file.
-const MAX_CHUNKS_TO_CHECK: u32 = 10;
 
 impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
     FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
@@ -39,14 +40,54 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         location: Vec<u8>,
         size: u64,
         fingerprint: Fingerprint<H_LENGTH>,
-    ) -> Self {
-        Self {
+    ) -> Result<Self, FileMetadataError> {
+        if owner.is_empty() {
+            return Err(FileMetadataError::InvalidOwner);
+        }
+
+        if bucket_id.is_empty() {
+            return Err(FileMetadataError::InvalidBucketId);
+        }
+
+        if location.is_empty() {
+            return Err(FileMetadataError::InvalidLocation);
+        }
+
+        if size == 0 {
+            return Err(FileMetadataError::InvalidFileSize);
+        }
+
+        if fingerprint.0.is_empty() {
+            return Err(FileMetadataError::InvalidFingerprint);
+        }
+
+        Ok(Self {
             owner,
             bucket_id,
             location,
             file_size: size,
             fingerprint,
-        }
+        })
+    }
+
+    pub fn owner(&self) -> &Vec<u8> {
+        &self.owner
+    }
+
+    pub fn bucket_id(&self) -> &Vec<u8> {
+        &self.bucket_id
+    }
+
+    pub fn location(&self) -> &Vec<u8> {
+        &self.location
+    }
+
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+
+    pub fn fingerprint(&self) -> &Fingerprint<H_LENGTH> {
+        &self.fingerprint
     }
 
     pub fn file_key<T: sp_core::Hasher>(&self) -> T::Out {
@@ -69,7 +110,9 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     }
 
     pub fn last_chunk_id(&self) -> ChunkId {
-        ChunkId::new(self.chunks_count() - 1)
+        // Chunks count should always be >= 1. This is assured by the checks in the constructor.
+        let last_chunk_idx = self.chunks_count().saturating_sub(1);
+        ChunkId::new(last_chunk_idx)
     }
 
     /// Calculates the size of a chunk at a given index.
@@ -78,7 +121,7 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     /// - `chunk_idx` - The index of the chunk (0-based)
     ///
     /// # Returns
-    /// The size of the chunk in bytes
+    /// A Result containing the size of the chunk in bytes, or an error if the chunk index is invalid
     ///
     /// This method handles the special case where the file size is an exact multiple
     /// of the chunk size, ensuring the last chunk is properly sized.
@@ -92,13 +135,24 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     /// created with `file_size = 0`, this method will return that the expected chunk size
     /// is [`CHUNK_SIZE`], essentially making the verification fail. Which is ok, given that
     /// a `file_size = 0` is an invalid file.
-    pub fn chunk_size_at(&self, chunk_idx: u64) -> usize {
-        let remaining_size = self.file_size % CHUNK_SIZE;
-        if remaining_size == 0 || chunk_idx != self.chunks_count() - 1 {
-            CHUNK_SIZE as usize
-        } else {
-            remaining_size as usize
+    pub fn chunk_size_at(&self, chunk_idx: u64) -> Result<usize, ChunkSizeError> {
+        // Validate chunk index is within range
+        let chunks_count = self.chunks_count();
+        if chunk_idx >= chunks_count {
+            return Err(ChunkSizeError::OutOfRangeChunkIndex(
+                chunk_idx,
+                chunks_count,
+            ));
         }
+
+        let remaining_size = self.file_size % CHUNK_SIZE;
+        let chunk_size = if remaining_size == 0 || chunk_idx != self.last_chunk_id().as_u64() {
+            CHUNK_SIZE
+        } else {
+            remaining_size
+        };
+
+        Ok(chunk_size as usize)
     }
 
     /// Validates if a chunk's size is correct for its position
@@ -110,8 +164,20 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
     /// # Returns
     /// true if the chunk size is valid, false otherwise
     pub fn is_valid_chunk_size(&self, chunk_idx: u64, chunk_size: usize) -> bool {
-        self.chunk_size_at(chunk_idx) == chunk_size
+        match self.chunk_size_at(chunk_idx) {
+            Ok(expected_size) => expected_size == chunk_size,
+            Err(_) => false,
+        }
     }
+}
+
+#[derive(Debug)]
+pub enum FileMetadataError {
+    InvalidOwner,
+    InvalidBucketId,
+    InvalidLocation,
+    InvalidFileSize,
+    InvalidFingerprint,
 }
 
 /// Interface for encoding and decoding FileMetadata, used by the runtime.
@@ -196,6 +262,14 @@ impl<const H_LENGTH: usize> AsRef<[u8; H_LENGTH]> for FileKey<H_LENGTH> {
     }
 }
 
+impl<const H_LENGTH: usize> fmt::LowerHex for FileKey<H_LENGTH> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let val = self.0;
+
+        write!(f, "0x{}", hex::encode(val))
+    }
+}
+
 /// A fingerprint is something that uniquely identifies the content of a file.
 /// In the context of this crate, a fingerprint is the root hash of a Merkle Patricia Trie
 /// of the merklised file.
@@ -259,6 +333,20 @@ impl<const H_LENGTH: usize> From<&[u8]> for Fingerprint<H_LENGTH> {
 impl<const H_LENGTH: usize> AsRef<[u8]> for Fingerprint<H_LENGTH> {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl<const H_LENGTH: usize> fmt::LowerHex for Fingerprint<H_LENGTH> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let val = self.0;
+
+        write!(f, "0x{}", hex::encode(val))
+    }
+}
+
+impl<const H_LENGTH: usize> PartialEq<[u8]> for Fingerprint<H_LENGTH> {
+    fn eq(&self, other: &[u8]) -> bool {
+        self.0 == other
     }
 }
 
@@ -328,6 +416,40 @@ impl<K, D: Debug> Leaf<K, D> {
 /// A hash type of arbitrary length `H_LENGTH`.
 pub type Hash<const H_LENGTH: usize> = [u8; H_LENGTH];
 
+/// Errors that can occur when calculating chunk sizes
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChunkSizeError {
+    /// The provided chunk index is out of range for this file
+    OutOfRangeChunkIndex(u64, u64), // (provided_index, max_valid_index)
+    /// The chunk size doesn't match what's expected
+    UnexpectedChunkSize(usize, usize), // (expected_size, actual_size)
+}
+
+impl fmt::Display for ChunkSizeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ChunkSizeError::OutOfRangeChunkIndex(idx, max) => {
+                write!(
+                    f,
+                    "Chunk index {} is out of range (max valid index: {})",
+                    idx,
+                    max - 1
+                )
+            }
+            ChunkSizeError::UnexpectedChunkSize(expected, actual) => {
+                write!(
+                    f,
+                    "Unexpected chunk size: expected {} bytes, got {} bytes",
+                    expected, actual
+                )
+            }
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for ChunkSizeError {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,11 +466,11 @@ mod tests {
         };
 
         // Test regular chunks
-        assert_eq!(metadata.chunk_size_at(0), TEST_CHUNK_SIZE as usize);
-        assert_eq!(metadata.chunk_size_at(1), TEST_CHUNK_SIZE as usize);
+        assert_eq!(metadata.chunk_size_at(0).unwrap(), TEST_CHUNK_SIZE as usize);
+        assert_eq!(metadata.chunk_size_at(1).unwrap(), TEST_CHUNK_SIZE as usize);
 
         // Test last chunk
-        assert_eq!(metadata.chunk_size_at(2), 452); // 2500 % 1024 = 452
+        assert_eq!(metadata.chunk_size_at(2).unwrap(), 452); // 2500 % 1024 = 452
 
         // Test validation
         assert!(metadata.is_valid_chunk_size(0, TEST_CHUNK_SIZE as usize));
@@ -367,7 +489,26 @@ mod tests {
         };
 
         // Both chunks should be full size since file_size is exact multiple of chunk_size
-        assert_eq!(metadata.chunk_size_at(0), TEST_CHUNK_SIZE as usize);
-        assert_eq!(metadata.chunk_size_at(1), TEST_CHUNK_SIZE as usize);
+        assert_eq!(metadata.chunk_size_at(0).unwrap(), TEST_CHUNK_SIZE as usize);
+        assert_eq!(metadata.chunk_size_at(1).unwrap(), TEST_CHUNK_SIZE as usize);
+    }
+
+    #[test]
+    fn test_out_of_range_chunk() {
+        let metadata = FileMetadata::<32, TEST_CHUNK_SIZE, 1024> {
+            file_size: TEST_CHUNK_SIZE * 2, // Exactly 2 chunks
+            fingerprint: Fingerprint::from([0u8; 32]),
+            owner: vec![],
+            location: vec![],
+            bucket_id: vec![],
+        };
+
+        // Test out-of-range chunk access
+        assert!(metadata.chunk_size_at(2).is_err());
+        assert!(metadata.chunk_size_at(100).is_err());
+
+        // Verify that is_valid_chunk_size rejects out-of-range indices
+        assert!(!metadata.is_valid_chunk_size(2, TEST_CHUNK_SIZE as usize));
+        assert!(!metadata.is_valid_chunk_size(100, TEST_CHUNK_SIZE as usize));
     }
 }

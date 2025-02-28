@@ -5,7 +5,6 @@ use ordered_float::OrderedFloat;
 use priority_queue::PriorityQueue;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use std::{
-    cmp::max,
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Duration,
@@ -19,9 +18,10 @@ use sp_core::H256;
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
+    capacity_manager::CapacityRequestData,
     commands::BlockchainServiceInterface,
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
-    types::{RetryStrategy, SendExtrinsicOptions},
+    types::RetryStrategy,
 };
 use shc_common::types::{
     BucketId, FileKeyProof, FileMetadata, HashT, ProviderId, StorageProofsMerkleTrieLayout,
@@ -34,7 +34,6 @@ use shc_file_transfer_service::{
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::{Chunk, ChunkId, Leaf as ProvenLeaf};
-use storage_hub_runtime::StorageDataUnit;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -215,7 +214,9 @@ where
                         .await
                         .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
 
-                    let file_metadata = file.to_file_metadata(bucket_id.as_ref().to_vec());
+                    let file_metadata = file
+                        .to_file_metadata(bucket_id.as_ref().to_vec())
+                        .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
                     let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
                     // Get BSP peer IDs and register them
@@ -363,14 +364,16 @@ where
 
         // Try to insert all files before accepting the request
         for file in &files {
-            let file_metadata = file.to_file_metadata(bucket.clone());
+            let file_metadata = file
+                .to_file_metadata(bucket.clone())
+                .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
             self.storage_hub_handler
                 .file_storage
                 .write()
                 .await
-                .insert_file(file_key.clone(), file_metadata.clone())
+                .insert_file(file_key, file_metadata.clone())
                 .map_err(|error| {
                     anyhow!(
                         "CRITICAL ❗️❗️❗️: Failed to insert file {:?} into file storage: {:?}",
@@ -565,53 +568,22 @@ where
             let max_storage_capacity = self
                 .storage_hub_handler
                 .provider_config
-                .max_storage_capacity;
+                .capacity_config
+                .max_capacity();
 
-            if max_storage_capacity == current_capacity {
+            if max_storage_capacity <= current_capacity {
                 let err_msg =
                     "Reached maximum storage capacity limit. Unable to add more storage capacity.";
-                warn!(target: LOG_TARGET, err_msg);
+                error!(
+                    target: LOG_TARGET, "{}", err_msg
+                );
                 return Err(anyhow::anyhow!(err_msg));
             }
 
-            let new_capacity = self.calculate_capacity(required_size, current_capacity)?;
-
-            let call = storage_hub_runtime::RuntimeCall::Providers(
-                pallet_storage_providers::Call::change_capacity { new_capacity },
-            );
-
-            let earliest_change_capacity_block = self
-                .storage_hub_handler
-                .blockchain
-                .query_earliest_change_capacity_block(own_msp_id)
-                .await
-                .map_err(|e| {
-                    error!(
-                        target: LOG_TARGET,
-                        "Failed to query earliest change capacity block: {:?}", e
-                    );
-                    anyhow::anyhow!("Failed to query earliest change capacity block: {:?}", e)
-                })?;
-
-            // Wait for the earliest block where the capacity can be changed
             self.storage_hub_handler
                 .blockchain
-                .wait_for_block(earliest_change_capacity_block)
+                .increase_capacity(CapacityRequestData::new(required_size))
                 .await?;
-
-            self.storage_hub_handler
-                .blockchain
-                .send_extrinsic(call, SendExtrinsicOptions::default())
-                .await?
-                .with_timeout(Duration::from_secs(60))
-                .watch_for_success(&self.storage_hub_handler.blockchain)
-                .await?;
-
-            info!(
-                target: LOG_TARGET,
-                "Increased storage capacity to {:?} bytes",
-                new_capacity
-            );
 
             let available_capacity = self
                 .storage_hub_handler
@@ -638,29 +610,6 @@ where
         Ok(())
     }
 
-    fn calculate_capacity(
-        &self,
-        required_size: u64,
-        current_capacity: StorageDataUnit,
-    ) -> Result<StorageDataUnit, anyhow::Error> {
-        let jump_capacity = self.storage_hub_handler.provider_config.jump_capacity;
-        let jumps_needed = (required_size + jump_capacity - 1) / jump_capacity;
-        let jumps = max(jumps_needed, 1);
-        let bytes_to_add = jumps * jump_capacity;
-        let required_capacity = current_capacity.checked_add(bytes_to_add).ok_or_else(|| {
-            anyhow::anyhow!("Reached maximum storage capacity limit. Cannot accept bucket move.")
-        })?;
-
-        let max_storage_capacity = self
-            .storage_hub_handler
-            .provider_config
-            .max_storage_capacity;
-
-        let new_capacity = std::cmp::min(required_capacity, max_storage_capacity);
-
-        Ok(new_capacity)
-    }
-
     /// Processes a single chunk download response
     async fn process_chunk_download_response(
         &self,
@@ -677,14 +626,14 @@ where
             .map_err(|e| anyhow!("Failed to decode file key proof: {:?}", e))?;
 
         // Verify fingerprint
-        let expected_fingerprint = file_metadata.fingerprint;
-        if file_key_proof.file_metadata.fingerprint != expected_fingerprint {
+        let expected_fingerprint = file_metadata.fingerprint();
+        if file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
             let mut peer_manager = peer_manager.write().await;
             peer_manager.record_failure(peer_id);
             return Err(anyhow!(
                 "Fingerprint mismatch. Expected: {:?}, got: {:?}",
                 expected_fingerprint,
-                file_key_proof.file_metadata.fingerprint
+                file_key_proof.file_metadata.fingerprint()
             ));
         }
 
@@ -727,7 +676,9 @@ where
 
         // Validate chunk size
         let chunk_idx = chunk_id.as_u64();
-        let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx);
+        let expected_chunk_size = file_metadata
+            .chunk_size_at(chunk_idx)
+            .map_err(|e| anyhow!("Failed to get chunk size for chunk {}: {:?}", chunk_idx, e))?;
 
         if chunk_data.len() != expected_chunk_size {
             return Err(anyhow!(
@@ -775,12 +726,7 @@ where
             match self
                 .storage_hub_handler
                 .file_transfer
-                .download_request(
-                    peer_id,
-                    file_key.into(),
-                    chunk_batch.clone(),
-                    Some(bucket.clone()),
-                )
+                .download_request(peer_id, file_key.into(), chunk_batch.clone(), Some(*bucket))
                 .await
             {
                 Ok(download_request) => {
@@ -872,7 +818,9 @@ where
         file: &shc_indexer_db::models::File,
         bucket: &BucketId,
     ) -> anyhow::Result<()> {
-        let file_metadata = file.to_file_metadata(bucket.as_ref().to_vec());
+        let file_metadata = file
+            .to_file_metadata(bucket.as_ref().to_vec())
+            .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
         let chunks_count = file_metadata.chunks_count();
 
@@ -891,8 +839,7 @@ where
                 let semaphore = Arc::clone(&chunk_semaphore);
                 let task = self.clone();
                 let file_metadata = file_metadata.clone();
-                let file_key = file_key.clone();
-                let bucket = bucket.clone();
+                let bucket = *bucket;
                 let peer_manager = Arc::clone(&peer_manager);
 
                 tokio::spawn(async move {
@@ -1062,7 +1009,6 @@ impl BspPeerStats {
     ///
     /// The score is a weighted combination of the peer's success rate and average speed.
     /// The success rate is weighted more heavily (70%) compared to the average speed (30%).
-    ///
     fn get_score(&self) -> f64 {
         // Combine success rate and speed into a single score
         // Weight success rate more heavily (70%) compared to speed (30%)
@@ -1128,7 +1074,7 @@ impl BspPeerManager {
             .peers
             .entry(peer_id)
             .or_insert_with(|| BspPeerStats::new());
-        stats.add_file_key(file_key.clone());
+        stats.add_file_key(file_key);
 
         // Add to the priority queue for this file key
         let queue = self

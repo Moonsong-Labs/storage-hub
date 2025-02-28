@@ -157,11 +157,11 @@ impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
     }
 
     fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
-        metadata.file_size
+        metadata.file_size()
     }
 
     fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
-        Self::AccountId::decode(&mut metadata.owner.as_slice())
+        Self::AccountId::decode(&mut metadata.owner().as_slice())
     }
 }
 

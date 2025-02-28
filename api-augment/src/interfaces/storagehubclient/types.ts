@@ -14,6 +14,13 @@ import type {
 } from "@polkadot/types-codec";
 import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 
+/** @name AddFilesToForestStorageResult */
+export interface AddFilesToForestStorageResult extends Enum {
+  readonly isSuccess: boolean;
+  readonly isForestNotFound: boolean;
+  readonly type: "Success" | "ForestNotFound";
+}
+
 /** @name BackupStorageProvider */
 export interface BackupStorageProvider extends Struct {
   readonly capacity: StorageDataUnit;
@@ -205,10 +212,22 @@ export interface QueryBucketsForMspError extends Enum {
   readonly type: "ProviderNotRegistered" | "InternalError";
 }
 
+/** @name QueryBucketsOfUserStoredByMspError */
+export interface QueryBucketsOfUserStoredByMspError extends Enum {
+  readonly isNotAnMsp: boolean;
+  readonly isInternalError: boolean;
+  readonly type: "NotAnMsp" | "InternalError";
+}
+
 /** @name QueryConfirmChunksToProveForFileError */
 export interface QueryConfirmChunksToProveForFileError extends Enum {
   readonly isChallengedChunkToChunkIdError: boolean;
-  readonly type: "ChallengedChunkToChunkIdError";
+  readonly isFailedToCreateFileMetadata: boolean;
+  readonly isFailedToGenerateChunkChallenges: boolean;
+  readonly type:
+    | "ChallengedChunkToChunkIdError"
+    | "FailedToCreateFileMetadata"
+    | "FailedToGenerateChunkChallenges";
 }
 
 /** @name QueryEarliestChangeCapacityBlockError */
@@ -265,6 +284,13 @@ export interface QueryStorageProviderCapacityError extends Enum {
 
 /** @name RandomnessOutput */
 export interface RandomnessOutput extends H256 {}
+
+/** @name RemoveFilesFromForestStorageResult */
+export interface RemoveFilesFromForestStorageResult extends Enum {
+  readonly isSuccess: boolean;
+  readonly isForestNotFound: boolean;
+  readonly type: "Success" | "ForestNotFound";
+}
 
 /** @name ReputationWeightType */
 export interface ReputationWeightType extends u32 {}
