@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use log::{debug, error, info, trace};
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi;
 use pallet_proofs_dealer_runtime_api::{GetChallengePeriodError, GetChallengeSeedError};
@@ -13,12 +15,15 @@ use shc_actors_framework::actor::Actor;
 use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_common::types::{BlockNumber, MaxBatchConfirmStorageRequests};
 use shc_forest_manager::traits::ForestStorageHandler;
+use tokio::sync::Mutex;
 
 use crate::events::{
     BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
     FinalisedTrieRemoveMutationsApplied, ForestWriteLockTaskData, MoveBucketAccepted,
-    MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, ProcessConfirmStoringRequestData,
-    ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequestData,
+    MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, ProcessConfirmStoringRequest,
+    ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+    ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
+    ProcessSubmitProofRequestData,
 };
 use crate::state::{
     OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
@@ -39,7 +44,7 @@ where
     ///
     /// Steps:
     /// 1. Catch up to the latest proof submissions that were missed due to a node restart.
-    pub(crate) fn bsp_initial_sync(&mut self) {
+    pub(crate) fn bsp_initial_sync(&self) {
         self.proof_submission_catch_up(&self.client.info().best_hash);
         // TODO: Send events to check that this node has a Forest Storage for the BSP that it manages.
         // TODO: Catch up to Forest root writes in the BSP Forest.
@@ -50,22 +55,22 @@ where
     /// Steps:
     /// 1. Catch up to Forest root changes in this BSP's Forest.
     /// 2. In blocks that are a multiple of [`CHECK_FOR_PENDING_PROOFS_PERIOD`], catch up to proof submissions for the current tick.
-    pub(crate) fn bsp_init_block_processing<Block>(
-        &mut self,
+    pub(crate) async fn bsp_init_block_processing<Block>(
+        &self,
         block_hash: &H256,
         block_number: &BlockNumber,
         tree_route: TreeRoute<Block>,
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        self.forest_root_changes_catchup(&tree_route);
+        self.forest_root_changes_catchup(&tree_route).await;
         if block_number % CHECK_FOR_PENDING_PROOFS_PERIOD == BlockNumber::zero() {
             self.proof_submission_catch_up(block_hash);
         }
     }
 
     /// Processes new block imported events that are only relevant for a BSP.
-    pub(crate) fn bsp_process_block_events(&self, block_hash: &H256, event: RuntimeEvent) {
+    pub(crate) fn bsp_process_block_import_events(&self, block_hash: &H256, event: RuntimeEvent) {
         let managed_bsp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => &bsp_handler.bsp_id,
             _ => {
@@ -226,7 +231,7 @@ where
     /// This function is called every time a new block is imported and after each request is queued.
     ///
     /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
-    pub(crate) fn bsp_check_pending_forest_root_writes(&mut self) {
+    pub(crate) fn bsp_assign_forest_root_write_lock(&mut self) {
         let client_best_hash = self.client.info().best_hash;
         let client_best_number = self.client.info().best_number;
 
@@ -383,7 +388,7 @@ where
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
-            self.emit_forest_write_event(event_data);
+            self.bsp_emit_forest_write_event(event_data);
         }
     }
 
@@ -550,6 +555,83 @@ where
                 provider_id: *bsp_id,
                 seeds: challenge_seeds,
             });
+        }
+    }
+
+    fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
+        // Get the BSP's Forest root write lock.
+        let forest_root_write_lock = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
+            _ => {
+                error!(target: LOG_TARGET, "`bsp_emit_forest_write_event` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        // Create a new channel to assign ownership of the BSP's Forest root write lock.
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        *forest_root_write_lock = Some(rx);
+
+        // If this is a confirm storing request or a stop storing for insolvent user request,
+        // we need to store it in the state store.
+        let data = data.into();
+        match &data {
+            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessConfirmStoringRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::MspRespondStorageRequest(_) => {
+                unreachable!("BSPs do not respond to storage requests as MSPs do.")
+            }
+            ForestWriteLockTaskData::FileDeletionRequest(_) => {
+                unreachable!("BSPs do not respond to file deletions as MSPs do.")
+            }
+            ForestWriteLockTaskData::SubmitProofRequest(_) => {
+                // We don't need to store anything in the state store for submit proof requests.
+                // They are periodically checked by the BSP's block processing loop.
+            }
+        }
+
+        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
+        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
+        // event. Clone is required because there is no constraint on the number of listeners that can
+        // subscribe to the event (and each is guaranteed to receive all emitted events).
+        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+        match data {
+            ForestWriteLockTaskData::SubmitProofRequest(data) => {
+                self.emit(ProcessSubmitProofRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
+                self.emit(ProcessConfirmStoringRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                self.emit(ProcessStopStoringForInsolventUserRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::MspRespondStorageRequest(_) => {
+                unreachable!("BSPs do not respond to storage requests as MSPs do.")
+            }
+            ForestWriteLockTaskData::FileDeletionRequest(_) => {
+                unreachable!("BSPs do not respond to file deletions as MSPs do.")
+            }
         }
     }
 }

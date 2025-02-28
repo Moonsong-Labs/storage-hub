@@ -4,7 +4,6 @@ use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
 use log::{debug, error, info, trace, warn};
-use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
@@ -16,10 +15,9 @@ use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    consts::CURRENT_FOREST_KEY,
     types::{
         BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
+        TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -35,22 +33,13 @@ use sp_runtime::{
 };
 use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 use substrate_frame_rpc_system::AccountNonceApi;
-use tokio::sync::Mutex;
 
 use crate::{
     events::{
-        AcceptedBspVolunteer, ForestWriteLockTaskData, LastChargeableInfoUpdated,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
-        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
-        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
+        AcceptedBspVolunteer, LastChargeableInfoUpdated, NewStorageRequest, NotifyPeriod,
+        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     handler::{LOG_TARGET, MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES},
-    state::{
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessFileDeletionRequestCf,
-        OngoingProcessMspRespondStorageRequestCf,
-        OngoingProcessStopStoringForInsolventUserRequestCf,
-    },
-    typed_store::ProvidesTypedDbSingleAccess,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
         SendExtrinsicOptions, Tip,
@@ -645,84 +634,6 @@ where
         (current_tick_minus_last_submission % provider_challenge_period) == 0
     }
 
-    pub(crate) fn emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.forest_root_write_lock = Some(rx);
-
-        let data = data.into();
-
-        // If this is a confirm storing request, respond storage request, or a stop storing for insolvent user request, we need to store it in the state store.
-        match &data {
-            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessConfirmStoringRequestCf)
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf)
-                    .write(data);
-                state_store_context.commit();
-            }
-            _ => {}
-        }
-
-        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
-        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
-        // event. Clone is required because there is no constraint on the number of listeners that can
-        // subscribe to the event (and each is guaranteed to receive all emitted events).
-        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-        match data {
-            ForestWriteLockTaskData::SubmitProofRequest(data) => {
-                self.emit(ProcessSubmitProofRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                self.emit(ProcessConfirmStoringRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
-                self.emit(ProcessMspRespondStoringRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                self.emit(ProcessStopStoringForInsolventUserRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                self.emit(ProcessFileDeletionRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-        }
-    }
-
     /// Applies Forest root changes found in a [`TreeRoute`].
     ///
     /// This function can be used both for new blocks as well as for reorgs.
@@ -998,7 +909,7 @@ where
         Ok(reverted_mutation)
     }
 
-    pub(crate) fn process_common_events(&mut self, event: RuntimeEvent) {
+    pub(crate) fn process_common_block_import_events(&mut self, event: RuntimeEvent) {
         match event {
             // New storage request event coming from pallet-file-system.
             RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
@@ -1119,6 +1030,12 @@ where
                     }
                 }
             }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn process_common_finality_events(&self, event: RuntimeEvent) {
+        match event {
             _ => {}
         }
     }

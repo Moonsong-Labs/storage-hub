@@ -781,7 +781,7 @@ where
                             .push_back(request);
                         state_store_context.commit();
                         // We check right away if we can process the request so we don't waste time.
-                        self.bsp_check_pending_forest_root_writes();
+                        self.bsp_assign_forest_root_write_lock();
                         match callback.send(Ok(())) {
                             Ok(_) => {}
                             Err(e) => {
@@ -805,7 +805,7 @@ where
                         .push_back(request);
                     state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
-                    self.msp_check_pending_forest_root_writes();
+                    self.msp_assign_forest_root_write_lock();
                     match callback.send(Ok(())) {
                         Ok(_) => {}
                         Err(e) => {
@@ -828,7 +828,7 @@ where
                         }
 
                         // We check right away if we can process the request so we don't waste time.
-                        self.bsp_check_pending_forest_root_writes();
+                        self.bsp_assign_forest_root_write_lock();
                         match callback.send(Ok(())) {
                             Ok(_) => {}
                             Err(e) => {
@@ -860,7 +860,7 @@ where
                         // We check right away if we can process the request so we don't waste time.
                         match managed_bsp_or_msp {
                             ManagedProvider::Bsp(_) => {
-                                self.bsp_check_pending_forest_root_writes();
+                                self.bsp_assign_forest_root_write_lock();
 
                                 match callback.send(Ok(())) {
                                     Ok(_) => {}
@@ -870,7 +870,7 @@ where
                                 }
                             }
                             ManagedProvider::Msp(_) => {
-                                self.msp_check_pending_forest_root_writes();
+                                self.msp_assign_forest_root_write_lock();
 
                                 match callback.send(Ok(())) {
                                     Ok(_) => {}
@@ -1013,10 +1013,10 @@ where
                         if forest_root_write_result.is_ok() {
                             match managed_bsp_or_msp {
                                 ManagedProvider::Msp(_) => {
-                                    self.msp_check_pending_forest_root_writes();
+                                    self.msp_assign_forest_root_write_lock();
                                 }
                                 ManagedProvider::Bsp(_) => {
-                                    self.bsp_check_pending_forest_root_writes();
+                                    self.bsp_assign_forest_root_write_lock();
                                 }
                             }
                         }
@@ -1043,7 +1043,7 @@ where
                         .push_back(request);
                     state_store_context.commit();
                     // We check right away if we can process the request so we don't waste time.
-                    self.msp_check_pending_forest_root_writes();
+                    self.msp_assign_forest_root_write_lock();
                     match callback.send(Ok(())) {
                         Ok(_) => {}
                         Err(e) => {
@@ -1244,10 +1244,12 @@ where
         // Provider-specific code to run on every block import.
         match self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
-                self.bsp_init_block_processing(block_hash, block_number, tree_route);
+                self.bsp_init_block_processing(block_hash, block_number, tree_route)
+                    .await;
             }
             Some(ManagedProvider::Msp(_)) => {
-                self.msp_init_block_processing(block_hash, block_number, tree_route);
+                self.msp_init_block_processing(block_hash, block_number, tree_route)
+                    .await;
             }
             None => {
                 trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
@@ -1264,10 +1266,10 @@ where
         // Process pending requests that update the forest root.
         match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
-                self.bsp_check_pending_forest_root_writes();
+                self.bsp_assign_forest_root_write_lock();
             }
             Some(ManagedProvider::Msp(_)) => {
-                self.msp_check_pending_forest_root_writes();
+                self.msp_assign_forest_root_write_lock();
             }
             None => {
                 trace!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
@@ -1283,15 +1285,15 @@ where
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
 
-                    self.process_common_events(ev.event.clone());
+                    self.process_common_block_import_events(ev.event.clone());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
                         Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_block_events(block_hash, ev.event.clone());
+                            self.bsp_process_block_import_events(block_hash, ev.event.clone());
                         }
                         Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_block_events(block_hash, ev.event.clone());
+                            self.msp_process_block_import_events(block_hash, ev.event.clone());
                         }
                         None => {
                             // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
@@ -1333,18 +1335,15 @@ where
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
-                    match ev.event.clone() {
-                        // Ignore all other events.
-                        _ => {}
-                    }
+                    self.process_common_finality_events(ev.event.clone());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
                         Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_block_events(&block_hash, ev.event.clone());
+                            self.bsp_process_finality_events(&block_hash, ev.event.clone());
                         }
                         Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_block_events(&block_hash, ev.event.clone());
+                            self.msp_process_finality_events(&block_hash, ev.event.clone());
                         }
                         _ => {}
                     }

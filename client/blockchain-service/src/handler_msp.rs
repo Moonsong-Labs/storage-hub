@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use log::{debug, error, info, trace};
 use sc_client_api::HeaderBackend;
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
 use storage_hub_runtime::RuntimeEvent;
 use sp_api::ProvideRuntimeApi;
-use tokio::sync::oneshot::error::TryRecvError;
+use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use shc_actors_framework::actor::Actor;
 use shc_common::types::{BlockHash, BlockNumber};
@@ -14,11 +16,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 
 use crate::{
     events::{
-        FileDeletionRequest, FinalisedMspStoppedStoringBucket,
-        FinalisedProofSubmittedForPendingFileDeletionRequest, ForestWriteLockTaskData,
-        MoveBucketRequestedForMsp, ProcessFileDeletionRequestData,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload,
+        FileDeletionRequest, FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest, ForestWriteLockTaskData, MoveBucketRequestedForMsp, ProcessFileDeletionRequest, ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload
     },
     handler::LOG_TARGET,
     state::{
@@ -41,7 +39,7 @@ where
     ///
     /// Steps:
     /// TODO
-    pub(crate) fn msp_initial_sync(&mut self) {
+    pub(crate) fn msp_initial_sync(&self) {
         // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
         // TODO: Catch up to Forest root writes in the Bucket's Forests.
     }
@@ -50,19 +48,19 @@ where
     ///
     /// Steps:
     /// 1. Catch up to Forest root changes in the Forests of the Buckets this MSP manages.
-    pub(crate) fn msp_init_block_processing<Block>(
-        &mut self,
+    pub(crate) async fn msp_init_block_processing<Block>(
+        &self,
         _block_hash: &H256,
         _block_number: &BlockNumber,
         tree_route: TreeRoute<Block>,
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        self.forest_root_changes_catchup(&tree_route);
+        self.forest_root_changes_catchup(&tree_route).await;
     }
 
     /// Processes new block imported events that are only relevant for an MSP.
-    pub(crate) fn msp_process_block_events(&self, _block_hash: &H256, event: RuntimeEvent) {
+    pub(crate) fn msp_process_block_import_events(&self, _block_hash: &H256, event: RuntimeEvent) {
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
             _ => {
@@ -190,7 +188,7 @@ where
     /// This function is called every time a new block is imported and after each request is queued.
     ///
     /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
-    pub(crate) fn msp_check_pending_forest_root_writes(&mut self) {
+    pub(crate) fn msp_assign_forest_root_write_lock(&mut self) {
         let client_best_hash = self.client.info().best_hash;
         let client_best_number = self.client.info().best_number;
 
@@ -331,7 +329,7 @@ where
 
         // If there is any event data to process, emit the event.
         if let Some(event_data) = next_event_data {
-            self.emit_forest_write_event(event_data);
+            self.msp_emit_forest_write_event(event_data);
         }
     }
 
@@ -439,6 +437,79 @@ where
                 info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
             }
             _ => {}
+        }
+    }
+
+    fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
+        // Get the MSP's Forest root write lock.
+        let forest_root_write_lock = match &mut self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => &mut msp_handler.forest_root_write_lock,
+            _ => {
+                error!(target: LOG_TARGET, "`msp_emit_forest_write_event` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
+                return;
+            }
+        };
+
+        // Create a new channel to assign ownership of the MSP's Forest root write lock.
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        *forest_root_write_lock = Some(rx);
+
+        
+        // If this is a respond storage request, stop storing for insolvent user request, or
+        // file deletion request, we need to store it in the state store.
+        let data = data.into();
+        match &data {
+            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::FileDeletionRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessFileDeletionRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+                state_store_context
+                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .write(data);
+                state_store_context.commit();
+            }
+            ForestWriteLockTaskData::ConfirmStoringRequest(_) => unreachable!("MSPs do not confirm storing requests the way BSPs do."),
+            ForestWriteLockTaskData::SubmitProofRequest(_) => unreachable!("MSPs do not submit proofs."),
+        }
+
+        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
+        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
+        // event. Clone is required because there is no constraint on the number of listeners that can
+        // subscribe to the event (and each is guaranteed to receive all emitted events).
+        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
+        match data {
+            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
+                self.emit(ProcessMspRespondStoringRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::FileDeletionRequest(data) => {
+                self.emit(ProcessFileDeletionRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                self.emit(ProcessStopStoringForInsolventUserRequest {
+                    data,
+                    forest_root_write_tx,
+                });
+            }
+            ForestWriteLockTaskData::ConfirmStoringRequest(_) => unreachable!("MSPs do not confirm storing requests the way BSPs do."),
+            ForestWriteLockTaskData::SubmitProofRequest(_) => unreachable!("MSPs do not submit proofs."),
         }
     }
 }
