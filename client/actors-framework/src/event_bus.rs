@@ -5,7 +5,7 @@ use tokio::sync::{broadcast, Semaphore};
 
 use crate::{
     actor::{Actor, ActorHandle, TaskSpawner},
-    constants::{MAX_PENDING_EVENTS, MAX_TASKS_EVENTS},
+    constants::{MAX_PENDING_EVENTS, MAX_TASKS_SPAWNED_PER_QUEUE},
 };
 
 pub trait EventBusMessage: Clone + Send + 'static {}
@@ -96,7 +96,7 @@ impl<T: EventBusMessage, E: EventHandler<T> + Send + 'static> EventBusListener<T
             spawner: spawner.with_group("event-handler-worker"),
             event_handler,
             receiver,
-            semaphore: Arc::new(Semaphore::new(MAX_TASKS_EVENTS)),
+            semaphore: Arc::new(Semaphore::new(MAX_TASKS_SPAWNED_PER_QUEUE)),
             critical,
         }
     }
