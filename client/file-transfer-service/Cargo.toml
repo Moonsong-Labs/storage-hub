@@ -26,7 +26,6 @@ array-bytes = { workspace = true }
 futures = { workspace = true }
 codec = { workspace = true }
 chrono = { workspace = true }
-serde = { workspace = true }
 # Substrate
 sc-client-api = { workspace = true }
 sc-service = { workspace = true }

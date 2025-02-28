@@ -13816,7 +13816,6 @@ dependencies = [
  "sc-service",
  "sc-tracing",
  "sc-utils",
- "serde",
  "shc-actors-framework",
  "shc-common",
  "shp-file-key-verifier",
