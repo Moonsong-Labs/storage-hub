@@ -12,7 +12,7 @@ use shc_blockchain_service::{
     events::{
         FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
     },
-    types::{RetryStrategy, SubmitProofRequest, WatchTransactionError},
+    types::{RetryStrategy, SendExtrinsicOptions, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
 };
 use shc_common::{
@@ -313,15 +313,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
                     .with_max_retries(MAX_PROOF_SUBMISSION_ATTEMPTS)
                     .with_max_tip(max_tip as f64)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    ))
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )

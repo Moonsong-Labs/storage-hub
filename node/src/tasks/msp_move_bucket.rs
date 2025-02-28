@@ -21,7 +21,7 @@ use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
     commands::BlockchainServiceInterface,
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
-    types::RetryStrategy,
+    types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
     BucketId, FileKeyProof, FileMetadata, HashT, ProviderId, StorageProofsMerkleTrieLayout,
@@ -492,15 +492,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
-                    .with_max_tip(self.config.max_tip)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    )),
+                    .with_max_tip(self.config.max_tip),
                 false,
             )
             .await
@@ -538,15 +538,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
-                    .with_max_tip(self.config.max_tip)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    )),
+                    .with_max_tip(self.config.max_tip),
                 false,
             )
             .await

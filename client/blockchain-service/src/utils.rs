@@ -441,7 +441,7 @@ where
     pub(crate) async fn send_extrinsic(
         &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-        options: SendExtrinsicOptions,
+        options: &SendExtrinsicOptions,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 

@@ -110,6 +110,8 @@ pub struct BlockchainService<FSH>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
+    /// The configuration for the BlockchainService.
+    pub(crate) config: BlockchainServiceConfig,
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
     /// The parachain client. Used to interact with the runtime.
@@ -279,13 +281,14 @@ where
                     call,
                     options,
                     callback,
-                } => match self.send_extrinsic(call, options).await {
+                } => match self.send_extrinsic(call, &options).await {
                     Ok(output) => {
                         debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
                         match callback.send(Ok(SubmittedTransaction::new(
                             output.receiver,
                             output.hash,
                             output.nonce,
+                            options.timeout(),
                         ))) {
                             Ok(_) => {
                                 trace!(target: LOG_TARGET, "Receiver sent successfully");
@@ -1100,6 +1103,7 @@ where
 {
     /// Create a new [`BlockchainService`].
     pub fn new(
+        config: BlockchainServiceConfig,
         client: Arc<ParachainClient>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
@@ -1109,6 +1113,7 @@ where
         capacity_request_queue: Option<CapacityRequestQueue>,
     ) -> Self {
         Self {
+            config,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             client,
             keystore,

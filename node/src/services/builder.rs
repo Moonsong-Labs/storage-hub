@@ -159,10 +159,13 @@ where
 
         let capacity_config = self.capacity_config.clone();
 
+        let blockchain_service_config = self.blockchain_service_config.clone().unwrap_or_default();
+
         let blockchain_service_handle = spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH>(
             self.task_spawner
                 .as_ref()
                 .expect("Task spawner is not set."),
+            blockchain_service_config,
             client.clone(),
             keystore.clone(),
             rpc_handlers.clone(),

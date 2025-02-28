@@ -9,7 +9,7 @@ use shc_blockchain_service::{
         FileDeletionRequest, FinalisedProofSubmittedForPendingFileDeletionRequest,
         ProcessFileDeletionRequest,
     },
-    types::{self, RetryStrategy},
+    types::{self, RetryStrategy, SendExtrinsicOptions},
 };
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -211,15 +211,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
                     .with_max_retries(max_try_count)
                     .with_max_tip(max_tip)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    ))
                     .retry_only_if_timeout(),
                 false,
             )

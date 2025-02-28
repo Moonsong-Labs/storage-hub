@@ -16,7 +16,7 @@ use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    types::{ConfirmStoringRequest, RetryStrategy},
+    types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
@@ -368,15 +368,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
                     .with_max_tip(self.config.max_tip)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .blockchain_service
-                            .extrinsic_retry_timeout,
-                    ))
                     .retry_only_if_timeout(),
                 true,
             )
@@ -643,14 +643,16 @@ where
         let result = self
             .storage_hub_handler
             .blockchain
-            .send_extrinsic(call.clone(), Default::default())
+            .send_extrinsic(
+                call.clone(),
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
+            )
             .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .blockchain_service
-                    .extrinsic_retry_timeout,
-            ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await;
 
@@ -673,14 +675,16 @@ where
             let result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Default::default())
+                .send_extrinsic(
+                    call,
+                    SendExtrinsicOptions::new(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    )),
+                )
                 .await?
-                .with_timeout(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                ))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
                 .await;
 

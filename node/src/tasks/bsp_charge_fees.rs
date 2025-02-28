@@ -9,7 +9,7 @@ use shc_blockchain_service::{
         LastChargeableInfoUpdated, ProcessStopStoringForInsolventUserRequest,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
-    types::StopStoringForInsolventUserRequest,
+    types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
 use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -317,15 +317,15 @@ where
             // continue only if it is successful.
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(stop_storing_for_insolvent_user_call, Default::default())
-                .await?
-                .with_timeout(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .blockchain_service
-                        .extrinsic_retry_timeout,
-                ))
-                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .send_extrinsic(
+                    stop_storing_for_insolvent_user_call,
+                    SendExtrinsicOptions::new(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    )),
+                )
                 .await?;
 
             trace!(target: LOG_TARGET, "Stop storing submitted successfully");
