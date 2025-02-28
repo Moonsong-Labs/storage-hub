@@ -6,12 +6,12 @@ use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use sc_client_api::HeaderBackend;
-use shc_common::types::{BlockNumber, StorageData, StorageProviderId};
+use shc_common::types::{BlockNumber, StorageData};
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 
-use crate::{transaction::SubmittedTransaction, BlockchainService};
+use crate::{transaction::SubmittedTransaction, types::ManagedProvider, BlockchainService};
 
 const LOG_TARGET: &str = "blockchain-service-capacity-manager";
 
@@ -352,15 +352,15 @@ where
         };
 
         // Get provider ID
-        let Some(storage_provider_id) = &self.provider_id else {
+        let Some(managed_provider) = &self.maybe_managed_provider else {
             return Err(anyhow!(
                 "No provider ID set, cannot process capacity requests"
             ));
         };
 
-        let inner_provider_id = match storage_provider_id {
-            StorageProviderId::MainStorageProvider(id)
-            | StorageProviderId::BackupStorageProvider(id) => id,
+        let provider_id = match managed_provider {
+            ManagedProvider::Msp(msp_handler) => msp_handler.msp_id,
+            ManagedProvider::Bsp(bsp_handler) => bsp_handler.bsp_id,
         };
 
         // Get current block hash
@@ -370,7 +370,7 @@ where
         let current_capacity = self
             .client
             .runtime_api()
-            .query_storage_provider_capacity(current_block_hash, inner_provider_id)
+            .query_storage_provider_capacity(current_block_hash, &provider_id)
             .unwrap_or_else(|_| Err(QueryStorageProviderCapacityError::InternalError))
             .map_err(|e| anyhow!("Failed to query current storage capacity: {:?}", e))?;
 
@@ -378,6 +378,6 @@ where
             return Err(anyhow!("Provider already at maximum capacity"));
         }
 
-        Ok((current_block_hash, current_capacity, *inner_provider_id))
+        Ok((current_block_hash, current_capacity, provider_id))
     }
 }

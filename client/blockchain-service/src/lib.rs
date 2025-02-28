@@ -2,6 +2,8 @@ pub mod capacity_manager;
 pub mod commands;
 pub mod events;
 pub mod handler;
+pub mod handler_bsp;
+pub mod handler_msp;
 pub mod state;
 pub mod transaction;
 pub mod typed_store;

@@ -109,7 +109,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             peer_manager: self.peer_manager.clone(),
-            pending_bucket_id: self.pending_bucket_id.clone(),
+            pending_bucket_id: self.pending_bucket_id,
             file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
         }
     }
@@ -206,7 +206,7 @@ where
             .map(|file| {
                 let semaphore = Arc::clone(&file_semaphore);
                 let task = self.clone();
-                let bucket_id = event.bucket_id.clone();
+                let bucket_id = event.bucket_id;
 
                 tokio::spawn(async move {
                     let _permit = semaphore
