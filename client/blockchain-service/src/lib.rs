@@ -1,3 +1,4 @@
+pub mod capacity_manager;
 pub mod commands;
 pub mod events;
 pub mod handler;
@@ -11,6 +12,7 @@ pub mod utils;
 
 use std::{path::PathBuf, sync::Arc};
 
+use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use sc_service::RpcHandlers;
 use sp_keystore::KeystorePtr;
 
@@ -27,6 +29,7 @@ pub async fn spawn_blockchain_service<FSH>(
     forest_storage_handler: FSH,
     rocksdb_root_path: impl Into<PathBuf>,
     notify_period: Option<u32>,
+    capacity_config: Option<CapacityConfig>,
 ) -> ActorHandle<BlockchainService<FSH>>
 where
     FSH: shc_forest_manager::traits::ForestStorageHandler + Clone + Send + Sync + 'static,
@@ -42,6 +45,7 @@ where
         forest_storage_handler,
         rocksdb_root_path,
         notify_period,
+        capacity_config.map(CapacityRequestQueue::new),
     );
 
     task_spawner.spawn_actor(blockchain_service)

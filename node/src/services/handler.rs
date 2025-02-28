@@ -6,15 +6,17 @@ use shc_actors_framework::{
     event_bus::{EventBusListener, EventHandler},
 };
 use shc_blockchain_service::{
+    capacity_manager::CapacityConfig,
     events::{
         AcceptedBspVolunteer, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
-        FinalisedBucketMovedAway, FinalisedMspStoppedStoringBucket,
-        FinalisedProofSubmittedForPendingFileDeletionRequest, LastChargeableInfoUpdated,
-        MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested,
-        MoveBucketRequestedForMsp, MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod,
-        ProcessConfirmStoringRequest, ProcessFileDeletionRequest, ProcessMspRespondStoringRequest,
-        ProcessStopStoringForInsolventUserRequest, ProcessSubmitProofRequest, SlashableProvider,
-        SpStopStoringInsolventUser, StartMovedBucketDownload, UserWithoutFunds,
+        FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
+        ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
+        ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
+        StartMovedBucketDownload, UserWithoutFunds,
     },
     BlockchainService,
 };
@@ -25,7 +27,6 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
-use storage_hub_runtime::StorageDataUnit;
 
 use crate::{
     services::types::{
@@ -38,6 +39,7 @@ use crate::{
         bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
         msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspRespondMoveBucketTask,
+        msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
         msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
     },
@@ -46,14 +48,10 @@ use crate::{
 /// Configuration parameters for Storage Providers.
 #[derive(Clone)]
 pub struct ProviderConfig {
-    /// Maximum storage capacity of the provider (bytes).
+    /// Configuration parameters necessary to run the capacity manager.
     ///
-    /// The Storage Provider will not request to increase its storage capacity beyond this value.
-    pub max_storage_capacity: StorageDataUnit,
-    /// Jump capacity (bytes).
-    ///
-    /// Storage capacity increases in jumps of this size.
-    pub jump_capacity: StorageDataUnit,
+    /// This is only required if running as a storage provider node.
+    pub capacity_config: CapacityConfig,
     /// The time in seconds to wait before retrying an extrinsic.
     pub extrinsic_retry_timeout: u64,
 }
@@ -289,6 +287,30 @@ where
         start_moved_bucket_download_event_bus_listener.start();
 
         let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
+
+        // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
+        let msp_stop_storing_insolvent_user = MspStopStoringInsolventUserTask::new(self.clone());
+
+        // Subscribing to UserInsolvent event from the BlockchainService to delete all stored buckets owned by a
+        // user that has been declared as without funds.
+        let user_without_funds_event_bus_listener: EventBusListener<UserWithoutFunds, _> =
+            msp_stop_storing_insolvent_user.clone().subscribe_to(
+                &self.task_spawner,
+                &self.blockchain,
+                true,
+            );
+        user_without_funds_event_bus_listener.start();
+
+        // Subscribing to FinalisedMspStopStoringBucketInsolventUser event from the BlockchainService.
+        let finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener: EventBusListener<
+            FinalisedMspStopStoringBucketInsolventUser,
+            _,
+        > = msp_stop_storing_insolvent_user.clone().subscribe_to(
+            &self.task_spawner,
+            &self.blockchain,
+            true,
+        );
+        finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener.start();
 
         // Subscribing to NotifyPeriod event from the BlockchainService.
         let notify_period_event_bus_listener: EventBusListener<NotifyPeriod, _> =

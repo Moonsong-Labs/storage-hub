@@ -252,12 +252,28 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForFileStorageComplete(this._api, fileKey),
 
       /**
+       * Waits for a Storage Provider to complete deleting a file key from the file storage.
+       * @param fileKey - Param to specify the file key to wait for.
+       * @returns A promise that resolves when the Provider has completed to delete the file.
+       */
+      fileDeletionFromFileStorage: (fileKey: H256 | string) =>
+        Waits.waitForFileDeletionFromFileStorageComplete(this._api, fileKey),
+
+      /**
        * Waits for a BSP to complete deleting a file from its forest.
        * @param fileKey - Param to specify the file key to wait for deletion.
        * @returns A promise that resolves when a BSP has correctly deleted the file from its forest storage.
        */
       bspFileDeletionCompleted: (fileKey: H256 | string) =>
         Waits.waitForBspFileDeletionComplete(this._api, fileKey),
+
+      /**
+       * Waits for a MSP to complete deleting a bucket from its forest.
+       * @param fileKey - Param to specify the bucket ID of the bucket to wait for deletion.
+       * @returns A promise that resolves when the MSP has correctly deleted the bucket from its forest storage.
+       */
+      mspBucketDeletionCompleted: (bucketId: H256 | string) =>
+        Waits.waitForMspBucketDeletionComplete(this._api, bucketId),
 
       /**
        * Waits for a BSP to catch up to the tip of the chain
@@ -504,6 +520,8 @@ export class BspNetTestApi implements AsyncDisposable {
       ) => BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber }),
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
+       * It will stop at the block before the minimum change time is reached since the capacity
+       * change extrinsic will be sent and included in the next block.
        *
        * @param bspId - The ID of the BSP that the capacity change is for.
        * @returns A promise that resolves when the minimum change time is reached.

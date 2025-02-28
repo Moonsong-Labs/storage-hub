@@ -24,9 +24,9 @@ use pallet_proofs_dealer_runtime_api::{
     ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
-    GetBspInfoError, QueryAvailableStorageCapacityError, QueryEarliestChangeCapacityBlockError,
-    QueryMspIdOfBucketIdError, QueryProviderMultiaddressesError, QueryStorageProviderCapacityError,
-    StorageProvidersApi,
+    GetBspInfoError, QueryAvailableStorageCapacityError, QueryBucketsOfUserStoredByMspError,
+    QueryEarliestChangeCapacityBlockError, QueryMspIdOfBucketIdError,
+    QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
@@ -35,6 +35,7 @@ use shc_common::{
 };
 
 use crate::{
+    capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
     events::BlockchainServiceEventBusProvider,
     state::{
@@ -121,6 +122,10 @@ where
     ///
     /// This is meant to be used for periodic, low priority tasks.
     pub(crate) notify_period: Option<u32>,
+    /// Efficiently manages the capacity changes of storage providers.
+    ///
+    /// Only required if the node is running as a provider.
+    pub(crate) capacity_manager: Option<CapacityRequestQueue>,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -975,6 +980,19 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::IncreaseCapacity { request, callback } => {
+                    // Create a new channel that will be used to notify completion
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+
+                    // The capacity manager handles sending the result back to the caller so we don't need to do anything here. Whether the transaction failed or succeeded, or if the capacity request was never queued, the result will be sent back through the channel by the capacity manager.
+                    self.queue_capacity_request(CapacityRequest::new(request, tx))
+                        .await;
+
+                    // Send the receiver back through the callback
+                    if let Err(e) = callback.send(rx) {
+                        error!(target: LOG_TARGET, "Failed to send capacity request receiver: {:?}", e);
+                    }
+                }
                 BlockchainServiceCommand::QueryMspIdOfBucketId {
                     bucket_id,
                     callback,
@@ -994,6 +1012,29 @@ where
                         Ok(_) => {}
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to send back MSP ID: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::QueryBucketsOfUserStoredByMsp {
+                    msp_id,
+                    user,
+                    callback,
+                } => {
+                    let current_block_hash = self.client.info().best_hash;
+
+                    let buckets = self
+                        .client
+                        .runtime_api()
+                        .query_buckets_of_user_stored_by_msp(current_block_hash, &msp_id, &user)
+                        .unwrap_or_else(|e| {
+                            error!(target: LOG_TARGET, "{}", e);
+                            Err(QueryBucketsOfUserStoredByMspError::InternalError)
+                        });
+
+                    match callback.send(buckets) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send back buckets: {:?}", e);
                         }
                     }
                 }
@@ -1020,6 +1061,7 @@ where
                                 }
                             }
                         }
+
                         match callback.send(forest_root_write_result) {
                             Ok(_) => {}
                             Err(e) => {
@@ -1072,6 +1114,7 @@ where
         forest_storage_handler: FSH,
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
+        capacity_request_queue: Option<CapacityRequestQueue>,
     ) -> Self {
         Self {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1086,6 +1129,7 @@ where
             maybe_managed_provider: None,
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             notify_period,
+            capacity_manager: capacity_request_queue,
         }
     }
 
@@ -1263,6 +1307,9 @@ where
         // It is not guaranteed that the tick number will increase at every block import.
         self.notify_tick_number(&block_hash);
 
+        // Notify the capacity manager that a new block has been imported.
+        self.notify_capacity_manager(&block_number).await;
+
         // Process pending requests that update the forest root.
         match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
@@ -1345,6 +1392,124 @@ where
                         Some(ManagedProvider::Msp(_)) => {
                             self.msp_process_finality_events(&block_hash, ev.event.clone());
                         }
+						RuntimeEvent::FileSystem(pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+							msp_id,
+							owner: _,
+							bucket_id
+						}) => {
+							// This event is relevant in case the Provider managed is the MSP of the event.
+							if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) = &self.provider_id {
+								if msp_id == *managed_msp_id {
+									self.emit(FinalisedMspStopStoringBucketInsolventUser {
+										msp_id,
+										bucket_id
+									})
+								}
+							}
+						}
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::BspConfirmStoppedStoring {
+                                bsp_id,
+                                file_key,
+                                new_root,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is a BSP.
+                            if let Some(StorageProviderId::BackupStorageProvider(managed_bsp_id)) =
+                                &self.provider_id
+                            {
+                                if managed_bsp_id == &bsp_id {
+                                    self.emit(FinalisedBspConfirmStoppedStoring {
+                                        bsp_id,
+                                        file_key: file_key.into(),
+                                        new_root,
+                                    });
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
+                                msp_id,
+                                user,
+                                file_key,
+                                file_size,
+                                bucket_id,
+                                proof_of_inclusion,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is an MSP.
+                            if let Some(StorageProviderId::MainStorageProvider(managed_msp_id)) =
+                                &self.provider_id
+                            {
+                                // Only emit the event if the MSP provided a proof of inclusion, meaning the file key was deleted from the bucket's forest.
+                                if managed_msp_id == &msp_id && proof_of_inclusion {
+                                    self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
+                                        user,
+                                        file_key: file_key.into(),
+                                        file_size: file_size.into(),
+                                        bucket_id,
+                                        msp_id,
+                                        proof_of_inclusion,
+                                    });
+                                }
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketRequested {
+                                who: _,
+                                bucket_id,
+                                new_msp_id,
+                                new_value_prop_id,
+                            },
+                        ) => {
+                            match self.provider_id {
+                                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                                Some(StorageProviderId::BackupStorageProvider(_)) => {
+                                    self.emit(MoveBucketRequested {
+                                        bucket_id,
+                                        new_msp_id,
+                                    });
+                                }
+                                // As an MSP, this node is interested in the event only if this node is the new MSP.
+                                Some(StorageProviderId::MainStorageProvider(msp_id))
+                                    if msp_id == new_msp_id =>
+                                {
+                                    self.emit(MoveBucketRequestedForMsp {
+                                        bucket_id,
+                                        value_prop_id: new_value_prop_id,
+                                    });
+                                }
+                                // Otherwise, ignore the event.
+                                _ => {}
+                            }
+                        }
+                        RuntimeEvent::FileSystem(
+                            pallet_file_system::Event::MoveBucketAccepted {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                                value_prop_id: _,
+                            },
+                        ) => {
+                            // This event is relevant in case the Provider managed is the old MSP,
+                            // in which case we should clean up the bucket.
+                            // Note: we do this in finality to ensure we don't lose data in case
+                            // of a reorg.
+                            if let Some(StorageProviderId::MainStorageProvider(own_msp_id)) =
+                                &self.provider_id
+                            {
+                                if let Some(old_msp_id) = old_msp_id {
+                                if own_msp_id == &old_msp_id {
+                                    self.emit(FinalisedBucketMovedAway {
+                                            bucket_id,
+                                            old_msp_id,
+                                            new_msp_id,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                        // Ignore all other events.
                         _ => {}
                     }
                 }

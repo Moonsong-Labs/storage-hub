@@ -66,6 +66,7 @@ import type {
   QueryAvailableStorageCapacityError,
   QueryBspConfirmChunksToProveForFileError,
   QueryBucketsForMspError,
+  QueryBucketsOfUserStoredByMspError,
   QueryEarliestChangeCapacityBlockError,
   QueryFileEarliestVolunteerBlockError,
   QueryMspConfirmChunksToProveForFileError,
@@ -688,6 +689,16 @@ declare module "@polkadot/api-base/types/calls" {
         (
           mspId: MainStorageProviderId | string | Uint8Array
         ) => Observable<Result<Vec<BucketId>, QueryBucketsForMspError>>
+      >;
+      /**
+       * Query the buckets stored by an MSP that belong to a specific user.
+       **/
+      queryBucketsOfUserStoredByMsp: AugmentedCall<
+        ApiType,
+        (
+          mspId: ProviderId | string | Uint8Array,
+          user: AccountId | string | Uint8Array
+        ) => Observable<Result<Vec<H256>, QueryBucketsOfUserStoredByMspError>>
       >;
       /**
        * Query the earliest block number that a BSP can change its capacity.
