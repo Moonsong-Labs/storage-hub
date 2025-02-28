@@ -269,7 +269,7 @@ where
         let stop_storing_bucket_for_insolvent_user_call =
             storage_hub_runtime::RuntimeCall::FileSystem(
                 pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
-                    bucket_id: bucket_id.clone(),
+                    bucket_id: *bucket_id,
                 },
             );
 

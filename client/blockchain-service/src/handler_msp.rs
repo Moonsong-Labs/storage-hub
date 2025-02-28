@@ -2,21 +2,26 @@ use std::sync::Arc;
 
 use log::{debug, error, info, trace};
 use sc_client_api::HeaderBackend;
+use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
 use storage_hub_runtime::RuntimeEvent;
-use sp_api::ProvideRuntimeApi;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
+use pallet_file_system_runtime_api::FileSystemApi;
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
 use shc_common::types::{BlockHash, BlockNumber};
 use shc_forest_manager::traits::ForestStorageHandler;
-use pallet_file_system_runtime_api::FileSystemApi;
-use pallet_storage_providers_runtime_api::StorageProvidersApi;
 
 use crate::{
     events::{
-        FileDeletionRequest, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest, ForestWriteLockTaskData, MoveBucketRequestedForMsp, ProcessFileDeletionRequest, ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload
+        FileDeletionRequest, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
+        ForestWriteLockTaskData, MoveBucketRequestedForMsp, ProcessFileDeletionRequest,
+        ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest,
+        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
+        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     state::{
@@ -172,43 +177,38 @@ where
                     });
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MspStopStoringBucketInsolventUser {
-                msp_id,
-                owner: _,
-                bucket_id
-            }) => {
-                    if msp_id == *managed_msp_id {
-                        self.emit(FinalisedMspStopStoringBucketInsolventUser {
-                            msp_id,
-                            bucket_id
-                        })
-                    }
-
-            }
             RuntimeEvent::FileSystem(
-                pallet_file_system::Event::MoveBucketAccepted {
+                pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+                    msp_id,
+                    owner: _,
                     bucket_id,
-                    old_msp_id,
-                    new_msp_id,
-                    value_prop_id: _,
                 },
             ) => {
+                if msp_id == *managed_msp_id {
+                    self.emit(FinalisedMspStopStoringBucketInsolventUser { msp_id, bucket_id })
+                }
+            }
+            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
+                bucket_id,
+                old_msp_id,
+                new_msp_id,
+                value_prop_id: _,
+            }) => {
                 // This event is relevant in case the Provider managed is the old MSP,
                 // in which case we should clean up the bucket.
                 // Note: we do this in finality to ensure we don't lose data in case
                 // of a reorg.
-                    if let Some(old_msp_id) = old_msp_id {
-                        if managed_msp_id == &old_msp_id {
-                            self.emit(FinalisedBucketMovedAway {
-                                bucket_id,
-                                old_msp_id,
-                                new_msp_id,
-                            });
-                        }
+                if let Some(old_msp_id) = old_msp_id {
+                    if managed_msp_id == &old_msp_id {
+                        self.emit(FinalisedBucketMovedAway {
+                            bucket_id,
+                            old_msp_id,
+                            new_msp_id,
+                        });
                     }
-                
+                }
             }
-            
+
             // Ignore all other events.
             _ => {}
         }
@@ -386,7 +386,7 @@ where
 
         // Preemptively getting the Buckets managed by this MSP, so that we do the query just once,
         // instead of doing it for every event.
-        let buckets_managed_by_msp = 
+        let buckets_managed_by_msp =
             self.client
                     .runtime_api()
                     .query_buckets_for_msp(*block_hash, managed_msp_id)
@@ -491,7 +491,6 @@ where
         let (tx, rx) = tokio::sync::oneshot::channel();
         *forest_root_write_lock = Some(rx);
 
-        
         // If this is a respond storage request, stop storing for insolvent user request, or
         // file deletion request, we need to store it in the state store.
         let data = data.into();
@@ -517,8 +516,12 @@ where
                     .write(data);
                 state_store_context.commit();
             }
-            ForestWriteLockTaskData::ConfirmStoringRequest(_) => unreachable!("MSPs do not confirm storing requests the way BSPs do."),
-            ForestWriteLockTaskData::SubmitProofRequest(_) => unreachable!("MSPs do not submit proofs."),
+            ForestWriteLockTaskData::ConfirmStoringRequest(_) => {
+                unreachable!("MSPs do not confirm storing requests the way BSPs do.")
+            }
+            ForestWriteLockTaskData::SubmitProofRequest(_) => {
+                unreachable!("MSPs do not submit proofs.")
+            }
         }
 
         // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
@@ -545,8 +548,12 @@ where
                     forest_root_write_tx,
                 });
             }
-            ForestWriteLockTaskData::ConfirmStoringRequest(_) => unreachable!("MSPs do not confirm storing requests the way BSPs do."),
-            ForestWriteLockTaskData::SubmitProofRequest(_) => unreachable!("MSPs do not submit proofs."),
+            ForestWriteLockTaskData::ConfirmStoringRequest(_) => {
+                unreachable!("MSPs do not confirm storing requests the way BSPs do.")
+            }
+            ForestWriteLockTaskData::SubmitProofRequest(_) => {
+                unreachable!("MSPs do not submit proofs.")
+            }
         }
     }
 }
