@@ -121,14 +121,10 @@ where
 
         let current_block_hash = self.client.info().best_hash;
 
-        let provider_id = match self.provider_id {
-            Some(provider_id) => match provider_id {
-                StorageProviderId::MainStorageProvider(id)
-                | StorageProviderId::BackupStorageProvider(id) => id,
-            },
-            None => {
-                return;
-            }
+        let provider_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id,
+            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
+            None => return,
         };
 
         let capacity_manager_ref = self

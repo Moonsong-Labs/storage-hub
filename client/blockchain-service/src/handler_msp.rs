@@ -16,7 +16,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 
 use crate::{
     events::{
-        FileDeletionRequest, FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest, ForestWriteLockTaskData, MoveBucketRequestedForMsp, ProcessFileDeletionRequest, ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload
+        FileDeletionRequest, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest, ForestWriteLockTaskData, MoveBucketRequestedForMsp, ProcessFileDeletionRequest, ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload
     },
     handler::LOG_TARGET,
     state::{
@@ -172,6 +172,43 @@ where
                     });
                 }
             }
+            RuntimeEvent::FileSystem(pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+                msp_id,
+                owner: _,
+                bucket_id
+            }) => {
+                    if msp_id == *managed_msp_id {
+                        self.emit(FinalisedMspStopStoringBucketInsolventUser {
+                            msp_id,
+                            bucket_id
+                        })
+                    }
+
+            }
+            RuntimeEvent::FileSystem(
+                pallet_file_system::Event::MoveBucketAccepted {
+                    bucket_id,
+                    old_msp_id,
+                    new_msp_id,
+                    value_prop_id: _,
+                },
+            ) => {
+                // This event is relevant in case the Provider managed is the old MSP,
+                // in which case we should clean up the bucket.
+                // Note: we do this in finality to ensure we don't lose data in case
+                // of a reorg.
+                    if let Some(old_msp_id) = old_msp_id {
+                        if managed_msp_id == &old_msp_id {
+                            self.emit(FinalisedBucketMovedAway {
+                                bucket_id,
+                                old_msp_id,
+                                new_msp_id,
+                            });
+                        }
+                    }
+                
+            }
+            
             // Ignore all other events.
             _ => {}
         }
