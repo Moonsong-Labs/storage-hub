@@ -34,6 +34,7 @@ use shp_traits::{
     ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
     ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
+use sp_std::collections::btree_map::BTreeMap;
 
 use crate::{
     pallet,
@@ -2840,6 +2841,22 @@ where
         mut encoded_event_info: &[u8],
     ) -> Result<BucketIdFor<T>, codec::Error> {
         BucketIdFor::<T>::decode(&mut encoded_event_info)
+    }
+
+    pub fn pending_storage_requests_by_msp(
+        msp_id: ProviderIdFor<T>,
+    ) -> BTreeMap<MerkleHash<T>, StorageRequestMetadata<T>> {
+        // Get the storage requests for a specific MSP
+        StorageRequests::<T>::iter()
+            .filter(|(_, metadata)| {
+                if let Some(msp) = metadata.msp {
+                    msp.0 == msp_id && !msp.1
+                } else {
+                    false
+                }
+            })
+            .map(|(file_key, metadata)| (file_key, metadata))
+            .collect()
     }
 }
 
