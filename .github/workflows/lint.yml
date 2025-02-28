@@ -15,7 +15,7 @@ on:
 jobs:
   check-rust-fmt:
     name: "Check format with rustfmt"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
@@ -26,13 +26,13 @@ jobs:
 
   check-rust-lint:
     name: "Check lint with clippy"
-    runs-on: blacksmith-4vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
         with:
           components: clippy
-      - uses: useblacksmith/rust-cache@v3
+      - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
       - name: Install libpq-dev
@@ -47,7 +47,7 @@ jobs:
 
   check-ts-fmt:
     name: "Check format with biome"
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -56,7 +56,7 @@ jobs:
 
   check-ts-lint:
     name: "Check lint with biome"
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm
@@ -65,7 +65,7 @@ jobs:
 
   typecheck-ts:
     name: "Typecheck with tsc"
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/workflow-templates/setup-pnpm

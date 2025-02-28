@@ -10,14 +10,14 @@ on:
 # TODO: When we start publishing runtimes, change steps to fetch from docker instead
 jobs:
   upgrading-typescript-api:
-    runs-on: blacksmith-2vcpu-ubuntu-2204
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.sha }}
       - name: Use Node.js
-        uses: useblacksmith/setup-node@v5
+        uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Use pnpm
