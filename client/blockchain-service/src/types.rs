@@ -239,11 +239,17 @@ pub struct SendExtrinsicOptions {
     tip: Tip,
     /// Optionally override the nonce to use when sending the transaction.
     nonce: Option<u32>,
+    /// Maximum time to wait for a response before assuming the extrinsic submission has failed.
+    timeout: Duration,
 }
 
 impl SendExtrinsicOptions {
-    pub fn new() -> Self {
-        Self::default()
+    pub fn new(timeout: Duration) -> Self {
+        Self {
+            tip: Tip::from(0),
+            nonce: None,
+            timeout,
+        }
     }
 
     pub fn with_tip(mut self, tip: u128) -> Self {
@@ -263,6 +269,10 @@ impl SendExtrinsicOptions {
     pub fn nonce(&self) -> Option<u32> {
         self.nonce
     }
+
+    pub fn timeout(&self) -> Duration {
+        self.timeout
+    }
 }
 
 impl Default for SendExtrinsicOptions {
@@ -270,6 +280,7 @@ impl Default for SendExtrinsicOptions {
         Self {
             tip: Tip::from(0),
             nonce: None,
+            timeout: Duration::from_secs(60),
         }
     }
 }
@@ -289,8 +300,6 @@ impl Default for SendExtrinsicOptions {
 pub struct RetryStrategy {
     /// Maximum number of retries after which the extrinsic submission will be considered failed.
     pub max_retries: u32,
-    /// Maximum time to wait for a response before assuming the extrinsic submission has failed.
-    pub timeout: Duration,
     /// Maximum tip to be paid for the extrinsic submission. The progression follows an exponential
     /// backoff strategy.
     pub max_tip: f64,
@@ -312,10 +321,9 @@ pub struct RetryStrategy {
 
 impl RetryStrategy {
     /// Creates a new `RetryStrategy` instance.
-    pub fn new(max_retries: u32, timeout: Duration, max_tip: f64, base_multiplier: f64) -> Self {
+    pub fn new(max_retries: u32, max_tip: f64, base_multiplier: f64) -> Self {
         Self {
             max_retries,
-            timeout,
             max_tip,
             base_multiplier,
             should_retry: None,
@@ -325,14 +333,6 @@ impl RetryStrategy {
     /// Set the maximum number of times to retry sending the extrinsic.
     pub fn with_max_retries(mut self, max_retries: u32) -> Self {
         self.max_retries = max_retries;
-        self
-    }
-
-    /// Set the timeout for the extrinsic.
-    ///
-    /// After this timeout, the extrinsic will be retried (if applicable) or fail.
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = timeout;
         self
     }
 
@@ -415,7 +415,6 @@ impl Default for RetryStrategy {
     fn default() -> Self {
         Self {
             max_retries: 5,
-            timeout: Duration::from_secs(30),
             max_tip: 0.0,
             base_multiplier: 2.0,
             should_retry: None,

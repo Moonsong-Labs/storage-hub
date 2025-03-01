@@ -21,7 +21,7 @@ use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
     commands::BlockchainServiceInterface,
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
-    types::RetryStrategy,
+    types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
     BucketId, FileKeyProof, FileMetadata, HashT, ProviderId, StorageProofsMerkleTrieLayout,
@@ -46,16 +46,41 @@ lazy_static::lazy_static! {
 
 const LOG_TARGET: &str = "msp-move-bucket-task";
 
-/// Maximum number of files to download in parallel
-const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
-/// Maximum number of chunks requests to do in parallel per file
-const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
-/// Maximum number of chunks to request in a single network request
-const MAX_CHUNKS_PER_REQUEST: usize = 10;
-/// Number of peers to select for each chunk download attempt (2 best + 3 random)
-const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
-/// Number of retries per peer for a single chunk request
-const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
+/// Configuration for the MspMoveBucketTask
+#[derive(Debug, Clone)]
+pub struct MspMoveBucketConfig {
+    /// Maximum number of files to download in parallel
+    pub max_concurrent_file_downloads: usize,
+    /// Maximum number of chunks requests to do in parallel per file
+    pub max_concurrent_chunks_per_file: usize,
+    /// Maximum number of chunks to request in a single network request
+    pub max_chunks_per_request: usize,
+    /// Number of peers to select for each chunk download attempt (2 best + x random)
+    pub chunk_request_peer_retry_attempts: usize,
+    /// Number of retries per peer for a single chunk request
+    pub download_retry_attempts: usize,
+    /// Maximum number of times to retry a move bucket request
+    pub max_try_count: u32,
+    /// Maximum tip amount to use when submitting a move bucket request extrinsic
+    pub max_tip: f64,
+    /// Processing interval between batches of move bucket requests
+    pub processing_interval: u64,
+}
+
+impl Default for MspMoveBucketConfig {
+    fn default() -> Self {
+        Self {
+            max_concurrent_file_downloads: 10,
+            max_concurrent_chunks_per_file: 5,
+            max_chunks_per_request: 10,
+            chunk_request_peer_retry_attempts: 5,
+            download_retry_attempts: 2,
+            max_try_count: 5,
+            max_tip: 500.0,
+            processing_interval: 60,
+        }
+    }
+}
 
 /// [`MspRespondMoveBucketTask`] handles bucket move requests between MSPs.
 ///
@@ -98,6 +123,8 @@ where
     peer_manager: Arc<RwLock<BspPeerManager>>,
     pending_bucket_id: Option<BucketId>,
     file_storage_inserted_file_keys: Vec<H256>,
+    /// Configuration for this task
+    config: MspMoveBucketConfig,
 }
 
 impl<NT> Clone for MspRespondMoveBucketTask<NT>
@@ -106,11 +133,12 @@ where
     NT::FSH: MspForestStorageHandlerT,
 {
     fn clone(&self) -> MspRespondMoveBucketTask<NT> {
-        Self {
+        MspRespondMoveBucketTask {
             storage_hub_handler: self.storage_hub_handler.clone(),
             peer_manager: self.peer_manager.clone(),
             pending_bucket_id: self.pending_bucket_id,
             file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -122,10 +150,11 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
             peer_manager: Arc::new(RwLock::new(BspPeerManager::new())),
             pending_bucket_id: None,
             file_storage_inserted_file_keys: Vec::new(),
+            config: storage_hub_handler.provider_config.msp_move_bucket.clone(),
         }
     }
 }
@@ -200,7 +229,7 @@ where
             .await;
 
         // Create semaphore for file-level parallelism
-        let file_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_FILE_DOWNLOADS));
+        let file_semaphore = Arc::new(Semaphore::new(self.config.max_concurrent_file_downloads));
         let file_tasks: Vec<_> = files
             .into_iter()
             .map(|file| {
@@ -463,14 +492,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
-                    .with_max_retries(3)
-                    .with_max_tip(10.0)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .extrinsic_retry_timeout,
-                    )),
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip),
                 false,
             )
             .await
@@ -508,20 +538,22 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
-                    .with_max_retries(3)
-                    .with_max_tip(10.0)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .extrinsic_retry_timeout,
-                    )),
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip),
                 false,
             )
             .await
             .map_err(|e| {
                 anyhow!(
-                    "Failed to submit move bucket acceptance after 3 retries: {:?}",
+                    "Failed to submit move bucket acceptance after {} retries: {:?}",
+                    self.config.max_try_count,
                     e
                 )
             })?;
@@ -710,14 +742,14 @@ where
         peer_manager: &Arc<RwLock<BspPeerManager>>,
         batch_size_bytes: u64,
     ) -> Result<bool, anyhow::Error> {
-        for attempt in 0..=DOWNLOAD_RETRY_ATTEMPTS {
+        for attempt in 0..=self.config.download_retry_attempts {
             if attempt > 0 {
                 warn!(
                     target: LOG_TARGET,
                     "Retrying download with peer {:?} (attempt {}/{})",
                     peer_id,
                     attempt + 1,
-                    DOWNLOAD_RETRY_ATTEMPTS + 1
+                    self.config.download_retry_attempts + 1
                 );
             }
 
@@ -744,7 +776,7 @@ where
                         .await
                     {
                         Ok(success) => return Ok(success),
-                        Err(e) if attempt < DOWNLOAD_RETRY_ATTEMPTS => {
+                        Err(e) if attempt < self.config.download_retry_attempts => {
                             warn!(
                                 target: LOG_TARGET,
                                 "Download attempt {} failed for peer {:?}: {:?}",
@@ -761,7 +793,7 @@ where
                         }
                     }
                 }
-                Err(e) if attempt < DOWNLOAD_RETRY_ATTEMPTS => {
+                Err(e) if attempt < self.config.download_retry_attempts => {
                     warn!(
                         target: LOG_TARGET,
                         "Download attempt {} failed for peer {:?}: {:?}",
@@ -776,7 +808,7 @@ where
                     peer_manager.record_failure(peer_id);
                     return Err(anyhow!(
                         "Download request failed after {} attempts to peer {:?}: {:?}",
-                        DOWNLOAD_RETRY_ATTEMPTS + 1,
+                        self.config.download_retry_attempts + 1,
                         peer_id,
                         e
                     ));
@@ -788,8 +820,12 @@ where
     }
 
     /// Creates a batch of chunk IDs to request together
-    fn create_chunk_batch(chunk_start: u64, chunks_count: u64) -> HashSet<ChunkId> {
-        let chunk_end = std::cmp::min(chunk_start + (MAX_CHUNKS_PER_REQUEST as u64), chunks_count);
+    fn create_chunk_batch(
+        max_chunks_per_request: usize,
+        chunk_start: u64,
+        chunks_count: u64,
+    ) -> HashSet<ChunkId> {
+        let chunk_end = std::cmp::min(chunk_start + (max_chunks_per_request as u64), chunks_count);
         (chunk_start..chunk_end).map(ChunkId::new).collect()
     }
 
@@ -829,18 +865,22 @@ where
             "MSP: downloading file {:?}", file_key,
         );
 
+        let max_chunks_per_request = self.config.max_chunks_per_request;
+
         // Create semaphore for chunk-level parallelism
-        let chunk_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHUNKS_PER_FILE));
+        let chunk_semaphore = Arc::new(Semaphore::new(self.config.max_concurrent_chunks_per_file));
         let peer_manager = Arc::clone(&self.peer_manager);
 
         let chunk_tasks: Vec<_> = (0..chunks_count)
-            .step_by(MAX_CHUNKS_PER_REQUEST)
+            .step_by(max_chunks_per_request)
             .map(|chunk_start| {
                 let semaphore = Arc::clone(&chunk_semaphore);
-                let task = self.clone();
+                // Clone everything needed for the tokio task to avoid capturing a reference to self
+                let task_clone = self.clone();
                 let file_metadata = file_metadata.clone();
                 let bucket = *bucket;
                 let peer_manager = Arc::clone(&peer_manager);
+                let config = self.config.clone();
 
                 tokio::spawn(async move {
                     let _permit = semaphore
@@ -848,7 +888,8 @@ where
                         .await
                         .map_err(|e| anyhow!("Failed to acquire chunk semaphore: {:?}", e))?;
 
-                    let chunk_batch = Self::create_chunk_batch(chunk_start, chunks_count);
+                    let chunk_batch =
+                        Self::create_chunk_batch(max_chunks_per_request, chunk_start, chunks_count);
                     let batch_size_bytes = chunk_batch.len() as u64 * FILE_CHUNK_SIZE as u64;
 
                     // Get the best performing peers for this request and shuffle them
@@ -856,7 +897,7 @@ where
                         let peer_manager = peer_manager.read().await;
                         let mut peers = peer_manager.select_peers(
                             2,
-                            CHUNK_REQUEST_PEER_RETRY_ATTEMPTS - 2,
+                            config.chunk_request_peer_retry_attempts - 2,
                             &file_key,
                         );
                         peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
@@ -865,7 +906,7 @@ where
 
                     // Try each selected peer
                     for peer_id in selected_peers {
-                        match task
+                        match task_clone
                             .try_download_chunk_batch(
                                 peer_id,
                                 file_key,

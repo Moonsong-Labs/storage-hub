@@ -15,9 +15,13 @@ use crate::{
     cli::{Cli, ProviderType, RelayChainCli, StorageLayer, Subcommand},
     config,
     service::new_partial,
+    services::builder::{
+        BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions,
+        BspSubmitProofOptions, BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions,
+        MspMoveBucketOptions,
+    },
 };
 
-// TODO: Have specific StorageHub role options (i.e. ProviderOptions, UserOptions).
 /// Configuration for the provider.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ProviderOptions {
@@ -31,10 +35,33 @@ pub struct ProviderOptions {
     pub max_storage_capacity: Option<StorageDataUnit>,
     /// Jump capacity (bytes).
     pub jump_capacity: Option<StorageDataUnit>,
-    /// Extrinsic retry timeout in seconds.
-    pub extrinsic_retry_timeout: u64,
     /// MSP charging fees frequency.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msp_charging_period: Option<u32>,
+    /// Configuration options for MSP delete file task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msp_delete_file: Option<MspDeleteFileOptions>,
+    /// Configuration options for MSP charge fees task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msp_charge_fees: Option<MspChargeFeesOptions>,
+    /// Configuration options for MSP move bucket task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub msp_move_bucket: Option<MspMoveBucketOptions>,
+    /// Configuration options for BSP upload file task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bsp_upload_file: Option<BspUploadFileOptions>,
+    /// Configuration options for BSP move bucket task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bsp_move_bucket: Option<BspMoveBucketOptions>,
+    /// Configuration options for BSP charge fees task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bsp_charge_fees: Option<BspChargeFeesOptions>,
+    /// Configuration options for BSP submit proof task.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bsp_submit_proof: Option<BspSubmitProofOptions>,
+    /// Configuration options for blockchain service.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub blockchain_service: Option<BlockchainServiceOptions>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
@@ -247,6 +274,7 @@ pub fn run() -> Result<()> {
         }
         None => {
             let mut provider_options = None;
+            let mut indexer_options = None;
             let runner = cli.create_runner(&cli.run.normalize())?;
 
             // If we have a provider config file
@@ -254,12 +282,23 @@ pub fn run() -> Result<()> {
                 let config = config::read_config(&provider_config_file);
                 if let Some(c) = config {
                     provider_options = Some(c.provider);
+                    indexer_options = c.indexer;
                 };
             };
 
             // We then check cli (the cli doesn't allow to have both cli parameters and a config file so we should not have overlap here)
             if cli.provider_config.provider {
                 provider_options = Some(cli.provider_config.provider_options());
+            };
+
+            // Convert IndexerOptions to IndexerConfigurations if available
+            let indexer_config = if let Some(opts) = indexer_options {
+                crate::cli::IndexerConfigurations {
+                    indexer: opts.indexer,
+                    database_url: opts.database_url,
+                }
+            } else {
+                cli.indexer_config
             };
 
             runner.run_node_until_exit(|config| async move {
@@ -285,7 +324,7 @@ pub fn run() -> Result<()> {
 							crate::service::start_dev_node::<sc_network::NetworkWorker<_, _>>(
 								config,
 								provider_options,
-								cli.indexer_config,
+								indexer_config,
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -307,7 +346,7 @@ pub fn run() -> Result<()> {
 								polkadot_config,
 								collator_options,
 								provider_options,
-								cli.indexer_config,
+								indexer_config,
 								id,
 								hwbench,
 							)
@@ -321,7 +360,7 @@ pub fn run() -> Result<()> {
 							crate::service::start_dev_node::<sc_network::Litep2pNetworkBackend>(
 								config,
 								provider_options,
-								cli.indexer_config,
+								indexer_config,
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -343,7 +382,7 @@ pub fn run() -> Result<()> {
 								polkadot_config,
 								collator_options,
 								provider_options,
-								cli.indexer_config,
+								indexer_config,
 								id,
 								hwbench,
 							)

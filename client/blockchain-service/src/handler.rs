@@ -7,6 +7,7 @@ use sc_client_api::{
 };
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
+use serde::Deserialize;
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
@@ -60,12 +61,14 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 ///
 /// TODO: Define properly the number of blocks to come out of sync mode
 /// TODO: Make this configurable in the config file
+/// TODO: CONSTANTS
 pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
 
 /// On blocks that are multiples of this number, the blockchain service will trigger the catch
 /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
 ///
 /// TODO: Make this configurable in the config file
+/// TODO: CONSTANTS
 pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
 
 /// The maximum number of blocks from the past that will be processed for catching up the root
@@ -74,6 +77,7 @@ pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
 /// variant.
 ///
 /// TODO: Make this configurable in the config file
+/// TODO: CONSTANTS
 pub(crate) const MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES: BlockNumber = 10;
 
 /// The BlockchainService actor.
@@ -85,6 +89,8 @@ pub struct BlockchainService<FSH>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
+    /// The configuration for the BlockchainService.
+    pub(crate) config: BlockchainServiceConfig,
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
     /// The parachain client. Used to interact with the runtime.
@@ -126,6 +132,20 @@ where
     ///
     /// Only required if the node is running as a provider.
     pub(crate) capacity_manager: Option<CapacityRequestQueue>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlockchainServiceConfig {
+    /// Extrinsic retry timeout in seconds.
+    pub extrinsic_retry_timeout: u64,
+}
+
+impl Default for BlockchainServiceConfig {
+    fn default() -> Self {
+        Self {
+            extrinsic_retry_timeout: 60,
+        }
+    }
 }
 
 /// Event loop for the BlockchainService actor.
@@ -221,13 +241,14 @@ where
                     call,
                     options,
                     callback,
-                } => match self.send_extrinsic(call, options).await {
+                } => match self.send_extrinsic(call, &options).await {
                     Ok(output) => {
                         debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
                         match callback.send(Ok(SubmittedTransaction::new(
                             output.receiver,
                             output.hash,
                             output.nonce,
+                            options.timeout(),
                         ))) {
                             Ok(_) => {
                                 trace!(target: LOG_TARGET, "Receiver sent successfully");
@@ -1108,6 +1129,7 @@ where
 {
     /// Create a new [`BlockchainService`].
     pub fn new(
+        config: BlockchainServiceConfig,
         client: Arc<ParachainClient>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
@@ -1117,6 +1139,7 @@ where
         capacity_request_queue: Option<CapacityRequestQueue>,
     ) -> Self {
         Self {
+            config,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             client,
             keystore,

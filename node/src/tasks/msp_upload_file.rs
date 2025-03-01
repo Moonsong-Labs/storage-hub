@@ -7,8 +7,8 @@ use std::{
 
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use shc_blockchain_service::capacity_manager::CapacityRequestData;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
+use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
@@ -322,9 +322,16 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Default::default())
+            .send_extrinsic(
+                call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
+            )
             .await?
-            .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 
@@ -530,9 +537,16 @@ where
 
                     self.storage_hub_handler
                         .blockchain
-                        .send_extrinsic(call, Default::default())
+                        .send_extrinsic(
+                            call,
+                            SendExtrinsicOptions::new(Duration::from_secs(
+                                self.storage_hub_handler
+                                    .provider_config
+                                    .blockchain_service
+                                    .extrinsic_retry_timeout,
+                            )),
+                        )
                         .await?
-                        .with_timeout(Duration::from_secs(60))
                         .watch_for_success(&self.storage_hub_handler.blockchain)
                         .await?;
 
@@ -843,9 +857,16 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Default::default())
+            .send_extrinsic(
+                call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
+            )
             .await?
-            .with_timeout(Duration::from_secs(60))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 

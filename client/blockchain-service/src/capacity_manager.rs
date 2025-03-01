@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, time::Duration};
 
 use anyhow::anyhow;
 use log::{debug, error};
@@ -11,7 +11,10 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 
-use crate::{transaction::SubmittedTransaction, types::ManagedProvider, BlockchainService};
+use crate::{
+    transaction::SubmittedTransaction, types::ManagedProvider, types::SendExtrinsicOptions,
+    BlockchainService,
+};
 
 const LOG_TARGET: &str = "blockchain-service-capacity-manager";
 
@@ -154,7 +157,7 @@ impl CapacityRequestQueue {
 }
 
 /// Configuration parameters determining values for capacity increases.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CapacityConfig {
     /// Maximum storage capacity of the provider in bytes.
     ///
@@ -304,13 +307,23 @@ where
             pallet_storage_providers::Call::change_capacity { new_capacity },
         );
 
+        let extrinsic_retry_timeout = Duration::from_secs(self.config.extrinsic_retry_timeout);
+
         // Send extrinsic to increase capacity
-        match self.send_extrinsic(call, Default::default()).await {
+        match self
+            .send_extrinsic(call, &SendExtrinsicOptions::new(extrinsic_retry_timeout))
+            .await
+        {
             Ok(output) => {
                 // Add all pending requests to the list of requests waiting for inclusion.
                 if let Some(capacity_manager) = self.capacity_manager.as_mut() {
                     capacity_manager.add_pending_requests_to_waiting_for_inclusion(
-                        SubmittedTransaction::new(output.receiver, output.hash, output.nonce),
+                        SubmittedTransaction::new(
+                            output.receiver,
+                            output.hash,
+                            output.nonce,
+                            extrinsic_retry_timeout,
+                        ),
                     );
                 } else {
                     error!(target: LOG_TARGET, "Capacity manager not initialized");
