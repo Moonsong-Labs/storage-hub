@@ -77,6 +77,8 @@ pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
 pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
+pub type MaxBatchConfirmStorageRequests =
+    <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
 
 /// Type alias for the events vector.
 ///
@@ -90,11 +92,6 @@ pub type StorageHubEventsVec = Vec<
         >,
     >,
 >;
-
-pub enum EitherBucketOrBspId {
-    Bucket(BucketId),
-    Bsp(BackupStorageProviderId),
-}
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;

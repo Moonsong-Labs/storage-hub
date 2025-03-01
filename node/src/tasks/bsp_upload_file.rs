@@ -778,19 +778,35 @@ where
             // Validate chunk size
             let chunk_idx = chunk.key.as_u64();
             if !file_metadata.is_valid_chunk_size(chunk_idx, chunk.data.len()) {
-                error!(
-                    target: LOG_TARGET,
-                    "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
-                    chunk.key,
-                    file_key,
-                    file_metadata.chunk_size_at(chunk_idx),
-                    chunk.data.len()
-                );
-                return Err(anyhow!(
-                    "Invalid chunk size. Expected {}, got {}",
-                    file_metadata.chunk_size_at(chunk_idx),
-                    chunk.data.len()
-                ));
+                match file_metadata.chunk_size_at(chunk_idx) {
+                    Ok(actual_chunk_size) => {
+                        error!(
+                                target: LOG_TARGET,
+                                "Invalid chunk size for chunk {:?} of file {:?}. Expected: {}, got: {}",
+                                chunk.key,
+                                file_key,
+                                actual_chunk_size,
+                            chunk.data.len()
+                        );
+                        return Err(anyhow!(
+                            "Invalid chunk size. Expected {}, got {}",
+                            actual_chunk_size,
+                            chunk.data.len()
+                        ));
+                    }
+                    Err(e) => {
+                        let err_msg = format!(
+                            "Failed to get chunk size for chunk {:?}: {:?}",
+                            chunk.key, e
+                        );
+                        error!(
+                            target: LOG_TARGET,
+                            "{}",
+                            err_msg
+                        );
+                        return Err(anyhow!(err_msg));
+                    }
+                }
             }
 
             let write_result = write_file_storage.write_chunk(&file_key, &chunk.key, &chunk.data);

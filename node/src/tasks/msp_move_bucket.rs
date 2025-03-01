@@ -235,7 +235,7 @@ where
             .map(|file| {
                 let semaphore = Arc::clone(&file_semaphore);
                 let task = self.clone();
-                let bucket_id = event.bucket_id.clone();
+                let bucket_id = event.bucket_id;
 
                 tokio::spawn(async move {
                     let _permit = semaphore
@@ -708,7 +708,9 @@ where
 
         // Validate chunk size
         let chunk_idx = chunk_id.as_u64();
-        let expected_chunk_size = file_metadata.chunk_size_at(chunk_idx);
+        let expected_chunk_size = file_metadata
+            .chunk_size_at(chunk_idx)
+            .map_err(|e| anyhow!("Failed to get chunk size for chunk {}: {:?}", chunk_idx, e))?;
 
         if chunk_data.len() != expected_chunk_size {
             return Err(anyhow!(
