@@ -26,13 +26,14 @@ pub fn build_merkle_patricia_forest<T: TrieLayout>(
         file_path.append(&mut bucket.to_vec());
         file_path.append(&mut file_name.to_vec());
 
-        let metadata = FileMetadata {
-            owner: "owner".as_bytes().to_vec(),
-            bucket_id: bucket.to_vec(),
-            location: file_path,
-            file_size: 0,
-            fingerprint: Fingerprint::default(),
-        };
+        let metadata = FileMetadata::new(
+            "owner".as_bytes().to_vec(),
+            bucket.to_vec(),
+            file_path,
+            1,
+            Fingerprint::default(),
+        )
+        .unwrap();
 
         file_leaves.push((metadata.file_key::<HashT<T>>(), metadata.encode()));
     }

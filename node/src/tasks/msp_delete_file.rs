@@ -78,7 +78,7 @@ where
     async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Queueing file deletion request for file_key {:?}",
+            "Queueing file deletion request for file_key {:x}",
             event.file_key
         );
 
@@ -194,7 +194,8 @@ where
                         self.storage_hub_handler
                             .provider_config
                             .extrinsic_retry_timeout,
-                    )),
+                    ))
+                    .retry_only_if_timeout(),
                 false,
             )
             .await
@@ -224,7 +225,7 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Successfully processed file deletion request for file_key {:?}",
+            "Successfully processed file deletion request for file_key {:x}",
             delete_file_request.file_key
         );
 
@@ -252,7 +253,7 @@ where
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Processing finalized file deletion request for file_key {:?}",
+            "Processing finalized file deletion request for file_key {:x}",
             event.file_key
         );
 
@@ -260,7 +261,7 @@ where
         if !event.proof_of_inclusion {
             info!(
                 target: LOG_TARGET,
-                "Skipping file deletion as no proof of inclusion was provided for file_key {:?}",
+                "Skipping file deletion as no proof of inclusion was provided for file_key {:x}",
                 event.file_key
             );
             return Ok(());

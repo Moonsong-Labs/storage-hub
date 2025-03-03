@@ -1,3 +1,4 @@
 pub const MAX_PENDING_EVENTS: usize = 2000;
+pub const MAX_TASKS_SPAWNED_PER_QUEUE: usize = 2000;
 
 pub const DEFAULT_ACTOR_COMMAND_QUEUE_WARNING_SIZE: usize = 2000;

@@ -302,7 +302,7 @@ describeBspNet(
 
       // Finally, wait for the BSP to confirm storing the file and seal the block
       const address = userApi.createType("Address", NODE_INFOS.bsp.AddressId);
-      await userApi.wait.bspStored(1, address);
+      await userApi.wait.bspStored({ expectedExts: 1, bspAccount: address });
     });
 
     it("BSP correctly responds to challenge with new forest root", async () => {

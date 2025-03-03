@@ -77,6 +77,8 @@ pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
 pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
 pub type StorageRequestMetadata = pallet_file_system::types::StorageRequestMetadata<Runtime>;
+pub type MaxBatchConfirmStorageRequests =
+    <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
 
 /// Type alias for the events vector.
 ///
@@ -90,11 +92,6 @@ pub type StorageHubEventsVec = Vec<
         >,
     >,
 >;
-
-pub enum EitherBucketOrBspId {
-    Bucket(BucketId),
-    Bsp(BackupStorageProviderId),
-}
 
 #[cfg(not(feature = "runtime-benchmarks"))]
 type HostFunctions = cumulus_client_service::ParachainHostFunctions;
@@ -166,16 +163,25 @@ pub struct FileProof {
 }
 
 impl FileProof {
-    pub fn to_file_key_proof(&self, file_metadata: FileMetadata) -> FileKeyProof {
+    pub fn to_file_key_proof(
+        &self,
+        file_metadata: FileMetadata,
+    ) -> Result<FileKeyProof, FileProofError> {
         FileKeyProof::new(
-            file_metadata.owner.clone(),
-            file_metadata.bucket_id.clone(),
-            file_metadata.location.clone(),
-            file_metadata.file_size,
-            file_metadata.fingerprint,
+            file_metadata.owner().clone(),
+            file_metadata.bucket_id().clone(),
+            file_metadata.location().clone(),
+            file_metadata.file_size(),
+            *file_metadata.fingerprint(),
             self.proof.clone(),
         )
+        .map_err(|_| FileProofError::InvalidFileMetadata)
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum FileProofError {
+    InvalidFileMetadata,
 }
 
 #[derive(Clone, Eq, Hash, PartialEq, Debug)]

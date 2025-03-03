@@ -225,11 +225,11 @@ impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
     }
 
     fn get_file_size(metadata: &Self::Metadata) -> Self::StorageDataUnit {
-        metadata.file_size
+        metadata.file_size()
     }
 
     fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
-        Self::AccountId::decode(&mut metadata.owner.as_slice())
+        Self::AccountId::decode(&mut metadata.owner().as_slice())
     }
 }
 
@@ -420,13 +420,18 @@ where
                             { shp_constants::H_LENGTH },
                             { shp_constants::FILE_CHUNK_SIZE },
                             { shp_constants::FILE_SIZE_TO_CHALLENGES },
-                        > = FileMetadata::new(
+                        > = match FileMetadata::new(
                             1_u64.encode(),
                             blake2_256(b"bucket").as_ref().to_vec(),
                             b"path/to/file".to_vec(),
                             1,
                             Fingerprint::default().into(),
-                        );
+                        ) {
+                            Ok(file_metadata) => file_metadata,
+                            Err(_) => {
+                                return Err(DispatchError::Other("Failed to create file metadata"))
+                            }
+                        };
                         if key.as_ref() != [0; H_LENGTH] {
                             Some(file_metadata.encode())
                         } else {
@@ -434,9 +439,9 @@ where
                         }
                     }
                 };
-                (*key, value)
+                Ok((*key, value))
             })
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
 
         // Return default db, the last key in mutations as the new root, and a
         // vector holding the supposedly mutated keys and values, so it is deterministic for testing.

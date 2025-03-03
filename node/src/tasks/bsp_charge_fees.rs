@@ -9,7 +9,7 @@ use shc_blockchain_service::{
         LastChargeableInfoUpdated, ProcessStopStoringForInsolventUserRequest,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
-    types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
+    types::StopStoringForInsolventUserRequest,
 };
 use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -109,7 +109,7 @@ where
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, SendExtrinsicOptions::default())
+                .send_extrinsic(call, Default::default())
                 .await;
 
             match charging_result {
@@ -276,11 +276,11 @@ where
             // It is not ideal because it means one extrinsic per file but batch deletion is not yet implemented.
             // TODO: Improve it once batch deletion is implemented.
             let (file_key, metadata) = user_files.first().expect("User files is not empty");
-            let bucket_id = H256::from_slice(metadata.bucket_id.as_ref());
-            let location = sp_runtime::BoundedVec::truncate_from(metadata.location.clone());
+            let bucket_id = H256::from_slice(metadata.bucket_id().as_ref());
+            let location = sp_runtime::BoundedVec::truncate_from(metadata.location().clone());
             let owner = insolvent_user.clone();
-            let fingerprint = H256(metadata.fingerprint.into());
-            let size = metadata.file_size;
+            let fingerprint = metadata.fingerprint().as_hash().into();
+            let size = metadata.file_size();
             let inclusion_forest_proof = fs
                 .read()
                 .await
@@ -305,10 +305,7 @@ where
             // continue only if it is successful.
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(
-                    stop_storing_for_insolvent_user_call,
-                    SendExtrinsicOptions::default(),
-                )
+                .send_extrinsic(stop_storing_for_insolvent_user_call, Default::default())
                 .await?
                 .with_timeout(Duration::from_secs(
                     self.storage_hub_handler
@@ -331,7 +328,7 @@ where
                 let charging_result = self
                     .storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, SendExtrinsicOptions::default())
+                    .send_extrinsic(call, Default::default())
                     .await;
 
                 match charging_result {

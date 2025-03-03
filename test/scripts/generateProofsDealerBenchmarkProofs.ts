@@ -193,7 +193,7 @@ async function generateBenchmarkProofs() {
 
     await userApi.wait.bspVolunteer(1);
     await bspApi.wait.fileStorageComplete(fileMetadata.fileKey);
-    await userApi.wait.bspStored(1);
+    await userApi.wait.bspStored({ expectedExts: 1 });
   }
 
   // Sort the file keys.

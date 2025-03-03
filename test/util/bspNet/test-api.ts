@@ -2,7 +2,7 @@ import "@storagehub/api-augment"; // must be first import
 
 import { ApiPromise, WsProvider } from "@polkadot/api";
 import type { KeyringPair } from "@polkadot/keyring/types";
-import type { Address, EventRecord, H256 } from "@polkadot/types/interfaces";
+import type { EventRecord, H256 } from "@polkadot/types/interfaces";
 import type { HexString } from "@polkadot/util/types";
 import { types as BundledTypes } from "@storagehub/types-bundle";
 import type { AssertExtrinsicOptions } from "../asserts";
@@ -13,7 +13,7 @@ import * as DockerBspNet from "./docker";
 import * as Files from "./fileHelpers";
 import { addBsp } from "./helpers";
 import * as NodeBspNet from "./node";
-import type { BspNetApi, SealBlockOptions } from "./types";
+import type { BspNetApi, BspStoredOptions, SealBlockOptions } from "./types";
 import * as Waits from "./waits";
 
 /**
@@ -217,13 +217,24 @@ export class BspNetTestApi implements AsyncDisposable {
        *
        * Checks that `expectedExts` extrinsics have been submitted to the tx pool.
        * Then seals a block and checks for the `BspConfirmedStoring` events.
-       * @param expectedExts - Optional param to specify the number of expected extrinsics.
-       * @param bspAccount - Optional param to specify the BSP Account ID that may be sending submit proof extrinsics.
-       * @param sealBlock - Optional param to specify if the block should be sealed with the confirmation extrinsic. Defaults to true.
+       * @param options - Options for the BSP Stored waiting utility function.
        * @returns A promise that resolves when a BSP has confirmed storing a file.
        */
-      bspStored: (expectedExts?: number, bspAccount?: Address, sealBlock = true) =>
-        Waits.waitForBspStored(this._api, expectedExts, bspAccount, sealBlock),
+      bspStored: (
+        options: BspStoredOptions = {
+          expectedExts: undefined,
+          bspAccount: undefined,
+          timeoutMs: undefined,
+          sealBlock: true
+        }
+      ) =>
+        Waits.waitForBspStored(
+          this._api,
+          options.expectedExts,
+          options.bspAccount,
+          options.timeoutMs,
+          options.sealBlock
+        ),
 
       /**
        * A generic utility to wait for a transaction to be in the tx pool.
@@ -231,19 +242,6 @@ export class BspNetTestApi implements AsyncDisposable {
        * @returns A promise that resolves when the transaction is in the tx pool.
        */
       waitForTxInPool: (options: WaitForTxOptions) => Waits.waitForTxInPool(this._api, options),
-
-      /**
-       * Waits for a BSP to submit to the tx pool the extrinsic to confirm storing a file.
-       * @param options - Optional configuration object
-       * @param options.expectedExts - Optional number of expected extrinsics
-       * @param options.timeoutMs - Optional timeout in milliseconds
-       * @returns A promise that resolves when a BSP has submitted to the tx pool the extrinsic to confirm storing a file.
-       */
-      bspStoredInTxPool: (options?: { expectedExts?: number; timeoutMs?: number }) =>
-        Waits.waitForBspStoredWithoutSealing(this._api, {
-          checkQuantity: options?.expectedExts,
-          timeout: options?.timeoutMs
-        }),
 
       /**
        * Waits for a Storage Provider to complete storing a file key.
@@ -254,12 +252,28 @@ export class BspNetTestApi implements AsyncDisposable {
         Waits.waitForFileStorageComplete(this._api, fileKey),
 
       /**
+       * Waits for a Storage Provider to complete deleting a file key from the file storage.
+       * @param fileKey - Param to specify the file key to wait for.
+       * @returns A promise that resolves when the Provider has completed to delete the file.
+       */
+      fileDeletionFromFileStorage: (fileKey: H256 | string) =>
+        Waits.waitForFileDeletionFromFileStorageComplete(this._api, fileKey),
+
+      /**
        * Waits for a BSP to complete deleting a file from its forest.
        * @param fileKey - Param to specify the file key to wait for deletion.
        * @returns A promise that resolves when a BSP has correctly deleted the file from its forest storage.
        */
       bspFileDeletionCompleted: (fileKey: H256 | string) =>
         Waits.waitForBspFileDeletionComplete(this._api, fileKey),
+
+      /**
+       * Waits for a MSP to complete deleting a bucket from its forest.
+       * @param fileKey - Param to specify the bucket ID of the bucket to wait for deletion.
+       * @returns A promise that resolves when the MSP has correctly deleted the bucket from its forest storage.
+       */
+      mspBucketDeletionCompleted: (bucketId: H256 | string) =>
+        Waits.waitForMspBucketDeletionComplete(this._api, bucketId),
 
       /**
        * Waits for a BSP to catch up to the tip of the chain
@@ -506,6 +520,8 @@ export class BspNetTestApi implements AsyncDisposable {
       ) => BspNetBlock.advanceToBlock(this._api, { ...options, blockNumber }),
       /**
        * Skips blocks until the minimum time for capacity changes is reached.
+       * It will stop at the block before the minimum change time is reached since the capacity
+       * change extrinsic will be sent and included in the next block.
        *
        * @param bspId - The ID of the BSP that the capacity change is for.
        * @returns A promise that resolves when the minimum change time is reached.

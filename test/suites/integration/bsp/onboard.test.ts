@@ -67,10 +67,11 @@ describeBspNet("BSPNet: Adding new BSPs", ({ before, createUserApi, createApi, i
 
     await it("is peer of other nodes", async () => {
       await waitFor({
-        lambda: async () => (await userApi.rpc.system.peers()).length > 0
+        lambda: async () => {
+          const peers = (await userApi.rpc.system.peers()).map(({ peerId }) => peerId.toString());
+          return peers.includes(peerId);
+        }
       });
-      const peers = (await userApi.rpc.system.peers()).map(({ peerId }) => peerId.toString());
-      strictEqual(peers.includes(peerId), true, `PeerId ${peerId} not found in ${peers}`);
     });
   });
 

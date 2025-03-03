@@ -45,6 +45,8 @@ pub enum QueryMspConfirmChunksToProveForFileError {
 #[derive(Eq, PartialEq, Encode, Decode, RuntimeDebug, TypeInfo)]
 pub enum QueryConfirmChunksToProveForFileError {
     ChallengedChunkToChunkIdError,
+    FailedToCreateFileMetadata,
+    FailedToGenerateChunkChallenges,
 }
 
 /// Error type for `decode_generic_apply_delta_event_info`.

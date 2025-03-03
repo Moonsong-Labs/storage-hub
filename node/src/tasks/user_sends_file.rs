@@ -1,5 +1,9 @@
 use log::{debug, info, warn};
 use sc_network::{PeerId, RequestFailure};
+use sp_core::H256;
+use sp_runtime::AccountId32;
+use std::collections::HashSet;
+
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
@@ -10,10 +14,7 @@ use shc_common::types::{
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
-use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::ChunkId;
-use sp_core::H256;
-use sp_runtime::AccountId32;
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 
@@ -119,13 +120,14 @@ where
             .extract_peer_ids_and_register_known_addresses(multiaddress_vec)
             .await;
 
-        let file_metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size.into(),
-            fingerprint: event.fingerprint,
-            location: event.location.into_inner(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            event.bucket_id.as_ref().to_vec(),
+            event.location.into_inner(),
+            event.size.into(),
+            event.fingerprint,
+        )
+        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
 
         let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
@@ -157,13 +159,14 @@ where
             event.location,
         );
 
-        let file_metadata = FileMetadata {
-            owner: <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
-            bucket_id: event.bucket_id.as_ref().to_vec(),
-            file_size: event.size.into(),
-            fingerprint: event.fingerprint,
-            location: event.location.into_inner(),
-        };
+        let file_metadata = FileMetadata::new(
+            <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
+            event.bucket_id.as_ref().to_vec(),
+            event.location.into_inner(),
+            event.size.into(),
+            event.fingerprint,
+        )
+        .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
 
         // Adds the multiaddresses of the BSP volunteering to store the file to the known addresses of the file transfer service.
         // This is required to establish a connection to the BSP.
@@ -220,7 +223,7 @@ where
 
         Err(anyhow::anyhow!(
             "Failed to send file {:?} to any of the peers",
-            file_metadata.fingerprint
+            file_metadata.fingerprint()
         ))
     }
 
@@ -236,16 +239,19 @@ where
         let mut current_batch = Vec::new();
         let mut current_batch_size = 0;
 
+        let fingerprint = file_metadata.fingerprint();
+
         for chunk_id in 0..chunk_count {
-            // Calculate the size of the current chunk
-            let chunk_size = if chunk_id == chunk_count - 1 {
-                file_metadata.file_size % FILE_CHUNK_SIZE as u64
-            } else {
-                FILE_CHUNK_SIZE as u64
-            };
+            let chunk_data = self
+                .storage_hub_handler
+                .file_storage
+                .read()
+                .await
+                .get_chunk(&file_key, &ChunkId::new(chunk_id))
+                .map_err(|e| anyhow::anyhow!("Failed to get chunk: {:?}", e))?;
 
             // Check if adding this chunk would exceed the batch size limit
-            if current_batch_size + (chunk_size as usize) > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
+            if current_batch_size + chunk_data.len() > BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE {
                 // Send current batch before adding new chunk
                 debug!(
                     target: LOG_TARGET,
@@ -262,8 +268,10 @@ where
                     .file_storage
                     .read()
                     .await
-                    .generate_proof(&file_key, &current_batch)
-                {
+                    .generate_proof(
+                        &file_key,
+                        &HashSet::from_iter(current_batch.iter().cloned()),
+                    ) {
                     Ok(proof) => proof,
                     Err(e) => {
                         return Err(anyhow::anyhow!(
@@ -286,8 +294,8 @@ where
                         Ok(r) => {
                             debug!(
                                 target: LOG_TARGET,
-                                "Successfully uploaded batch for file {:?} to peer {:?}",
-                                file_metadata.fingerprint,
+                                "Successfully uploaded batch for file fingerprint {:x} to peer {:?}",
+                                fingerprint,
                                 peer_id
                             );
 
@@ -295,9 +303,9 @@ where
                             if r.file_complete {
                                 info!(
                                     target: LOG_TARGET,
-                                    "Stopping file upload process. Peer {:?} has the entire file {:?}",
+                                    "Stopping file upload process. Peer {:?} has the entire file fingerprint {:x}",
                                     peer_id,
-                                    file_metadata.fingerprint
+                                    fingerprint
                                 );
                                 return Ok(());
                             }
@@ -359,7 +367,7 @@ where
 
             // Add chunk to current batch
             current_batch.push(ChunkId::new(chunk_id));
-            current_batch_size += chunk_size as usize;
+            current_batch_size += chunk_data.len();
 
             // If this is the last chunk, send the final batch
             if chunk_id == chunk_count - 1 && !current_batch.is_empty() {
@@ -378,8 +386,10 @@ where
                     .file_storage
                     .read()
                     .await
-                    .generate_proof(&file_key, &current_batch)
-                {
+                    .generate_proof(
+                        &file_key,
+                        &HashSet::from_iter(current_batch.iter().cloned()),
+                    ) {
                     Ok(proof) => proof,
                     Err(e) => {
                         return Err(anyhow::anyhow!(
@@ -402,17 +412,17 @@ where
                         Ok(r) => {
                             debug!(
                                 target: LOG_TARGET,
-                                "Successfully uploaded final batch for file {:?} to peer {:?}",
-                                file_metadata.fingerprint,
+                                "Successfully uploaded final batch for file fingerprint {:x} to peer {:?}",
+                                fingerprint,
                                 peer_id
                             );
 
                             if r.file_complete {
                                 info!(
                                     target: LOG_TARGET,
-                                    "File upload complete. Peer {:?} has the entire file {:?}",
+                                    "File upload complete. Peer {:?} has the entire file fingerprint {:x}",
                                     peer_id,
-                                    file_metadata.fingerprint
+                                    fingerprint
                                 );
                             }
                             break;
@@ -467,7 +477,7 @@ where
             }
         }
 
-        info!(target: LOG_TARGET, "Successfully sent file {:?} to peer {:?}", file_metadata.fingerprint, peer_id);
-        return Ok(());
+        info!(target: LOG_TARGET, "Successfully sent file fingerprint {:x} to peer {:?}", fingerprint, peer_id);
+        Ok(())
     }
 }
