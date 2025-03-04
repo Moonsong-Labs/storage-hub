@@ -29,6 +29,7 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
 use crate::{
+    services::bsp_peer_manager::BspPeerManager,
     services::types::{
         BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
         ShStorageLayer, UserRole,
@@ -75,6 +76,8 @@ where
     pub provider_config: ProviderConfig,
     /// The indexer database pool.
     pub indexer_db_pool: Option<DbPool>,
+    /// The BSP peer manager for tracking peer performance.
+    pub peer_manager: Arc<BspPeerManager>,
 }
 
 impl<NT> Clone for StorageHubHandler<NT>
@@ -90,6 +93,7 @@ where
             forest_storage_handler: self.forest_storage_handler.clone(),
             provider_config: self.provider_config.clone(),
             indexer_db_pool: self.indexer_db_pool.clone(),
+            peer_manager: self.peer_manager.clone(),
         }
     }
 }
@@ -106,6 +110,7 @@ where
         forest_storage_handler: NT::FSH,
         provider_config: ProviderConfig,
         indexer_db_pool: Option<DbPool>,
+        peer_manager: Arc<BspPeerManager>,
     ) -> Self {
         Self {
             task_spawner,
@@ -115,6 +120,7 @@ where
             forest_storage_handler,
             provider_config,
             indexer_db_pool,
+            peer_manager,
         }
     }
 }

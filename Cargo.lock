@@ -16212,6 +16212,7 @@ dependencies = [
  "polkadot-runtime-common 17.0.0",
  "priority-queue",
  "rand",
+ "rocksdb",
  "sc-basic-authorship",
  "sc-chain-spec",
  "sc-cli",
