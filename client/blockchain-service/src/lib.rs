@@ -30,6 +30,7 @@ pub async fn spawn_blockchain_service<FSH>(
     rocksdb_root_path: impl Into<PathBuf>,
     notify_period: Option<u32>,
     capacity_config: Option<CapacityConfig>,
+    maintenance_mode: bool,
 ) -> ActorHandle<BlockchainService<FSH>>
 where
     FSH: shc_forest_manager::traits::ForestStorageHandler + Clone + Send + Sync + 'static,
@@ -46,6 +47,7 @@ where
         rocksdb_root_path,
         notify_period,
         capacity_config.map(CapacityRequestQueue::new),
+        maintenance_mode,
     );
 
     task_spawner.spawn_actor(blockchain_service)

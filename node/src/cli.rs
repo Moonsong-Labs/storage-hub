@@ -106,6 +106,12 @@ pub struct ProviderConfigurations {
     #[arg(long)]
     pub provider: bool,
 
+    /// Run the node in maintenance mode.
+    /// In this mode, the node will not import blocks or participate in consensus,
+    /// but will allow specific RPC calls for file and storage management.
+    #[arg(long, default_value = "false")]
+    pub maintenance_mode: bool,
+
     /// Type of StorageHub provider.
     #[clap(
         long,
@@ -173,6 +179,7 @@ impl ProviderConfigurations {
             jump_capacity: self.jump_capacity,
             extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             msp_charging_period: self.msp_charging_period,
+            maintenance_mode: self.maintenance_mode,
         }
     }
 }
