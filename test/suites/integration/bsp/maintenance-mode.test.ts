@@ -7,14 +7,12 @@ import {
   ShConsts
 } from "../../../util";
 
-describeBspNet("BSPNet: Maintenance Mode Test", ({ before, it, createUserApi, createBspApi, createApi }) => {
+describeBspNet("BSPNet: Maintenance Mode Test", ({ before, it, createUserApi, createApi }) => {
   let userApi: EnrichedBspApi;
-  let bspApi: EnrichedBspApi;
   let maintenanceBspApi: EnrichedBspApi;
 
   before(async () => {
     userApi = await createUserApi();
-    bspApi = await createBspApi();
 
 	// 1 block to maxthreshold (i.e. instant acceptance)
     const tickToMaximumThresholdRuntimeParameter = {
