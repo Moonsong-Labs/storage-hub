@@ -118,6 +118,9 @@ where
         indexer_db_pool: Option<DbPool>,
         peer_manager: Arc<BspPeerManager>,
     ) -> Self {
+        // Create a FileDownloadManager with the peer manager already initialized
+        let file_download_manager = Arc::new(FileDownloadManager::new(Arc::clone(&peer_manager)));
+
         Self {
             task_spawner,
             file_transfer,
@@ -127,7 +130,7 @@ where
             provider_config,
             indexer_db_pool,
             peer_manager,
-            file_download_manager: Arc::new(FileDownloadManager::new()),
+            file_download_manager,
         }
     }
 }
