@@ -29,10 +29,13 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
 use crate::{
-    services::bsp_peer_manager::BspPeerManager,
-    services::types::{
-        BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
-        ShStorageLayer, UserRole,
+    services::{
+        bsp_peer_manager::BspPeerManager,
+        file_download_manager::FileDownloadManager,
+        types::{
+            BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider,
+            ShNodeType, ShStorageLayer, UserRole,
+        },
     },
     tasks::{
         bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
@@ -78,6 +81,8 @@ where
     pub indexer_db_pool: Option<DbPool>,
     /// The BSP peer manager for tracking peer performance.
     pub peer_manager: Arc<BspPeerManager>,
+    /// The file download manager for rate-limiting downloads.
+    pub file_download_manager: Arc<FileDownloadManager>,
 }
 
 impl<NT> Clone for StorageHubHandler<NT>
@@ -94,6 +99,7 @@ where
             provider_config: self.provider_config.clone(),
             indexer_db_pool: self.indexer_db_pool.clone(),
             peer_manager: self.peer_manager.clone(),
+            file_download_manager: self.file_download_manager.clone(),
         }
     }
 }
@@ -121,6 +127,7 @@ where
             provider_config,
             indexer_db_pool,
             peer_manager,
+            file_download_manager: Arc::new(FileDownloadManager::new()),
         }
     }
 }

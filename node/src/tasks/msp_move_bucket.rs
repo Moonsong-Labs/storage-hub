@@ -7,7 +7,6 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::sync::Semaphore;
 
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
@@ -44,17 +43,6 @@ lazy_static::lazy_static! {
 }
 
 const LOG_TARGET: &str = "msp-move-bucket-task";
-
-/// Maximum number of files to download in parallel
-const MAX_CONCURRENT_FILE_DOWNLOADS: usize = 10;
-/// Maximum number of chunks requests to do in parallel per file
-const MAX_CONCURRENT_CHUNKS_PER_FILE: usize = 5;
-/// Maximum number of chunks to request in a single network request
-const MAX_CHUNKS_PER_REQUEST: usize = 10;
-/// Number of peers to select for each chunk download attempt (2 best + 3 random)
-const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
-/// Number of retries per peer for a single chunk request
-const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 
 /// [`MspRespondMoveBucketTask`] handles bucket move requests between MSPs.
 ///
@@ -195,8 +183,11 @@ where
             .get_or_create(&bucket)
             .await;
 
-        // Create semaphore for file-level parallelism
-        let file_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_FILE_DOWNLOADS));
+        // Get the file semaphore from the download manager
+        let file_semaphore = self
+            .storage_hub_handler
+            .file_download_manager
+            .file_semaphore();
         let file_tasks: Vec<_> = files
             .into_iter()
             .map(|file| {
@@ -703,14 +694,21 @@ where
         peer_manager: &Arc<BspPeerManager>,
         batch_size_bytes: u64,
     ) -> Result<bool, anyhow::Error> {
-        for attempt in 0..=DOWNLOAD_RETRY_ATTEMPTS {
+        // Get retry attempts from the FileDownloadManager
+        let download_retry_attempts = self
+            .storage_hub_handler
+            .file_download_manager
+            .download_retry_attempts();
+
+        // Retry the download up to the configured number of times
+        for attempt in 0..=download_retry_attempts {
             if attempt > 0 {
                 warn!(
                     target: LOG_TARGET,
                     "Retrying download with peer {:?} (attempt {}/{})",
                     peer_id,
                     attempt + 1,
-                    DOWNLOAD_RETRY_ATTEMPTS + 1
+                    download_retry_attempts + 1
                 );
             }
 
@@ -737,7 +735,7 @@ where
                         .await
                     {
                         Ok(success) => return Ok(success),
-                        Err(e) if attempt < DOWNLOAD_RETRY_ATTEMPTS => {
+                        Err(e) if attempt < download_retry_attempts => {
                             warn!(
                                 target: LOG_TARGET,
                                 "Download attempt {} failed for peer {:?}: {:?}",
@@ -753,7 +751,7 @@ where
                         }
                     }
                 }
-                Err(e) if attempt < DOWNLOAD_RETRY_ATTEMPTS => {
+                Err(e) if attempt < download_retry_attempts => {
                     warn!(
                         target: LOG_TARGET,
                         "Download attempt {} failed for peer {:?}: {:?}",
@@ -767,7 +765,7 @@ where
                     peer_manager.record_failure(peer_id).await;
                     return Err(anyhow!(
                         "Download request failed after {} attempts to peer {:?}: {:?}",
-                        DOWNLOAD_RETRY_ATTEMPTS + 1,
+                        download_retry_attempts + 1,
                         peer_id,
                         e
                     ));
@@ -779,8 +777,12 @@ where
     }
 
     /// Creates a batch of chunk IDs to request together
-    fn create_chunk_batch(chunk_start: u64, chunks_count: u64) -> HashSet<ChunkId> {
-        let chunk_end = std::cmp::min(chunk_start + (MAX_CHUNKS_PER_REQUEST as u64), chunks_count);
+    fn create_chunk_batch(
+        chunk_start: u64,
+        chunks_count: u64,
+        max_chunks_per_request: usize,
+    ) -> HashSet<ChunkId> {
+        let chunk_end = std::cmp::min(chunk_start + (max_chunks_per_request as u64), chunks_count);
         (chunk_start..chunk_end).map(ChunkId::new).collect()
     }
 
@@ -820,12 +822,16 @@ where
             "MSP: downloading file {:?}", file_key,
         );
 
-        // Create semaphore for chunk-level parallelism
-        let chunk_semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT_CHUNKS_PER_FILE));
+        // Get a new chunk semaphore from the download manager
+        let chunk_semaphore = self
+            .storage_hub_handler
+            .file_download_manager
+            .new_chunk_semaphore();
         let peer_manager = Arc::clone(&self.storage_hub_handler.peer_manager);
+        let download_manager = self.storage_hub_handler.file_download_manager.clone();
 
         let chunk_tasks: Vec<_> = (0..chunks_count)
-            .step_by(MAX_CHUNKS_PER_REQUEST)
+            .step_by(download_manager.max_chunks_per_request())
             .map(|chunk_start| {
                 let semaphore = Arc::clone(&chunk_semaphore);
                 let task = self.clone();
@@ -839,12 +845,22 @@ where
                         .await
                         .map_err(|e| anyhow!("Failed to acquire chunk semaphore: {:?}", e))?;
 
-                    let chunk_batch = Self::create_chunk_batch(chunk_start, chunks_count);
+                    let chunk_batch = Self::create_chunk_batch(
+                        chunk_start,
+                        chunks_count,
+                        task.storage_hub_handler
+                            .file_download_manager
+                            .max_chunks_per_request(),
+                    );
                     let batch_size_bytes = chunk_batch.len() as u64 * FILE_CHUNK_SIZE as u64;
 
                     // Get the best performing peers for this request and shuffle them
+                    let peer_retry_attempts = task
+                        .storage_hub_handler
+                        .file_download_manager
+                        .chunk_request_peer_retry_attempts();
                     let mut peers = peer_manager
-                        .select_peers(2, CHUNK_REQUEST_PEER_RETRY_ATTEMPTS - 2, &file_key)
+                        .select_peers(2, peer_retry_attempts - 2, &file_key)
                         .await;
                     peers.shuffle(&mut *GLOBAL_RNG.lock().unwrap());
 
