@@ -154,7 +154,7 @@ where
             .map(|file| {
                 let semaphore = Arc::clone(&file_semaphore);
                 let task = self.clone();
-                let bucket_id = event.bucket_id.clone();
+                let bucket_id = event.bucket_id;
 
                 tokio::spawn(async move {
                     let _permit = semaphore

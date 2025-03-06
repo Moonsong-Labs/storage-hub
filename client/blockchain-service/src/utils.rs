@@ -1,65 +1,54 @@
+use anyhow::{anyhow, Result};
+use log::{debug, error, info, trace, warn};
+use serde_json::Number;
 use std::{cmp::max, sync::Arc, vec};
 
-use anyhow::{anyhow, Result};
 use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
-use pallet_file_system_runtime_api::FileSystemApi;
+use polkadot_runtime_common::BlockHashCount;
+use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
+use sc_network::Multiaddr;
+use sp_api::ProvideRuntimeApi;
+use sp_blockchain::{HashAndNumber, TreeRoute};
+use sp_core::{Blake2Hasher, Hasher, H256};
+use sp_keystore::KeystorePtr;
+use sp_runtime::{
+    generic::{self, SignedPayload},
+    traits::Zero,
+    AccountId32, SaturatedConversion,
+};
+use substrate_frame_rpc_system::AccountNonceApi;
+
 use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetChallengeSeedError, GetProofSubmissionRecordError, ProofsDealerApi,
+    GetChallengePeriodError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
-use polkadot_runtime_common::BlockHashCount;
-use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
-use sc_tracing::tracing::{debug, error, info, trace, warn};
-use serde_json::Number;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
-    blockchain_utils::get_events_at_block,
-    consts::CURRENT_FOREST_KEY,
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     types::{
-        BlockNumber, ForestRoot, ParachainClient, ProofsDealerProviderId, StorageProviderId,
+        BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
         TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
-use sp_api::ProvideRuntimeApi;
-use sp_blockchain::{HashAndNumber, TreeRoute};
-use sp_core::{Blake2Hasher, Get, Hasher, H256};
-use sp_keystore::KeystorePtr;
-use sp_runtime::{
-    generic::{self, SignedPayload},
-    traits::Zero,
-    SaturatedConversion,
-};
-use storage_hub_runtime::{Runtime, RuntimeEvent, SignedExtra, UncheckedExtrinsic};
-use substrate_frame_rpc_system::AccountNonceApi;
-use tokio::sync::{oneshot::error::TryRecvError, Mutex};
+use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
 use crate::{
     events::{
-        ForestWriteLockTaskData, MultipleNewChallengeSeeds, NotifyPeriod,
-        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData, ProcessFileDeletionRequest,
-        ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
-        ProcessSubmitProofRequestData,
+        AcceptedBspVolunteer, LastChargeableInfoUpdated, NewStorageRequest, NotifyPeriod,
+        SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
     handler::{LOG_TARGET, MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES},
-    state::{
-        OngoingProcessConfirmStoringRequestCf, OngoingProcessFileDeletionRequestCf,
-        OngoingProcessMspRespondStorageRequestCf,
-        OngoingProcessStopStoringForInsolventUserRequestCf,
+    types::{
+        BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
+        SendExtrinsicOptions, Tip,
     },
-    types::{Extrinsic, MinimalBlockInfo, NewBlockNotificationKind, SendExtrinsicOptions, Tip},
     BlockchainService,
 };
-
-// TODO: Make this configurable in the config file
-const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
 impl<FSH> BlockchainService<FSH>
 where
@@ -133,14 +122,10 @@ where
 
         let current_block_hash = self.client.info().best_hash;
 
-        let provider_id = match self.provider_id {
-            Some(provider_id) => match provider_id {
-                StorageProviderId::MainStorageProvider(id)
-                | StorageProviderId::BackupStorageProvider(id) => id,
-            },
-            None => {
-                return;
-            }
+        let provider_id = match &self.maybe_managed_provider {
+            Some(ManagedProvider::Msp(msp_handler)) => msp_handler.msp_id,
+            Some(ManagedProvider::Bsp(bsp_handler)) => bsp_handler.bsp_id,
+            None => return,
         };
 
         let capacity_manager_ref = self
@@ -389,7 +374,7 @@ where
     /// IMPORTANT! If there is more than one [`BCSV_KEY_TYPE`] key in this node's keystore, linked to
     /// different Provider IDs, this function will panic. In other words, this node doesn't support
     /// managing multiple Providers at once.
-    pub(crate) fn get_provider_id(&mut self, block_hash: &H256) {
+    pub(crate) fn sync_provider_id(&mut self, block_hash: &H256) {
         let mut provider_ids_found = Vec::new();
         for key in self.keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
             let maybe_provider_id = match self
@@ -429,7 +414,7 @@ where
 
         // Case: There is exactly one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
         let provider_id = *provider_ids_found.get(0).expect("There is exactly one Provider ID linked to any of the BCSV keys in this node's keystore; qed");
-        self.provider_id = Some(provider_id);
+        self.maybe_managed_provider = Some(ManagedProvider::new(provider_id));
     }
 
     /// Send an extrinsic to this node using an RPC call.
@@ -750,433 +735,6 @@ where
         (current_tick_minus_last_submission % provider_challenge_period) == 0
     }
 
-    /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
-    ///
-    /// If this node is managing a BSP, the priority is given by:
-    /// 1. `SubmitProofRequest` over...
-    /// 2. `ConfirmStoringRequest`.
-    ///
-    /// If this node is managing a MSP, the priority is given by:
-    /// 1. `FileDeletionRequest` over...
-    /// 2. `RespondStorageRequest`.
-    ///
-    /// For both BSPs and MSPs, the last priority is given to:
-    /// 1. `StopStoringForInsolventUserRequest`.
-    ///
-    /// This function is called every time a new block is imported and after each request is queued.
-    ///
-    /// _This check will be skipped if the latest processed block does not match the current best block._
-    pub(crate) fn check_pending_forest_root_writes(&mut self) {
-        let client_best_hash = self.client.info().best_hash;
-        let client_best_number = self.client.info().best_number;
-
-        // Skip if the latest processed block doesn't match the current best block
-        if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
-        {
-            trace!(target: LOG_TARGET, "Skipping forest root write because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
-            return;
-        }
-
-        if let Some(mut rx) = self.forest_root_write_lock.take() {
-            // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
-            match rx.try_recv() {
-                // If the channel is empty, means we still need to wait for the current task to finish.
-                Err(TryRecvError::Empty) => {
-                    // If we have a task writing to the runtime, we don't want to start another one.
-                    self.forest_root_write_lock = Some(rx);
-                    trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
-                    return;
-                }
-                Ok(_) => {
-                    trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .access_value(&OngoingProcessConfirmStoringRequestCf)
-                        .delete();
-                    state_store_context
-                        .access_value(&OngoingProcessMspRespondStorageRequestCf)
-                        .delete();
-                    state_store_context
-                        .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                        .delete();
-                    state_store_context
-                        .access_value(&OngoingProcessFileDeletionRequestCf)
-                        .delete();
-                    state_store_context.commit();
-                }
-                Err(TryRecvError::Closed) => {
-                    error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .access_value(&OngoingProcessConfirmStoringRequestCf)
-                        .delete();
-                    state_store_context
-                        .access_value(&OngoingProcessMspRespondStorageRequestCf)
-                        .delete();
-                    state_store_context
-                        .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                        .delete();
-                    state_store_context
-                        .access_value(&OngoingProcessFileDeletionRequestCf)
-                        .delete();
-                    state_store_context.commit();
-                }
-            }
-        }
-
-        // At this point we know that the lock is released and we can start processing new requests.
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        let mut next_event_data = None;
-
-        if self.provider_id.is_none() {
-            // If there's no Provider being managed, there's no point in checking for pending requests.
-            return;
-        }
-
-        if let StorageProviderId::BackupStorageProvider(_) = self
-            .provider_id
-            .expect("Just checked that this node is managing a Provider; qed")
-        {
-            // If we have a submit proof request, prioritise it.
-            // This is a BSP only operation, since MSPs don't have to submit proofs.
-            while let Some(request) = self.pending_submit_proof_requests.pop_first() {
-                // Check if the proof is still the next one to be submitted.
-                let provider_id = request.provider_id;
-                let next_challenge_tick = match self
-                    .get_next_challenge_tick_for_provider(&provider_id)
-                {
-                    Ok(next_challenge_tick) => next_challenge_tick,
-                    Err(e) => {
-                        error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
-
-                        // If this is the case, no reason to continue to the next pending proof request.
-                        // We can just break the loop.
-                        break;
-                    }
-                };
-
-                // This is to avoid starting a new task if the proof is not the next one to be submitted.
-                if next_challenge_tick != request.tick {
-                    // If the proof is not the next one to be submitted, we can remove it from the list of pending submit proof requests.
-                    trace!(target: LOG_TARGET, "Proof for tick [{:?}] is not the next one to be submitted. Removing it from the list of pending submit proof requests.", request.tick);
-                    self.pending_submit_proof_requests.remove(&request);
-
-                    // Continue to the next pending proof request.
-                    continue;
-                }
-
-                // If the proof is still the next one to be submitted, we can process it.
-                trace!(target: LOG_TARGET, "Proof for tick [{:?}] is the next one to be submitted. Processing it.", request.tick);
-                next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
-                    ProcessSubmitProofRequestData {
-                        seed: request.seed,
-                        provider_id: request.provider_id,
-                        tick: request.tick,
-                        forest_challenges: request.forest_challenges,
-                        checkpoint_challenges: request.checkpoint_challenges,
-                    },
-                ));
-
-                // Exit the loop since we have found the next proof to be submitted.
-                break;
-            }
-
-            // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
-            // This is a BSP only operation, since MSPs don't have to confirm storing.
-            if next_event_data.is_none() {
-                let max_batch_confirm =
-                <<Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests as Get<
-                    u32,
-                >>::get();
-
-                // Batch multiple confirm file storing taking the runtime maximum.
-                let mut confirm_storing_requests = Vec::new();
-                for _ in 0..max_batch_confirm {
-                    if let Some(request) = state_store_context
-                        .pending_confirm_storing_request_deque()
-                        .pop_front()
-                    {
-                        trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
-                        confirm_storing_requests.push(request);
-                    } else {
-                        break;
-                    }
-                }
-
-                // If we have at least 1 confirm storing request, send the process event.
-                if confirm_storing_requests.len() > 0 {
-                    next_event_data = Some(
-                        ProcessConfirmStoringRequestData {
-                            confirm_storing_requests,
-                        }
-                        .into(),
-                    );
-                }
-            }
-        }
-
-        if let StorageProviderId::MainStorageProvider(_) = self
-            .provider_id
-            .expect("Just checked that this node is managing a Provider; qed")
-        {
-            // If we have no pending submit proof requests nor pending confirm storing requests, we can also check for pending file deletion requests.
-            // We prioritize file deletion requests over respond storing requests since MSPs cannot charge any users while there are pending file deletion requests.
-            if next_event_data.is_none() {
-                // TODO: Update this to some greater value once batching is supported by the runtime.
-                let max_batch_delete: u32 = 1;
-                let mut file_deletion_requests = Vec::new();
-                for _ in 0..max_batch_delete {
-                    if let Some(request) = state_store_context
-                        .pending_file_deletion_request_deque()
-                        .pop_front()
-                    {
-                        file_deletion_requests.push(request);
-                    } else {
-                        break;
-                    }
-                }
-
-                // If we have at least 1 file deletion request, send the process event.
-                if file_deletion_requests.len() > 0 {
-                    next_event_data = Some(
-                        ProcessFileDeletionRequestData {
-                            file_deletion_requests,
-                        }
-                        .into(),
-                    );
-                }
-            }
-
-            // If we have no pending file deletion requests, we can also check for pending respond storing requests.
-            // This is a MSP only operation, since BSPs don't have to respond to storage requests, they volunteer and confirm.
-            if next_event_data.is_none() {
-                let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
-
-                // Batch multiple respond storing requests up to the runtime configured maximum.
-                let mut respond_storage_requests = Vec::new();
-                for _ in 0..max_batch_respond {
-                    if let Some(request) = state_store_context
-                        .pending_msp_respond_storage_request_deque()
-                        .pop_front()
-                    {
-                        respond_storage_requests.push(request);
-                    } else {
-                        break;
-                    }
-                }
-
-                // If we have at least 1 respond storing request, send the process event.
-                if respond_storage_requests.len() > 0 {
-                    next_event_data = Some(
-                        ProcessMspRespondStoringRequestData {
-                            respond_storing_requests: respond_storage_requests,
-                        }
-                        .into(),
-                    );
-                }
-            }
-        }
-
-        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
-        if next_event_data.is_none() {
-            if let Some(request) = state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque()
-                .pop_front()
-            {
-                next_event_data = Some(
-                    ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
-                );
-            }
-        }
-        state_store_context.commit();
-
-        if let Some(event_data) = next_event_data {
-            self.emit_forest_write_event(event_data);
-        }
-    }
-
-    pub(crate) fn emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        self.forest_root_write_lock = Some(rx);
-
-        let data = data.into();
-
-        // If this is a confirm storing request, respond storage request, or a stop storing for insolvent user request, we need to store it in the state store.
-        match &data {
-            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessConfirmStoringRequestCf)
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                    .write(data);
-                state_store_context.commit();
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf)
-                    .write(data);
-                state_store_context.commit();
-            }
-            _ => {}
-        }
-
-        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
-        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
-        // event. Clone is required because there is no constraint on the number of listeners that can
-        // subscribe to the event (and each is guaranteed to receive all emitted events).
-        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-        match data {
-            ForestWriteLockTaskData::SubmitProofRequest(data) => {
-                self.emit(ProcessSubmitProofRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                self.emit(ProcessConfirmStoringRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
-                self.emit(ProcessMspRespondStoringRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                self.emit(ProcessStopStoringForInsolventUserRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                self.emit(ProcessFileDeletionRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-        }
-    }
-
-    /// Emits a [`MultipleNewChallengeSeeds`] event with all the pending proof submissions for this provider.
-    /// This is used to catch up to the latest proof submissions that were missed due to a node restart.
-    /// Also, it can help to catch up to proofs in case there is a change in the BSP's stake (therefore
-    /// also a change in it's challenge period).
-    ///
-    /// IMPORTANT: This function takes into account whether a proof should be submitted for the current tick.
-    pub(crate) fn proof_submission_catch_up(
-        &self,
-        current_block_hash: &H256,
-        provider_id: &ProofsDealerProviderId,
-    ) {
-        // Get the current challenge period for this provider.
-        let challenge_period = match self
-            .client
-            .runtime_api()
-            .get_challenge_period(*current_block_hash, provider_id)
-        {
-            Ok(challenge_period_result) => match challenge_period_result {
-                Ok(challenge_period) => challenge_period,
-                Err(e) => match e {
-                    GetChallengePeriodError::ProviderNotRegistered => {
-                        debug!(target: LOG_TARGET, "Provider [{:?}] is not registered", provider_id);
-                        return;
-                    }
-                    GetChallengePeriodError::InternalApiError => {
-                        error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting challenge period for Provider [{:?}]", provider_id);
-                        return;
-                    }
-                },
-            },
-            Err(e) => {
-                error!(target: LOG_TARGET, "Runtime API error while getting challenge period for Provider [{:?}]: {:?}", provider_id, e);
-                return;
-            }
-        };
-
-        // Get the current tick.
-        let current_tick = match self
-            .client
-            .runtime_api()
-            .get_current_tick(*current_block_hash)
-        {
-            Ok(current_tick) => current_tick,
-            Err(e) => {
-                error!(target: LOG_TARGET, "Runtime API error while getting current tick for Provider [{:?}]: {:?}", provider_id, e);
-                return;
-            }
-        };
-
-        // Advance by `challenge_period` ticks and add the seed to the list of challenge seeds.
-        let mut challenge_seeds = Vec::new();
-        let mut next_challenge_tick = match Self::get_next_challenge_tick_for_provider(
-            &self,
-            provider_id,
-        ) {
-            Ok(next_challenge_tick) => next_challenge_tick,
-            Err(e) => {
-                error!(target: LOG_TARGET, "Failed to get next challenge tick for provider [{:?}]: {:?}", provider_id, e);
-                return;
-            }
-        };
-        while next_challenge_tick <= current_tick {
-            // Get the seed for the challenge tick.
-            let seed = match self
-                .client
-                .runtime_api()
-                .get_challenge_seed(*current_block_hash, next_challenge_tick)
-            {
-                Ok(seed_result) => match seed_result {
-                    Ok(seed) => seed,
-                    Err(e) => match e {
-                        GetChallengeSeedError::TickBeyondLastSeedStored => {
-                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Tick [{:?}] is beyond last seed stored and this provider needs to submit a proof for it.", next_challenge_tick);
-                            return;
-                        }
-                        GetChallengeSeedError::TickIsInTheFuture => {
-                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ Tick [{:?}] is in the future. This should never happen. \nThis is a bug. Please report it to the StorageHub team.", next_challenge_tick);
-                            return;
-                        }
-                        GetChallengeSeedError::InternalApiError => {
-                            error!(target: LOG_TARGET, "This should be impossible, we just checked the API error. \nInternal API error while getting challenge seed for challenge tick [{:?}]: {:?}", next_challenge_tick, e);
-                            return;
-                        }
-                    },
-                },
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Runtime API error while getting challenges from seed for challenge tick [{:?}]: {:?}", next_challenge_tick, e);
-                    return;
-                }
-            };
-            challenge_seeds.push((next_challenge_tick, seed));
-            next_challenge_tick += challenge_period;
-        }
-
-        // Emit the `MultipleNewChallengeSeeds` event.
-        if challenge_seeds.len() > 0 {
-            trace!(target: LOG_TARGET, "Emitting MultipleNewChallengeSeeds event for provider [{:?}] with challenge seeds: {:?}", provider_id, challenge_seeds);
-            self.emit(MultipleNewChallengeSeeds {
-                provider_id: *provider_id,
-                seeds: challenge_seeds,
-            });
-        }
-    }
-
     /// Applies Forest root changes found in a [`TreeRoute`].
     ///
     /// This function can be used both for new blocks as well as for reorgs.
@@ -1256,159 +814,28 @@ where
             trace!(target: LOG_TARGET, "Applying Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
         }
 
-        // Preemptively getting the Buckets managed by this node, in case it is an MSP, so that we
-        // do the query just once, instead of doing it for every event.
-        let buckets_managed_by_msp = if let Some(StorageProviderId::MainStorageProvider(msp_id)) =
-            &self.provider_id
-        {
-            self.client
-                    .runtime_api()
-                    .query_buckets_for_msp(block.hash, msp_id)
-                    .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API call failed while querying buckets for MSP [{:?}]: {:?}", msp_id, e))
-                    .ok()
-                    .and_then(|api_result| {
-                        api_result
-                            .inspect_err(|e| error!(target: LOG_TARGET, "Runtime API error while querying buckets for MSP [{:?}]: {:?}", msp_id, e))
-                            .ok()
-                    })
-        } else {
-            None
-        };
-
         // Process the events in the block, specifically those that are related to the Forest root changes.
         match get_events_at_block(&self.client, &block.hash) {
             Ok(events) => {
                 for ev in events {
-                    match ev.event.clone() {
-                        RuntimeEvent::ProofsDealer(
-                            pallet_proofs_dealer::Event::MutationsAppliedForProvider {
-                                provider_id,
-                                mutations,
-                                old_root,
-                                new_root,
-                            },
-                        ) => {
-                            // This event is relevant in case the Provider managed is a BSP.
-                            if let Some(StorageProviderId::BackupStorageProvider(bsp_id)) =
-                                &self.provider_id
-                            {
-                                // Check if the `provider_id` is the BSP that this node is managing.
-                                if provider_id != *bsp_id {
-                                    debug!(target: LOG_TARGET, "Provider ID [{:?}] is not the BSP ID [{:?}] that this node is managing. Skipping mutations applied event.", provider_id, bsp_id);
-                                    continue;
-                                }
-
-                                debug!(target: LOG_TARGET, "Applying on-chain Forest root mutations to BSP [{:?}]", provider_id);
-                                debug!(target: LOG_TARGET, "Mutations: {:?}", mutations);
-
-                                // Apply forest root changes to the BSP's Forest Storage.
-                                // At this point, we only apply the mutation of this file and its metadata to the Forest of this BSP,
-                                // and not to the File Storage.
-                                // This is because if in a future block built on top of this one, the BSP needs to provide
-                                // a proof, it will be against the Forest root with this change applied.
-                                // For file deletions, we will remove the file from the File Storage only after finality is reached.
-                                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                                let current_forest_key = CURRENT_FOREST_KEY.to_vec();
-                                if let Err(e) = self
-                                    .apply_forest_mutations_and_verify_root(
-                                        current_forest_key,
-                                        &mutations,
-                                        revert,
-                                        old_root,
-                                        new_root,
-                                    )
-                                    .await
-                                {
-                                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for BSP [{:?}]. \nError: {:?}", provider_id, e);
-                                    return;
-                                };
-
-                                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for BSP [{:?}]", provider_id);
+                    if let Some(managed_provider) = &self.maybe_managed_provider {
+                        match managed_provider {
+                            ManagedProvider::Bsp(_) => {
+                                self.bsp_process_forest_root_changing_events(
+                                    ev.event.clone(),
+                                    revert,
+                                )
+                                .await;
+                            }
+                            ManagedProvider::Msp(_) => {
+                                self.msp_process_forest_root_changing_events(
+                                    &block.hash,
+                                    ev.event.clone(),
+                                    revert,
+                                )
+                                .await;
                             }
                         }
-                        RuntimeEvent::ProofsDealer(
-                            pallet_proofs_dealer::Event::MutationsApplied {
-                                mutations,
-                                old_root,
-                                new_root,
-                                event_info,
-                            },
-                        ) => {
-                            // This event is relevant in case the Provider managed is an MSP.
-                            // In which case the mutations are applied to a Bucket's Forest root.
-                            if let Some(StorageProviderId::MainStorageProvider(_)) =
-                                &self.provider_id
-                            {
-                                // Check that this MSP is managing at least one bucket.
-                                if buckets_managed_by_msp.is_none() {
-                                    debug!(target: LOG_TARGET, "MSP is not managing any buckets. Skipping mutations applied event.");
-                                    continue;
-                                }
-                                let buckets_managed_by_msp = buckets_managed_by_msp
-                                    .as_ref()
-                                    .expect("Just checked that this is not None; qed");
-                                if buckets_managed_by_msp.is_empty() {
-                                    debug!(target: LOG_TARGET, "Buckets managed by MSP is an empty vector. Skipping mutations applied event.");
-                                    continue;
-                                }
-
-                                // In StorageHub, we assume that all `MutationsApplied` events are emitted by bucket
-                                // root changes, and they should contain the encoded `BucketId` of the bucket that was mutated
-                                // in the `event_info` field.
-                                if event_info.is_none() {
-                                    error!(target: LOG_TARGET, "MutationsApplied event with `None` event info, when it is expected to contain the BucketId of the bucket that was mutated. This should never happen. This is a bug. Please report it to the StorageHub team.");
-                                    continue;
-                                }
-                                let event_info =
-                                    event_info.expect("Just checked that this is not None; qed");
-                                let bucket_id = match self
-                                    .client
-                                    .runtime_api()
-                                    .decode_generic_apply_delta_event_info(block.hash, event_info)
-                                {
-                                    Ok(runtime_api_result) => match runtime_api_result {
-                                        Ok(bucket_id) => bucket_id,
-                                        Err(e) => {
-                                            error!(target: LOG_TARGET, "Failed to decode BucketId from event info: {:?}", e);
-                                            continue;
-                                        }
-                                    },
-                                    Err(e) => {
-                                        error!(target: LOG_TARGET, "Error while calling runtime API to decode BucketId from event info: {:?}", e);
-                                        continue;
-                                    }
-                                };
-
-                                // Check if Bucket is managed by this MSP.
-                                if !buckets_managed_by_msp.contains(&bucket_id) {
-                                    debug!(target: LOG_TARGET, "Bucket [{:?}] is not managed by this MSP. Skipping mutations applied event.", bucket_id);
-                                    continue;
-                                }
-
-                                // Apply forest root changes to the Bucket's Forest Storage.
-                                // At this point, we only apply the mutation of this file and its metadata to the Forest of this Bucket,
-                                // and not to the File Storage.
-                                // For file deletions, we will remove the file from the File Storage only after finality is reached.
-                                // This gives us the opportunity to put the file back in the Forest if this block is re-orged.
-                                let bucket_forest_key = bucket_id.as_ref().to_vec();
-                                if let Err(e) = self
-                                    .apply_forest_mutations_and_verify_root(
-                                        bucket_forest_key,
-                                        &mutations,
-                                        revert,
-                                        old_root,
-                                        new_root,
-                                    )
-                                    .await
-                                {
-                                    error!(target: LOG_TARGET, "CRITICAL ❗️❗️ Failed to apply mutations and verify root for Bucket [{:?}]. \nError: {:?}", bucket_id, e);
-                                    return;
-                                };
-
-                                info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
-                            }
-                        }
-                        _ => {}
                     }
                 }
             }
@@ -1428,7 +855,7 @@ where
     /// Forest root will be verified against the `new_root` Forest root.
     ///
     /// Changes are applied to the Forest in `self.forest_storage_handler.get(forest_key)`.
-    async fn apply_forest_mutations_and_verify_root(
+    pub(crate) async fn apply_forest_mutations_and_verify_root(
         &self,
         forest_key: Vec<u8>,
         mutations: &[(H256, TrieMutation)],
@@ -1581,6 +1008,177 @@ where
         };
 
         Ok(reverted_mutation)
+    }
+
+    pub(crate) fn process_common_block_import_events(&mut self, event: RuntimeEvent) {
+        match event {
+            // New storage request event coming from pallet-file-system.
+            RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
+                who,
+                file_key,
+                bucket_id,
+                location,
+                fingerprint,
+                size,
+                peer_ids,
+                expires_at,
+            }) => self.emit(NewStorageRequest {
+                who,
+                file_key: FileKey::from(file_key.as_ref()),
+                bucket_id,
+                location,
+                fingerprint: fingerprint.as_ref().into(),
+                size,
+                user_peer_ids: peer_ids,
+                expires_at,
+            }),
+            // A Provider's challenge cycle has been initialised.
+            RuntimeEvent::ProofsDealer(
+                pallet_proofs_dealer::Event::NewChallengeCycleInitialised {
+                    current_tick: _,
+                    next_challenge_deadline: _,
+                    provider: provider_id,
+                    maybe_provider_account,
+                },
+            ) => {
+                // This node only cares if the Provider account matches one of the accounts in the keystore.
+                if let Some(account) = maybe_provider_account {
+                    let account: Vec<u8> =
+                        <sp_runtime::AccountId32 as AsRef<[u8; 32]>>::as_ref(&account).to_vec();
+                    if self.keystore.has_keys(&[(account.clone(), BCSV_KEY_TYPE)]) {
+                        // If so, add the Provider ID to the list of Providers that this node is monitoring.
+                        info!(target: LOG_TARGET, "🔑 New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
+
+                        // Managing more than one Provider is not supported, so if this node is already managing another Provider, emit a warning
+                        // and stop managing it, in favour of the new Provider.
+                        if let Some(managed_provider) = &self.maybe_managed_provider {
+                            let managed_provider_id = match managed_provider {
+                                ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                                ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                            };
+                            if managed_provider_id != &provider_id {
+                                warn!(target: LOG_TARGET, "🔄 This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", managed_provider, provider_id);
+                            }
+                        }
+
+                        // Only BSPs can be challenged, therefore this is a BSP.
+                        self.maybe_managed_provider =
+                            Some(ManagedProvider::Bsp(BspHandler::new(provider_id)));
+                    }
+                }
+            }
+            // A provider has been marked as slashable.
+            RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
+                provider,
+                next_challenge_deadline,
+            }) => self.emit(SlashableProvider {
+                provider,
+                next_challenge_deadline,
+            }),
+            // The last chargeable info of a provider has been updated
+            RuntimeEvent::PaymentStreams(
+                pallet_payment_streams::Event::LastChargeableInfoUpdated {
+                    provider_id,
+                    last_chargeable_tick,
+                    last_chargeable_price_index,
+                },
+            ) => {
+                if let Some(managed_provider_id) = &self.maybe_managed_provider {
+                    // We only emit the event if the Provider ID is the one that this node is managing.
+                    // It's irrelevant if the Provider ID is a MSP or a BSP.
+                    let managed_provider_id = match managed_provider_id {
+                        ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                        ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                    };
+                    if provider_id == *managed_provider_id {
+                        self.emit(LastChargeableInfoUpdated {
+                            provider_id: provider_id,
+                            last_chargeable_tick: last_chargeable_tick,
+                            last_chargeable_price_index: last_chargeable_price_index,
+                        })
+                    }
+                }
+            }
+            // A user has been flagged as without funds in the runtime
+            RuntimeEvent::PaymentStreams(pallet_payment_streams::Event::UserWithoutFunds {
+                who,
+            }) => {
+                self.emit(UserWithoutFunds { who });
+            }
+            // A file was correctly deleted from a user without funds
+            RuntimeEvent::FileSystem(pallet_file_system::Event::SpStopStoringInsolventUser {
+                sp_id,
+                file_key,
+                owner,
+                location,
+                new_root,
+            }) => {
+                if let Some(managed_provider_id) = &self.maybe_managed_provider {
+                    // We only emit the event if the Provider ID is the one that this node is managing.
+                    // It's irrelevant if the Provider ID is a MSP or a BSP.
+                    let managed_provider_id = match managed_provider_id {
+                        ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
+                        ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
+                    };
+                    if sp_id == *managed_provider_id {
+                        self.emit(SpStopStoringInsolventUser {
+                            sp_id,
+                            file_key: file_key.into(),
+                            owner,
+                            location,
+                            new_root,
+                        })
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    pub(crate) fn process_common_finality_events(&self, event: RuntimeEvent) {
+        match event {
+            _ => {}
+        }
+    }
+
+    pub(crate) fn process_test_user_events(&self, event: RuntimeEvent) {
+        match event {
+            RuntimeEvent::FileSystem(pallet_file_system::Event::AcceptedBspVolunteer {
+                bsp_id,
+                bucket_id,
+                location,
+                fingerprint,
+                multiaddresses,
+                owner,
+                size,
+            }) if owner == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) => {
+                // This event should only be of any use if a node is run by as a user.
+                if self.maybe_managed_provider.is_none() {
+                    log::info!(
+                        target: LOG_TARGET,
+                        "AcceptedBspVolunteer event for BSP ID: {:?}",
+                        bsp_id
+                    );
+
+                    // We try to convert the types coming from the runtime into our expected types.
+                    let fingerprint: Fingerprint = fingerprint.as_bytes().into();
+
+                    let multiaddress_vec: Vec<Multiaddr> =
+                        convert_raw_multiaddresses_to_multiaddr(multiaddresses);
+
+                    self.emit(AcceptedBspVolunteer {
+                        bsp_id,
+                        bucket_id,
+                        location,
+                        fingerprint,
+                        multiaddresses: multiaddress_vec,
+                        owner,
+                        size,
+                    })
+                }
+            }
+            _ => {}
+        }
     }
 }
 

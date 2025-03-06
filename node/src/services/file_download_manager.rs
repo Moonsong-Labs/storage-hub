@@ -5,7 +5,7 @@ use log::*;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use sc_network::PeerId;
 use shc_common::types::{
-    BucketId, Chunk, ChunkId, FileKeyProof, FileMetadata, HashT, Proven,
+    BucketId, Chunk, ChunkId, FileKeyProof, FileMetadata, Fingerprint, HashT, Proven,
     StorageProofsMerkleTrieLayout,
 };
 use shc_file_manager::traits::FileStorage;
@@ -184,21 +184,33 @@ impl FileDownloadManager {
         }
     }
 
-    /// Extract proven chunks from a download response
+    /// Extract proven chunks from a download response, validating the fingerprint
     fn extract_chunks_from_response(
         response: &RemoteDownloadDataResponse,
+        file_key: &H256,
+        expected_fingerprint: &Fingerprint,
     ) -> Result<Vec<Proven<ChunkId, Chunk>>> {
-        // Access the file_key_proof field
+        // Access the file_key_proof bytes
         let file_key_proof_bytes = &response.file_key_proof;
 
         // Decode the file key proof
         let file_key_proof = FileKeyProof::decode(&mut file_key_proof_bytes.as_slice())
             .map_err(|e| anyhow!("Failed to decode FileKeyProof: {:?}", e))?;
 
-        // Extract proven chunks from the proof using the correct layout type
+        // Verify that the fingerprint in the response matches the expected fingerprint
+        if file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
+            return Err(anyhow!(
+                "Fingerprint mismatch for file {:?}. Expected: {:?}, got: {:?}",
+                file_key,
+                expected_fingerprint,
+                file_key_proof.file_metadata.fingerprint()
+            ));
+        }
+
+        // Extract proven chunks from the proof
         let proven_leaves = file_key_proof
             .proven::<StorageProofsMerkleTrieLayout>()
-            .map_err(|e| anyhow!("Failed to extract chunks from proof: {:?}", e))?;
+            .map_err(|e| anyhow!("Failed to extract proven chunks from proof: {:?}", e))?;
 
         // Convert Leaf<ChunkId, Chunk> to Proven<ChunkId, Chunk>
         let proven_chunks = proven_leaves
@@ -225,7 +237,13 @@ impl FileDownloadManager {
     {
         let elapsed = start_time.elapsed();
 
-        let chunks = Self::extract_chunks_from_response(&download_request)?;
+        // Extract chunks from the response, including fingerprint validation
+        let chunks = Self::extract_chunks_from_response(
+            &download_request,
+            &file_key,
+            file_metadata.fingerprint(),
+        )
+        .map_err(|e| anyhow!("Error processing response from peer {:?}: {:?}", peer_id, e))?;
 
         if chunks.is_empty() {
             return Err(anyhow!("No chunks in response from peer {:?}", peer_id));
@@ -243,7 +261,9 @@ impl FileDownloadManager {
 
                 // Validate chunk size using is_valid_chunk_size
                 if !file_metadata.is_valid_chunk_size(chunk_idx, chunk_data.len()) {
-                    let expected_size = file_metadata.chunk_size_at(chunk_idx);
+                    let expected_size = file_metadata
+                        .chunk_size_at(chunk_idx)
+                        .map_err(|e| anyhow!("Failed to get expected chunk size: {:?}", e))?;
                     return Err(anyhow!(
                         "Invalid chunk size for chunk {}: Expected: {}, got: {}",
                         chunk_idx,

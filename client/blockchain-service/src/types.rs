@@ -1,5 +1,7 @@
+use log::warn;
 use std::{
     cmp::{min, Ordering},
+    collections::{BTreeMap, BTreeSet},
     future::Future,
     pin::Pin,
     time::Duration,
@@ -7,17 +9,18 @@ use std::{
 
 use codec::{Decode, Encode};
 use frame_support::dispatch::DispatchInfo;
-use log::warn;
 use sc_client_api::BlockImportNotification;
-use shc_common::types::{
-    BlockNumber, BucketId, CustomChallenge, HasherOutT, ProofsDealerProviderId, RandomnessOutput,
-    RejectedStorageRequestReason, StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout,
-};
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::H256;
 use sp_runtime::{
     traits::{Header, NumberFor},
     AccountId32, DispatchError, SaturatedConversion,
+};
+
+use shc_common::types::{
+    BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
+    MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput, RejectedStorageRequestReason,
+    StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 
 use crate::{events, handler::LOG_TARGET};
@@ -583,6 +586,92 @@ impl Ord for ForestStorageSnapshotInfo {
                     }
                 }
             }
+        }
+    }
+}
+
+/// A struct that holds the information to handle a BSP.
+///
+/// This struct implements all the needed logic to manage BSP specific functionality.
+#[derive(Debug)]
+pub struct BspHandler {
+    /// The BSP ID.
+    pub(crate) bsp_id: BackupStorageProviderId,
+    /// Pending submit proof requests. Note: this is not kept in the persistent state because of
+    /// various edge cases when restarting the node.
+    pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
+    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    ///
+    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
+    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
+    /// would be to send a [`MutexGuard`].
+    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// A set of Forest Storage snapshots, ordered by block number and block hash.
+    ///
+    /// A BSP can have multiple Forest Storage snapshots.
+    /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
+    #[allow(dead_code)]
+    pub(crate) forest_root_snapshots: BTreeSet<ForestStorageSnapshotInfo>,
+}
+
+impl BspHandler {
+    pub fn new(bsp_id: BackupStorageProviderId) -> Self {
+        Self {
+            bsp_id,
+            pending_submit_proof_requests: BTreeSet::new(),
+            forest_root_write_lock: None,
+            forest_root_snapshots: BTreeSet::new(),
+        }
+    }
+}
+/// A struct that holds the information to handle an MSP.
+///
+/// This struct implements all the needed logic to manage MSP specific functionality.
+#[derive(Debug)]
+pub struct MspHandler {
+    /// The MSP ID.
+    pub(crate) msp_id: MainStorageProviderId,
+    /// TODO: CHANGE THIS INTO MULTIPLE LOCKS, ONE FOR EACH BUCKET.
+    ///
+    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
+    ///
+    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
+    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
+    /// would be to send a [`MutexGuard`].
+    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
+    /// A map of [`BucketId`] to the Forest Storage snapshots.
+    ///
+    /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
+    /// Each Bucket can have multiple Forest Storage snapshots.
+    /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
+    #[allow(dead_code)]
+    pub(crate) forest_root_snapshots: BTreeMap<BucketId, BTreeSet<ForestStorageSnapshotInfo>>,
+}
+
+impl MspHandler {
+    pub fn new(msp_id: MainStorageProviderId) -> Self {
+        Self {
+            msp_id,
+            forest_root_write_lock: None,
+            forest_root_snapshots: BTreeMap::new(),
+        }
+    }
+}
+
+/// An enum that represents the managed provider, either a BSP or an MSP.
+///
+/// The enum variants hold the handler for the managed provider (see [`BspHandler`] and [`MspHandler`]).
+#[derive(Debug)]
+pub enum ManagedProvider {
+    Bsp(BspHandler),
+    Msp(MspHandler),
+}
+
+impl ManagedProvider {
+    pub fn new(provider_id: StorageProviderId) -> Self {
+        match provider_id {
+            StorageProviderId::BackupStorageProvider(bsp_id) => Self::Bsp(BspHandler::new(bsp_id)),
+            StorageProviderId::MainStorageProvider(msp_id) => Self::Msp(MspHandler::new(msp_id)),
         }
     }
 }
