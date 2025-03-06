@@ -42,7 +42,7 @@ describeMspNet(
       }
     });
 
-    it.only("postgres DB is ready", async () => {
+    it("postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
         containerName: "docker-sh-postgres-1",
         searchString: "database system is ready to accept connections",
@@ -50,7 +50,7 @@ describeMspNet(
       });
     });
 
-    it.only("Network launches and can be queried", async () => {
+    it("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -58,7 +58,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it.only("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
+    it("Add 2 more BSPs (3 total) and set the replication target to 2", async () => {
       // Replicate to 2 BSPs, 5 blocks to maxthreshold
       const maxReplicationTargetRuntimeParameter = {
         RuntimeConfig: {
@@ -104,7 +104,7 @@ describeMspNet(
       });
     });
 
-    it.only("User submits 3 storage requests in the same bucket for first MSP", async () => {
+    it("User submits 3 storage requests in the same bucket for first MSP", async () => {
       // Get value propositions form the MSP to use, and use the first one (can be any).
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
@@ -150,7 +150,7 @@ describeMspNet(
       await userApi.block.seal({ calls: txs, signer: shUser });
     });
 
-    it.only("MSP 1 receives files from user and accepts them", async () => {
+    it("MSP 1 receives files from user and accepts them", async () => {
       const originalRoot = await msp1Api.rpc.storagehubclient.getForestRoot(bucketId);
 
       // Get the events of the storage requests to extract the file keys and check
