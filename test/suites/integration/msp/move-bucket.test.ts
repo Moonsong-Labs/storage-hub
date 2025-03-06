@@ -307,7 +307,7 @@ describeMspNet(
       }
     });
 
-    it.only("User moves bucket to second MSP", async () => {
+    it("User moves bucket to second MSP", async () => {
       // Get the value propositions of the second MSP to use, and use the first one (can be any).
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID_2
