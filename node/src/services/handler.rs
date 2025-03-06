@@ -118,8 +118,15 @@ where
         indexer_db_pool: Option<DbPool>,
         peer_manager: Arc<BspPeerManager>,
     ) -> Self {
+        // Get the data directory path from the peer manager's directory
+        // This assumes the peer manager stores data in a similar location to where we want our download state
+        let data_dir = std::env::temp_dir().join("storagehub");
+
         // Create a FileDownloadManager with the peer manager already initialized
-        let file_download_manager = Arc::new(FileDownloadManager::new(Arc::clone(&peer_manager)));
+        let file_download_manager = Arc::new(
+            FileDownloadManager::new(Arc::clone(&peer_manager), data_dir)
+                .expect("Failed to initialize FileDownloadManager"),
+        );
 
         Self {
             task_spawner,

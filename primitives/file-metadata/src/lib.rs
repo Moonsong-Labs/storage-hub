@@ -354,6 +354,12 @@ impl<const H_LENGTH: usize> PartialEq<[u8]> for Fingerprint<H_LENGTH> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TypeInfo, Encode, Decode, Ord, PartialOrd, Hash)]
 pub struct ChunkId(u64);
 
+impl Default for ChunkId {
+    fn default() -> Self {
+        Self(0)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChunkIdError {
     InvalidChunkId,

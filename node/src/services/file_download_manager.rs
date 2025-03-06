@@ -1,24 +1,24 @@
 use anyhow::{anyhow, Result};
-use codec::Decode;
 use futures::future::join_all;
 use log::*;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
+use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
+use tokio::sync::{RwLock, Semaphore};
+
+use codec::Decode;
 use sc_network::PeerId;
+use sp_core::H256;
+
 use shc_common::types::{
-    BucketId, Chunk, ChunkId, FileKeyProof, FileMetadata, Fingerprint, HashT, Proven,
-    StorageProofsMerkleTrieLayout,
+    BucketId, FileKeyProof, FileMetadata, Fingerprint, HashT, Proven, StorageProofsMerkleTrieLayout,
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, schema::v1::provider::RemoteDownloadDataResponse,
 };
-use sp_core::H256;
-use std::collections::HashSet;
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::{RwLock, Semaphore};
+use shp_file_metadata::{Chunk, ChunkId};
 
-use super::bsp_peer_manager::BspPeerManager;
+use crate::services::{bsp_peer_manager::BspPeerManager, download_state_store::DownloadStateStore};
 
 const LOG_TARGET: &str = "file_download_manager";
 
@@ -103,6 +103,8 @@ pub struct FileDownloadManager {
     file_semaphore: Arc<Semaphore>,
     /// BSP peer manager for tracking and selecting peers
     peer_manager: Arc<BspPeerManager>,
+    /// Download state store for persistence
+    download_state_store: Arc<DownloadStateStore>,
 }
 
 impl FileDownloadManager {
@@ -110,8 +112,8 @@ impl FileDownloadManager {
     ///
     /// # Arguments
     /// * `peer_manager` - The peer manager to use for peer selection and tracking
-    pub fn new(peer_manager: Arc<BspPeerManager>) -> Self {
-        Self::with_limits(FileDownloadLimits::default(), peer_manager)
+    pub fn new(peer_manager: Arc<BspPeerManager>, data_dir: PathBuf) -> Result<Self> {
+        Self::with_limits(FileDownloadLimits::default(), peer_manager, data_dir)
     }
 
     /// Create a new FileDownloadManager with specified limits
@@ -119,14 +121,20 @@ impl FileDownloadManager {
     /// # Arguments
     /// * `limits` - The download limits to use
     /// * `peer_manager` - The peer manager to use for peer selection and tracking
-    pub fn with_limits(limits: FileDownloadLimits, peer_manager: Arc<BspPeerManager>) -> Self {
-        let file_semaphore = Arc::new(Semaphore::new(limits.max_concurrent_file_downloads));
+    pub fn with_limits(
+        limits: FileDownloadLimits,
+        peer_manager: Arc<BspPeerManager>,
+        data_dir: PathBuf,
+    ) -> Result<Self> {
+        // Create a new download state store
+        let download_state_store = Arc::new(DownloadStateStore::new(data_dir)?);
 
-        Self {
+        Ok(Self {
+            file_semaphore: Arc::new(Semaphore::new(limits.max_concurrent_file_downloads)),
             limits,
-            file_semaphore,
             peer_manager,
-        }
+            download_state_store,
+        })
     }
 
     /// Get a reference to the file semaphore for file-level parallelism
@@ -137,15 +145,6 @@ impl FileDownloadManager {
     /// Create a new chunk semaphore for chunk-level parallelism within a file
     pub fn new_chunk_semaphore(&self) -> Arc<Semaphore> {
         Arc::new(Semaphore::new(self.limits.max_concurrent_chunks_per_file))
-    }
-
-    /// Create a batch of chunks to download
-    pub fn create_chunk_batch(&self, chunk_start: u64, chunks_count: u64) -> HashSet<ChunkId> {
-        let chunk_end = std::cmp::min(
-            chunk_start + (self.limits.max_chunks_per_request as u64),
-            chunks_count,
-        );
-        (chunk_start..chunk_end).map(ChunkId::new).collect()
     }
 
     /// Process a single proven chunk, writing it to file storage
@@ -169,6 +168,13 @@ impl FileDownloadManager {
                 file_storage
                     .write_chunk(&file_key, &chunk_id, &chunk_data)
                     .map_err(|error| anyhow!("Failed to write chunk {}: {:?}", chunk_idx, error))?;
+
+                // Mark chunk as downloaded in persistent state
+                let context = self.download_state_store.open_rw_context();
+                context
+                    .missing_chunks_map()
+                    .mark_chunk_downloaded(&file_key, chunk_id);
+                context.commit();
 
                 Ok(())
             }
@@ -412,14 +418,60 @@ impl FileDownloadManager {
             "Downloading file {:?} with {} chunks", file_key, chunks_count
         );
 
+        // Check if we already have state for this file
+        let context = self.download_state_store.open_rw_context();
+        let missing_chunks = {
+            let existing_metadata = context.get_file_metadata(&file_key);
+
+            if let Some(_existing_metadata) = existing_metadata {
+                info!(
+                    target: LOG_TARGET,
+                    "Resuming download of file {:?} with {} chunks", file_key, chunks_count
+                );
+                // We already have state for this file, use it
+            } else {
+                // New file download, initialize state
+                info!(
+                    target: LOG_TARGET,
+                    "Starting new download of file {:?} with {} chunks", file_key, chunks_count
+                );
+                context.store_file_metadata(&file_key, &file_metadata);
+                context.missing_chunks_map().initialize_file(&file_metadata);
+            }
+
+            // Get missing chunks from the store in both cases
+            context.missing_chunks_map().get_missing_chunks(&file_key)
+        };
+        context.commit();
+
+        if missing_chunks.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "File {:?} is already fully downloaded", file_key
+            );
+            return Ok(());
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "File {:?} has {} missing chunks to download",
+            file_key,
+            missing_chunks.len()
+        );
+
         // Create a new chunk semaphore for this file
         let chunk_semaphore = self.new_chunk_semaphore();
         let manager = self.clone();
 
-        // Create tasks for chunk batches
-        let chunk_tasks: Vec<_> = (0..chunks_count)
-            .step_by(self.limits.max_chunks_per_request)
-            .map(|chunk_start| {
+        // Group missing chunks into batches
+        let max_chunks_per_request = self.limits.max_chunks_per_request as u64;
+        let mut missing_chunks_sorted = missing_chunks;
+        missing_chunks_sorted.sort();
+
+        // Create tasks for missing chunk batches
+        let chunk_tasks: Vec<_> = missing_chunks_sorted
+            .chunks(max_chunks_per_request as usize)
+            .map(|chunk_ids| {
                 let semaphore = Arc::clone(&chunk_semaphore);
                 let file_metadata = file_metadata.clone();
                 let bucket = bucket.clone();
@@ -427,6 +479,7 @@ impl FileDownloadManager {
                 let file_storage = Arc::clone(&file_storage);
                 let file_key = file_key;
                 let manager = manager.clone();
+                let chunk_batch: HashSet<ChunkId> = chunk_ids.iter().copied().collect();
 
                 tokio::spawn(async move {
                     // Acquire semaphore permit for this chunk batch
@@ -434,9 +487,6 @@ impl FileDownloadManager {
                         .acquire()
                         .await
                         .map_err(|e| anyhow!("Failed to acquire chunk semaphore: {:?}", e))?;
-
-                    // Create chunk batch
-                    let chunk_batch = manager.create_chunk_batch(chunk_start, chunks_count);
 
                     // Get peers to try for this download
                     let mut peers = manager
@@ -486,8 +536,7 @@ impl FileDownloadManager {
 
                     // All peers failed
                     Err(anyhow!(
-                        "Failed to download chunk batch starting at {} after trying all peers",
-                        chunk_start
+                        "Failed to download chunk batch after trying all peers"
                     ))
                 })
             })
@@ -495,6 +544,19 @@ impl FileDownloadManager {
 
         // Wait for all chunk tasks to complete
         let results = join_all(chunk_tasks).await;
+
+        // Check if download is complete
+        let is_complete = {
+            let context = self.download_state_store.open_rw_context();
+            let is_complete = context.missing_chunks_map().is_file_complete(&file_key);
+
+            if is_complete {
+                // Clean up metadata if download is complete
+                context.delete_file_metadata(&file_key);
+            }
+
+            is_complete
+        };
 
         // Process results and check for errors
         let mut errors = Vec::new();
@@ -510,7 +572,7 @@ impl FileDownloadManager {
             }
         }
 
-        if !errors.is_empty() {
+        if !errors.is_empty() && !is_complete {
             Err(anyhow!(
                 "Failed to download file {:?}: {}",
                 file_key,
@@ -532,6 +594,7 @@ impl Clone for FileDownloadManager {
             limits: self.limits.clone(),
             file_semaphore: Arc::clone(&self.file_semaphore),
             peer_manager: Arc::clone(&self.peer_manager),
+            download_state_store: Arc::clone(&self.download_state_store),
         }
     }
 }
