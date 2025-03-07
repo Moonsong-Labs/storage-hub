@@ -1,10 +1,6 @@
 use anyhow::anyhow;
-use futures::future::join_all;
 use rand::{rngs::StdRng, SeedableRng};
-use std::{
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{sync::Mutex, time::Duration};
 
 use sc_tracing::tracing::*;
 use sp_core::H256;
@@ -21,7 +17,7 @@ use shc_common::types::{
     BucketId, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 use shc_file_manager::traits::FileStorage;
-use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -113,99 +109,70 @@ where
             event.bucket_id
         );
 
-        let indexer_db_pool = if let Some(indexer_db_pool) =
-            self.storage_hub_handler.indexer_db_pool.clone()
-        {
-            indexer_db_pool
-        } else {
-            return Err(anyhow!("Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."));
-        };
+        // Get all files for this bucket from the indexer
+        let indexer_db_pool =
+            if let Some(indexer_db_pool) = self.storage_hub_handler.indexer_db_pool.clone() {
+                indexer_db_pool
+            } else {
+                return Err(anyhow!(
+                    "Indexer is disabled but a StartMovedBucketDownload event was received"
+                ));
+            };
 
-        let mut indexer_connection = indexer_db_pool.get().await.map_err(|error| {
-            anyhow!(
-                "Failed to get indexer connection after timeout: {:?}",
-                error
-            )
-        })?;
+        let mut indexer_connection = indexer_db_pool.get().await?;
 
-        let bucket = event.bucket_id.as_ref().to_vec();
         let files = shc_indexer_db::models::File::get_by_onchain_bucket_id(
             &mut indexer_connection,
-            bucket.clone(),
+            event.bucket_id.as_ref().to_vec(),
         )
         .await?;
 
-        let total_files = files.len();
-
-        // Create forest storage for the bucket if it doesn't exist
-        let _ = self
-            .storage_hub_handler
-            .forest_storage_handler
-            .get_or_create(&bucket)
-            .await;
-
-        // Get the file semaphore from the download manager
-        let file_semaphore = self
-            .storage_hub_handler
-            .file_download_manager
-            .file_semaphore();
-        let file_tasks: Vec<_> = files
-            .into_iter()
-            .map(|file| {
-                let semaphore = Arc::clone(&file_semaphore);
-                let task = self.clone();
-                let bucket_id = event.bucket_id;
-
-                tokio::spawn(async move {
-                    let _permit = semaphore
-                        .acquire()
-                        .await
-                        .map_err(|e| anyhow!("Failed to acquire file semaphore: {:?}", e))?;
-
-                    // Download file using the simplified download method
-                    task.download_file(&file, &bucket_id).await
-                })
-            })
-            .collect();
-
-        // Wait for all file downloads to complete
-        let results = join_all(file_tasks).await;
-
-        // Process results and count failures
-        let mut failed_downloads = 0;
-        for result in results {
-            match result {
-                Ok(download_result) => {
-                    if let Err(e) = download_result {
-                        error!(
-                            target: LOG_TARGET,
-                            "File download task failed: {:?}", e
-                        );
-                        failed_downloads += 1;
-                    }
-                }
-                Err(e) => {
-                    error!(
-                        target: LOG_TARGET,
-                        "File download task panicked: {:?}", e
-                    );
-                    failed_downloads += 1;
-                }
-            }
-        }
-
-        if failed_downloads > 0 {
-            return Err(anyhow!(
-                "Failed to download {} out of {} files",
-                failed_downloads,
-                total_files
-            ));
-        } else {
+        if files.is_empty() {
             info!(
                 target: LOG_TARGET,
-                "Successfully completed bucket move with all files downloaded"
+                "No files to download for bucket {:?}", event.bucket_id
             );
+            self.pending_bucket_id = None;
+            return Ok(());
         }
+
+        // Convert indexer files to FileMetadata
+        let file_metadatas = files
+            .iter()
+            .filter_map(
+                |file| match file.to_file_metadata(event.bucket_id.as_ref().to_vec()) {
+                    Ok(metadata) => Some(metadata),
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to convert file to metadata: {:?}", e
+                        );
+                        None
+                    }
+                },
+            )
+            .collect::<Vec<_>>();
+
+        // Now download all files using the FileDownloadManager
+        let file_download_manager = &self.storage_hub_handler.file_download_manager;
+        let file_transfer_service = self.storage_hub_handler.file_transfer.clone();
+
+        file_download_manager
+            .download_bucket(
+                event.bucket_id,
+                file_metadatas,
+                file_transfer_service,
+                self.storage_hub_handler.file_storage.clone(),
+            )
+            .await?;
+
+        // After download is complete, update status
+        self.pending_bucket_id = None;
+
+        info!(
+            target: LOG_TARGET,
+            "Bucket move completed for bucket {:?}", event.bucket_id
+        );
 
         Ok(())
     }
@@ -237,22 +204,25 @@ where
                 error
             )
         })?;
-        let bucket = event.bucket_id.as_ref().to_vec();
 
-        let forest_storage = self
-            .storage_hub_handler
-            .forest_storage_handler
-            .get_or_create(&bucket)
-            .await;
-
-        self.pending_bucket_id = Some(event.bucket_id);
-
+        // First, retrieve all the files for this bucket from the indexer
         let files = shc_indexer_db::models::File::get_by_onchain_bucket_id(
             &mut indexer_connection,
-            bucket.clone(),
+            event.bucket_id.as_ref().to_vec(),
         )
         .await?;
 
+        if files.is_empty() {
+            warn!(
+                target: LOG_TARGET,
+                "No files found for bucket {:?}", event.bucket_id
+            );
+            // We still accept since there's nothing to download
+            self.accept_bucket_move(event.bucket_id).await?;
+            return Ok(());
+        }
+
+        // Calculate total size to check capacity
         let total_size: u64 = files
             .iter()
             .try_fold(0u64, |acc, file| acc.checked_add(file.size as u64))
@@ -266,62 +236,59 @@ where
             .query_storage_provider_id(None)
             .await?;
 
+        // Convert to the expected ProviderId type
         let own_msp_id = match own_provider_id {
             Some(StorageProviderId::MainStorageProvider(id)) => id,
             Some(StorageProviderId::BackupStorageProvider(_)) => {
-                return Err(anyhow!("CRITICAL ❗️❗️❗️: Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."));
+                return Err(anyhow!("Current node is a BSP. Expected an MSP ID."));
             }
             None => {
-                return Err(anyhow!("CRITICAL ❗️❗️❗️: Failed to get own MSP ID."));
+                return Err(anyhow!("Failed to get own provider ID."));
             }
         };
 
-        // Check and increase capacity if needed
+        // Validate capacity - might trigger capacity increase
         self.check_and_increase_capacity(total_size, own_msp_id)
             .await?;
 
-        // Try to insert all files before accepting the request
+        // Register BSP peers and prepare file metadata
+        let mut file_metadatas = Vec::with_capacity(files.len());
+
         for file in &files {
             let file_metadata = file
-                .to_file_metadata(bucket.clone())
+                .to_file_metadata(event.bucket_id.as_ref().to_vec())
                 .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
+
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
 
-            self.storage_hub_handler
-                .file_storage
-                .write()
-                .await
-                .insert_file(file_key, file_metadata.clone())
-                .map_err(|error| {
-                    anyhow!(
-                        "CRITICAL ❗️❗️❗️: Failed to insert file {:?} into file storage: {:?}",
-                        file_key,
-                        error
-                    )
-                })?;
-
-            self.file_storage_inserted_file_keys.push(file_key);
-
-            forest_storage
-                .write()
-                .await
-                .insert_files_metadata(&[file_metadata.clone()])
-                .map_err(|error| {
-                    anyhow!(
-                        "CRITICAL ❗️❗️❗️: Failed to insert file {:?} into forest storage: {:?}",
-                        file_key,
-                        error
-                    )
-                })?;
-
+            // Register the BSP peers with the peer manager for this file
             let bsp_peer_ids = file.get_bsp_peer_ids(&mut indexer_connection).await?;
             if bsp_peer_ids.is_empty() {
                 return Err(anyhow!("No BSP peer IDs found for file {:?}", file_key));
             }
+
+            for peer_id in &bsp_peer_ids {
+                self.storage_hub_handler
+                    .peer_manager
+                    .add_peer(*peer_id, file_key)
+                    .await;
+            }
+
+            // Add the file metadata to our list
+            file_metadatas.push(file_metadata);
         }
 
-        // Accept the request since we've verified we can handle all files
+        // Store bucket ID for tracking purposes
+        self.pending_bucket_id = Some(event.bucket_id);
+
+        // All validation passed, now accept the request
         self.accept_bucket_move(event.bucket_id).await?;
+
+        // File downloads will be initiated by the StartMovedBucketDownload event handler
+        info!(
+            target: LOG_TARGET,
+            "Bucket move request accepted for bucket {:?}, waiting for on-chain confirmation", event.bucket_id
+        );
 
         Ok(())
     }
@@ -458,9 +425,8 @@ where
             .query_available_storage_capacity(own_msp_id)
             .await
             .map_err(|e| {
-                let err_msg = format!("Failed to query available storage capacity: {:?}", e);
-                error!(target: LOG_TARGET, err_msg);
-                anyhow::anyhow!(err_msg)
+                error!(target: LOG_TARGET, "Failed to query available storage capacity: {:?}", e);
+                anyhow::anyhow!("Failed to query available storage capacity: {:?}", e)
             })?;
 
         // Increase storage capacity if the available capacity is less than the required size
@@ -478,9 +444,8 @@ where
                 .query_storage_provider_capacity(own_msp_id)
                 .await
                 .map_err(|e| {
-                    let err_msg = format!("Failed to query storage provider capacity: {:?}", e);
-                    error!(target: LOG_TARGET, err_msg);
-                    anyhow::anyhow!(err_msg)
+                    error!(target: LOG_TARGET, "Failed to query storage provider capacity: {:?}", e);
+                    anyhow::anyhow!("Failed to query storage provider capacity: {:?}", e)
                 })?;
 
             let max_storage_capacity = self
@@ -526,61 +491,5 @@ where
         }
 
         Ok(())
-    }
-
-    /// Downloads a file from BSPs (Backup Storage Providers).
-    ///
-    /// Uses the FileDownloadManager which implements multi-level parallelism:
-    /// - File-level parallelism: Multiple files can be downloaded simultaneously
-    /// - Chunk-level parallelism: For each file, multiple chunk batches are downloaded in parallel
-    /// - Peer selection and retry strategy: Selects and tries multiple peers
-    async fn download_file(
-        &self,
-        file: &shc_indexer_db::models::File,
-        bucket: &BucketId,
-    ) -> anyhow::Result<()> {
-        let file_metadata = file
-            .to_file_metadata(bucket.as_ref().to_vec())
-            .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
-        let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
-
-        info!(
-            target: LOG_TARGET,
-            "Starting file download for file_key: {:?}", file_key
-        );
-
-        // Register BSP peers with the peer manager for this file
-        let bsp_peer_ids = file
-            .get_bsp_peer_ids(
-                &mut self
-                    .storage_hub_handler
-                    .indexer_db_pool
-                    .as_ref()
-                    .unwrap()
-                    .get()
-                    .await?,
-            )
-            .await?;
-
-        for &peer_id in &bsp_peer_ids {
-            self.storage_hub_handler
-                .peer_manager
-                .add_peer(peer_id, file_key)
-                .await;
-        }
-
-        // Get the file storage reference
-        let file_storage = self.storage_hub_handler.file_storage.clone();
-
-        // Use the simplified FileDownloadManager interface
-        self.storage_hub_handler
-            .file_download_manager
-            .download_file(
-                file_metadata,
-                *bucket,
-                self.storage_hub_handler.file_transfer.clone(),
-                file_storage,
-            )
-            .await
     }
 }

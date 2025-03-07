@@ -22,7 +22,7 @@ use shc_blockchain_service::{
 };
 use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_file_transfer_service::{
-    events::{RemoteDownloadRequest, RemoteUploadRequest},
+    events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -44,8 +44,8 @@ use crate::{
         msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspRespondMoveBucketTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
-        msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
-        user_sends_file::UserSendsFileTask,
+        msp_upload_file::MspUploadFileTask, retry_bucket_move::RetryBucketMoveTask,
+        sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
     },
 };
 
@@ -341,6 +341,20 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain, true);
         notify_period_event_bus_listener.start();
+
+        // Create the RetryBucketMoveTask and subscribe to events
+        let retry_bucket_move_download_task = RetryBucketMoveTask::new(self.clone());
+
+        // Subscribing to RetryBucketMoveDownload event from the FileTransferService.
+        let retry_bucket_move_download_event_bus_listener: EventBusListener<
+            RetryBucketMoveDownload,
+            _,
+        > = retry_bucket_move_download_task.clone().subscribe_to(
+            &self.task_spawner,
+            &self.file_transfer,
+            false,
+        );
+        retry_bucket_move_download_event_bus_listener.start();
     }
 }
 

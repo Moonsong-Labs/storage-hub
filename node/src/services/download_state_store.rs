@@ -8,7 +8,7 @@ use shc_common::{
         BufferedWriteSupport, CFRangeMapAPI, CompositeKey, ProvidesDbContext,
         ProvidesTypedDbAccess, ScaleDbCodec, ScaleEncodedCf, TypedCf, TypedDbContext, TypedRocksDB,
     },
-    types::FileMetadata,
+    types::{BucketId, FileMetadata},
 };
 use shp_file_metadata::ChunkId;
 
@@ -70,6 +70,29 @@ impl TypedCf for MissingChunksCompositeCf {
 /// It is removed when a download is completed or cancelled.
 pub struct FileMetadataCf;
 
+/// Column family that tracks pending bucket downloads.
+///
+/// This CF uses a simple key-value structure where:
+/// - The key is a bucket ID (BucketId)
+/// - The value is a boolean flag indicating whether the download is in progress
+///
+/// This CF is used to track which buckets are being downloaded so that
+/// downloads can be resumed if interrupted.
+pub struct PendingBucketDownloadsCf;
+
+impl Default for PendingBucketDownloadsCf {
+    fn default() -> Self {
+        Self
+    }
+}
+
+impl ScaleEncodedCf for PendingBucketDownloadsCf {
+    type Key = BucketId; // Bucket ID
+    type Value = bool; // Download in progress flag
+
+    const SCALE_ENCODED_NAME: &'static str = "pending_bucket_downloads";
+}
+
 impl Default for FileMetadataCf {
     fn default() -> Self {
         Self
@@ -87,6 +110,7 @@ impl ScaleEncodedCf for FileMetadataCf {
 const ALL_COLUMN_FAMILIES: &[&str] = &[
     MissingChunksCompositeCf::NAME,
     FileMetadataCf::SCALE_ENCODED_NAME,
+    PendingBucketDownloadsCf::SCALE_ENCODED_NAME,
 ];
 
 /// Persistent store for file download state using RocksDB.
@@ -165,6 +189,60 @@ impl<'a> DownloadStateStoreRwContext<'a> {
 
     pub fn commit(self) {
         self.db_context.flush();
+    }
+
+    pub fn delete_file_metadata(&self, file_key: &H256) {
+        self.db_context
+            .cf(&FileMetadataCf::default())
+            .delete(file_key);
+        self.db_context.flush();
+    }
+
+    // Methods to store and retrieve pending bucket downloads
+    pub fn mark_bucket_download_started(&self, bucket_id: &BucketId) {
+        self.db_context
+            .cf(&PendingBucketDownloadsCf::default())
+            .put(bucket_id, &true);
+        self.db_context.flush();
+    }
+
+    pub fn mark_bucket_download_completed(&self, bucket_id: &BucketId) {
+        self.db_context
+            .cf(&PendingBucketDownloadsCf::default())
+            .delete(bucket_id);
+        self.db_context.flush();
+    }
+
+    pub fn is_bucket_download_in_progress(&self, bucket_id: &BucketId) -> bool {
+        self.db_context
+            .cf(&PendingBucketDownloadsCf::default())
+            .get(bucket_id)
+            .is_some()
+    }
+
+    pub fn get_all_pending_bucket_downloads(&self) -> Vec<BucketId> {
+        self.db_context
+            .cf(&PendingBucketDownloadsCf::default())
+            .iterate_with_range(..)
+            .map(|(bucket_id, _)| bucket_id)
+            .collect()
+    }
+
+    /// Get all file keys that need to be downloaded for a specific bucket
+    pub fn get_missing_files_for_bucket(&self, bucket_id: &BucketId) -> Vec<H256> {
+        // If the bucket is not in progress, return empty list
+        if !self.is_bucket_download_in_progress(bucket_id) {
+            return Vec::new();
+        }
+
+        // Get all files with pending downloads for this bucket
+        // For now, we'll just return all files in the store since we don't track by bucket
+        self.missing_chunks_map()
+            .db_context()
+            .cf(&MissingChunksCf::default())
+            .iterate_with_range(..)
+            .map(|(file_key, _)| file_key)
+            .collect()
     }
 }
 
@@ -251,12 +329,5 @@ impl<'a> DownloadStateStoreRwContext<'a> {
 
     pub fn get_file_metadata(&self, file_key: &H256) -> Option<FileMetadata> {
         self.db_context.cf(&FileMetadataCf::default()).get(file_key)
-    }
-
-    pub fn delete_file_metadata(&self, file_key: &H256) {
-        self.db_context
-            .cf(&FileMetadataCf::default())
-            .delete(file_key);
-        self.db_context.flush();
     }
 }

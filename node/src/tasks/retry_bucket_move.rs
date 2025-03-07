@@ -1,0 +1,259 @@
+use log::{error, info, warn};
+use shc_actors_framework::event_bus::EventHandler;
+use shc_common::types::{HashT, StorageProofsMerkleTrieLayout};
+use shc_file_transfer_service::events::RetryBucketMoveDownload;
+use std::sync::Arc;
+
+use crate::services::{
+    download_state_store::DownloadStateStore,
+    handler::StorageHubHandler,
+    types::{MspForestStorageHandlerT, ShNodeType},
+};
+
+const LOG_TARGET: &str = "retry-bucket-move-task";
+
+/// Task that handles retrying and resuming bucket move downloads
+/// that might have been interrupted.
+pub struct RetryBucketMoveTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    storage_hub_handler: StorageHubHandler<NT>,
+    download_state_store: Arc<DownloadStateStore>,
+}
+
+impl<NT> RetryBucketMoveTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+        Self {
+            storage_hub_handler: storage_hub_handler.clone(),
+            download_state_store: storage_hub_handler
+                .file_download_manager
+                .download_state_store(),
+        }
+    }
+}
+
+impl<NT> Clone for RetryBucketMoveTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    fn clone(&self) -> Self {
+        Self {
+            storage_hub_handler: self.storage_hub_handler.clone(),
+            download_state_store: self.download_state_store.clone(),
+        }
+    }
+}
+
+impl<NT> EventHandler<RetryBucketMoveDownload> for RetryBucketMoveTask<NT>
+where
+    NT: ShNodeType + 'static,
+    NT::FSH: MspForestStorageHandlerT,
+{
+    async fn handle_event(&mut self, _event: RetryBucketMoveDownload) -> anyhow::Result<()> {
+        info!(
+            target: LOG_TARGET,
+            "Checking for pending bucket downloads to resume"
+        );
+
+        // Get all pending bucket downloads from the state store
+        let context = self.download_state_store.open_rw_context();
+        let pending_buckets = context.get_all_pending_bucket_downloads();
+
+        if pending_buckets.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "No pending bucket downloads to resume"
+            );
+            return Ok(());
+        }
+
+        info!(
+            target: LOG_TARGET,
+            "Found {} pending bucket downloads to resume", pending_buckets.len()
+        );
+
+        // Get indexer DB pool for fetching file metadata
+        let indexer_db_pool =
+            if let Some(indexer_db_pool) = self.storage_hub_handler.indexer_db_pool.clone() {
+                indexer_db_pool
+            } else {
+                warn!(
+                    target: LOG_TARGET,
+                    "Indexer is disabled but there are pending bucket downloads"
+                );
+                return Ok(());
+            };
+
+        // For each pending bucket, directly use the file download manager
+        for bucket_id in pending_buckets {
+            info!(
+                target: LOG_TARGET,
+                "Resuming download for bucket {:?}", bucket_id
+            );
+
+            // Get connection to indexer DB
+            let mut indexer_connection = match indexer_db_pool.get().await {
+                Ok(conn) => conn,
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to get indexer connection: {:?}", e
+                    );
+                    continue;
+                }
+            };
+
+            // Get files for this bucket from indexer only to update BSP peer information
+            let indexer_files = match shc_indexer_db::models::File::get_by_onchain_bucket_id(
+                &mut indexer_connection,
+                bucket_id.as_ref().to_vec(),
+            )
+            .await
+            {
+                Ok(files) => files,
+                Err(e) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to get files for bucket {:?} from indexer: {:?}", bucket_id, e
+                    );
+                    // Continue with download attempt even if we couldn't get indexer info
+                    // We'll just have fewer peers to try
+                    Vec::new()
+                }
+            };
+
+            // Get missing files from download state store
+            let context = self.download_state_store.open_rw_context();
+            let missing_files = context.get_missing_files_for_bucket(&bucket_id);
+
+            if missing_files.is_empty() {
+                info!(
+                    target: LOG_TARGET,
+                    "No missing files found for bucket {:?}, marking as completed", bucket_id
+                );
+
+                // Mark as completed if no missing files in download state
+                context.mark_bucket_download_completed(&bucket_id);
+                context.commit();
+                continue;
+            }
+            context.commit();
+
+            // Register BSP peers from indexer files
+            for file in &indexer_files {
+                if let Ok(metadata) = file.to_file_metadata(bucket_id.as_ref().to_vec()) {
+                    // Register BSP peers for this file
+                    let file_key = metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+                    if let Ok(peer_ids) =
+                        futures::executor::block_on(file.get_bsp_peer_ids(&mut indexer_connection))
+                    {
+                        for peer_id in &peer_ids {
+                            // Register peer for file
+                            let _ = self
+                                .storage_hub_handler
+                                .peer_manager
+                                .add_peer(*peer_id, file_key);
+                        }
+                    }
+                }
+            }
+
+            // Get list of file metadatas from indexer files
+            let file_metadatas = indexer_files
+                .iter()
+                .filter_map(
+                    |file| match file.to_file_metadata(bucket_id.as_ref().to_vec()) {
+                        Ok(metadata) => Some(metadata),
+                        Err(e) => {
+                            error!(
+                                target: LOG_TARGET,
+                                "Failed to convert file to metadata: {:?}", e
+                            );
+                            None
+                        }
+                    },
+                )
+                .collect::<Vec<_>>();
+
+            info!(
+                target: LOG_TARGET,
+                "Starting download of {} files for bucket {:?}",
+                file_metadatas.len(), bucket_id
+            );
+
+            // Acquire a bucket semaphore permit to respect concurrency limits
+            let bucket_semaphore = self
+                .storage_hub_handler
+                .file_download_manager
+                .bucket_semaphore();
+            let permit = match tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                bucket_semaphore.acquire(),
+            )
+            .await
+            {
+                Ok(permit_result) => match permit_result {
+                    Ok(permit) => {
+                        info!(
+                            target: LOG_TARGET,
+                            "Acquired bucket semaphore permit for bucket {:?}", bucket_id
+                        );
+                        permit
+                    }
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to acquire bucket semaphore: {:?}", e
+                        );
+                        continue;
+                    }
+                },
+                Err(_) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Timed out waiting for bucket semaphore for bucket {:?}", bucket_id
+                    );
+                    continue;
+                }
+            };
+
+            // Create a _permit variable that drops at the end of scope, releasing the semaphore
+            let _permit = permit;
+
+            let file_transfer_service = self.storage_hub_handler.file_transfer.clone();
+            let file_storage = self.storage_hub_handler.file_storage.clone();
+
+            if let Err(e) = self
+                .storage_hub_handler
+                .file_download_manager
+                .download_bucket(
+                    bucket_id,
+                    file_metadatas,
+                    file_transfer_service,
+                    file_storage,
+                )
+                .await
+            {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to resume bucket download for {:?}: {:?}", bucket_id, e
+                );
+                // Note: We don't mark as completed here so it can be retried later
+            } else {
+                info!(
+                    target: LOG_TARGET,
+                    "Successfully resumed bucket download for {:?}", bucket_id
+                );
+            }
+        }
+
+        Ok(())
+    }
+}

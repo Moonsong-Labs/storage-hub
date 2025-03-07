@@ -30,6 +30,7 @@ const CHUNK_REQUEST_PEER_RETRY_ATTEMPTS: usize = 5;
 const DOWNLOAD_RETRY_ATTEMPTS: usize = 2;
 const BEST_PEERS_TO_SELECT: usize = 2;
 const RANDOM_PEERS_TO_SELECT: usize = 3;
+const MAX_CONCURRENT_BUCKET_DOWNLOADS: usize = 2;
 
 /// Configuration for file download limits and parallelism settings
 pub struct FileDownloadLimits {
@@ -47,6 +48,8 @@ pub struct FileDownloadLimits {
     pub best_peers_to_select: usize,
     /// Number of random peers to select
     pub random_peers_to_select: usize,
+    /// Maximum number of bucket downloads to process in parallel
+    pub max_concurrent_bucket_downloads: usize,
 }
 
 impl Default for FileDownloadLimits {
@@ -59,6 +62,7 @@ impl Default for FileDownloadLimits {
             download_retry_attempts: DOWNLOAD_RETRY_ATTEMPTS,
             best_peers_to_select: BEST_PEERS_TO_SELECT,
             random_peers_to_select: RANDOM_PEERS_TO_SELECT,
+            max_concurrent_bucket_downloads: MAX_CONCURRENT_BUCKET_DOWNLOADS,
         }
     }
 }
@@ -73,6 +77,7 @@ impl Clone for FileDownloadLimits {
             download_retry_attempts: self.download_retry_attempts,
             best_peers_to_select: self.best_peers_to_select,
             random_peers_to_select: self.random_peers_to_select,
+            max_concurrent_bucket_downloads: self.max_concurrent_bucket_downloads,
         }
     }
 }
@@ -101,6 +106,8 @@ pub struct FileDownloadManager {
     pub limits: FileDownloadLimits,
     /// Semaphore for controlling file-level parallelism
     file_semaphore: Arc<Semaphore>,
+    /// Semaphore for controlling bucket-level parallelism
+    bucket_semaphore: Arc<Semaphore>,
     /// BSP peer manager for tracking and selecting peers
     peer_manager: Arc<BspPeerManager>,
     /// Download state store for persistence
@@ -131,6 +138,7 @@ impl FileDownloadManager {
 
         Ok(Self {
             file_semaphore: Arc::new(Semaphore::new(limits.max_concurrent_file_downloads)),
+            bucket_semaphore: Arc::new(Semaphore::new(limits.max_concurrent_bucket_downloads)),
             limits,
             peer_manager,
             download_state_store,
@@ -140,6 +148,16 @@ impl FileDownloadManager {
     /// Get a reference to the file semaphore for file-level parallelism
     pub fn file_semaphore(&self) -> Arc<Semaphore> {
         Arc::clone(&self.file_semaphore)
+    }
+
+    /// Get a reference to the bucket semaphore for bucket-level parallelism
+    pub fn bucket_semaphore(&self) -> Arc<Semaphore> {
+        self.bucket_semaphore.clone()
+    }
+
+    /// Returns a reference to the download state store
+    pub fn download_state_store(&self) -> Arc<DownloadStateStore> {
+        self.download_state_store.clone()
     }
 
     /// Create a new chunk semaphore for chunk-level parallelism within a file
@@ -586,6 +604,83 @@ impl FileDownloadManager {
             Ok(())
         }
     }
+
+    /// Mark a bucket download as started
+    pub fn mark_bucket_download_started(&self, bucket_id: &BucketId) {
+        let context = self.download_state_store.open_rw_context();
+        context.mark_bucket_download_started(bucket_id);
+        context.commit();
+    }
+
+    /// Mark a bucket download as completed
+    pub fn mark_bucket_download_completed(&self, bucket_id: &BucketId) {
+        let context = self.download_state_store.open_rw_context();
+        context.mark_bucket_download_completed(bucket_id);
+        context.commit();
+    }
+
+    /// Check if a bucket download is in progress
+    pub fn is_bucket_download_in_progress(&self, bucket_id: &BucketId) -> bool {
+        let context = self.download_state_store.open_rw_context();
+        let result = context.is_bucket_download_in_progress(bucket_id);
+        result
+    }
+
+    /// Download an entire bucket's files
+    /// This method accepts a list of file metadata objects rather than using a callback
+    pub async fn download_bucket<FS, FT>(
+        &self,
+        bucket_id: BucketId,
+        file_metadatas: Vec<FileMetadata>,
+        file_transfer: FT,
+        file_storage: Arc<RwLock<FS>>,
+    ) -> Result<()>
+    where
+        FT: FileTransferServiceInterface + Send + Sync + Clone + 'static,
+        FS: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    {
+        // Check if bucket download is already in progress
+        if self.is_bucket_download_in_progress(&bucket_id) {
+            info!(
+                target: LOG_TARGET,
+                "Resuming download of bucket {:?}", bucket_id
+            );
+        } else {
+            info!(
+                target: LOG_TARGET,
+                "Starting new download of bucket {:?}", bucket_id
+            );
+            self.mark_bucket_download_started(&bucket_id);
+        }
+
+        // Acquire a bucket download permit
+        let _bucket_permit = self.bucket_semaphore.clone().acquire_owned().await?;
+
+        info!(
+            target: LOG_TARGET,
+            "Downloading {} files for bucket {:?}", file_metadatas.len(), bucket_id
+        );
+
+        // Download each file in the bucket
+        for file_metadata in file_metadatas {
+            self.download_file(
+                file_metadata.clone(),
+                bucket_id,
+                file_transfer.clone(),
+                Arc::clone(&file_storage),
+            )
+            .await?;
+        }
+
+        // Mark bucket download as completed
+        self.mark_bucket_download_completed(&bucket_id);
+        info!(
+            target: LOG_TARGET,
+            "Completed download of bucket {:?}", bucket_id
+        );
+
+        Ok(())
+    }
 }
 
 impl Clone for FileDownloadManager {
@@ -593,6 +688,7 @@ impl Clone for FileDownloadManager {
         Self {
             limits: self.limits.clone(),
             file_semaphore: Arc::clone(&self.file_semaphore),
+            bucket_semaphore: Arc::clone(&self.bucket_semaphore),
             peer_manager: Arc::clone(&self.peer_manager),
             download_state_store: Arc::clone(&self.download_state_store),
         }
