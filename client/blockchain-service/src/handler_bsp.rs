@@ -22,7 +22,7 @@ use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
     events::{
-        BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
+        BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
         FinalisedTrieRemoveMutationsApplied, ForestWriteLockTaskData, MoveBucketAccepted,
         MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MultipleNewChallengeSeeds,
         ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
@@ -139,6 +139,18 @@ where
                     });
                 }
             }
+            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequested {
+                who: _,
+                bucket_id,
+                new_msp_id,
+                new_value_prop_id: _,
+            }) => {
+                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                self.emit(MoveBucketRequested {
+                    bucket_id,
+                    new_msp_id,
+                });
+            }
             // Ignore all other events.
             _ => {}
         }
@@ -183,38 +195,6 @@ where
                         file_key: file_key.into(),
                         new_root,
                     });
-                }
-            }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequested {
-                who: _,
-                bucket_id,
-                new_msp_id,
-                new_value_prop_id: _,
-            }) => {
-                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
-                self.emit(MoveBucketRequested {
-                    bucket_id,
-                    new_msp_id,
-                });
-            }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
-                bucket_id,
-                old_msp_id,
-                new_msp_id,
-                value_prop_id: _,
-            }) => {
-                // This event is relevant in case the Provider managed is the old MSP,
-                // in which case we should clean up the bucket.
-                // Note: we do this in finality to ensure we don't lose data in case
-                // of a reorg.
-                if let Some(old_msp_id) = old_msp_id {
-                    if managed_bsp_id == &old_msp_id {
-                        self.emit(FinalisedBucketMovedAway {
-                            bucket_id,
-                            old_msp_id,
-                            new_msp_id,
-                        });
-                    }
                 }
             }
             // Ignore all other events.

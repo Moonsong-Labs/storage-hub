@@ -409,6 +409,7 @@ impl Actor for FileTransferService {
                     bucket_id,
                     callback,
                 } => {
+                    info!(target: LOG_TARGET, "Registering new bucket peer {:?} for bucket {:?}", peer_id, bucket_id);
                     let result = match self.peer_bucket_allow_list.insert((peer_id, bucket_id)) {
                         true => Ok(()),
                         false => Err(RequestError::BucketAlreadyRegisteredForPeer),

@@ -17,7 +17,7 @@ use shc_common::types::{
     BucketId, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 use shc_file_manager::traits::FileStorage;
-use shc_forest_manager::traits::ForestStorageHandler;
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -109,6 +109,14 @@ where
             event.bucket_id
         );
 
+        // Important: Add a delay after receiving the on-chain confirmation
+        // This gives the BSPs time to process the chain event and prepare to serve files
+        info!(
+            target: LOG_TARGET,
+            "Waiting for BSPs to be ready to serve files for bucket {:?}", event.bucket_id
+        );
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
         // Get all files for this bucket from the indexer
         let indexer_db_pool =
             if let Some(indexer_db_pool) = self.storage_hub_handler.indexer_db_pool.clone() {
@@ -156,6 +164,11 @@ where
         // Now download all files using the FileDownloadManager
         let file_download_manager = &self.storage_hub_handler.file_download_manager;
         let file_transfer_service = self.storage_hub_handler.file_transfer.clone();
+
+        info!(
+            target: LOG_TARGET,
+            "Starting new download of bucket {:?}", event.bucket_id
+        );
 
         file_download_manager
             .download_bucket(
@@ -222,6 +235,14 @@ where
             return Ok(());
         }
 
+        let bucket = event.bucket_id.as_ref().to_vec();
+
+        let forest_storage = self
+            .storage_hub_handler
+            .forest_storage_handler
+            .get_or_create(&bucket)
+            .await;
+
         // Calculate total size to check capacity
         let total_size: u64 = files
             .iter()
@@ -260,6 +281,33 @@ where
                 .map_err(|e| anyhow!("Failed to convert file to file metadata: {:?}", e))?;
 
             let file_key = file_metadata.file_key::<HashT<StorageProofsMerkleTrieLayout>>();
+
+            self.storage_hub_handler
+                .file_storage
+                .write()
+                .await
+                .insert_file(file_key, file_metadata.clone())
+                .map_err(|error| {
+                    anyhow!(
+                        "CRITICAL ❗️❗️❗️: Failed to insert file {:?} into file storage: {:?}",
+                        file_key,
+                        error
+                    )
+                })?;
+
+            self.file_storage_inserted_file_keys.push(file_key);
+
+            forest_storage
+                .write()
+                .await
+                .insert_files_metadata(&[file_metadata.clone()])
+                .map_err(|error| {
+                    anyhow!(
+                        "CRITICAL ❗️❗️❗️: Failed to insert file {:?} into forest storage: {:?}",
+                        file_key,
+                        error
+                    )
+                })?;
 
             // Register the BSP peers with the peer manager for this file
             let bsp_peer_ids = file.get_bsp_peer_ids(&mut indexer_connection).await?;
