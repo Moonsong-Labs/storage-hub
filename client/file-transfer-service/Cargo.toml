@@ -37,6 +37,7 @@ sc-tracing = { workspace = true }
 
 # Local
 shc-actors-framework = { workspace = true }
+shc-actors-derive = { workspace = true }
 shc-common = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }

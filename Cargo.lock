@@ -13667,6 +13667,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "shc-actors-derive"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "shc-actors-framework",
+ "syn 2.0.94",
+]
+
+[[package]]
 name = "shc-actors-framework"
 version = "0.1.0"
 dependencies = [
@@ -13718,6 +13729,7 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-actors-derive",
  "shc-actors-framework",
  "shc-common",
  "shc-forest-manager",
@@ -13816,6 +13828,7 @@ dependencies = [
  "sc-service",
  "sc-tracing",
  "sc-utils",
+ "shc-actors-derive",
  "shc-actors-framework",
  "shc-common",
  "shp-file-key-verifier",
