@@ -6,7 +6,7 @@ use shc_common::types::{MaxUsersToCharge, StorageProviderId};
 use sp_core::Get;
 use storage_hub_runtime::Balance;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{MspForestStorageHandlerT, ShNodeType},
 };

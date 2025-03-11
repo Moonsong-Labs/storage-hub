@@ -29,10 +29,6 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
 use crate::{
-    services::types::{
-        BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
-        ShStorageLayer, UserRole,
-    },
     tasks::{
         bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
         bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
@@ -42,6 +38,10 @@ use crate::{
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
         msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
+    },
+    types::{
+        BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
+        ShStorageLayer, UserRole,
     },
 };
 
@@ -124,7 +124,7 @@ where
 /// This trait is implemented by the different [`StorageHubHandler`] variants,
 /// and runs the tasks required to work as a specific [`ShRole`](super::types::ShRole).
 pub trait RunnableTasks {
-    async fn run_tasks(&mut self);
+    fn run_tasks(&mut self) -> impl std::future::Future<Output = ()> + Send;
 }
 
 impl<S: ShStorageLayer> RunnableTasks for StorageHubHandler<(BspProvider, S)>

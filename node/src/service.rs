@@ -53,6 +53,14 @@ use sc_network::{
 use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use shc_client::{
+    builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
+    handler::{RunnableTasks, StorageHubHandler},
+    types::{
+        BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer, RocksDbStorageLayer,
+        ShNodeType, ShRole, ShStorageLayer, UserRole,
+    },
+};
 use shc_file_transfer_service::configure_file_transfer_network;
 use sp_keystore::{Keystore, KeystorePtr};
 use substrate_prometheus_endpoint::Registry;
@@ -60,14 +68,6 @@ use substrate_prometheus_endpoint::Registry;
 use crate::{
     cli::{self, IndexerConfigurations, ProviderType, StorageLayer},
     command::ProviderOptions,
-    services::{
-        builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
-        handler::{RunnableTasks, StorageHubHandler},
-        types::{
-            BspProvider, InMemoryStorageLayer, MspProvider, NoStorageLayer, RocksDbStorageLayer,
-            ShNodeType, ShRole, ShStorageLayer, UserRole,
-        },
-    },
 };
 
 //* These type definitions were moved from this file to the common crate to be used by'
