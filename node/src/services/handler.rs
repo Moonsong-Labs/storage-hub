@@ -1,9 +1,10 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use shc_actors_derive::subscribe_actor_event;
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
-    event_bus::{EventBusListener, EventHandler},
+    event_bus::EventHandler,
 };
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
@@ -164,20 +165,25 @@ where
     fn start_user_tasks(&self) {
         log::info!("Starting User tasks.");
 
-        let user_sends_file_task = UserSendsFileTask::new(self.clone());
-
         // Subscribing to NewStorageRequest event from the BlockchainService.
-        let new_storage_request_event_bus_listener: EventBusListener<NewStorageRequest, _> =
-            user_sends_file_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        new_storage_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: NewStorageRequest,
+            task: UserSendsFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
-        let accepted_bsp_volunteer_event_bus_listener: EventBusListener<AcceptedBspVolunteer, _> =
-            user_sends_file_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        accepted_bsp_volunteer_event_bus_listener.start();
+        // Subscribing to AcceptedBspVolunteer event from the BlockchainService.
+        subscribe_actor_event!(
+            event: AcceptedBspVolunteer,
+            task: UserSendsFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
     }
 }
 
@@ -193,131 +199,135 @@ where
         // an upcoming RemoteUploadRequest events, which happens when the user connects to the MSP and submits chunks of the file,
         // along with a proof of storage, which is then queued to batch accept many storage requests at once.
         // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
-        let msp_upload_file_task = MspUploadFileTask::new(self.clone());
         // Subscribing to NewStorageRequest event from the BlockchainService.
-        let new_storage_request_event_bus_listener: EventBusListener<NewStorageRequest, _> =
-            msp_upload_file_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        new_storage_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: NewStorageRequest,
+            task: MspUploadFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to RemoteUploadRequest event from the FileTransferService.
-        let remote_upload_request_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
-            msp_upload_file_task.clone().subscribe_to(
-                &self.task_spawner,
-                &self.file_transfer,
-                false,
-            );
-        remote_upload_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: RemoteUploadRequest,
+            task: MspUploadFileTask,
+            service: &self.file_transfer,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: false,
+        );
         // Subscribing to ProcessMspRespondStoringRequest event from the BlockchainService.
-        let process_confirm_storing_request_event_bus_listener: EventBusListener<
-            ProcessMspRespondStoringRequest,
-            _,
-        > = msp_upload_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        process_confirm_storing_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: ProcessMspRespondStoringRequest,
+            task: MspUploadFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // Task that handles bucket deletion (both move and stop storing)
-        let msp_delete_bucket_task = MspDeleteBucketTask::new(self.clone());
         // Subscribing to FinalisedMspStoppedStoringBucket event
-        let finalised_msp_stopped_storing_bucket_event_bus_listener: EventBusListener<
-            FinalisedMspStoppedStoringBucket,
-            _,
-        > = msp_delete_bucket_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        finalised_msp_stopped_storing_bucket_event_bus_listener.start();
-
+        subscribe_actor_event!(
+            event: FinalisedMspStoppedStoringBucket,
+            task: MspDeleteBucketTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to FinalisedBucketMovedAway event
-        let finalised_bucket_moved_away_event_bus_listener: EventBusListener<
-            FinalisedBucketMovedAway,
-            _,
-        > = msp_delete_bucket_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        finalised_bucket_moved_away_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: FinalisedBucketMovedAway,
+            task: MspDeleteBucketTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // MspDeleteFileTask handles events for deleting individual files from an MSP.
-        let msp_delete_file_task = MspDeleteFileTask::new(self.clone());
         // Subscribing to FileDeletionRequest event from the BlockchainService.
-        let file_deletion_request_event_bus_listener: EventBusListener<FileDeletionRequest, _> =
-            msp_delete_file_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        file_deletion_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: FileDeletionRequest,
+            task: MspDeleteFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to ProcessFileDeletionRequest event from the BlockchainService.
-        let process_file_deletion_request_event_bus_listener: EventBusListener<
-            ProcessFileDeletionRequest,
-            _,
-        > = msp_delete_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        process_file_deletion_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: ProcessFileDeletionRequest,
+            task: MspDeleteFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to FinalisedProofSubmittedForPendingFileDeletionRequest event from the BlockchainService.
-        let finalised_file_deletion_request_event_bus_listener: EventBusListener<
-            FinalisedProofSubmittedForPendingFileDeletionRequest,
-            _,
-        > = msp_delete_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        finalised_file_deletion_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: FinalisedProofSubmittedForPendingFileDeletionRequest,
+            task: MspDeleteFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // MspMoveBucketTask handles events for moving buckets to a new MSP.
-        let msp_move_bucket_task = MspRespondMoveBucketTask::new(self.clone());
         // Subscribing to MoveBucketRequestedForNewMsp event from the FileTransferService.
-        let move_bucket_requested_for_new_msp_event_bus_listener: EventBusListener<
-            MoveBucketRequestedForMsp,
-            _,
-        > = msp_move_bucket_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        move_bucket_requested_for_new_msp_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: MoveBucketRequestedForMsp,
+            task: MspRespondMoveBucketTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // MspDownloadMovedBucketTask handles downloading files after a bucket move is confirmed.
-        let msp_download_moved_bucket_task = MspRespondMoveBucketTask::new(self.clone());
         // Subscribing to StartMovedBucketDownload event from the BlockchainService.
-        let start_moved_bucket_download_event_bus_listener: EventBusListener<
-            StartMovedBucketDownload,
-            _,
-        > = msp_download_moved_bucket_task.clone().subscribe_to(
-            &self.task_spawner,
-            &self.blockchain,
-            true,
+        subscribe_actor_event!(
+            event: StartMovedBucketDownload,
+            task: MspRespondMoveBucketTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
         );
-        start_moved_bucket_download_event_bus_listener.start();
-
-        let msp_charge_fees_task = MspChargeFeesTask::new(self.clone());
 
         // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
-        let msp_stop_storing_insolvent_user = MspStopStoringInsolventUserTask::new(self.clone());
-
         // Subscribing to UserInsolvent event from the BlockchainService to delete all stored buckets owned by a
         // user that has been declared as without funds.
-        let user_without_funds_event_bus_listener: EventBusListener<UserWithoutFunds, _> =
-            msp_stop_storing_insolvent_user.clone().subscribe_to(
-                &self.task_spawner,
-                &self.blockchain,
-                true,
-            );
-        user_without_funds_event_bus_listener.start();
-
-        // Subscribing to FinalisedMspStopStoringBucketInsolventUser event from the BlockchainService.
-        let finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener: EventBusListener<
-            FinalisedMspStopStoringBucketInsolventUser,
-            _,
-        > = msp_stop_storing_insolvent_user.clone().subscribe_to(
-            &self.task_spawner,
-            &self.blockchain,
-            true,
+        subscribe_actor_event!(
+            event: UserWithoutFunds,
+            task: MspStopStoringInsolventUserTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
         );
-        finalised_msp_stop_storing_bucket_insolvent_user_event_bus_listener.start();
+        // Subscribing to FinalisedMspStopStoringBucketInsolventUser event from the BlockchainService.
+        subscribe_actor_event!(
+            event: FinalisedMspStopStoringBucketInsolventUser,
+            task: MspStopStoringInsolventUserTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // Subscribing to NotifyPeriod event from the BlockchainService.
-        let notify_period_event_bus_listener: EventBusListener<NotifyPeriod, _> =
-            msp_charge_fees_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        notify_period_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: NotifyPeriod,
+            task: MspChargeFeesTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
     }
 }
 
@@ -346,36 +356,44 @@ where
         // volunteering to store the file. Then it waits for RemoteUploadRequest events, which
         // happens when the user, now aware of the BSP volunteering, submits chunks of the file,
         // along with a proof of storage.
-        let bsp_upload_file_task = BspUploadFileTask::new(self.clone());
-        // Subscribing to NewStorageRequest event from the BlockchainService.
-        let new_storage_request_event_bus_listener: EventBusListener<NewStorageRequest, _> =
-            bsp_upload_file_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        new_storage_request_event_bus_listener.start();
-        // Subscribing to RemoteUploadRequest event from the FileTransferService.
-        let remote_upload_request_event_bus_listener: EventBusListener<RemoteUploadRequest, _> =
-            bsp_upload_file_task.clone().subscribe_to(
-                &self.task_spawner,
-                &self.file_transfer,
-                false,
-            );
-        remote_upload_request_event_bus_listener.start();
-        // Subscribing to ProcessConfirmStoringRequest event from the BlockchainService.
-        let process_confirm_storing_request_event_bus_listener: EventBusListener<
-            ProcessConfirmStoringRequest,
-            _,
-        > = bsp_upload_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        process_confirm_storing_request_event_bus_listener.start();
 
-        // The BspDownloadFileTask
-        let bsp_download_file_task = BspDownloadFileTask::new(self.clone());
+        // Subscribing to NewStorageRequest event from the BlockchainService.
+        subscribe_actor_event!(
+            event: NewStorageRequest,
+            task: BspUploadFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
+        // Subscribing to RemoteUploadRequest event from the FileTransferService.
+        subscribe_actor_event!(
+            event: RemoteUploadRequest,
+            task: BspUploadFileTask,
+            service: &self.file_transfer,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: false,
+        );
+        // Subscribing to ProcessConfirmStoringRequest event from the BlockchainService.
+        subscribe_actor_event!(
+            event: ProcessConfirmStoringRequest,
+            task: BspUploadFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
+
         // Subscribing to RemoteDownloadRequest event from the FileTransferService.
-        let remote_download_request_event_bus_listener: EventBusListener<RemoteDownloadRequest, _> =
-            bsp_download_file_task.subscribe_to(&self.task_spawner, &self.file_transfer, false);
-        remote_download_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: RemoteDownloadRequest,
+            task: BspDownloadFileTask,
+            service: &self.file_transfer,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: false,
+        );
 
         // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
         // It responds by computing challenges derived from the seeds, taking also into account
@@ -383,111 +401,125 @@ where
         // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
         // BlockchainService when it is time to actually submit the proof of storage.
         // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
-        let bsp_submit_proof_task = BspSubmitProofTask::new(self.clone());
+
         // Subscribing to MultipleNewChallengeSeeds event from the BlockchainService.
-        let multiple_new_challenge_seeds_event_bus_listener: EventBusListener<
-            MultipleNewChallengeSeeds,
-            _,
-        > = bsp_submit_proof_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        multiple_new_challenge_seeds_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: MultipleNewChallengeSeeds,
+            task: BspSubmitProofTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to ProcessSubmitProofRequest event from the BlockchainService.
-        let process_submit_proof_request_event_bus_listener: EventBusListener<
-            ProcessSubmitProofRequest,
-            _,
-        > = bsp_submit_proof_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        process_submit_proof_request_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: ProcessSubmitProofRequest,
+            task: BspSubmitProofTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // Slash your own kin or potentially commit seppuku on your own stake.
         // Running this is as a BSP is very honourable and shows a great sense of justice.
-        let bsp_slash_provider_task = SlashProviderTask::new(self.clone());
+
         // Subscribing to SlashableProvider event from the BlockchainService.
-        let slashable_provider_event_bus_listener: EventBusListener<SlashableProvider, _> =
-            bsp_slash_provider_task.clone().subscribe_to(
-                &self.task_spawner,
-                &self.blockchain,
-                true,
-            );
-        slashable_provider_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: SlashableProvider,
+            task: SlashProviderTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // Collect debt from users after a BSP proof is accepted.
-        let bsp_charge_fees_task = BspChargeFeesTask::new(self.clone());
-        let last_chargeable_info_updated_event_bus_listener: EventBusListener<
-            LastChargeableInfoUpdated,
-            _,
-        > = bsp_charge_fees_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        last_chargeable_info_updated_event_bus_listener.start();
-
+        // Subscribing to LastChargeableInfoUpdated event from the BlockchainService.
+        subscribe_actor_event!(
+            event: LastChargeableInfoUpdated,
+            task: BspChargeFeesTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to ProcessStopStoringForInsolventUserRequest event from the BlockchainService.
-        let process_stop_storing_for_insolvent_user_request_event_bus_listener: EventBusListener<
-            ProcessStopStoringForInsolventUserRequest,
-            _,
-        > = bsp_charge_fees_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        process_stop_storing_for_insolvent_user_request_event_bus_listener.start();
-
+        subscribe_actor_event!(
+            event: ProcessStopStoringForInsolventUserRequest,
+            task: BspChargeFeesTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Start deletion process for stored files owned by a user that has been declared as without funds and charge
         // its payment stream afterwards, getting the owed tokens and deleting it.
-        let user_without_funds_event_bus_listener: EventBusListener<UserWithoutFunds, _> =
-            bsp_charge_fees_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        user_without_funds_event_bus_listener.start();
-
+        subscribe_actor_event!(
+            event: UserWithoutFunds,
+            task: BspChargeFeesTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Continue deletion process for stored files owned by a user that has been declared as without funds.
         // Once the last file has been deleted, get the owed tokens and delete the payment stream.
-        let sp_stop_storing_insolvent_user_event_bus_listener: EventBusListener<
-            SpStopStoringInsolventUser,
-            _,
-        > = bsp_charge_fees_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        sp_stop_storing_insolvent_user_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: SpStopStoringInsolventUser,
+            task: BspChargeFeesTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // BspMoveBucketTask handles events for moving buckets to a new MSP.
-        let bsp_move_bucket_task = BspMoveBucketTask::new(self.clone());
         // Subscribing to MoveBucketRequested event from the BlockchainService.
-        let move_bucket_requested_event_bus_listener: EventBusListener<MoveBucketRequested, _> =
-            bsp_move_bucket_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        move_bucket_requested_event_bus_listener.start();
-
+        subscribe_actor_event!(
+            event: MoveBucketRequested,
+            task: BspMoveBucketTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to MoveBucketAccepted event from the BlockchainService.
-        let move_bucket_accepted_event_bus_listener: EventBusListener<MoveBucketAccepted, _> =
-            bsp_move_bucket_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        move_bucket_accepted_event_bus_listener.start();
-
+        subscribe_actor_event!(
+            event: MoveBucketAccepted,
+            task: BspMoveBucketTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to MoveBucketRejected event from the BlockchainService.
-        let move_bucket_rejected_event_bus_listener: EventBusListener<MoveBucketRejected, _> =
-            bsp_move_bucket_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        move_bucket_rejected_event_bus_listener.start();
-
+        subscribe_actor_event!(
+            event: MoveBucketRejected,
+            task: BspMoveBucketTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
         // Subscribing to MoveBucketExpired event from the BlockchainService.
-        let move_bucket_expired_event_bus_listener: EventBusListener<MoveBucketExpired, _> =
-            bsp_move_bucket_task
-                .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        move_bucket_expired_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: MoveBucketExpired,
+            task: BspMoveBucketTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
 
         // Task that listen for `FinalisedBspConfirmStoppedStoring` to delete file
-        let bsp_delete_file_task = BspDeleteFileTask::new(self.clone());
-        let finalised_bsp_confirm_stopped_storing_event_bus_listener: EventBusListener<
-            FinalisedBspConfirmStoppedStoring,
-            _,
-        > = bsp_delete_file_task
-            .clone()
-            .subscribe_to(&self.task_spawner, &self.blockchain, true);
-        finalised_bsp_confirm_stopped_storing_event_bus_listener.start();
+        subscribe_actor_event!(
+            event: FinalisedBspConfirmStoppedStoring,
+            task: BspDeleteFileTask,
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+        );
     }
 }
