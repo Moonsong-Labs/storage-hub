@@ -6,7 +6,7 @@ use shc_common::types::BucketId;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{MspForestStorageHandlerT, ShNodeType},
 };

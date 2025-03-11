@@ -8,7 +8,7 @@ use shc_blockchain_service::{
 };
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };

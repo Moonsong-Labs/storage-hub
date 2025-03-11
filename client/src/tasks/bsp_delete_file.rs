@@ -7,7 +7,7 @@ use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::H256;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };

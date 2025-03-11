@@ -7,7 +7,7 @@ use shc_blockchain_service::{
     commands::BlockchainServiceInterface, events::SlashableProvider, types::SendExtrinsicOptions,
 };
 
-use crate::services::{handler::StorageHubHandler, types::ShNodeType};
+use crate::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "slash-provider-task";
 
