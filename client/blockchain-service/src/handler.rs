@@ -31,16 +31,13 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    types::{
-        BlockNumber, EitherBucketOrBspId, Fingerprint, ParachainClient, StorageProviderId,
-        StorageRequestMetadata, TickNumber, BCSV_KEY_TYPE,
-    },
+    types::{BlockNumber, Fingerprint, ParachainClient, StorageRequestMetadata, TickNumber},
 };
 
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
-    events::BlockchainServiceEventBusProvider,
+    events::{BlockchainServiceEventBusProvider, NewStorageRequest},
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
         OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
@@ -1289,11 +1286,11 @@ where
         state_store_context.commit();
 
         // Initialise the Provider.
-        match self.maybe_managed_provider {
+        match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
                 self.bsp_initial_sync();
             }
-            Some(StorageProviderId::MainStorageProvider(msp_id)) => {
+            Some(ManagedProvider::Msp(msp_handler)) => {
                 // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
                 // TODO: Catch up to Forest root writes in the Bucket's Forests.
 
@@ -1302,7 +1299,7 @@ where
                 let storage_requests: BTreeMap<H256, StorageRequestMetadata> = match self
                     .client
                     .runtime_api()
-                    .pending_storage_requests_by_msp(block_hash, msp_id)
+                    .pending_storage_requests_by_msp(block_hash, msp_handler.msp_id)
                 {
                     Ok(sr) => sr,
                     Err(_) => {
@@ -1330,7 +1327,7 @@ where
                         expires_at: sr.expires_at,
                     })
                 }
-              
+
                 self.msp_initial_sync();
             }
             None => {
