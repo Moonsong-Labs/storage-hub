@@ -35,7 +35,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::{Chunk, ChunkId, Leaf as ProvenLeaf};
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{MspForestStorageHandlerT, ShNodeType},
 };
