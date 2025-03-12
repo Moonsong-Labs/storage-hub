@@ -31,13 +31,13 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
-    types::{BlockNumber, Fingerprint, ParachainClient, StorageRequestMetadata, TickNumber},
+    types::{BlockNumber, ParachainClient, TickNumber},
 };
 
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
-    events::{BlockchainServiceEventBusProvider, NewStorageRequest},
+    events::BlockchainServiceEventBusProvider,
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
         OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
@@ -1291,44 +1291,7 @@ where
                 self.bsp_initial_sync();
             }
             Some(ManagedProvider::Msp(msp_handler)) => {
-                // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
-                // TODO: Catch up to Forest root writes in the Bucket's Forests.
-
-                info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
-
-                let storage_requests: BTreeMap<H256, StorageRequestMetadata> = match self
-                    .client
-                    .runtime_api()
-                    .pending_storage_requests_by_msp(block_hash, msp_handler.msp_id)
-                {
-                    Ok(sr) => sr,
-                    Err(_) => {
-                        // If querying for pending storage requests fail, do not try to answer them
-                        warn!(target: LOG_TARGET, "Failed to get pending storage request");
-                        return;
-                    }
-                };
-
-                info!(
-                    "We have {} pending storage requests",
-                    storage_requests.len()
-                );
-
-                // loop over each pending storage requests to start a new storage request task for the MSP
-                for (file_key, sr) in storage_requests {
-                    self.emit(NewStorageRequest {
-                        who: sr.owner,
-                        file_key: file_key.into(),
-                        bucket_id: sr.bucket_id,
-                        location: sr.location,
-                        fingerprint: Fingerprint::from(sr.fingerprint.as_bytes()),
-                        size: sr.size,
-                        user_peer_ids: sr.user_peer_ids,
-                        expires_at: sr.expires_at,
-                    })
-                }
-
-                self.msp_initial_sync();
+                self.msp_initial_sync(block_hash, msp_handler.msp_id);
             }
             None => {
                 warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
