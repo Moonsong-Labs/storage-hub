@@ -256,33 +256,13 @@ where
                     jump_capacity.unwrap_or_default(),
                 )));
 
-            if let Some(c) = msp_delete_file {
-                storage_hub_builder.with_msp_delete_file_config(c.clone());
-            }
-
-            if let Some(c) = msp_charge_fees {
-                storage_hub_builder.with_msp_charge_fees_config(c.clone());
-            }
-
-            if let Some(c) = msp_move_bucket {
-                storage_hub_builder.with_msp_move_bucket_config(c.clone());
-            }
-
-            if let Some(c) = bsp_upload_file {
-                storage_hub_builder.with_bsp_upload_file_config(c.clone());
-            }
-
-            if let Some(c) = bsp_move_bucket {
-                storage_hub_builder.with_bsp_move_bucket_config(c.clone());
-            }
-
-            if let Some(c) = bsp_charge_fees {
-                storage_hub_builder.with_bsp_charge_fees_config(c.clone());
-            }
-
-            if let Some(c) = bsp_submit_proof {
-                storage_hub_builder.with_bsp_submit_proof_config(c.clone());
-            }
+            storage_hub_builder.with_msp_delete_file_config(msp_delete_file.clone());
+            storage_hub_builder.with_msp_charge_fees_config(msp_charge_fees.clone());
+            storage_hub_builder.with_msp_move_bucket_config(msp_move_bucket.clone());
+            storage_hub_builder.with_bsp_upload_file_config(bsp_upload_file.clone());
+            storage_hub_builder.with_bsp_move_bucket_config(bsp_move_bucket.clone());
+            storage_hub_builder.with_bsp_charge_fees_config(bsp_charge_fees.clone());
+            storage_hub_builder.with_bsp_submit_proof_config(bsp_submit_proof.clone());
 
             // Setup specific configuration for the MSP node.
             if *provider_type == ProviderType::Msp {
