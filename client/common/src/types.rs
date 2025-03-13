@@ -76,6 +76,7 @@ pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
 pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
 pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
+pub type StorageRequestMetadata = pallet_file_system::types::StorageRequestMetadata<Runtime>;
 pub type MaxBatchConfirmStorageRequests =
     <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
 
