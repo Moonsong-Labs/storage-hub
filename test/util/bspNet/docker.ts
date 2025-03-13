@@ -182,6 +182,21 @@ export const restartContainer = async (options: {
   await container.restart();
 };
 
+export const clearLogs = async (options: {
+  containerName: string;
+}) => {
+  const docker = new Docker();
+  const container = docker.getContainer(options.containerName);
+  const exec = await container.exec({
+    AttachStdout: true,
+    AttachStderr: true,
+    Cmd: ["sh", "-c", `> /var/lib/docker/containers/${options.containerName}/*.log`]
+  });
+
+  await exec.start({});
+  console.log(`Logs cleared for container ${options.containerName}`);
+};
+
 export const resumeContainer = async (options: {
   containerName: string;
 }) => {
@@ -232,13 +247,14 @@ export const waitForLog = async (options: {
   searchString: string;
   containerName: string;
   timeout?: number;
+  tail?: number;
 }): Promise<string> => {
   return new Promise((resolve, reject) => {
     const docker = new Docker();
     const container = docker.getContainer(options.containerName);
 
     container.logs(
-      { follow: true, stdout: true, stderr: true, tail: undefined, timestamps: false },
+      { follow: true, stdout: true, stderr: true, tail: options.tail, timestamps: false }, // set tail default to 10 to get the 10 last lines of logs printed
       (err, stream) => {
         if (err) {
           return reject(err);

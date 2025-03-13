@@ -22,15 +22,7 @@ use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
-use shc_common::{
-    consts::CURRENT_FOREST_KEY,
-    types::{
-        BackupStorageProviderId, BlockNumber, BucketId, ChunkId, CustomChallenge, FileMetadata,
-        ForestLeaf, HashT, KeyProof, KeyProofs, MainStorageProviderId, ProofsDealerProviderId,
-        Proven, RandomnessOutput, StorageProof, StorageProofsMerkleTrieLayout, BCSV_KEY_TYPE,
-        FILE_CHUNK_SIZE,
-    },
-};
+use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
@@ -323,6 +315,7 @@ where
             BlockNumber,
             ChunkId,
             BucketId,
+            StorageRequestMetadata,
         >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
