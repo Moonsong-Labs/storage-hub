@@ -218,12 +218,6 @@ where
         message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
         async {
-            // If the node is running in maintenance mode, we don't process any messages.
-            if self.maintenance_mode {
-                info!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping message processing.");
-                return;
-            }
-
             match message {
                 BlockchainServiceCommand::SendExtrinsic {
                     call,
@@ -1171,6 +1165,12 @@ where
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
+        // If the node is running in maintenance mode, we don't process block imports.
+        if self.maintenance_mode {
+            info!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping processing of block import notification: {:?}", notification);
+            return;
+        }
+
         let last_block_processed = self.best_block;
 
         // Check if this new imported block is the new best, and if it causes a reorg.
@@ -1317,12 +1317,6 @@ where
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        // If the node is running in maintenance mode, we don't process block imports.
-        if self.maintenance_mode {
-            info!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping processing ofblock import #{}: {}", block_number, block_hash);
-            return;
-        }
-
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Provider-specific code to run on every block import.
