@@ -43,9 +43,10 @@ use crate::{
         bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
         msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspRespondMoveBucketTask,
+        msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
-        msp_upload_file::MspUploadFileTask, retry_bucket_move::RetryBucketMoveTask,
-        sp_slash_provider::SlashProviderTask, user_sends_file::UserSendsFileTask,
+        msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
+        user_sends_file::UserSendsFileTask,
     },
 };
 
@@ -343,13 +344,13 @@ where
         notify_period_event_bus_listener.start();
 
         // Create the RetryBucketMoveTask and subscribe to events
-        let retry_bucket_move_download_task = RetryBucketMoveTask::new(self.clone());
+        let msp_retry_bucket_move_task = MspRetryBucketMoveTask::new(self.clone());
 
         // Subscribing to RetryBucketMoveDownload event from the FileTransferService.
         let retry_bucket_move_download_event_bus_listener: EventBusListener<
             RetryBucketMoveDownload,
             _,
-        > = retry_bucket_move_download_task.clone().subscribe_to(
+        > = msp_retry_bucket_move_task.clone().subscribe_to(
             &self.task_spawner,
             &self.file_transfer,
             false,

@@ -14,7 +14,7 @@ const LOG_TARGET: &str = "retry-bucket-move-task";
 
 /// Task that handles retrying and resuming bucket move downloads
 /// that might have been interrupted.
-pub struct RetryBucketMoveTask<NT>
+pub struct MspRetryBucketMoveTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -23,7 +23,7 @@ where
     download_state_store: Arc<DownloadStateStore>,
 }
 
-impl<NT> RetryBucketMoveTask<NT>
+impl<NT> MspRetryBucketMoveTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -38,7 +38,7 @@ where
     }
 }
 
-impl<NT> Clone for RetryBucketMoveTask<NT>
+impl<NT> Clone for MspRetryBucketMoveTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
@@ -51,7 +51,7 @@ where
     }
 }
 
-impl<NT> EventHandler<RetryBucketMoveDownload> for RetryBucketMoveTask<NT>
+impl<NT> EventHandler<RetryBucketMoveDownload> for MspRetryBucketMoveTask<NT>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
