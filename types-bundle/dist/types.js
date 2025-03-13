@@ -87,7 +87,7 @@ export const ALL_TYPES = {
     bucket_id: "BucketId",
     location: "Vec<u8>",
     fingerprint: "[u8; 32]",
-    current_size: "StorageDataUnit",
+    file_size: "StorageDataUnit",
     msp: "Option<(ProviderId, bool)>",
     user_peer_ids: "Vec<ProviderId>",
     bsps_required: "u32",
