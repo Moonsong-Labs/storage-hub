@@ -89,7 +89,7 @@ export const ALL_TYPES: RegistryTypes = {
     bucket_id: "BucketId",
     location: "Vec<u8>",
     fingerprint: "[u8; 32]",
-    size: "StorageDataUnit",
+    current_size: "StorageDataUnit",
     msp: "Option<(ProviderId, bool)>",
     user_peer_ids: "Vec<ProviderId>",
     bsps_required: "u32",

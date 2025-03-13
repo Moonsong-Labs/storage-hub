@@ -333,7 +333,7 @@ export interface StorageRequestMetadata extends Struct {
   readonly bucket_id: BucketId;
   readonly location: Bytes;
   readonly fingerprint: U8aFixed;
-  readonly sizekek: StorageDataUnit;
+  readonly current_size: StorageDataUnit;
   readonly msp: Option<ITuple<[ProviderId, bool]>>;
   readonly user_peer_ids: Vec<ProviderId>;
   readonly bsps_required: u32;
