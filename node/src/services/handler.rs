@@ -166,13 +166,17 @@ where
         log::info!("Starting User tasks.");
 
         // Subscribing to NewStorageRequest event from the BlockchainService.
+        // NewStorageRequest event can be used by the user to spam, by spamming the network with new
+        // storage requests. To prevent this from affecting a BSP node, we make this event NOT
+        // critical. This means that if used to spam, some of those spam NewStorageRequest events
+        // will be dropped.
         subscribe_actor_event!(
             event: NewStorageRequest,
             task: UserSendsFileTask,
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
-            critical: true,
+            critical: false,
         );
 
         // Subscribing to AcceptedBspVolunteer event from the BlockchainService.

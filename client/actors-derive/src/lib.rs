@@ -1,3 +1,62 @@
+/*!
+# StorageHub Actors Derive
+
+This crate provides procedural macros to reduce boilerplate code in the StorageHub actors framework.
+
+## Features
+
+- `ActorEvent` derive macro: Implements `EventBusMessage` for event structs and registers them with a specific actor.
+- `ActorEventBus` attribute macro: Generates the event bus provider struct and implements all the required methods and traits.
+
+## Usage
+
+First, add the dependency to your crate by including it in your Cargo.toml:
+
+```toml
+[dependencies]
+shc-actors-derive = { workspace = true }
+```
+
+### 1. Defining Event Messages
+
+Import the macros directly and use the `ActorEvent` derive macro:
+
+```rust
+use shc_actors_derive::ActorEvent;
+
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct NewChallengeSeed {
+    pub provider_id: String,
+    pub tick: u32,
+    pub seed: Vec<u8>,
+}
+```
+
+### 2. Creating Event Bus Providers
+
+Use the `ActorEventBus` attribute macro:
+
+```rust
+use shc_actors_derive::ActorEventBus;
+
+#[ActorEventBus("blockchain_service")]
+pub struct BlockchainServiceEventBusProvider;
+```
+
+## How It Works
+
+1. The `ActorEvent` derive macro registers each event type with an actor ID in a global registry.
+2. The `ActorEventBus` attribute macro looks up all the event types registered for the specified actor ID and generates the required code.
+
+This approach greatly reduces boilerplate code while maintaining type safety and performance.
+
+## Limitations
+
+- All event types must be defined and processed before the `ActorEventBus` macro is used.
+- The macro relies on a global state to keep track of registered events, which may cause issues in certain build scenarios.
+*/
+
 use once_cell::sync::Lazy;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
@@ -10,9 +69,26 @@ use syn::{
     Attribute, DeriveInput, Ident, LitStr, Token,
 };
 
-/// Custom parser for ActorEvent attribute arguments
+/// Parser for the `#[actor(actor = "...")]` attribute that accompanies the `ActorEvent` derive macro.
+///
+/// # Usage
+///
+/// ```rust
+/// #[derive(Debug, Clone, ActorEvent)]
+/// #[actor(actor = "blockchain_service")]
+/// pub struct MyEvent {
+///     // fields...
+/// }
+/// ```
+///
+/// The `actor` parameter specifies which actor this event is registered with.
+/// This is used by the `ActorEventBus` macro to automatically generate the appropriate
+/// event bus implementations. All events with the same actor ID will be included in the
+/// corresponding event bus provider.
 #[allow(dead_code)]
 struct ActorEventArgs {
+    /// The actor ID string (e.g., "blockchain_service") that this event is associated with.
+    /// This ID is used to register the event with a specific actor's event bus.
     actor: LitStr,
 }
 
@@ -34,8 +110,22 @@ impl Parse for ActorEventArgs {
     }
 }
 
-/// Custom parser for ActorEventBus attribute arguments
+/// Parser for the `#[ActorEventBus("...")]` attribute macro.
+///
+/// # Usage
+///
+/// ```rust
+/// #[ActorEventBus("blockchain_service")]
+/// pub struct BlockchainServiceEventBusProvider;
+/// ```
+///
+/// The string parameter is the actor ID that this event bus provider will handle.
+/// The macro will automatically find all event types that were registered with this actor ID
+/// using the `#[actor(actor = "...")]` attribute and generate the appropriate
+/// fields and implementations.
 struct ActorEventBusArgs {
+    /// The actor ID string (e.g., "blockchain_service") for which this provider will handle events.
+    /// All events registered with this ID will be included in the generated code.
     actor: LitStr,
 }
 
@@ -223,8 +313,30 @@ fn get_actor_id_from_attr(attr: &Attribute) -> Option<String> {
     Some(actor_id.to_string())
 }
 
-/// Derive macro for implementing EventBusMessage for event structs
-/// and registering them with a specific actor
+/// A derive macro for implementing `EventBusMessage` for event structs.
+///
+/// This macro automatically:
+/// - Implements `EventBusMessage` for the struct
+/// - Registers the event with the specified actor ID
+///
+/// # Usage
+///
+/// ```rust
+/// use shc_actors_derive::ActorEvent;
+///
+/// #[derive(Debug, Clone, ActorEvent)]
+/// #[actor(actor = "blockchain_service")]
+/// pub struct NewChallengeSeed {
+///     pub provider_id: String,
+///     pub tick: u32,
+///     pub seed: Vec<u8>,
+/// }
+/// ```
+///
+/// # Attributes
+///
+/// - `#[actor(actor = "actor_id")]`: Required. Specifies which actor this event is registered with.
+///   The `actor_id` is a string identifier for the actor.
 #[proc_macro_derive(ActorEvent, attributes(actor))]
 pub fn derive_actor_event(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -268,7 +380,30 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
     TokenStream::from(expanded)
 }
 
-/// Derive macro for generating the EventBusProvider struct for an actor
+/// An attribute macro for generating the event bus provider struct for an actor.
+///
+/// This macro automatically:
+/// - Adds fields for each event bus registered with the specified actor ID
+/// - Implements the `new()` method to initialize all event buses
+/// - Implements `ProvidesEventBus<T>` for each event type
+///
+/// # Usage
+///
+/// ```rust
+/// use shc_actors_derive::ActorEventBus;
+///
+/// #[ActorEventBus("blockchain_service")]
+/// pub struct BlockchainServiceEventBusProvider;
+/// ```
+///
+/// This will expand to include all the necessary fields and implementations for
+/// every event that was registered with the "blockchain_service" actor ID using
+/// the `ActorEvent` derive macro.
+///
+/// # Important Note
+///
+/// All event types must be defined and processed before this macro is used.
+/// The order of declaration in your code matters.
 #[allow(non_snake_case)]
 #[proc_macro_attribute]
 pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
