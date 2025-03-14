@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use crate::services::{
     download_state_store::DownloadStateStore,
+    file_download_manager::BucketDownloadError,
     handler::StorageHubHandler,
     types::{MspForestStorageHandlerT, ShNodeType},
 };
@@ -91,11 +92,11 @@ where
                 return Ok(());
             };
 
-        // For each pending bucket, directly use the file download manager
+        // For each pending bucket, try to resume its download
         for bucket_id in pending_buckets {
             info!(
                 target: LOG_TARGET,
-                "Resuming download for bucket {:?}", bucket_id
+                "Attempting to resume download for bucket {:?}", bucket_id
             );
 
             // Get connection to indexer DB
@@ -110,7 +111,24 @@ where
                 }
             };
 
-            // Get files for this bucket from indexer only to update BSP peer information
+            // Check if there are missing files for this bucket
+            let context = self.download_state_store.open_rw_context();
+            let missing_files = context.get_missing_files_for_bucket(&bucket_id);
+
+            if missing_files.is_empty() {
+                info!(
+                    target: LOG_TARGET,
+                    "No missing files found for bucket {:?}, marking as completed", bucket_id
+                );
+
+                // Mark as completed if no missing files in download state
+                context.mark_bucket_download_completed(&bucket_id);
+                context.commit();
+                continue;
+            }
+            context.commit();
+
+            // Get files for this bucket from indexer
             let indexer_files = match shc_indexer_db::models::File::get_by_onchain_bucket_id(
                 &mut indexer_connection,
                 bucket_id.as_ref().to_vec(),
@@ -128,23 +146,6 @@ where
                     Vec::new()
                 }
             };
-
-            // Get missing files from download state store
-            let context = self.download_state_store.open_rw_context();
-            let missing_files = context.get_missing_files_for_bucket(&bucket_id);
-
-            if missing_files.is_empty() {
-                info!(
-                    target: LOG_TARGET,
-                    "No missing files found for bucket {:?}, marking as completed", bucket_id
-                );
-
-                // Mark as completed if no missing files in download state
-                context.mark_bucket_download_completed(&bucket_id);
-                context.commit();
-                continue;
-            }
-            context.commit();
 
             // Register BSP peers from indexer files
             for file in &indexer_files {
@@ -188,52 +189,14 @@ where
                 file_metadatas.len(), bucket_id
             );
 
-            // Acquire a bucket semaphore permit to respect concurrency limits
-            let bucket_semaphore = self
-                .storage_hub_handler
-                .file_download_manager
-                .bucket_semaphore();
-            let permit = match tokio::time::timeout(
-                std::time::Duration::from_secs(10),
-                bucket_semaphore.acquire(),
-            )
-            .await
-            {
-                Ok(permit_result) => match permit_result {
-                    Ok(permit) => {
-                        info!(
-                            target: LOG_TARGET,
-                            "Acquired bucket semaphore permit for bucket {:?}", bucket_id
-                        );
-                        permit
-                    }
-                    Err(e) => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Failed to acquire bucket semaphore: {:?}", e
-                        );
-                        continue;
-                    }
-                },
-                Err(_) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Timed out waiting for bucket semaphore for bucket {:?}", bucket_id
-                    );
-                    continue;
-                }
-            };
-
-            // Create a _permit variable that drops at the end of scope, releasing the semaphore
-            let _permit = permit;
-
             let file_transfer_service = self.storage_hub_handler.file_transfer.clone();
             let file_storage = self.storage_hub_handler.file_storage.clone();
 
-            if let Err(e) = self
+            // Try to download the bucket using our new method with internal locking
+            match self
                 .storage_hub_handler
                 .file_download_manager
-                .download_bucket(
+                .try_lock_and_download_bucket(
                     bucket_id,
                     file_metadatas,
                     file_transfer_service,
@@ -241,16 +204,25 @@ where
                 )
                 .await
             {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to resume bucket download for {:?}: {:?}", bucket_id, e
-                );
-                // Note: We don't mark as completed here so it can be retried later
-            } else {
-                info!(
-                    target: LOG_TARGET,
-                    "Successfully resumed bucket download for {:?}", bucket_id
-                );
+                Ok(()) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "Successfully resumed bucket download for {:?}", bucket_id
+                    );
+                }
+                Err(BucketDownloadError::AlreadyBeingDownloaded(_)) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "Bucket {:?} is already being downloaded by another task", bucket_id
+                    );
+                }
+                Err(BucketDownloadError::DownloadFailed(e)) => {
+                    error!(
+                        target: LOG_TARGET,
+                        "Failed to resume bucket download for {:?}: {:?}", bucket_id, e
+                    );
+                    // Note: We don't mark as completed here so it can be retried later
+                }
             }
         }
 

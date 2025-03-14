@@ -170,14 +170,40 @@ where
             "Starting new download of bucket {:?}", event.bucket_id
         );
 
-        file_download_manager
-            .download_bucket(
+        // Use try_lock_and_download_bucket which handles locking internally
+        let download_result = file_download_manager
+            .try_lock_and_download_bucket(
                 event.bucket_id,
                 file_metadatas,
                 file_transfer_service,
                 self.storage_hub_handler.file_storage.clone(),
             )
-            .await?;
+            .await;
+
+        match download_result {
+            Ok(()) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Successfully downloaded bucket {:?}", event.bucket_id
+                );
+            }
+            Err(
+                crate::services::file_download_manager::BucketDownloadError::AlreadyBeingDownloaded(
+                    _,
+                ),
+            ) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Bucket {:?} is already being downloaded by another task", event.bucket_id
+                );
+            }
+            Err(crate::services::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to download bucket {:?}: {:?}", event.bucket_id, e
+                );
+            }
+        }
 
         // After download is complete, update status
         self.pending_bucket_id = None;

@@ -2,7 +2,13 @@ use anyhow::{anyhow, Result};
 use futures::future::join_all;
 use log::*;
 use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
-use std::{collections::HashSet, path::PathBuf, sync::Arc, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
+use thiserror::Error;
 use tokio::sync::{RwLock, Semaphore};
 
 use codec::Decode;
@@ -82,6 +88,40 @@ impl Clone for FileDownloadLimits {
     }
 }
 
+/// A bucket lock with metadata about its active status
+struct BucketLockInfo {
+    /// Whether this lock is currently actively downloading (has acquired the mutex)
+    is_downloading: bool,
+}
+
+impl BucketLockInfo {
+    fn new() -> Self {
+        Self {
+            is_downloading: false,
+        }
+    }
+
+    fn set_downloading(&mut self, is_downloading: bool) {
+        self.is_downloading = is_downloading;
+    }
+}
+
+/// Possible errors that can occur during bucket download
+#[derive(Error, Debug)]
+pub enum BucketDownloadError {
+    #[error("Bucket {0:?} is already being downloaded by another task")]
+    AlreadyBeingDownloaded(BucketId),
+
+    #[error("Failed to download bucket: {0}")]
+    DownloadFailed(anyhow::Error),
+}
+
+impl From<anyhow::Error> for BucketDownloadError {
+    fn from(error: anyhow::Error) -> Self {
+        BucketDownloadError::DownloadFailed(error)
+    }
+}
+
 /// Manages file downloads and operations with rate limiting
 ///
 /// # Parallelism Implementation
@@ -101,6 +141,11 @@ impl Clone for FileDownloadLimits {
 ///      - Selects peers (best performing + random)
 ///      - Tries each selected peer multiple times
 ///      - First successful download stops the retry process
+///
+/// 4. Bucket-Level Locking:
+///    - Per-bucket locks prevent multiple tasks from downloading the same bucket
+///    - Lock status tracked to avoid premature cleanup
+///    - Locks automatically expire after downloads complete
 pub struct FileDownloadManager {
     /// Configuration for download limits
     pub limits: FileDownloadLimits,
@@ -108,6 +153,8 @@ pub struct FileDownloadManager {
     file_semaphore: Arc<Semaphore>,
     /// Semaphore for controlling bucket-level parallelism
     bucket_semaphore: Arc<Semaphore>,
+    /// Per-bucket locks with status info to prevent concurrent downloads of the same bucket
+    bucket_locks: Arc<RwLock<HashMap<BucketId, BucketLockInfo>>>,
     /// BSP peer manager for tracking and selecting peers
     peer_manager: Arc<BspPeerManager>,
     /// Download state store for persistence
@@ -139,6 +186,7 @@ impl FileDownloadManager {
         Ok(Self {
             file_semaphore: Arc::new(Semaphore::new(limits.max_concurrent_file_downloads)),
             bucket_semaphore: Arc::new(Semaphore::new(limits.max_concurrent_bucket_downloads)),
+            bucket_locks: Arc::new(RwLock::new(HashMap::new())),
             limits,
             peer_manager,
             download_state_store,
@@ -148,11 +196,6 @@ impl FileDownloadManager {
     /// Get a reference to the file semaphore for file-level parallelism
     pub fn file_semaphore(&self) -> Arc<Semaphore> {
         Arc::clone(&self.file_semaphore)
-    }
-
-    /// Get a reference to the bucket semaphore for bucket-level parallelism
-    pub fn bucket_semaphore(&self) -> Arc<Semaphore> {
-        self.bucket_semaphore.clone()
     }
 
     /// Returns a reference to the download state store
@@ -612,11 +655,13 @@ impl FileDownloadManager {
         context.commit();
     }
 
-    /// Mark a bucket download as completed
-    pub fn mark_bucket_download_completed(&self, bucket_id: &BucketId) {
-        let context = self.download_state_store.open_rw_context();
-        context.mark_bucket_download_completed(bucket_id);
-        context.commit();
+    /// Mark a bucket lock as inactive
+    async fn mark_bucket_inactive(&self, bucket_id: &BucketId) {
+        let mut locks = self.bucket_locks.write().await;
+        if let Some(lock_info) = locks.get_mut(bucket_id) {
+            // Mark that the bucket is no longer actively downloading
+            lock_info.set_downloading(false);
+        }
     }
 
     /// Check if a bucket download is in progress
@@ -626,19 +671,46 @@ impl FileDownloadManager {
         result
     }
 
-    /// Download an entire bucket's files
-    /// This method accepts a list of file metadata objects rather than using a callback
-    pub async fn download_bucket<FS, FT>(
+    /// Attempt to lock a bucket and download its files
+    /// This method handles all locking internally and returns a specific error
+    /// if the bucket is already being downloaded
+    pub async fn try_lock_and_download_bucket<FS, FT>(
         &self,
         bucket_id: BucketId,
         file_metadatas: Vec<FileMetadata>,
         file_transfer: FT,
         file_storage: Arc<RwLock<FS>>,
-    ) -> Result<()>
+    ) -> Result<(), BucketDownloadError>
     where
         FT: FileTransferServiceInterface + Send + Sync + Clone + 'static,
         FS: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
     {
+        // Check if bucket is already being downloaded
+        {
+            let locks = self.bucket_locks.read().await;
+            if let Some(lock_info) = locks.get(&bucket_id) {
+                if lock_info.is_downloading {
+                    return Err(BucketDownloadError::AlreadyBeingDownloaded(bucket_id));
+                }
+            }
+        }
+
+        // Mark bucket as downloading
+        {
+            let mut locks = self.bucket_locks.write().await;
+            let lock_info = locks
+                .entry(bucket_id.clone())
+                .or_insert_with(BucketLockInfo::new);
+
+            // Check again in case it became downloading while we were waiting
+            if lock_info.is_downloading {
+                return Err(BucketDownloadError::AlreadyBeingDownloaded(bucket_id));
+            }
+
+            // Mark as downloading
+            lock_info.set_downloading(true);
+        }
+
         // Check if bucket download is already in progress
         if self.is_bucket_download_in_progress(&bucket_id) {
             info!(
@@ -654,32 +726,83 @@ impl FileDownloadManager {
         }
 
         // Acquire a bucket download permit
-        let _bucket_permit = self.bucket_semaphore.clone().acquire_owned().await?;
+        let _bucket_permit = match self.bucket_semaphore.clone().acquire_owned().await {
+            Ok(permit) => permit,
+            Err(e) => {
+                self.mark_bucket_inactive(&bucket_id).await;
+                return Err(anyhow!("Failed to acquire bucket semaphore: {:?}", e).into());
+            }
+        };
 
         info!(
             target: LOG_TARGET,
             "Downloading {} files for bucket {:?}", file_metadatas.len(), bucket_id
         );
 
-        // Download each file in the bucket
-        for file_metadata in file_metadatas {
-            self.download_file(
-                file_metadata.clone(),
-                bucket_id,
-                file_transfer.clone(),
-                Arc::clone(&file_storage),
-            )
-            .await?;
+        // Try to download all files in the bucket
+        let download_result = async {
+            // Process all files in parallel
+            let file_tasks: Vec<_> = file_metadatas
+                .into_iter()
+                .map(|file_metadata| {
+                    let file_transfer = file_transfer.clone();
+                    let file_storage = Arc::clone(&file_storage);
+                    let bucket_id = bucket_id.clone();
+                    let manager = self.clone();
+
+                    // Spawn a task for each file download
+                    tokio::spawn(async move {
+                        manager
+                            .download_file(file_metadata, bucket_id, file_transfer, file_storage)
+                            .await
+                    })
+                })
+                .collect();
+
+            // Wait for all file downloads to complete
+            let results = join_all(file_tasks).await;
+
+            // Process results and collect errors
+            let mut errors = Vec::new();
+            for (i, result) in results.into_iter().enumerate() {
+                match result {
+                    Ok(Ok(_)) => {} // Successfully downloaded
+                    Ok(Err(e)) => errors.push(format!("File {} download failed: {}", i, e)),
+                    Err(e) => errors.push(format!("File {} task panicked: {}", i, e)),
+                }
+            }
+
+            // If there were any errors, return an error with details
+            if !errors.is_empty() {
+                Err(anyhow!(
+                    "Failed to download some files: {}",
+                    errors.join(", ")
+                ))
+            } else {
+                Ok(())
+            }
         }
+        .await;
 
-        // Mark bucket download as completed
-        self.mark_bucket_download_completed(&bucket_id);
-        info!(
-            target: LOG_TARGET,
-            "Completed download of bucket {:?}", bucket_id
-        );
+        // Always mark the bucket inactive at the end
+        self.mark_bucket_inactive(&bucket_id).await;
 
-        Ok(())
+        // If download was successful, mark it as completed
+        if download_result.is_ok() {
+            // Update persistent state
+            let context = self.download_state_store.open_rw_context();
+            context.mark_bucket_download_completed(&bucket_id);
+            context.commit();
+
+            info!(
+                target: LOG_TARGET,
+                "Completed download of bucket {:?}", bucket_id
+            );
+            Ok(())
+        } else {
+            // Propagate the error
+            Err(download_result.unwrap_err().into())
+        }
     }
 }
 
@@ -689,6 +812,7 @@ impl Clone for FileDownloadManager {
             limits: self.limits.clone(),
             file_semaphore: Arc::clone(&self.file_semaphore),
             bucket_semaphore: Arc::clone(&self.bucket_semaphore),
+            bucket_locks: Arc::clone(&self.bucket_locks),
             peer_manager: Arc::clone(&self.peer_manager),
             download_state_store: Arc::clone(&self.download_state_store),
         }
