@@ -1,37 +1,38 @@
-use std::sync::Arc;
-
 use log::{debug, error, info, trace};
-use pallet_proofs_dealer_runtime_api::ProofsDealerApi;
-use pallet_proofs_dealer_runtime_api::{GetChallengePeriodError, GetChallengeSeedError};
+use std::sync::Arc;
+use tokio::sync::{oneshot::error::TryRecvError, Mutex};
+
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
 use sp_core::{Get, H256};
 use sp_runtime::traits::Zero;
-use storage_hub_runtime::RuntimeEvent;
-use tokio::sync::oneshot::error::TryRecvError;
 
+use pallet_proofs_dealer_runtime_api::{
+    GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
+};
 use shc_actors_framework::actor::Actor;
-use shc_common::consts::CURRENT_FOREST_KEY;
-use shc_common::types::{BlockNumber, MaxBatchConfirmStorageRequests};
+use shc_common::{
+    consts::CURRENT_FOREST_KEY,
+    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
+    types::{BlockNumber, MaxBatchConfirmStorageRequests},
+};
 use shc_forest_manager::traits::ForestStorageHandler;
-use tokio::sync::Mutex;
+use storage_hub_runtime::RuntimeEvent;
 
-use crate::events::{
-    BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring, FinalisedBucketMovedAway,
-    FinalisedTrieRemoveMutationsApplied, ForestWriteLockTaskData, MoveBucketAccepted,
-    MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, ProcessConfirmStoringRequest,
-    ProcessConfirmStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-    ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
-    ProcessSubmitProofRequestData,
-};
-use crate::state::{
-    OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
-};
-use crate::typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess};
 use crate::{
-    events::MultipleNewChallengeSeeds,
+    events::{
+        BspConfirmStoppedStoring, FinalisedBspConfirmStoppedStoring,
+        FinalisedTrieRemoveMutationsApplied, ForestWriteLockTaskData, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MultipleNewChallengeSeeds,
+        ProcessConfirmStoringRequest, ProcessConfirmStoringRequestData,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        ProcessSubmitProofRequest, ProcessSubmitProofRequestData,
+    },
     handler::{CHECK_FOR_PENDING_PROOFS_PERIOD, LOG_TARGET},
+    state::{
+        OngoingProcessConfirmStoringRequestCf, OngoingProcessStopStoringForInsolventUserRequestCf,
+    },
     types::ManagedProvider,
     BlockchainService,
 };
@@ -138,6 +139,18 @@ where
                     });
                 }
             }
+            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequested {
+                who: _,
+                bucket_id,
+                new_msp_id,
+                new_value_prop_id: _,
+            }) => {
+                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
+                self.emit(MoveBucketRequested {
+                    bucket_id,
+                    new_msp_id,
+                });
+            }
             // Ignore all other events.
             _ => {}
         }
@@ -182,38 +195,6 @@ where
                         file_key: file_key.into(),
                         new_root,
                     });
-                }
-            }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequested {
-                who: _,
-                bucket_id,
-                new_msp_id,
-                new_value_prop_id: _,
-            }) => {
-                // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
-                self.emit(MoveBucketRequested {
-                    bucket_id,
-                    new_msp_id,
-                });
-            }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
-                bucket_id,
-                old_msp_id,
-                new_msp_id,
-                value_prop_id: _,
-            }) => {
-                // This event is relevant in case the Provider managed is the old MSP,
-                // in which case we should clean up the bucket.
-                // Note: we do this in finality to ensure we don't lose data in case
-                // of a reorg.
-                if let Some(old_msp_id) = old_msp_id {
-                    if managed_bsp_id == &old_msp_id {
-                        self.emit(FinalisedBucketMovedAway {
-                            bucket_id,
-                            old_msp_id,
-                            new_msp_id,
-                        });
-                    }
                 }
             }
             // Ignore all other events.

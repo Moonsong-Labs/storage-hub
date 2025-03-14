@@ -32,6 +32,7 @@ rand = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 toml = { workspace = true }
+rocksdb = { workspace = true }
 
 # Local
 pallet-file-system = { workspace = true }
