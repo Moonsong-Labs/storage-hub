@@ -1167,7 +1167,7 @@ where
     {
         // If the node is running in maintenance mode, we don't process block imports.
         if self.maintenance_mode {
-            info!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping processing of block import notification: {:?}", notification);
+            trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping processing of block import notification: {:?}", notification);
             return;
         }
 
@@ -1411,7 +1411,7 @@ where
 
         // If the node is running in maintenance mode, we don't process finality notifications.
         if self.maintenance_mode {
-            info!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping finality notification #{}: {}", block_number, block_hash);
+            trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping finality notification #{}: {}", block_number, block_hash);
             return;
         }
 
