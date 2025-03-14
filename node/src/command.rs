@@ -35,6 +35,8 @@ pub struct ProviderOptions {
     pub extrinsic_retry_timeout: u64,
     /// MSP charging fees frequency.
     pub msp_charging_period: Option<u32>,
+    /// Whether the node is running in maintenance mode.
+    pub maintenance_mode: bool,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

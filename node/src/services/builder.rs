@@ -1,4 +1,5 @@
 use async_channel::Receiver;
+use log::*;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
 use shc_indexer_db::DbPool;
@@ -19,6 +20,7 @@ use shc_rpc::StorageHubClientRpcConfig;
 const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 60;
 
 use super::{
+    bsp_peer_manager::BspPeerManager,
     handler::{ProviderConfig, StorageHubHandler},
     types::{
         BspForestStorageHandlerT, BspProvider, InMemoryStorageLayer, MspForestStorageHandlerT,
@@ -47,6 +49,7 @@ where
     extrinsic_retry_timeout: u64,
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
+    peer_manager: Option<Arc<BspPeerManager>>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -66,6 +69,7 @@ where
             extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
             indexer_db_pool: None,
             notify_period: None,
+            peer_manager: None,
         }
     }
 
@@ -128,6 +132,7 @@ where
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
+        maintenance_mode: bool,
     ) -> &mut Self {
         if self.forest_storage_handler.is_none() {
             panic!(
@@ -153,6 +158,7 @@ where
             rocksdb_root_path,
             self.notify_period,
             capacity_config,
+            maintenance_mode,
         )
         .await;
 
@@ -166,6 +172,28 @@ where
     /// they are not storing, like which are the BSPs storing them.
     pub fn with_indexer_db_pool(&mut self, indexer_db_pool: Option<DbPool>) -> &mut Self {
         self.indexer_db_pool = indexer_db_pool;
+        self
+    }
+
+    /// Initialize the BSP peer manager for tracking peer performance
+    pub fn with_peer_manager(&mut self, rocks_db_path: PathBuf) -> &mut Self {
+        let mut peer_db_path = rocks_db_path;
+        peer_db_path.push("bsp_peer_manager");
+
+        // Create directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&peer_db_path) {
+            warn!(
+                "Failed to create directory for BSP peer manager at {:?}: {}. Will continue without peer manager.",
+                peer_db_path, e
+            );
+            return self;
+        }
+
+        let manager = BspPeerManager::new(peer_db_path)
+            .expect("Failed to initialize BSP peer manager. This is a critical component and the node cannot function without it.");
+
+        info!("Successfully initialized BSP peer manager");
+        self.peer_manager = Some(Arc::new(manager));
         self
     }
 
@@ -304,6 +332,7 @@ where
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
+            self.peer_manager.expect("Peer Manager not set"),
         )
     }
 }
@@ -340,6 +369,7 @@ where
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
+            self.peer_manager.expect("Peer Manager not set"),
         )
     }
 }
@@ -368,14 +398,16 @@ where
                 .as_ref()
                 .expect("File Storage not set.")
                 .clone(),
-            // Not used by the user role
-            <(UserRole, NoStorageLayer) as ShNodeType>::FSH::new(),
-            // Not used by the user role
+            self.forest_storage_handler
+                .as_ref()
+                .expect("Forest Storage Handler not set.")
+                .clone(),
             ProviderConfig {
-                capacity_config: CapacityConfig::new(0, 0),
+                capacity_config: self.capacity_config.expect("Capacity Config not set"),
                 extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             },
             self.indexer_db_pool.clone(),
+            self.peer_manager.expect("Peer Manager not set"),
         )
     }
 }

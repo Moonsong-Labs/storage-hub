@@ -272,6 +272,7 @@ async fn finish_sh_builder_and_run_tasks<R, S>(
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
     rocksdb_root_path: impl Into<PathBuf>,
+    maintenance_mode: bool,
 ) -> Result<(), sc_service::Error>
 where
     R: ShRole,
@@ -280,15 +281,21 @@ where
     StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
     StorageHubHandler<(R, S)>: RunnableTasks,
 {
+    let rocks_db_path = rocksdb_root_path.into();
+
     // Spawn the Blockchain Service if node is running as a Storage Provider
     sh_builder
         .with_blockchain(
             client.clone(),
             keystore.clone(),
             Arc::new(rpc_handlers),
-            rocksdb_root_path,
+            rocks_db_path.clone(),
+            maintenance_mode,
         )
         .await;
+
+    // Initialize the BSP peer manager
+    sh_builder.with_peer_manager(rocks_db_path.clone());
 
     // Build the StorageHubHandler
     let mut sh_handler = sh_builder.build();
@@ -318,6 +325,23 @@ where
 {
     use async_io::Timer;
     use sc_consensus_manual_seal::{run_manual_seal, EngineCommand, ManualSealParams};
+
+    // Check if we're in maintenance mode and build the dev node in maintenance mode if so
+    let maintenance_mode = provider_options
+        .as_ref()
+        .map_or(false, |opts| opts.maintenance_mode);
+    if maintenance_mode {
+        log::info!("🛠️  Running dev node in maintenance mode");
+        log::info!("🛠️  Network participation is disabled");
+        log::info!("🛠️  Only storage management RPC methods are available");
+        return start_dev_in_maintenance_mode::<R, S, Network>(
+            config,
+            provider_options,
+            indexer_config,
+            hwbench,
+        )
+        .await;
+    }
 
     let sc_service::PartialComponents {
         client,
@@ -530,6 +554,7 @@ where
             rpc_handlers,
             keystore.clone(),
             base_path,
+            maintenance_mode,
         )
         .await?;
     }
@@ -696,6 +721,195 @@ where
     Ok(task_manager)
 }
 
+async fn start_dev_in_maintenance_mode<R, S, Network>(
+    config: Configuration,
+    provider_options: Option<ProviderOptions>,
+    indexer_config: IndexerConfigurations,
+    hwbench: Option<sc_sysinfo::HwBench>,
+) -> sc_service::error::Result<TaskManager>
+where
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType,
+    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
+    StorageHubHandler<(R, S)>: RunnableTasks,
+    Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
+{
+    let sc_service::PartialComponents {
+        client,
+        backend,
+        mut task_manager,
+        import_queue,
+        keystore_container,
+        select_chain: _maybe_select_chain,
+        transaction_pool,
+        other: (_, mut telemetry, _),
+    } = new_partial(&config, true)?;
+
+    let maybe_database_url = indexer_config
+        .database_url
+        .clone()
+        .or(env::var("DATABASE_URL").ok());
+
+    let maybe_db_pool = if let Some(database_url) = maybe_database_url {
+        Some(
+            shc_indexer_db::setup_db_pool(database_url)
+                .await
+                .map_err(|e| sc_service::Error::Application(Box::new(e)))?,
+        )
+    } else {
+        None
+    };
+
+    if indexer_config.indexer {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
+        spawn_indexer_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+    }
+
+    let signing_dev_key = config
+        .dev_key_seed
+        .clone()
+        .expect("Dev key seed must be present in dev mode.");
+    let keystore = keystore_container.keystore();
+
+    // Initialise seed for signing transactions using blockchain service.
+    // In dev mode we use a well known dev account.
+    keystore
+        .sr25519_generate_new(BCSV_KEY_TYPE, Some(signing_dev_key.as_ref()))
+        .expect("Invalid dev signing key provided.");
+
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
+        &config.network,
+        config
+            .prometheus_config
+            .as_ref()
+            .map(|cfg| cfg.registry.clone()),
+    );
+
+    // If we are a provider we update the network configuration with the file transfer protocol.
+    let mut file_transfer_request_protocol = None;
+    if provider_options.is_some() {
+        file_transfer_request_protocol = Some(configure_file_transfer_network(
+            client.clone(),
+            &config,
+            &mut net_config,
+        ));
+    }
+
+    let metrics = Network::register_notification_metrics(
+        config.prometheus_config.as_ref().map(|cfg| &cfg.registry),
+    );
+
+    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+        sc_service::build_network(sc_service::BuildNetworkParams {
+            config: &config,
+            net_config,
+            client: client.clone(),
+            transaction_pool: transaction_pool.clone(),
+            spawn_handle: task_manager.spawn_handle(),
+            import_queue,
+            block_announce_validator_builder: None,
+            warp_sync_config: None,
+            block_relay: None,
+            metrics,
+        })?;
+
+    // No offchain workers in maintenance mode - intentionally omitted
+
+    // Create command_sink for RPC
+    let (command_sink, _) = futures::channel::mpsc::channel(1000);
+
+    // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
+    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
+        &provider_options,
+        &task_manager,
+        file_transfer_request_protocol,
+        network.clone(),
+        keystore.clone(),
+        maybe_db_pool,
+    )
+    .await
+    {
+        Some((shb, rpc)) => (Some(shb), Some(rpc)),
+        None => (None, None),
+    };
+
+    let rpc_builder = {
+        let client = client.clone();
+        let transaction_pool = transaction_pool.clone();
+
+        Box::new(move |_| {
+            let deps = crate::rpc::FullDeps {
+                client: client.clone(),
+                pool: transaction_pool.clone(),
+                maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
+                command_sink: Some(command_sink.clone()),
+            };
+
+            crate::rpc::create_full(deps).map_err(Into::into)
+        })
+    };
+
+    let base_path = config.base_path.path().to_path_buf().clone();
+
+    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+        rpc_builder,
+        client: client.clone(),
+        transaction_pool: transaction_pool.clone(),
+        task_manager: &mut task_manager,
+        config,
+        keystore: keystore.clone(),
+        backend: backend.clone(),
+        network: network.clone(),
+        sync_service: sync_service.clone(),
+        system_rpc_tx,
+        tx_handler_controller,
+        telemetry: telemetry.as_mut(),
+    })?;
+
+    // Finish building the StorageHubBuilder if node is running as a Storage Provider.
+    if let Some(_) = provider_options {
+        finish_sh_builder_and_run_tasks(
+            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            client.clone(),
+            rpc_handlers,
+            keystore.clone(),
+            base_path,
+            true,
+        )
+        .await?;
+    }
+
+    if let Some(hwbench) = hwbench {
+        sc_sysinfo::print_hwbench(&hwbench);
+
+        if let Some(ref mut telemetry) = telemetry {
+            let telemetry_handle = telemetry.handle();
+            task_manager.spawn_handle().spawn(
+                "telemetry_hwbench",
+                None,
+                sc_sysinfo::initialize_hwbench_telemetry(telemetry_handle, hwbench),
+            );
+        }
+    }
+
+    // In maintenance mode, we intentionally don't start the manual sealing process
+    // This means no block production will occur
+    log::info!("🛠️  Dev node started in maintenance mode - block production is disabled");
+    log::info!("🛠️  Manual sealing is disabled");
+    log::info!("🛠️  Only RPC functionality is available");
+
+    network_starter.start_network();
+    Ok(task_manager)
+}
+
 /// Start a node with the given parachain `Configuration` and relay chain `Configuration`.
 ///
 /// This is the actual implementation that is abstract over the executor and the runtime api.
@@ -716,6 +930,26 @@ where
     StorageHubHandler<(R, S)>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
+    // Check if we're in maintenance mode and build the node in maintenance mode if so
+    let maintenance_mode = provider_options
+        .as_ref()
+        .map_or(false, |opts| opts.maintenance_mode);
+    if maintenance_mode {
+        log::info!("🛠️  Running dev node in maintenance mode");
+        log::info!("🛠️  Network participation is disabled");
+        log::info!("🛠️  Only storage management RPC methods are available");
+        return start_node_in_maintenance_mode::<R, S, Network>(
+            parachain_config,
+            polkadot_config,
+            collator_options,
+            provider_options,
+            indexer_config,
+            para_id,
+            hwbench,
+        )
+        .await;
+    }
+
     let parachain_config = prepare_node_config(parachain_config);
 
     let params = new_partial(&parachain_config, false)?;
@@ -879,6 +1113,7 @@ where
             rpc_handlers,
             keystore.clone(),
             base_path,
+            maintenance_mode,
         )
         .await?;
     }
@@ -956,6 +1191,195 @@ where
     }
 
     network_starter.start_network();
+
+    Ok((task_manager, client))
+}
+
+async fn start_node_in_maintenance_mode<R, S, Network>(
+    parachain_config: Configuration,
+    polkadot_config: Configuration,
+    collator_options: CollatorOptions,
+    provider_options: Option<ProviderOptions>,
+    indexer_config: IndexerConfigurations,
+    para_id: ParaId,
+    hwbench: Option<sc_sysinfo::HwBench>,
+) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
+where
+    R: ShRole,
+    S: ShStorageLayer,
+    (R, S): ShNodeType,
+    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
+    StorageHubHandler<(R, S)>: RunnableTasks,
+    Network: NetworkBackend<OpaqueBlock, BlockHash>,
+{
+    let parachain_config = prepare_node_config(parachain_config);
+
+    let params = new_partial(&parachain_config, false)?;
+    let (_block_import, mut telemetry, telemetry_worker_handle) = params.other;
+
+    // Create network configuration
+    let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, Network>::new(
+        &parachain_config.network,
+        parachain_config
+            .prometheus_config
+            .as_ref()
+            .map(|cfg| cfg.registry.clone()),
+    );
+
+    let client = params.client.clone();
+    let backend = params.backend.clone();
+    let mut task_manager = params.task_manager;
+    let keystore = params.keystore_container.keystore();
+
+    let maybe_database_url = indexer_config
+        .database_url
+        .clone()
+        .or(env::var("DATABASE_URL").ok());
+
+    let maybe_db_pool = if let Some(database_url) = maybe_database_url {
+        Some(
+            shc_indexer_db::setup_db_pool(database_url)
+                .await
+                .map_err(|e| sc_service::Error::Application(Box::new(e)))?,
+        )
+    } else {
+        None
+    };
+
+    if indexer_config.indexer {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
+        spawn_indexer_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+    }
+
+    // If we are a provider we update the network configuration with the file transfer protocol.
+    let mut file_transfer_request_protocol = None;
+    if provider_options.is_some() {
+        file_transfer_request_protocol = Some(configure_file_transfer_network(
+            client.clone(),
+            &parachain_config,
+            &mut net_config,
+        ));
+    }
+
+    // Create relay chain interface
+    let (relay_chain_interface, _collator_key) = build_relay_chain_interface(
+        polkadot_config,
+        &parachain_config,
+        telemetry_worker_handle,
+        &mut task_manager,
+        collator_options.clone(),
+        hwbench.clone(),
+    )
+    .await
+    .map_err(|e| sc_service::Error::Application(Box::new(e)))?;
+
+    let transaction_pool = params.transaction_pool.clone();
+
+    let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+        build_network(BuildNetworkParams {
+            parachain_config: &parachain_config,
+            net_config,
+            client: client.clone(),
+            transaction_pool: transaction_pool.clone(),
+            para_id,
+            spawn_handle: task_manager.spawn_handle(),
+            relay_chain_interface: relay_chain_interface.clone(),
+            import_queue: params.import_queue,
+            sybil_resistance_level: CollatorSybilResistance::Resistant, // because of Aura
+        })
+        .await?;
+
+    // No need for offchain workers in maintenance mode
+
+    // If node is running as a Storage Provider, start building the StorageHubHandler using the StorageHubBuilder.
+    let (sh_builder, maybe_storage_hub_client_rpc_config) = match init_sh_builder::<R, S>(
+        &provider_options,
+        &task_manager,
+        file_transfer_request_protocol,
+        network.clone(),
+        keystore.clone(),
+        maybe_db_pool,
+    )
+    .await
+    {
+        Some((shb, rpc)) => (Some(shb), Some(rpc)),
+        None => (None, None),
+    };
+
+    let rpc_builder = {
+        let client = client.clone();
+        let transaction_pool = transaction_pool.clone();
+
+        Box::new(move |_| {
+            let deps = crate::rpc::FullDeps {
+                client: client.clone(),
+                pool: transaction_pool.clone(),
+                maybe_storage_hub_client_config: maybe_storage_hub_client_rpc_config.clone(),
+                command_sink: None,
+            };
+
+            crate::rpc::create_full(deps).map_err(Into::into)
+        })
+    };
+
+    let base_path = parachain_config.base_path.path().to_path_buf().clone();
+
+    let rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
+        rpc_builder,
+        client: client.clone(),
+        transaction_pool: transaction_pool.clone(),
+        task_manager: &mut task_manager,
+        config: parachain_config,
+        keystore: keystore.clone(),
+        backend: backend.clone(),
+        network: network.clone(),
+        sync_service: sync_service.clone(),
+        system_rpc_tx,
+        tx_handler_controller,
+        telemetry: telemetry.as_mut(),
+    })?;
+
+    // Finish building the StorageHubBuilder if node is running as a Storage Provider.
+    if let Some(_) = provider_options {
+        finish_sh_builder_and_run_tasks(
+            sh_builder.expect("StorageHubBuilder should already be initialised."),
+            client.clone(),
+            rpc_handlers,
+            keystore.clone(),
+            base_path,
+            true,
+        )
+        .await?;
+    }
+
+    if let Some(hwbench) = hwbench {
+        sc_sysinfo::print_hwbench(&hwbench);
+
+        if let Some(ref mut telemetry) = telemetry {
+            let telemetry_handle = telemetry.handle();
+            task_manager.spawn_handle().spawn(
+                "telemetry_hwbench",
+                None,
+                sc_sysinfo::initialize_hwbench_telemetry(telemetry_handle, hwbench),
+            );
+        }
+    }
+
+    // In maintenance mode, we don't need the relay chain tasks
+    log::info!("🛠️  Skipping relay chain tasks initialization in maintenance mode");
+    log::info!("🛠️  Block import and relay chain sync are disabled");
+
+    // We still need to start the network to allow RPC connections
+    network_starter.start_network();
+
+    log::info!("🛠️  Node started in maintenance mode - only RPC functionality is available");
 
     Ok((task_manager, client))
 }

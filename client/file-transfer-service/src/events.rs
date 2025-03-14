@@ -42,5 +42,12 @@ pub struct RemoteDownloadRequest {
     pub request_id: DownloadRequestId,
 }
 
+/// Event triggered to retry pending bucket move downloads.
+/// This is emitted on startup and will be periodically emitted later to ensure
+/// any interrupted downloads can be resumed.
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "file_transfer_service")]
+pub struct RetryBucketMoveDownload;
+
 #[ActorEventBus("file_transfer_service")]
 pub struct FileTransferServiceEventBusProvider;
