@@ -64,6 +64,10 @@ pub enum BlockchainServiceCommand {
         block_number: BlockNumber,
         callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
     },
+    WaitForNumBlocks {
+        number_of_blocks: BlockNumber,
+        callback: tokio::sync::oneshot::Sender<tokio::sync::oneshot::Receiver<()>>,
+    },
     WaitForTick {
         tick_number: TickNumber,
         callback:
@@ -238,6 +242,9 @@ pub trait BlockchainServiceInterface {
 
     /// Wait for a block number.
     async fn wait_for_block(&self, block_number: BlockNumber) -> Result<()>;
+
+    /// Wait for a number blocks to pass.
+    async fn wait_for_num_blocks(&self, number_of_blocks: BlockNumber) -> Result<()>;
 
     /// Wait for a tick number.
     async fn wait_for_tick(&self, tick_number: TickNumber) -> Result<(), ApiError>;
@@ -479,6 +486,19 @@ where
         // Build command to send to blockchain service.
         let message = BlockchainServiceCommand::WaitForBlock {
             block_number,
+            callback,
+        };
+        self.send(message).await;
+        let rx = rx.await.expect("Failed to receive response from BlockchainService. Probably means BlockchainService has crashed.");
+        rx.await.expect("Failed to wait for block");
+        Ok(())
+    }
+
+    async fn wait_for_num_blocks(&self, number_of_blocks: BlockNumber) -> Result<()> {
+        let (callback, rx) = tokio::sync::oneshot::channel();
+        // Build command to send to blockchain service.
+        let message = BlockchainServiceCommand::WaitForNumBlocks {
+            number_of_blocks,
             callback,
         };
         self.send(message).await;

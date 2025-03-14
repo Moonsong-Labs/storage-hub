@@ -352,6 +352,28 @@ where
                         }
                     }
                 }
+                BlockchainServiceCommand::WaitForNumBlocks {
+                    number_of_blocks,
+                    callback,
+                } => {
+                    let current_block_number = self.client.info().best_number;
+
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+
+                    self.wait_for_block_request_by_number
+                        .entry(current_block_number + number_of_blocks)
+                        .or_insert_with(Vec::new)
+                        .push(tx);
+
+                    match callback.send(rx) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Block message receiver sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send block message receiver: {:?}", e);
+                        }
+                    }
+                }
                 BlockchainServiceCommand::WaitForTick {
                     tick_number,
                     callback,
@@ -1264,12 +1286,12 @@ where
         state_store_context.commit();
 
         // Initialise the Provider.
-        match self.maybe_managed_provider {
+        match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
                 self.bsp_initial_sync();
             }
-            Some(ManagedProvider::Msp(_)) => {
-                self.msp_initial_sync();
+            Some(ManagedProvider::Msp(msp_handler)) => {
+                self.msp_initial_sync(block_hash, msp_handler.msp_id);
             }
             None => {
                 warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");

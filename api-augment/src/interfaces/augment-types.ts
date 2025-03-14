@@ -1366,6 +1366,7 @@ import type {
   ShouldRemoveFile,
   StorageDataUnit,
   StorageProviderId,
+  StorageRequestMetadata,
   TrieRemoveMutation,
   ValuePropId,
   ValueProposition,
@@ -2493,6 +2494,7 @@ declare module "@polkadot/types/types/registry" {
     StorageMetadataV9: StorageMetadataV9;
     StorageProof: StorageProof;
     StorageProviderId: StorageProviderId;
+    StorageRequestMetadata: StorageRequestMetadata;
     StoredPendingChange: StoredPendingChange;
     StoredState: StoredState;
     StrikeCount: StrikeCount;

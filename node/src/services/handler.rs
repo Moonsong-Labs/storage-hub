@@ -191,10 +191,14 @@ where
         let user_sends_file_task = UserSendsFileTask::new(self.clone());
 
         // Subscribing to NewStorageRequest event from the BlockchainService.
+        // NewStorageRequest event can be used by the user to spam, by spamming the network with new
+        // storage requests. To prevent this from affecting a BSP node, we make this event NOT
+        // critical. This means that if used to spam, some of those spam NewStorageRequest events
+        // will be dropped.
         let new_storage_request_event_bus_listener: EventBusListener<NewStorageRequest, _> =
             user_sends_file_task
                 .clone()
-                .subscribe_to(&self.task_spawner, &self.blockchain, true);
+                .subscribe_to(&self.task_spawner, &self.blockchain, false);
         new_storage_request_event_bus_listener.start();
 
         let accepted_bsp_volunteer_event_bus_listener: EventBusListener<AcceptedBspVolunteer, _> =

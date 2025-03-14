@@ -1,4 +1,5 @@
-use log::{debug, error, info, trace};
+use log::{debug, error, info, trace, warn};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
@@ -12,7 +13,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
 use shc_common::{
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BlockHash, BlockNumber},
+    types::{BlockHash, BlockNumber, Fingerprint, ProviderId, StorageRequestMetadata},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use storage_hub_runtime::RuntimeEvent;
@@ -21,10 +22,11 @@ use crate::{
     events::{
         FileDeletionRequest, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
         FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
-        ForestWriteLockTaskData, MoveBucketRequestedForMsp, ProcessFileDeletionRequest,
-        ProcessFileDeletionRequestData, ProcessMspRespondStoringRequest,
-        ProcessMspRespondStoringRequestData, ProcessStopStoringForInsolventUserRequest,
-        ProcessStopStoringForInsolventUserRequestData, StartMovedBucketDownload,
+        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
+        ProcessFileDeletionRequest, ProcessFileDeletionRequestData,
+        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
+        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
+        StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
     state::{
@@ -46,9 +48,43 @@ where
     ///
     /// Steps:
     /// TODO
-    pub(crate) fn msp_initial_sync(&self) {
+    pub(crate) fn msp_initial_sync(&self, block_hash: H256, msp_id: ProviderId) {
         // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
         // TODO: Catch up to Forest root writes in the Bucket's Forests.
+
+        info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
+
+        let storage_requests: BTreeMap<H256, StorageRequestMetadata> = match self
+            .client
+            .runtime_api()
+            .pending_storage_requests_by_msp(block_hash, msp_id)
+        {
+            Ok(sr) => sr,
+            Err(_) => {
+                // If querying for pending storage requests fail, do not try to answer them
+                warn!(target: LOG_TARGET, "Failed to get pending storage request");
+                return;
+            }
+        };
+
+        info!(
+            "We have {} pending storage requests",
+            storage_requests.len()
+        );
+
+        // loop over each pending storage requests to start a new storage request task for the MSP
+        for (file_key, sr) in storage_requests {
+            self.emit(NewStorageRequest {
+                who: sr.owner,
+                file_key: file_key.into(),
+                bucket_id: sr.bucket_id,
+                location: sr.location,
+                fingerprint: Fingerprint::from(sr.fingerprint.as_bytes()),
+                size: sr.size,
+                user_peer_ids: sr.user_peer_ids,
+                expires_at: sr.expires_at,
+            })
+        }
     }
 
     /// Initialises the block processing flow for a MSP.
