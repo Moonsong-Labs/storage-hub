@@ -11,6 +11,7 @@ pub mod utils;
 
 use std::{path::PathBuf, sync::Arc};
 
+use handler::BlockchainServiceConfig;
 use sc_service::RpcHandlers;
 use sp_keystore::KeystorePtr;
 
@@ -22,6 +23,7 @@ pub use self::handler::BlockchainService;
 
 pub async fn spawn_blockchain_service<FSH>(
     task_spawner: &TaskSpawner,
+    config: BlockchainServiceConfig,
     client: Arc<ParachainClient>,
     keystore: KeystorePtr,
     rpc_handlers: Arc<RpcHandlers>,
@@ -39,6 +41,7 @@ where
         .with_group("network");
 
     let blockchain_service = BlockchainService::<FSH>::new(
+        config,
         client,
         keystore,
         rpc_handlers,

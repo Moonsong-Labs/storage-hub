@@ -12,7 +12,7 @@ use shc_blockchain_service::{
     events::{
         FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
     },
-    types::{RetryStrategy, SubmitProofRequest, WatchTransactionError},
+    types::{RetryStrategy, SendExtrinsicOptions, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
 };
 use shc_common::{
@@ -30,7 +30,21 @@ use crate::services::{
 };
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
-const MAX_PROOF_SUBMISSION_ATTEMPTS: u32 = 3;
+
+/// Configuration for the BspSubmitProofTask
+#[derive(Debug, Clone)]
+pub struct BspSubmitProofConfig {
+    /// Maximum number of attempts to submit a proof
+    pub max_submission_attempts: u32,
+}
+
+impl Default for BspSubmitProofConfig {
+    fn default() -> Self {
+        Self {
+            max_submission_attempts: 5, // Default value that was in command.rs
+        }
+    }
+}
 
 /// BSP Submit Proof Task: Handles the submission of proof for BSP (Backup Storage Provider) to the runtime.
 ///
@@ -63,6 +77,8 @@ where
     NT::FSH: BspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
+    /// Configuration for this task
+    config: BspSubmitProofConfig,
 }
 
 impl<NT> Clone for BspSubmitProofTask<NT>
@@ -73,6 +89,7 @@ where
     fn clone(&self) -> BspSubmitProofTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -84,7 +101,8 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
+            config: storage_hub_handler.provider_config.bsp_submit_proof.clone(),
         }
     }
 }
@@ -292,14 +310,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
-                    .with_max_retries(MAX_PROOF_SUBMISSION_ATTEMPTS)
+                    .with_max_retries(self.config.max_submission_attempts)
                     .with_max_tip(max_tip as f64)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .extrinsic_retry_timeout,
-                    ))
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )
