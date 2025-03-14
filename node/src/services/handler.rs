@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use shc_actors_derive::subscribe_actor_event;
+use shc_actors_derive::{subscribe_actor_event, subscribe_actor_event_map};
 use shc_actors_framework::{
     actor::{ActorHandle, TaskSpawner},
     event_bus::EventHandler,
@@ -170,23 +170,17 @@ where
         // storage requests. To prevent this from affecting a BSP node, we make this event NOT
         // critical. This means that if used to spam, some of those spam NewStorageRequest events
         // will be dropped.
-        subscribe_actor_event!(
-            event: NewStorageRequest,
-            task: UserSendsFileTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: false,
-        );
-
         // Subscribing to AcceptedBspVolunteer event from the BlockchainService.
-        subscribe_actor_event!(
-            event: AcceptedBspVolunteer,
-            task: UserSendsFileTask,
+        subscribe_actor_event_map!(
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
+            [
+                // Override critical for NewStorageRequest to make it non-critical
+                NewStorageRequest => { task: UserSendsFileTask, critical: false },
+                AcceptedBspVolunteer => UserSendsFileTask,
+            ]
         );
     }
 }
@@ -203,16 +197,8 @@ where
         // an upcoming RemoteUploadRequest events, which happens when the user connects to the MSP and submits chunks of the file,
         // along with a proof of storage, which is then queued to batch accept many storage requests at once.
         // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
-        // Subscribing to NewStorageRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: NewStorageRequest,
-            task: MspUploadFileTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to RemoteUploadRequest event from the FileTransferService.
+
+        // RemoteUploadRequest comes from FileTransferService and requires a separate service parameter
         subscribe_actor_event!(
             event: RemoteUploadRequest,
             task: MspUploadFileTask,
@@ -221,116 +207,28 @@ where
             context: self.clone(),
             critical: false,
         );
-        // Subscribing to ProcessMspRespondStoringRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: ProcessMspRespondStoringRequest,
-            task: MspUploadFileTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
 
-        // Task that handles bucket deletion (both move and stop storing)
-        // Subscribing to FinalisedMspStoppedStoringBucket event
-        subscribe_actor_event!(
-            event: FinalisedMspStoppedStoringBucket,
-            task: MspDeleteBucketTask,
+        subscribe_actor_event_map!(
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
-        );
-        // Subscribing to FinalisedBucketMovedAway event
-        subscribe_actor_event!(
-            event: FinalisedBucketMovedAway,
-            task: MspDeleteBucketTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // MspDeleteFileTask handles events for deleting individual files from an MSP.
-        // Subscribing to FileDeletionRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: FileDeletionRequest,
-            task: MspDeleteFileTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to ProcessFileDeletionRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: ProcessFileDeletionRequest,
-            task: MspDeleteFileTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to FinalisedProofSubmittedForPendingFileDeletionRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: FinalisedProofSubmittedForPendingFileDeletionRequest,
-            task: MspDeleteFileTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // MspMoveBucketTask handles events for moving buckets to a new MSP.
-        // Subscribing to MoveBucketRequestedForNewMsp event from the FileTransferService.
-        subscribe_actor_event!(
-            event: MoveBucketRequestedForMsp,
-            task: MspRespondMoveBucketTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // MspDownloadMovedBucketTask handles downloading files after a bucket move is confirmed.
-        // Subscribing to StartMovedBucketDownload event from the BlockchainService.
-        subscribe_actor_event!(
-            event: StartMovedBucketDownload,
-            task: MspRespondMoveBucketTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
-        // Subscribing to UserInsolvent event from the BlockchainService to delete all stored buckets owned by a
-        // user that has been declared as without funds.
-        subscribe_actor_event!(
-            event: UserWithoutFunds,
-            task: MspStopStoringInsolventUserTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to FinalisedMspStopStoringBucketInsolventUser event from the BlockchainService.
-        subscribe_actor_event!(
-            event: FinalisedMspStopStoringBucketInsolventUser,
-            task: MspStopStoringInsolventUserTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // Subscribing to NotifyPeriod event from the BlockchainService.
-        subscribe_actor_event!(
-            event: NotifyPeriod,
-            task: MspChargeFeesTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
+            [
+                // MspDeleteFileTask handles events for deleting individual files from an MSP.
+                FileDeletionRequest => MspDeleteFileTask,
+                ProcessFileDeletionRequest => MspDeleteFileTask,
+                FinalisedProofSubmittedForPendingFileDeletionRequest => MspDeleteFileTask,
+                FinalisedBucketMovedAway => MspDeleteBucketTask,
+                FinalisedMspStoppedStoringBucket => MspDeleteBucketTask,
+                NewStorageRequest => MspUploadFileTask,
+                ProcessMspRespondStoringRequest => MspUploadFileTask,
+                MoveBucketRequestedForMsp => MspRespondMoveBucketTask,
+                StartMovedBucketDownload => MspRespondMoveBucketTask,
+                // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
+                UserWithoutFunds => MspStopStoringInsolventUserTask,
+                FinalisedMspStopStoringBucketInsolventUser => MspStopStoringInsolventUserTask,
+                NotifyPeriod => MspChargeFeesTask,
+            ]
         );
     }
 }
@@ -361,169 +259,55 @@ where
         // happens when the user, now aware of the BSP volunteering, submits chunks of the file,
         // along with a proof of storage.
 
-        // Subscribing to NewStorageRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: NewStorageRequest,
-            task: BspUploadFileTask,
+        // Subscribing tasks to events from the BlockchainService.
+        subscribe_actor_event_map!(
             service: &self.blockchain,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
+            [
+                NewStorageRequest => BspUploadFileTask,
+                ProcessConfirmStoringRequest => BspUploadFileTask,
+                // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
+                // It responds by computing challenges derived from the seeds, taking also into account
+                // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.
+                // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
+                // BlockchainService when it is time to actually submit the proof of storage.
+                // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
+                MultipleNewChallengeSeeds => BspSubmitProofTask,
+                ProcessSubmitProofRequest => BspSubmitProofTask,
+                // Slash your own kin or potentially commit seppuku on your own stake.
+                // Running this is as a BSP is very honourable and shows a great sense of justice.
+                SlashableProvider => SlashProviderTask,
+                // Collect debt from users after a BSP proof is accepted.
+                LastChargeableInfoUpdated => BspChargeFeesTask,
+                ProcessStopStoringForInsolventUserRequest => BspChargeFeesTask,
+                // Start deletion process for stored files owned by a user that has been declared as without funds and charge
+                // its payment stream afterwards, getting the owed tokens and deleting it.
+                UserWithoutFunds => BspChargeFeesTask,
+                // Continue deletion process for stored files owned by a user that has been declared as without funds.
+                // Once the last file has been deleted, get the owed tokens and delete the payment stream.
+                SpStopStoringInsolventUser => BspChargeFeesTask,
+                // BspMoveBucketTask handles events for moving buckets to a new MSP.
+                MoveBucketRequested => BspMoveBucketTask,
+                MoveBucketAccepted => BspMoveBucketTask,
+                MoveBucketRejected => BspMoveBucketTask,
+                MoveBucketExpired => BspMoveBucketTask,
+                // Task that listen for `FinalisedBspConfirmStoppedStoring` to delete file
+                FinalisedBspConfirmStoppedStoring => BspDeleteFileTask,
+            ]
         );
-        // Subscribing to RemoteUploadRequest event from the FileTransferService.
-        subscribe_actor_event!(
-            event: RemoteUploadRequest,
-            task: BspUploadFileTask,
+
+        // Subscribing tasks to events from the FileTransferService.
+        subscribe_actor_event_map!(
             service: &self.file_transfer,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: false,
-        );
-        // Subscribing to ProcessConfirmStoringRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: ProcessConfirmStoringRequest,
-            task: BspUploadFileTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // Subscribing to RemoteDownloadRequest event from the FileTransferService.
-        subscribe_actor_event!(
-            event: RemoteDownloadRequest,
-            task: BspDownloadFileTask,
-            service: &self.file_transfer,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: false,
-        );
-
-        // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
-        // It responds by computing challenges derived from the seeds, taking also into account
-        // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.
-        // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
-        // BlockchainService when it is time to actually submit the proof of storage.
-        // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
-
-        // Subscribing to MultipleNewChallengeSeeds event from the BlockchainService.
-        subscribe_actor_event!(
-            event: MultipleNewChallengeSeeds,
-            task: BspSubmitProofTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to ProcessSubmitProofRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: ProcessSubmitProofRequest,
-            task: BspSubmitProofTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // Slash your own kin or potentially commit seppuku on your own stake.
-        // Running this is as a BSP is very honourable and shows a great sense of justice.
-
-        // Subscribing to SlashableProvider event from the BlockchainService.
-        subscribe_actor_event!(
-            event: SlashableProvider,
-            task: SlashProviderTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // Collect debt from users after a BSP proof is accepted.
-        // Subscribing to LastChargeableInfoUpdated event from the BlockchainService.
-        subscribe_actor_event!(
-            event: LastChargeableInfoUpdated,
-            task: BspChargeFeesTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to ProcessStopStoringForInsolventUserRequest event from the BlockchainService.
-        subscribe_actor_event!(
-            event: ProcessStopStoringForInsolventUserRequest,
-            task: BspChargeFeesTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Start deletion process for stored files owned by a user that has been declared as without funds and charge
-        // its payment stream afterwards, getting the owed tokens and deleting it.
-        subscribe_actor_event!(
-            event: UserWithoutFunds,
-            task: BspChargeFeesTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Continue deletion process for stored files owned by a user that has been declared as without funds.
-        // Once the last file has been deleted, get the owed tokens and delete the payment stream.
-        subscribe_actor_event!(
-            event: SpStopStoringInsolventUser,
-            task: BspChargeFeesTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // BspMoveBucketTask handles events for moving buckets to a new MSP.
-        // Subscribing to MoveBucketRequested event from the BlockchainService.
-        subscribe_actor_event!(
-            event: MoveBucketRequested,
-            task: BspMoveBucketTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to MoveBucketAccepted event from the BlockchainService.
-        subscribe_actor_event!(
-            event: MoveBucketAccepted,
-            task: BspMoveBucketTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to MoveBucketRejected event from the BlockchainService.
-        subscribe_actor_event!(
-            event: MoveBucketRejected,
-            task: BspMoveBucketTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-        // Subscribing to MoveBucketExpired event from the BlockchainService.
-        subscribe_actor_event!(
-            event: MoveBucketExpired,
-            task: BspMoveBucketTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
-        );
-
-        // Task that listen for `FinalisedBspConfirmStoppedStoring` to delete file
-        subscribe_actor_event!(
-            event: FinalisedBspConfirmStoppedStoring,
-            task: BspDeleteFileTask,
-            service: &self.blockchain,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: true,
+            [
+                RemoteDownloadRequest => BspDownloadFileTask,
+                RemoteUploadRequest => BspUploadFileTask,
+            ]
         );
     }
 }

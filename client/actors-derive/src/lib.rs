@@ -7,6 +7,8 @@ This crate provides procedural macros to reduce boilerplate code in the StorageH
 
 - `ActorEvent` derive macro: Implements `EventBusMessage` for event structs and registers them with a specific actor.
 - `ActorEventBus` attribute macro: Generates the event bus provider struct and implements all the required methods and traits.
+- `subscribe_actor_event` macro: Creates and starts an event bus listener for a specific event type and task.
+- `subscribe_actor_event_map` macro: Simplifies subscribing multiple events to tasks with shared parameters.
 
 ## Usage
 
@@ -42,6 +44,37 @@ use shc_actors_derive::ActorEventBus;
 
 #[ActorEventBus("blockchain_service")]
 pub struct BlockchainServiceEventBusProvider;
+```
+
+### 3. Subscribing to Events
+
+For subscribing to a single event:
+
+```rust
+subscribe_actor_event!(
+    event: NewChallengeSeed,
+    task: SubmitProofTask,
+    service: &self.blockchain,
+    spawner: &self.task_spawner,
+    context: self.clone(),
+    critical: true,
+);
+```
+
+For subscribing to multiple events with shared parameters:
+
+```rust
+subscribe_actor_event_map!(
+    service: &self.blockchain,
+    spawner: &self.task_spawner,
+    context: self.clone(),
+    critical: true,
+    [
+        NewStorageRequest => { task: MspUploadFileTask, critical: false },
+        ProcessMspRespondStoringRequest => MspUploadFileTask,
+        FinalisedMspStoppedStoringBucket => MspDeleteBucketTask,
+    ]
+);
 ```
 
 ## How It Works
@@ -565,6 +598,220 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     };
 
     result.into()
+}
+
+/// A macro to simplify mapping multiple events to tasks with shared parameters.
+///
+/// This macro calls `subscribe_actor_event!` for each event-task pair, applying common parameters
+/// and allowing for per-mapping overrides.
+///
+/// # Parameters
+///
+/// - `service`: The service that provides the event bus (required)
+/// - `spawner`: The task spawner for spawning event handlers (required)
+/// - `context`: The context to create new tasks (required)
+/// - `critical`: Default critical value for all mappings (optional, defaults to false)
+/// - An array of mappings, where each mapping is either:
+///   - `EventType => TaskType`: Uses default critical value
+///   - `EventType => { task: TaskType, critical: bool }`: Overrides critical value for this mapping
+///
+/// # Examples
+///
+/// ```rust
+/// // Basic usage with multiple event-task mappings
+/// subscribe_actor_event_map!(
+///     service: &self.blockchain,
+///     spawner: &self.task_spawner,
+///     context: self.clone(),
+///     critical: true,
+///     [
+///         // Override critical for specific mapping
+///         NewStorageRequest => { task: MspUploadFileTask, critical: false },
+///         // Use default critical value
+///         ProcessMspRespondStoringRequest => MspUploadFileTask,
+///         FinalisedMspStoppedStoringBucket => MspDeleteBucketTask,
+///     ]
+/// );
+/// ```
+#[proc_macro]
+pub fn subscribe_actor_event_map(input: TokenStream) -> TokenStream {
+    struct ActorEventMapArgs {
+        service: syn::Expr,
+        spawner: syn::Expr,
+        context: syn::Expr,
+        critical: Option<syn::LitBool>,
+        mappings: Vec<EventTaskMapping>,
+    }
+
+    struct EventTaskMapping {
+        event_type: syn::Type,
+        task_type: syn::Type,
+        critical_override: Option<syn::LitBool>,
+    }
+
+    impl Parse for ActorEventMapArgs {
+        fn parse(input: ParseStream) -> syn::Result<Self> {
+            let mut service = None;
+            let mut spawner = None;
+            let mut context = None;
+            let mut critical = None;
+            let mut mappings = Vec::new();
+
+            // Parse named parameters
+            while !input.peek(syn::token::Bracket) {
+                let key: Ident = input.parse()?;
+                let _: Token![:] = input.parse()?;
+
+                if key == "service" {
+                    service = Some(input.parse()?);
+                } else if key == "spawner" {
+                    spawner = Some(input.parse()?);
+                } else if key == "context" {
+                    context = Some(input.parse()?);
+                } else if key == "critical" {
+                    critical = Some(input.parse()?);
+                } else {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!("Unknown parameter: {}", key),
+                    ));
+                }
+
+                // Parse comma if there are more fields
+                if input.peek(Token![,]) {
+                    let _: Token![,] = input.parse()?;
+                }
+            }
+
+            // Parse mappings array
+            let content;
+            let _ = syn::bracketed!(content in input);
+
+            while !content.is_empty() {
+                // Parse event type
+                let event_type: syn::Type = content.parse()?;
+
+                // Parse =>
+                let _: Token![=>] = content.parse()?;
+
+                // Parse task type or task config
+                let (task_type, critical_override) = if content.peek(syn::token::Brace) {
+                    // Complex form: EventType => { task: TaskType, critical: bool }
+                    let inner_content;
+                    let _ = syn::braced!(inner_content in content);
+
+                    let mut task = None;
+                    let mut crit_override = None;
+
+                    while !inner_content.is_empty() {
+                        let key: Ident = inner_content.parse()?;
+                        let _: Token![:] = inner_content.parse()?;
+
+                        if key == "task" {
+                            task = Some(inner_content.parse()?);
+                        } else if key == "critical" {
+                            crit_override = Some(inner_content.parse()?);
+                        } else {
+                            return Err(syn::Error::new(
+                                key.span(),
+                                format!("Unknown mapping parameter: {}", key),
+                            ));
+                        }
+
+                        // Parse comma if there are more fields
+                        if inner_content.peek(Token![,]) {
+                            let _: Token![,] = inner_content.parse()?;
+                        }
+                    }
+
+                    (
+                        task.ok_or_else(|| {
+                            syn::Error::new(
+                                Span::call_site(),
+                                "Missing required parameter 'task' in mapping",
+                            )
+                        })?,
+                        crit_override,
+                    )
+                } else {
+                    // Simple form: EventType => TaskType
+                    (content.parse()?, None)
+                };
+
+                mappings.push(EventTaskMapping {
+                    event_type,
+                    task_type,
+                    critical_override,
+                });
+
+                // Parse comma if there are more mappings
+                if content.peek(Token![,]) {
+                    let _: Token![,] = content.parse()?;
+                }
+            }
+
+            // Validate required fields
+            let service = service.ok_or_else(|| {
+                syn::Error::new(Span::call_site(), "Missing required parameter 'service'")
+            })?;
+
+            let spawner = spawner.ok_or_else(|| {
+                syn::Error::new(Span::call_site(), "Missing required parameter 'spawner'")
+            })?;
+
+            let context = context.ok_or_else(|| {
+                syn::Error::new(Span::call_site(), "Missing required parameter 'context'")
+            })?;
+
+            Ok(ActorEventMapArgs {
+                service,
+                spawner,
+                context,
+                critical,
+                mappings,
+            })
+        }
+    }
+
+    let args = parse_macro_input!(input as ActorEventMapArgs);
+
+    // Default critical value
+    let default_critical = args
+        .critical
+        .map_or_else(|| syn::LitBool::new(false, Span::call_site()), |c| c);
+
+    // Generate subscribe_actor_event! calls for each mapping
+    let calls = args.mappings.iter().map(|mapping| {
+        let event_type = &mapping.event_type;
+        let task_type = &mapping.task_type;
+        let service = &args.service;
+        let spawner = &args.spawner;
+        let context = &args.context;
+
+        // Use mapping-specific critical value if provided, otherwise use default
+        let critical = mapping
+            .critical_override
+            .as_ref()
+            .unwrap_or(&default_critical);
+
+        quote! {
+            subscribe_actor_event!(
+                event: #event_type,
+                task: #task_type,
+                service: #service,
+                spawner: #spawner,
+                context: #context,
+                critical: #critical,
+            );
+        }
+    });
+
+    // Combine all calls
+    let expanded = quote! {
+        #(#calls)*
+    };
+
+    TokenStream::from(expanded)
 }
 
 /// Helper function to convert CamelCase to snake_case
