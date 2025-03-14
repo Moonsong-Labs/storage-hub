@@ -126,6 +126,8 @@ where
     ///
     /// Only required if the node is running as a provider.
     pub(crate) capacity_manager: Option<CapacityRequestQueue>,
+    /// Whether the node is running in maintenance mode.
+    pub(crate) maintenance_mode: bool,
 }
 
 /// Event loop for the BlockchainService actor.
@@ -1137,6 +1139,7 @@ where
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
         capacity_request_queue: Option<CapacityRequestQueue>,
+        maintenance_mode: bool,
     ) -> Self {
         Self {
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
@@ -1152,6 +1155,7 @@ where
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             notify_period,
             capacity_manager: capacity_request_queue,
+            maintenance_mode,
         }
     }
 
@@ -1161,6 +1165,12 @@ where
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
+        // If the node is running in maintenance mode, we don't process block imports.
+        if self.maintenance_mode {
+            trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping processing of block import notification: {:?}", notification);
+            return;
+        }
+
         let last_block_processed = self.best_block;
 
         // Check if this new imported block is the new best, and if it causes a reorg.
@@ -1398,6 +1408,12 @@ where
     {
         let block_hash: H256 = notification.hash;
         let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+
+        // If the node is running in maintenance mode, we don't process finality notifications.
+        if self.maintenance_mode {
+            trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping finality notification #{}: {}", block_number, block_hash);
+            return;
+        }
 
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
 
