@@ -113,6 +113,12 @@ pub struct ProviderConfigurations {
     #[arg(long)]
     pub provider: bool,
 
+    /// Run the node in maintenance mode.
+    /// In this mode, the node will not import blocks or participate in consensus,
+    /// but will allow specific RPC calls for file and storage management.
+    #[arg(long, default_value = "false")]
+    pub maintenance_mode: bool,
+
     /// Type of StorageHub provider.
     #[clap(
         long,
@@ -255,78 +261,6 @@ pub struct ProviderConfigurations {
     )]
     pub msp_move_bucket_max_tip: Option<f64>,
 
-    /// Processing interval between batches of move bucket requests (in seconds).
-    #[clap(
-        long,
-        value_name = "SECONDS",
-        help_heading = "MSP Move Bucket Options",
-        required_if_eq_all([
-            ("msp_move_bucket_task", "true"),
-            ("provider_type", "msp"),
-        ])
-    )]
-    pub msp_move_bucket_processing_interval: Option<u64>,
-
-    /// Maximum number of files to download in parallel.
-    #[clap(
-        long,
-        value_name = "COUNT",
-        help_heading = "MSP Move Bucket Options",
-        required_if_eq_all([
-            ("msp_move_bucket_task", "true"),
-            ("provider_type", "msp"),
-        ])
-    )]
-    pub msp_move_bucket_max_concurrent_file_downloads: Option<usize>,
-
-    /// Maximum number of chunks requests to do in parallel per file.
-    #[clap(
-        long,
-        value_name = "COUNT",
-        help_heading = "MSP Move Bucket Options",
-        required_if_eq_all([
-            ("msp_move_bucket_task", "true"),
-            ("provider_type", "msp"),
-        ])
-    )]
-    pub msp_move_bucket_max_concurrent_chunks_per_file: Option<usize>,
-
-    /// Maximum number of chunks to request in a single network request.
-    #[clap(
-        long,
-        value_name = "COUNT",
-        help_heading = "MSP Move Bucket Options",
-        required_if_eq_all([
-            ("msp_move_bucket_task", "true"),
-            ("provider_type", "msp"),
-        ])
-    )]
-    pub msp_move_bucket_max_chunks_per_request: Option<usize>,
-
-    /// Number of peers to select for each chunk download attempt (2 best + x random).
-    #[clap(
-        long,
-        value_name = "COUNT",
-        help_heading = "MSP Move Bucket Options",
-        required_if_eq_all([
-            ("msp_move_bucket_task", "true"),
-            ("provider_type", "msp"),
-        ])
-    )]
-    pub msp_move_bucket_chunk_request_peer_retry_attempts: Option<usize>,
-
-    /// Number of retries per peer for a single chunk request.
-    #[clap(
-        long,
-        value_name = "COUNT",
-        help_heading = "MSP Move Bucket Options",
-        required_if_eq_all([
-            ("msp_move_bucket_task", "true"),
-            ("provider_type", "msp"),
-        ])
-    )]
-    pub msp_move_bucket_download_retry_attempts: Option<usize>,
-
     // ============== BSP Upload File task options ==============
     /// Enable and configure BSP Upload File task.
     #[clap(long)]
@@ -444,15 +378,6 @@ impl ProviderConfigurations {
                 let mut options = MspMoveBucketOptions::default();
                 options.max_try_count = self.msp_move_bucket_max_try_count;
                 options.max_tip = self.msp_move_bucket_max_tip;
-                options.processing_interval = self.msp_move_bucket_processing_interval;
-                options.max_concurrent_file_downloads =
-                    self.msp_move_bucket_max_concurrent_file_downloads;
-                options.max_concurrent_chunks_per_file =
-                    self.msp_move_bucket_max_concurrent_chunks_per_file;
-                options.max_chunks_per_request = self.msp_move_bucket_max_chunks_per_request;
-                options.chunk_request_peer_retry_attempts =
-                    self.msp_move_bucket_chunk_request_peer_retry_attempts;
-                options.download_retry_attempts = self.msp_move_bucket_download_retry_attempts;
                 msp_move_bucket = Some(options);
             }
         }
@@ -531,6 +456,7 @@ impl ProviderConfigurations {
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
+            maintenance_mode: self.maintenance_mode,
         }
     }
 }
@@ -631,9 +557,6 @@ pub struct Cli {
         "msp_charging_period",  "msp_delete_file_task", "msp_delete_file_max_try_count",
         "msp_delete_file_max_tip", "msp_charge_fees_task", "msp_charge_fees_min_debt",
         "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", 
-        "msp_move_bucket_processing_interval", "msp_move_bucket_max_concurrent_file_downloads",
-        "msp_move_bucket_max_concurrent_chunks_per_file", "msp_move_bucket_max_chunks_per_request",
-        "msp_move_bucket_chunk_request_peer_retry_attempts", "msp_move_bucket_download_retry_attempts",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",

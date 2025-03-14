@@ -1,14 +1,13 @@
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
-
 use anyhow::anyhow;
 use futures::prelude::*;
+use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
 };
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde::Deserialize;
-use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
@@ -32,8 +31,10 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
+    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{BlockNumber, ParachainClient, TickNumber},
 };
+use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
@@ -45,7 +46,6 @@ use crate::{
         OngoingProcessStopStoringForInsolventUserRequestCf,
     },
     transaction::SubmittedTransaction,
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{
         ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
         StopStoringForInsolventUserRequest,
@@ -106,6 +106,8 @@ where
     ///
     /// Only required if the node is running as a provider.
     pub(crate) capacity_manager: Option<CapacityRequestQueue>,
+    /// Whether the node is running in maintenance mode.
+    pub(crate) maintenance_mode: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -355,6 +357,28 @@ where
                             .or_insert_with(Vec::new)
                             .push(tx);
                     }
+
+                    match callback.send(rx) {
+                        Ok(_) => {
+                            trace!(target: LOG_TARGET, "Block message receiver sent successfully");
+                        }
+                        Err(e) => {
+                            error!(target: LOG_TARGET, "Failed to send block message receiver: {:?}", e);
+                        }
+                    }
+                }
+                BlockchainServiceCommand::WaitForNumBlocks {
+                    number_of_blocks,
+                    callback,
+                } => {
+                    let current_block_number = self.client.info().best_number;
+
+                    let (tx, rx) = tokio::sync::oneshot::channel();
+
+                    self.wait_for_block_request_by_number
+                        .entry(current_block_number + number_of_blocks)
+                        .or_insert_with(Vec::new)
+                        .push(tx);
 
                     match callback.send(rx) {
                         Ok(_) => {
@@ -1129,6 +1153,7 @@ where
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
         capacity_request_queue: Option<CapacityRequestQueue>,
+        maintenance_mode: bool,
     ) -> Self {
         Self {
             config,
@@ -1145,6 +1170,7 @@ where
             persistent_state: BlockchainServiceStateStore::new(rocksdb_root_path.into()),
             notify_period,
             capacity_manager: capacity_request_queue,
+            maintenance_mode,
         }
     }
 
@@ -1154,6 +1180,12 @@ where
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
+        // If the node is running in maintenance mode, we don't process block imports.
+        if self.maintenance_mode {
+            trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping processing of block import notification: {:?}", notification);
+            return;
+        }
+
         let last_block_processed = self.best_block;
 
         // Check if this new imported block is the new best, and if it causes a reorg.
@@ -1281,12 +1313,12 @@ where
         state_store_context.commit();
 
         // Initialise the Provider.
-        match self.maybe_managed_provider {
+        match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(_)) => {
                 self.bsp_initial_sync();
             }
-            Some(ManagedProvider::Msp(_)) => {
-                self.msp_initial_sync();
+            Some(ManagedProvider::Msp(msp_handler)) => {
+                self.msp_initial_sync(block_hash, msp_handler.msp_id);
             }
             None => {
                 warn!(target: LOG_TARGET, "No Provider ID found. This node is not managing a Provider.");
@@ -1393,6 +1425,12 @@ where
     {
         let block_hash: H256 = notification.hash;
         let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+
+        // If the node is running in maintenance mode, we don't process finality notifications.
+        if self.maintenance_mode {
+            trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping finality notification #{}: {}", block_number, block_hash);
+            return;
+        }
 
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
 

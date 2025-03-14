@@ -44,10 +44,19 @@ pub struct RemoteDownloadRequest {
 
 impl EventBusMessage for RemoteDownloadRequest {}
 
+/// Event triggered to retry pending bucket move downloads.
+/// This is emitted on startup and will be periodically emitted later to ensure
+/// any interrupted downloads can be resumed.
+#[derive(Debug, Clone)]
+pub struct RetryBucketMoveDownload;
+
+impl EventBusMessage for RetryBucketMoveDownload {}
+
 #[derive(Clone, Default)]
 pub struct FileTransferServiceEventBusProvider {
     remote_upload_request_event_bus: EventBus<RemoteUploadRequest>,
     remote_download_request_event_bus: EventBus<RemoteDownloadRequest>,
+    retry_bucket_move_download_event_bus: EventBus<RetryBucketMoveDownload>,
 }
 
 impl FileTransferServiceEventBusProvider {
@@ -55,6 +64,7 @@ impl FileTransferServiceEventBusProvider {
         Self {
             remote_upload_request_event_bus: EventBus::new(),
             remote_download_request_event_bus: EventBus::new(),
+            retry_bucket_move_download_event_bus: EventBus::new(),
         }
     }
 }
@@ -68,5 +78,11 @@ impl ProvidesEventBus<RemoteUploadRequest> for FileTransferServiceEventBusProvid
 impl ProvidesEventBus<RemoteDownloadRequest> for FileTransferServiceEventBusProvider {
     fn event_bus(&self) -> &EventBus<RemoteDownloadRequest> {
         &self.remote_download_request_event_bus
+    }
+}
+
+impl ProvidesEventBus<RetryBucketMoveDownload> for FileTransferServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<RetryBucketMoveDownload> {
+        &self.retry_bucket_move_download_event_bus
     }
 }

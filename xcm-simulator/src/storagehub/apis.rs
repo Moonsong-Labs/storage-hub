@@ -5,6 +5,7 @@ use frame_support::{
     weights::Weight,
 };
 use pallet_aura::Authorities;
+use pallet_file_system::types::StorageRequestMetadata;
 use pallet_file_system_runtime_api::*;
 use pallet_payment_streams_runtime_api::*;
 use pallet_proofs_dealer::types::{
@@ -25,6 +26,7 @@ use sp_runtime::{
     transaction_validity::{TransactionSource, TransactionValidity},
     ApplyExtrinsicResult, ExtrinsicInclusionMode,
 };
+use sp_std::collections::btree_map::BTreeMap;
 use sp_std::prelude::Vec;
 use sp_version::RuntimeVersion;
 use xcm_runtime_apis::{
@@ -326,7 +328,7 @@ impl_runtime_apis! {
         }
     }
 
-    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId, BucketId<Runtime>> for Runtime {
+    impl pallet_file_system_runtime_api::FileSystemApi<Block, BackupStorageProviderId<Runtime>, MainStorageProviderId<Runtime>, H256, BlockNumber, ChunkId, BucketId<Runtime>, StorageRequestMetadata<Runtime>> for Runtime {
         fn is_storage_request_open_to_volunteers(file_key: H256) -> Result<bool, IsStorageRequestOpenToVolunteersError> {
             FileSystem::is_storage_request_open_to_volunteers(file_key)
         }
@@ -345,6 +347,10 @@ impl_runtime_apis! {
 
         fn decode_generic_apply_delta_event_info(encoded_event_info: Vec<u8>) -> Result<BucketId<Runtime>, GenericApplyDeltaEventInfoError> {
             FileSystem::decode_generic_apply_delta_event_info(encoded_event_info)
+        }
+
+        fn pending_storage_requests_by_msp(msp_id: MainStorageProviderId<Runtime>) -> BTreeMap<H256, StorageRequestMetadata<Runtime>> {
+            FileSystem::pending_storage_requests_by_msp(msp_id)
         }
     }
 

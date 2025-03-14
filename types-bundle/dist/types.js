@@ -80,6 +80,21 @@ export const ALL_TYPES = {
     reputation_weight: "ReputationWeightType",
     sign_up_block: "BlockNumber"
   },
+  StorageRequestMetadata: {
+    requested_at: "BlockNumber",
+    expires_at: "BlockNumber",
+    owner: "AccountId",
+    bucket_id: "BucketId",
+    location: "Vec<u8>",
+    fingerprint: "[u8; 32]",
+    file_size: "StorageDataUnit",
+    msp: "Option<(ProviderId, bool)>",
+    user_peer_ids: "Vec<ProviderId>",
+    bsps_required: "u32",
+    bsps_confirmed: "u32",
+    bsps_volunteered: "u32",
+    deposit_paid: "BalanceOf"
+  },
   StorageProviderId: {
     _enum: {
       BackupStorageProvider: "BackupStorageProviderId",

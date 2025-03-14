@@ -7843,7 +7843,9 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-api 34.0.0",
+ "sp-core 34.0.0",
  "sp-runtime 39.0.5",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2409)",
 ]
 
 [[package]]
@@ -13753,6 +13755,7 @@ dependencies = [
  "pallet-storage-providers",
  "parity-scale-codec",
  "polkadot-primitives 16.0.0",
+ "rocksdb",
  "sc-client-api",
  "sc-executor",
  "sc-network",
@@ -13770,6 +13773,7 @@ dependencies = [
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2409)",
  "sp-trie 29.0.0",
  "storage-hub-runtime",
+ "tempfile",
  "thiserror 1.0.69",
  "trie-db 0.29.1",
 ]
@@ -16211,6 +16215,7 @@ dependencies = [
  "polkadot-runtime-common 17.0.0",
  "priority-queue",
  "rand",
+ "rocksdb",
  "sc-basic-authorship",
  "sc-chain-spec",
  "sc-cli",

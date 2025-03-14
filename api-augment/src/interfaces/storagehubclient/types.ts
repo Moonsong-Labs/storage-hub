@@ -5,6 +5,7 @@ import type {
   Bytes,
   Enum,
   Null,
+  Option,
   Struct,
   U8aFixed,
   Vec,
@@ -12,7 +13,8 @@ import type {
   u32,
   u64
 } from "@polkadot/types-codec";
-import type { AccountId, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
+import type { ITuple } from "@polkadot/types-codec/types";
+import type { AccountId, BalanceOf, BlockNumber, H256 } from "@polkadot/types/interfaces/runtime";
 
 /** @name AddFilesToForestStorageResult */
 export interface AddFilesToForestStorageResult extends Enum {
@@ -321,6 +323,23 @@ export interface StorageProviderId extends Enum {
   readonly isMainStorageProvider: boolean;
   readonly asMainStorageProvider: MainStorageProviderId;
   readonly type: "BackupStorageProvider" | "MainStorageProvider";
+}
+
+/** @name StorageRequestMetadata */
+export interface StorageRequestMetadata extends Struct {
+  readonly requested_at: BlockNumber;
+  readonly expires_at: BlockNumber;
+  readonly owner: AccountId;
+  readonly bucket_id: BucketId;
+  readonly location: Bytes;
+  readonly fingerprint: U8aFixed;
+  readonly file_size: StorageDataUnit;
+  readonly msp: Option<ITuple<[ProviderId, bool]>>;
+  readonly user_peer_ids: Vec<ProviderId>;
+  readonly bsps_required: u32;
+  readonly bsps_confirmed: u32;
+  readonly bsps_volunteered: u32;
+  readonly deposit_paid: BalanceOf;
 }
 
 /** @name TrieRemoveMutation */

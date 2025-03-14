@@ -357,6 +357,7 @@ export const waitForBspToCatchUpToChainTip = async (
           await sleep(delay);
           const syncedBestBlock = await syncedApi.rpc.chain.getHeader();
           const bspBehindBestBlock = await bspBehindApi.rpc.chain.getHeader();
+
           assert(
             syncedBestBlock.hash.toString() === bspBehindBestBlock.hash.toString(),
             "BSP did not catch up to the chain tip"

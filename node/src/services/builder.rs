@@ -1,5 +1,5 @@
 use async_channel::Receiver;
-use log::info;
+use log::*;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
 use serde::Deserialize;
@@ -19,8 +19,6 @@ use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::StorageHubClientRpcConfig;
 
-const LOG_TARGET: &str = "storage_hub_builder";
-
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
     bsp_submit_proof::BspSubmitProofConfig, bsp_upload_file::BspUploadFileConfig,
@@ -29,6 +27,7 @@ use crate::tasks::{
 };
 
 use super::{
+    bsp_peer_manager::BspPeerManager,
     handler::{ProviderConfig, StorageHubHandler},
     types::{
         BspForestStorageHandlerT, BspProvider, InMemoryStorageLayer, MspForestStorageHandlerT,
@@ -65,6 +64,7 @@ where
     bsp_charge_fees_config: Option<BspChargeFeesConfig>,
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig>,
+    peer_manager: Option<Arc<BspPeerManager>>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -91,6 +91,7 @@ where
             bsp_charge_fees_config: None,
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
+            peer_manager: None,
         }
     }
 
@@ -145,6 +146,7 @@ where
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
+        maintenance_mode: bool,
     ) -> &mut Self {
         if self.forest_storage_handler.is_none() {
             panic!(
@@ -173,6 +175,7 @@ where
             rocksdb_root_path,
             self.notify_period,
             capacity_config,
+            maintenance_mode,
         )
         .await;
 
@@ -186,6 +189,28 @@ where
     /// they are not storing, like which are the BSPs storing them.
     pub fn with_indexer_db_pool(&mut self, indexer_db_pool: Option<DbPool>) -> &mut Self {
         self.indexer_db_pool = indexer_db_pool;
+        self
+    }
+
+    /// Initialize the BSP peer manager for tracking peer performance
+    pub fn with_peer_manager(&mut self, rocks_db_path: PathBuf) -> &mut Self {
+        let mut peer_db_path = rocks_db_path;
+        peer_db_path.push("bsp_peer_manager");
+
+        // Create directory if it doesn't exist
+        if let Err(e) = std::fs::create_dir_all(&peer_db_path) {
+            warn!(
+                "Failed to create directory for BSP peer manager at {:?}: {}. Will continue without peer manager.",
+                peer_db_path, e
+            );
+            return self;
+        }
+
+        let manager = BspPeerManager::new(peer_db_path)
+            .expect("Failed to initialize BSP peer manager. This is a critical component and the node cannot function without it.");
+
+        info!("Successfully initialized BSP peer manager");
+        self.peer_manager = Some(Arc::new(manager));
         self
     }
 
@@ -392,7 +417,7 @@ where
     <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
 {
     fn build(self) -> StorageHubHandler<(BspProvider, S)> {
-        let handler = StorageHubHandler::new(
+        StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -425,11 +450,8 @@ where
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
-        );
-
-        info!(target: LOG_TARGET, "StorageHubHandler configurations: {:?}", handler);
-
-        handler
+            self.peer_manager.expect("Peer Manager not set"),
+        )
     }
 }
 
@@ -439,7 +461,7 @@ where
     <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
 {
     fn build(self) -> StorageHubHandler<(MspProvider, S)> {
-        let handler = StorageHubHandler::new(
+        StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -472,11 +494,8 @@ where
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
-        );
-
-        info!(target: LOG_TARGET, "StorageHubHandler configurations: {:?}", handler);
-
-        handler
+            self.peer_manager.expect("Peer Manager not set"),
+        )
     }
 }
 
@@ -487,7 +506,7 @@ where
         ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer)> {
-        let handler = StorageHubHandler::new(
+        StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
                 .expect("Task Spawner not set")
@@ -504,11 +523,12 @@ where
                 .as_ref()
                 .expect("File Storage not set.")
                 .clone(),
-            // Not used by the user role
-            <(UserRole, NoStorageLayer) as ShNodeType>::FSH::new(),
-            // Not used by the user role
+            self.forest_storage_handler
+                .as_ref()
+                .expect("Forest Storage Handler not set.")
+                .clone(),
             ProviderConfig {
-                capacity_config: CapacityConfig::new(0, 0),
+                capacity_config: self.capacity_config.expect("Capacity Config not set"),
                 msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
                 msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
                 msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
@@ -519,11 +539,8 @@ where
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
-        );
-
-        info!(target: LOG_TARGET, "StorageHubHandler configurations: {:?}", handler);
-
-        handler
+            self.peer_manager.expect("Peer Manager not set"),
+        )
     }
 }
 
@@ -567,18 +584,6 @@ pub struct MspMoveBucketOptions {
     pub max_try_count: Option<u32>,
     /// Maximum tip amount to use when submitting a move bucket request extrinsic.
     pub max_tip: Option<f64>,
-    /// Processing interval between batches of move bucket requests.
-    pub processing_interval: Option<u64>,
-    /// Maximum number of files to download in parallel.
-    pub max_concurrent_file_downloads: Option<usize>,
-    /// Maximum number of chunks requests to do in parallel per file.
-    pub max_concurrent_chunks_per_file: Option<usize>,
-    /// Maximum number of chunks to request in a single network request.
-    pub max_chunks_per_request: Option<usize>,
-    /// Number of peers to select for each chunk download attempt (2 best + x random).
-    pub chunk_request_peer_retry_attempts: Option<usize>,
-    /// Number of retries per peer for a single chunk request.
-    pub download_retry_attempts: Option<usize>,
 }
 
 impl Into<MspMoveBucketConfig> for MspMoveBucketOptions {
@@ -586,14 +591,6 @@ impl Into<MspMoveBucketConfig> for MspMoveBucketOptions {
         MspMoveBucketConfig {
             max_try_count: self.max_try_count.unwrap_or_default(),
             max_tip: self.max_tip.unwrap_or_default(),
-            processing_interval: self.processing_interval.unwrap_or_default(),
-            max_concurrent_file_downloads: self.max_concurrent_file_downloads.unwrap_or_default(),
-            max_concurrent_chunks_per_file: self.max_concurrent_chunks_per_file.unwrap_or_default(),
-            max_chunks_per_request: self.max_chunks_per_request.unwrap_or_default(),
-            chunk_request_peer_retry_attempts: self
-                .chunk_request_peer_retry_attempts
-                .unwrap_or_default(),
-            download_retry_attempts: self.download_retry_attempts.unwrap_or_default(),
         }
     }
 }
