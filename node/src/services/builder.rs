@@ -128,6 +128,7 @@ where
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
+        maintenance_mode: bool,
     ) -> &mut Self {
         if self.forest_storage_handler.is_none() {
             panic!(
@@ -153,6 +154,7 @@ where
             rocksdb_root_path,
             self.notify_period,
             capacity_config,
+            maintenance_mode,
         )
         .await;
 
