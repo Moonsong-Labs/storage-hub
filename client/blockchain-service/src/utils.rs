@@ -41,7 +41,7 @@ use crate::{
         AcceptedBspVolunteer, LastChargeableInfoUpdated, NewStorageRequest, NotifyPeriod,
         SlashableProvider, SpStopStoringInsolventUser, UserWithoutFunds,
     },
-    handler::{LOG_TARGET, MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES},
+    handler::LOG_TARGET,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
         SendExtrinsicOptions, Tip,
@@ -240,7 +240,7 @@ where
             // Construct the tree route from the last best block processed and the new best block.
             // Fetch the parents of the new best block until:
             // - We reach the genesis block, or
-            // - The size of the route is equal to `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES`, or
+            // - The size of the route is equal to `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes`, or
             // - The parent block is not found, or
             // - We reach the last best block processed.
             let mut route = vec![new_block_info.into()];
@@ -253,7 +253,7 @@ where
                 }
 
                 // Check if the route reached the maximum number of blocks to catch up on.
-                if route.len() == MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES as usize {
+                if route.len() == self.config.max_blocks_behind_to_catch_up_root_changes as usize {
                     trace!(target: LOG_TARGET, "Reached maximum blocks to catch up on while building tree route for new best block");
                     break;
                 }

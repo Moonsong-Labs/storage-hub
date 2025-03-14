@@ -160,6 +160,18 @@ pub struct ProviderConfigurations {
     #[clap(long, default_value = "60")]
     pub extrinsic_retry_timeout: Option<u64>,
 
+    /// The minimum number of blocks behind the current best block to consider the node out of sync.
+    #[clap(long, default_value = "5")]
+    pub sync_mode_min_blocks_behind: Option<u32>,
+
+    /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
+    #[clap(long, default_value = "4")]
+    pub check_for_pending_proofs_period: Option<u32>,
+
+    /// The maximum number of blocks from the past that will be processed for catching up the root changes.
+    #[clap(long, default_value = "10")]
+    pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
+
     /// MSP charging fees period (in blocks).
     /// Setting it to 600 with a block every 6 seconds will charge user every hour.
     #[clap(long, required_if_eq_all([
@@ -480,6 +492,27 @@ impl ProviderConfigurations {
             blockchain_service = Some(default_config);
         }
 
+        if let Some(sync_mode_min_blocks_behind) = self.sync_mode_min_blocks_behind {
+            let mut default_config = BlockchainServiceOptions::default();
+            default_config.sync_mode_min_blocks_behind = Some(sync_mode_min_blocks_behind);
+            blockchain_service = Some(default_config);
+        }
+
+        if let Some(check_for_pending_proofs_period) = self.check_for_pending_proofs_period {
+            let mut default_config = BlockchainServiceOptions::default();
+            default_config.check_for_pending_proofs_period = Some(check_for_pending_proofs_period);
+            blockchain_service = Some(default_config);
+        }
+
+        if let Some(max_blocks_behind_to_catch_up_root_changes) =
+            self.max_blocks_behind_to_catch_up_root_changes
+        {
+            let mut default_config = BlockchainServiceOptions::default();
+            default_config.max_blocks_behind_to_catch_up_root_changes =
+                Some(max_blocks_behind_to_catch_up_root_changes);
+            blockchain_service = Some(default_config);
+        }
+
         ProviderOptions {
             provider_type,
             storage_layer: self
@@ -593,9 +626,10 @@ pub struct Cli {
     /// Provider configurations file path (allow to specify the provider configuration in a file instead of the cli)
     #[clap(long, conflicts_with_all = [
         "provider", "provider_type", "max_storage_capacity", "jump_capacity", 
-        "storage_layer", "storage_path", "extrinsic_retry_timeout", "msp_charging_period", 
-        "msp_delete_file_task", "msp_delete_file_max_try_count", "msp_delete_file_max_tip",
-        "msp_charge_fees_task", "msp_charge_fees_min_debt",
+        "storage_layer", "storage_path", "extrinsic_retry_timeout", "sync_mode_min_blocks_behind",
+        "check_for_pending_proofs_period", "max_blocks_behind_to_catch_up_root_changes",
+        "msp_charging_period",  "msp_delete_file_task", "msp_delete_file_max_try_count",
+        "msp_delete_file_max_tip", "msp_charge_fees_task", "msp_charge_fees_min_debt",
         "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", 
         "msp_move_bucket_processing_interval", "msp_move_bucket_max_concurrent_file_downloads",
         "msp_move_bucket_max_concurrent_chunks_per_file", "msp_move_bucket_max_chunks_per_request",

@@ -30,9 +30,7 @@ use crate::state::{
 };
 use crate::typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess};
 use crate::{
-    events::MultipleNewChallengeSeeds,
-    handler::{CHECK_FOR_PENDING_PROOFS_PERIOD, LOG_TARGET},
-    types::ManagedProvider,
+    events::MultipleNewChallengeSeeds, handler::LOG_TARGET, types::ManagedProvider,
     BlockchainService,
 };
 
@@ -54,7 +52,7 @@ where
     ///
     /// Steps:
     /// 1. Catch up to Forest root changes in this BSP's Forest.
-    /// 2. In blocks that are a multiple of [`CHECK_FOR_PENDING_PROOFS_PERIOD`], catch up to proof submissions for the current tick.
+    /// 2. In blocks that are a multiple of `BlockchainServiceConfig::check_for_pending_proofs_period`, catch up to proof submissions for the current tick.
     pub(crate) async fn bsp_init_block_processing<Block>(
         &self,
         block_hash: &H256,
@@ -64,7 +62,7 @@ where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         self.forest_root_changes_catchup(&tree_route).await;
-        if block_number % CHECK_FOR_PENDING_PROOFS_PERIOD == BlockNumber::zero() {
+        if block_number % self.config.check_for_pending_proofs_period == BlockNumber::zero() {
             self.proof_submission_catch_up(block_hash);
         }
     }

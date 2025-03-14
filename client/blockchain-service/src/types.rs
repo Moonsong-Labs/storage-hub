@@ -510,8 +510,8 @@ where
     /// - `tree_route`: The [`TreeRoute`] with `new_best_block` as the last element. The
     ///   length of the `tree_route` is determined by the number of blocks between the
     ///   `last_best_block_processed` and `new_best_block`, but if there are more than
-    ///   `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES` blocks between the two, the route
-    ///   will be trimmed to include the first `MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES`
+    ///   `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes` blocks between the two, the route
+    ///   will be trimmed to include the first `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes`
     ///   before the `new_best_block`.
     NewBestBlock {
         last_best_block_processed: MinimalBlockInfo,

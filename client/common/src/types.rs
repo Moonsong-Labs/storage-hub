@@ -20,7 +20,6 @@ use trie_db::TrieLayout;
 /// Size of each batch in bytes (2 MiB)
 /// This is the maximum size of a batch of chunks that can be uploaded in a single call
 /// (request-response round-trip).
-/// TODO: CONSTANTS
 pub const BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE: usize = 2 * 1024 * 1024;
 
 /// The hash type of trie node keys

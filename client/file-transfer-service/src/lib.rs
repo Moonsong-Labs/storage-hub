@@ -24,7 +24,7 @@ pub mod handler;
 pub mod schema;
 
 /// Maximum memory usage target for queued requests (8GB)
-/// TODO: CONSTANTS
+// TODO: Make this a configurable parameter
 const MAX_QUEUED_REQUESTS_MEMORY_BYTES: u64 = 8 * 1024 * 1024 * 1024;
 
 /// Max size of request packet. Calculated based on batch chunk size plus overhead percentage
@@ -34,14 +34,14 @@ const MAX_REQUEST_PACKET_SIZE_BYTES: u64 = {
     /// Percentage increase for packet overhead
     ///
     /// This will cover any additional overhead required for the [`RemoteUploadDataRequest`](schema::v1::provider::request::Request::RemoteUploadDataRequest) payload.
-    /// TODO: CONSTANTS
+    // TODO: Make this a configurable parameter
     const OVERHEAD_PERCENTILE: u64 = 100;
 
     base_size.saturating_mul(100 + OVERHEAD_PERCENTILE) / 100
 };
 
 /// Max size of response packet. Using same size as request for simplicity
-/// TODO: CONSTANTS
+// TODO: Make this a configurable parameter
 const MAX_RESPONSE_PACKET_SIZE_BYTES: u64 = MAX_REQUEST_PACKET_SIZE_BYTES;
 
 /// Max number of queued requests. Calculated to limit total memory usage
