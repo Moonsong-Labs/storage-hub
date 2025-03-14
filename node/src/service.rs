@@ -281,16 +281,21 @@ where
     StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
     StorageHubHandler<(R, S)>: RunnableTasks,
 {
+    let rocks_db_path = rocksdb_root_path.into();
+
     // Spawn the Blockchain Service if node is running as a Storage Provider
     sh_builder
         .with_blockchain(
             client.clone(),
             keystore.clone(),
             Arc::new(rpc_handlers),
-            rocksdb_root_path,
+            rocks_db_path.clone(),
             maintenance_mode,
         )
         .await;
+
+    // Initialize the BSP peer manager
+    sh_builder.with_peer_manager(rocks_db_path.clone());
 
     // Build the StorageHubHandler
     let mut sh_handler = sh_builder.build();

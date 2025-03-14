@@ -46,7 +46,7 @@ use shc_common::types::{
 };
 use shp_file_metadata::ChunkId;
 
-use crate::events::RemoteUploadRequest;
+use crate::events::{RemoteUploadRequest, RetryBucketMoveDownload};
 
 use super::{
     commands::{FileTransferServiceCommand, RequestError},
@@ -55,6 +55,9 @@ use super::{
 };
 
 const LOG_TARGET: &str = "file-transfer-service";
+
+/// Time interval between bucket move download retry attempts (in seconds)
+const BUCKET_MOVE_RETRY_INTERVAL_SECONDS: u64 = 3 * 60 * 60; // 3 hours
 
 #[derive(Eq)]
 pub struct BucketIdWithExpiration {
@@ -122,6 +125,8 @@ pub struct FileTransferService {
         HashMap<UploadRequestId, futures::channel::oneshot::Sender<OutgoingResponse>>,
     /// Counter for generating unique upload request IDs
     upload_pending_response_nonce: UploadRequestId,
+    /// Timestamp of the last bucket move retry check
+    last_bucket_move_retry: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl Actor for FileTransferService {
@@ -404,6 +409,7 @@ impl Actor for FileTransferService {
                     bucket_id,
                     callback,
                 } => {
+                    info!(target: LOG_TARGET, "Registering new bucket peer {:?} for bucket {:?}", peer_id, bucket_id);
                     let result = match self.peer_bucket_allow_list.insert((peer_id, bucket_id)) {
                         true => Ok(()),
                         false => Err(RequestError::BucketAlreadyRegisteredForPeer),
@@ -517,6 +523,9 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
                 Some(MergedEventLoopMessage::Tick) => {
                     // Handle expired buckets
                     self.actor.handle_expired_buckets();
+
+                    // Check for pending bucket move downloads to retry
+                    self.actor.handle_retry_bucket_move();
                 }
                 None => {
                     warn!(target: LOG_TARGET, "FileTransferService event loop terminated.");
@@ -548,6 +557,7 @@ impl FileTransferService {
             download_pending_response_nonce: DownloadRequestId::new(0),
             upload_pending_responses: HashMap::new(),
             upload_pending_response_nonce: UploadRequestId::new(0),
+            last_bucket_move_retry: None,
         }
     }
 
@@ -786,6 +796,32 @@ impl FileTransferService {
 
             // Update the expiration to check.
             bucket_to_check = self.bucket_allow_list_grace_period_time.first();
+        }
+    }
+
+    fn handle_retry_bucket_move(&mut self) {
+        let now = chrono::Utc::now();
+
+        // Check if it's time to retry bucket move downloads
+        let should_retry = match self.last_bucket_move_retry {
+            // If we've never retried or enough time has passed
+            None => true,
+            Some(last_retry) => {
+                let duration_since_last_retry = now.signed_duration_since(last_retry);
+                duration_since_last_retry.num_seconds() as u64 >= BUCKET_MOVE_RETRY_INTERVAL_SECONDS
+            }
+        };
+
+        if should_retry {
+            // Update the last retry timestamp
+            self.last_bucket_move_retry = Some(now);
+
+            // Emit the retry event
+            info!(
+                target: LOG_TARGET,
+                "Emitting RetryBucketMoveDownload event to check for pending bucket downloads"
+            );
+            self.emit(RetryBucketMoveDownload);
         }
     }
 }

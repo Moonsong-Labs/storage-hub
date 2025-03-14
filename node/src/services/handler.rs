@@ -22,16 +22,20 @@ use shc_blockchain_service::{
 };
 use shc_common::consts::CURRENT_FOREST_KEY;
 use shc_file_transfer_service::{
-    events::{RemoteDownloadRequest, RemoteUploadRequest},
+    events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
 use crate::{
-    services::types::{
-        BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
-        ShStorageLayer, UserRole,
+    services::{
+        bsp_peer_manager::BspPeerManager,
+        file_download_manager::FileDownloadManager,
+        types::{
+            BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider,
+            ShNodeType, ShStorageLayer, UserRole,
+        },
     },
     tasks::{
         bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
@@ -39,6 +43,7 @@ use crate::{
         bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
         msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspDeleteBucketTask,
         msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspRespondMoveBucketTask,
+        msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
         msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
@@ -75,6 +80,10 @@ where
     pub provider_config: ProviderConfig,
     /// The indexer database pool.
     pub indexer_db_pool: Option<DbPool>,
+    /// The BSP peer manager for tracking peer performance.
+    pub peer_manager: Arc<BspPeerManager>,
+    /// The file download manager for rate-limiting downloads.
+    pub file_download_manager: Arc<FileDownloadManager>,
 }
 
 impl<NT> Clone for StorageHubHandler<NT>
@@ -90,6 +99,8 @@ where
             forest_storage_handler: self.forest_storage_handler.clone(),
             provider_config: self.provider_config.clone(),
             indexer_db_pool: self.indexer_db_pool.clone(),
+            peer_manager: self.peer_manager.clone(),
+            file_download_manager: self.file_download_manager.clone(),
         }
     }
 }
@@ -106,7 +117,18 @@ where
         forest_storage_handler: NT::FSH,
         provider_config: ProviderConfig,
         indexer_db_pool: Option<DbPool>,
+        peer_manager: Arc<BspPeerManager>,
     ) -> Self {
+        // Get the data directory path from the peer manager's directory
+        // This assumes the peer manager stores data in a similar location to where we want our download state
+        let data_dir = std::env::temp_dir().join("storagehub");
+
+        // Create a FileDownloadManager with the peer manager already initialized
+        let file_download_manager = Arc::new(
+            FileDownloadManager::new(Arc::clone(&peer_manager), data_dir)
+                .expect("Failed to initialize FileDownloadManager"),
+        );
+
         Self {
             task_spawner,
             file_transfer,
@@ -115,6 +137,8 @@ where
             forest_storage_handler,
             provider_config,
             indexer_db_pool,
+            peer_manager,
+            file_download_manager,
         }
     }
 }
@@ -322,6 +346,20 @@ where
                 .clone()
                 .subscribe_to(&self.task_spawner, &self.blockchain, true);
         notify_period_event_bus_listener.start();
+
+        // Create the RetryBucketMoveTask and subscribe to events
+        let msp_retry_bucket_move_task = MspRetryBucketMoveTask::new(self.clone());
+
+        // Subscribing to RetryBucketMoveDownload event from the FileTransferService.
+        let retry_bucket_move_download_event_bus_listener: EventBusListener<
+            RetryBucketMoveDownload,
+            _,
+        > = msp_retry_bucket_move_task.clone().subscribe_to(
+            &self.task_spawner,
+            &self.file_transfer,
+            false,
+        );
+        retry_bucket_move_download_event_bus_listener.start();
     }
 }
 

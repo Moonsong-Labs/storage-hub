@@ -6,16 +6,15 @@ pub mod handler_bsp;
 pub mod handler_msp;
 pub mod state;
 pub mod transaction;
-pub mod typed_store;
 pub mod types;
 pub mod utils;
 
 use std::{path::PathBuf, sync::Arc};
 
-use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use sc_service::RpcHandlers;
 use sp_keystore::KeystorePtr;
 
+use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::types::ParachainClient;
 
