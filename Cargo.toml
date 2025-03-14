@@ -202,6 +202,7 @@ pallet-storage-providers-runtime-api = { path = "pallets/providers/runtime-api",
 
 # Local - StorageHub Client (used by the node, can be std or no_std)
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
+shc-actors-derive = { path = "client/actors-derive", default-features = false }
 shc-blockchain-service = { path = "client/blockchain-service", default-features = false }
 shc-file-transfer-service = { path = "client/file-transfer-service", default-features = false }
 shc-indexer-service = { path = "client/indexer-service", default-features = false }
