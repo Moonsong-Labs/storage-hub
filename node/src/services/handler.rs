@@ -223,13 +223,15 @@ where
         // Finally once the ProcessMspRespondStoringRequest event is emitted, the MSP will respond to the user with a confirmation.
 
         // RemoteUploadRequest comes from FileTransferService and requires a separate service parameter
-        subscribe_actor_event!(
-            event: RemoteUploadRequest,
-            task: MspUploadFileTask,
+        subscribe_actor_event_map!(
             service: &self.file_transfer,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: false,
+            [
+                RemoteUploadRequest => MspUploadFileTask,
+                RetryBucketMoveDownload => MspRetryBucketMoveTask,
+            ]
         );
 
         subscribe_actor_event_map!(
@@ -253,15 +255,6 @@ where
                 FinalisedMspStopStoringBucketInsolventUser => MspStopStoringInsolventUserTask,
                 NotifyPeriod => MspChargeFeesTask,
             ]
-        );
-
-        subscribe_actor_event!(
-            event: RetryBucketMoveDownload,
-            task: MspRetryBucketMoveTask,
-            service: &self.file_transfer,
-            spawner: &self.task_spawner,
-            context: self.clone(),
-            critical: false,
         );
     }
 }
