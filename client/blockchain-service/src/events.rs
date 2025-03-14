@@ -1,15 +1,17 @@
+use std::sync::Arc;
+use tokio::sync::{oneshot, Mutex};
+
 use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_derive::{ActorEvent, ActorEventBus};
+use sp_core::H256;
+use sp_runtime::AccountId32;
+
 use shc_common::types::{
     Balance, BlockNumber, BucketId, CustomChallenge, FileKey, FileLocation, Fingerprint,
     ForestRoot, KeyProofs, PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput,
     StorageData, TrieMutation, ValuePropId,
 };
-use sp_core::H256;
-use sp_runtime::AccountId32;
-use std::sync::Arc;
-use tokio::sync::{oneshot, Mutex};
 
 use crate::types::{
     ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
