@@ -1,3 +1,132 @@
+//! # Typed RocksDB Storage Framework
+//!
+//! This module provides a type-safe abstraction layer on top of RocksDB for persisting structured data.
+//! It addresses several challenges when working with RocksDB directly:
+//!
+//! 1. **Type Safety**: RocksDB is a key-value store that works with raw bytes, requiring manual
+//!    serialization/deserialization. This framework ensures type safety by handling this automatically.
+//!
+//! 2. **Column Family Organization**: While RocksDB supports column families for organizing data,
+//!    using them directly requires string names and careful handling. This framework provides
+//!    strongly-typed column family definitions.
+//!
+//! 3. **Higher-level Data Structures**: This framework implements common data structures on top of
+//!    RocksDB such as:
+//!    - Deques (CFDequeAPI) for queue-like operations
+//!    - Hash Sets (CFHashSetAPI) for set-like operations
+//!    - Range Maps (CFRangeMapAPI) for map structures with range querying capabilities
+//!
+//! ## Architecture
+//!
+//! The framework is organized into several abstraction layers:
+//!
+//! ### 1. Base Layer: Encoding/Decoding
+//!
+//! The `DbCodec<T>` trait defines how types are encoded to and decoded from bytes:
+//! - `encode(value: &T) -> Vec<u8>`: Converts a value to bytes for storage
+//! - `decode(bytes: &[u8]) -> T`: Converts bytes back to the original type
+//!
+//! The most common implementation is `ScaleDbCodec`, which uses SCALE (Simple Concatenated Aggregate Little-Endian)
+//! encoding, the same serialization format used throughout the Substrate ecosystem.
+//!
+//! ### 2. Column Family Definitions
+//!
+//! Column families are defined as types implementing various traits:
+//!
+//! - `TypedCf`: The fundamental trait for column families, defining key and value types and their codecs
+//! - `ScaleEncodedCf`: For column families using SCALE encoding for both keys and values
+//! - `SingleScaleEncodedValueCf`: For column families storing a single value (essentially a global variable)
+//!
+//! ### 3. Database Access Layer
+//!
+//! - `ReadableRocks`/`WriteableRocks`: Traits that abstract RocksDB read/write operations
+//! - `TypedDbContext`: Provides a context for interacting with the database, supporting transactions and overlays
+//! - `BufferedWriteSupport`: Enables batched writes for performance
+//!
+//! ### 4. Higher-level Data Structures
+//!
+//! - `CFDequeAPI`: Implements a double-ended queue abstraction over RocksDB
+//! - `CFHashSetAPI`: Implements a set abstraction for storing unique values
+//! - `CFRangeMapAPI`: Implements a map abstraction with range query capabilities
+//!
+//! ## Common Usage Patterns
+//!
+//! ### Defining Column Families
+//!
+//! Column families are typically defined as empty structs implementing the appropriate traits:
+//!
+//! ```
+//! // Single value column family (global variable)
+//! pub struct LastProcessedBlockNumberCf;
+//! impl SingleScaleEncodedValueCf for LastProcessedBlockNumberCf {
+//!     type Value = BlockNumber;
+//!     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "last_processed_block_number";
+//! }
+//!
+//! // Key-value column family
+//! pub struct PendingRequestsCf;
+//! impl ScaleEncodedCf for PendingRequestsCf {
+//!     type Key = u64;
+//!     type Value = Request;
+//!     const SCALE_ENCODED_NAME: &'static str = "pending_requests";
+//! }
+//! ```
+//!
+//! ### Reading/Writing Data
+//!
+//! Operations are performed through a context that provides type safety:
+//!
+//! ```
+//! // Read a single value
+//! let block_number = context.access_value(&LastProcessedBlockNumberCf::default()).read();
+//!
+//! // Write a value
+//! context.access_value(&LastProcessedBlockNumberCf::default()).write(&new_block_number);
+//!
+//! // Access a key-value column family
+//! let entry = context.cf(&PendingRequestsCf::default()).get(&key);
+//! context.cf(&PendingRequestsCf::default()).put(&key, &value);
+//! ```
+//!
+//! ### Using Higher-level Data Structures
+//!
+//! The framework provides APIs for common data structures:
+//!
+//! ```
+//! // Using a deque (queue)
+//! let deque = context.pending_requests_deque();
+//! deque.push_back(request);  // Add to the end
+//! let next_request = deque.pop_front();  // Get from the front
+//!
+//! // Using a set
+//! let hashset = context.unique_addresses();
+//! hashset.insert(&address);
+//! let contains = hashset.contains(&address);
+//!
+//! // Using a range map
+//! let range_map = context.file_chunks_map();
+//! range_map.insert(&file_key, chunk_id);
+//! let chunks = range_map.values_for_key(&file_key);
+//! ```
+//!
+//! ## Transaction Management
+//!
+//! Operations can be batched and committed atomically:
+//!
+//! ```
+//! let context = store.open_rw_context_with_overlay();
+//! // Perform multiple operations
+//! context.commit();  // Flushes all changes to the database
+//! ```
+//!
+//! ## Design Benefits
+//!
+//! 1. **Type Safety**: Compile-time checks prevent using wrong types with column families
+//! 2. **Code Organization**: Clear separation between storage definition and usage
+//! 3. **Performance**: Batched operations and efficient encodings
+//! 4. **Abstraction**: Higher-level data structures hide RocksDB complexity
+//! 5. **Flexibility**: Easy to add new column families or data structures
+
 use codec::{Decode, Encode};
 use rocksdb::{
     AsColumnFamilyRef, ColumnFamily, DBPinnableSlice, Direction, IteratorMode, ReadOptions,
@@ -10,6 +139,10 @@ use std::{
     ops::RangeBounds,
 };
 
+/// Defines how types are encoded to and decoded from bytes for storage in RocksDB.
+///
+/// This trait abstracts the serialization and deserialization process, allowing
+/// different encoding formats to be used with the same storage framework.
 pub trait DbCodec<T> {
     /// Encode a value to bytes.
     fn encode(value: &T) -> Vec<u8>;
@@ -19,9 +152,14 @@ pub trait DbCodec<T> {
 }
 
 /// A DbCodec for the SCALE codec.
+///
+/// This implementation uses the SCALE (Simple Concatenated Aggregate Little-Endian) codec,
+/// which is the standard serialization format used throughout the Substrate ecosystem.
+/// It works with any type that implements the `Encode` and `Decode` traits.
 #[derive(Clone)]
 pub struct ScaleDbCodec;
 
+/// Implement the DbCodec trait for any type that implements Encode and Decode (SCALE codec).
 impl<T> DbCodec<T> for ScaleDbCodec
 where
     T: Encode + Decode,
@@ -36,8 +174,17 @@ where
 }
 
 /// A typed RocksDB column family.
+///
+/// This trait defines the core properties of a column family in RocksDB, including
+/// the types of keys and values it stores, how they are encoded/decoded, and the
+/// name used to identify the column family in the database.
+///
+/// By implementing this trait on empty structs, you can create type-safe column
+/// family definitions that ensure correct usage throughout your codebase.
 pub trait TypedCf {
+    /// Type of the key.
     type Key;
+    /// Type of the value.
     type Value;
 
     /// Type of the [`DbCodec`] for the keys.
@@ -51,6 +198,10 @@ pub trait TypedCf {
 }
 
 /// A DbCodec for the unit type, used for single row column families.
+///
+/// This codec is used with column families that store only a single value,
+/// effectively implementing a global variable. The key type is `()` (unit),
+/// indicating there's only one possible key.
 #[derive(Debug, Clone)]
 pub struct SingleRowDbCodec;
 
@@ -66,6 +217,10 @@ impl DbCodec<()> for SingleRowDbCodec {
 
 /// A convenience trait implementing [`TypedCf`] for when [`Self::Key`] and [`Self::Value`] support
 /// SCALE encode/decode.
+///
+/// This trait simplifies the definition of column families that use SCALE encoding.
+/// It requires only the key and value types and a name, then automatically implements
+/// `TypedCf` with the appropriate codec settings.
 pub trait ScaleEncodedCf {
     type Key: Encode + Decode;
     type Value: Encode + Decode;
@@ -84,6 +239,10 @@ impl<K: Encode + Decode, V: Encode + Decode, S: ScaleEncodedCf<Key = K, Value = 
 }
 
 /// A convenience trait implementing [`ScaleEncodedCf`] for a single SCALE-encoded value column family.
+///
+/// This trait is used for column families that act as global variables, storing only
+/// a single value with the unit type `()` as the key. It further simplifies the definition
+/// of these common storage patterns.
 pub trait SingleScaleEncodedValueCf {
     type Value: Encode + Decode;
 
@@ -98,6 +257,10 @@ impl<V: Encode + Decode, S: SingleScaleEncodedValueCf<Value = V>> ScaleEncodedCf
 }
 
 /// A RocksDb write buffer used for batching.
+///
+/// This struct collects multiple write operations (puts, deletes, etc.) before
+/// committing them to the database in a single atomic write. This improves performance
+/// and ensures consistency by avoiding partial updates.
 #[derive(Default)]
 pub struct WriteBuffer {
     write_batch: RefCell<WriteBatch>,
@@ -125,6 +288,11 @@ impl WriteBuffer {
     }
 }
 
+/// Defines read operations for a RocksDB database.
+///
+/// This trait abstracts the read operations that can be performed on a RocksDB database,
+/// such as getting values, iterating over column families, etc. It is implemented by
+/// database connection types like `TypedRocksDB`.
 pub trait ReadableRocks {
     /// Resolves the column family by name.
     fn cf_handle(&self, name: &str) -> &ColumnFamily;
@@ -153,12 +321,18 @@ pub trait ReadableRocks {
 }
 
 /// A write-supporting interface of a RocksDB database.
+///
+/// This trait extends `ReadableRocks` with the ability to write data to the database.
+/// It is implemented by database connection types that support writing, such as `TypedRocksDB`.
 pub trait WriteableRocks: ReadableRocks {
     /// Atomically writes the given batch of updates.
     fn write(&self, batch: WriteBatch);
 }
 
 /// An internal wrapper for a [`TypedCf`] and dependencies resolved from it.
+///
+/// This struct connects a typed column family definition with its actual RocksDB handle,
+/// ensuring operations have the correct type information.
 struct CfHandle<'r, CF: TypedCf> {
     handle: &'r ColumnFamily,
     phantom: PhantomData<CF>,
@@ -175,9 +349,16 @@ impl<'r, CF: TypedCf> CfHandle<'r, CF> {
     }
 }
 
-/// An write enabling marker trait to be used with [`TypedDbContext`].
+/// A write enabling marker trait to be used with [`TypedDbContext`].
+///
+/// This trait is used as a type parameter to indicate whether a context
+/// supports write operations. It doesn't define any methods but serves
+/// as a compile-time constraint on what operations are allowed.
 pub trait WriteSupport {}
 
+/// Type that indicates no write support is available.
+///
+/// This is used with `TypedDbContext` to create a read-only context.
 pub struct NoWriteSupport;
 
 impl WriteSupport for NoWriteSupport {}
@@ -186,6 +367,10 @@ impl WriteSupport for NoWriteSupport {}
 ///
 /// All reads see the current DB state.
 /// All (optional) write capabilities depend upon the used [`WriteSupport`].
+///
+/// This struct provides a context for interacting with a RocksDB database
+/// in a type-safe manner. It keeps track of changes in memory and allows
+/// them to be committed as a single transaction if write support is available.
 pub struct TypedDbContext<'r, R: ReadableRocks, W: WriteSupport> {
     rocks: &'r R,
     overlay: DbOverlay,
@@ -209,6 +394,8 @@ impl<'r, R: ReadableRocks, W: WriteSupport> TypedDbContext<'r, R, W> {
 /// All writes are accumulated in the internal buffer and are not visible to any subsequent reads,
 /// until [`BufferedWriteSupport::flush()`] happens (either an explicit one, likely propagated from
 /// [`TypedDbContext::flush()`], or an implicit one on [`Drop`]).
+///
+/// This struct enables batched writes for better performance and atomicity.
 pub struct BufferedWriteSupport<'r, R: WriteableRocks> {
     buffer: WriteBuffer,
     rocks: &'r R,
@@ -254,6 +441,9 @@ impl<'r, R: WriteableRocks> TypedDbContext<'r, R, BufferedWriteSupport<'r, R>> {
 
 /// A higher-level DB access API bound to its [`TypedDbContext`] and scoped at a specific column
 /// family.
+///
+/// This struct is the main interface for performing type-safe operations on a column family.
+/// It ensures that all operations use the correct types for keys and values.
 pub struct TypedCfApi<'r, 'o, 'w, CF: TypedCf, R: ReadableRocks, W: WriteSupport> {
     cf: CfHandle<'r, CF>,
     rocks: &'r R,
@@ -517,6 +707,9 @@ impl<'r, R: ReadableRocks, W: WriteSupport> TypedDbContext<'r, R, W> {
 }
 
 /// A RocksDB wrapper which implements [`ReadableRocks`] and [`WriteableRocks`].
+///
+/// This struct wraps a RocksDB database and provides type-safe access through
+/// the traits defined in this module.
 pub struct TypedRocksDB {
     pub db: DB,
 }
@@ -571,6 +764,12 @@ impl WriteableRocks for TypedRocksDB {
 }
 
 /// A key-value operation in the overlay.
+///
+/// This enum represents operations that will be applied to the database:
+/// - `Put`: Set a value
+/// - `Delete`: Remove a value
+///
+/// The overlay stores these operations in memory before committing them to the database.
 #[derive(Debug, Clone)]
 pub enum DbCfOverlayValueOp {
     Put(Vec<u8>),
@@ -578,6 +777,8 @@ pub enum DbCfOverlayValueOp {
 }
 
 /// A key in the overlay, composed of the column_family and the key.
+///
+/// This struct represents a key for the in-memory overlay, wrapping the actual key bytes.
 #[derive(Debug, Clone, Eq, PartialEq, PartialOrd, Ord)]
 pub struct DbCfOverlayKey {
     pub key: Vec<u8>,
@@ -589,6 +790,10 @@ impl DbCfOverlayKey {
     }
 }
 
+/// An in-memory overlay for all column families in a database.
+///
+/// This struct maintains a map of column family names to their respective overlays.
+/// It accumulates changes in memory before they are committed to the database.
 pub struct DbOverlay {
     pub cfs: RefCell<BTreeMap<String, DbCfOverlay>>,
 }
@@ -612,6 +817,9 @@ impl DbOverlay {
 }
 
 /// An in memory overlay for a column family used by [`TypedCfApi`].
+///
+/// This struct maintains a map of keys to their pending operations (put or delete).
+/// It allows changes to be accumulated in memory before being committed to the database.
 pub struct DbCfOverlay {
     pub key_value: RefCell<BTreeMap<DbCfOverlayKey, DbCfOverlayValueOp>>,
 }
@@ -644,6 +852,9 @@ impl DbCfOverlay {
 }
 
 /// A scoped access to a single value column family.
+///
+/// This struct provides a convenient interface for accessing column families
+/// that store only a single value (global variables).
 pub struct SingleValueScopedAccess<'a, CF: SingleScaleEncodedValueCf> {
     db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
     cf: &'a CF,
@@ -671,11 +882,17 @@ impl<'a, CF: SingleScaleEncodedValueCf> SingleValueScopedAccess<'a, CF> {
 }
 
 /// A trait for providing a database context.
+///
+/// This trait is implemented by types that can provide access to a `TypedDbContext`,
+/// which is required for interacting with the database.
 pub trait ProvidesDbContext {
     fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>>;
 }
 
 /// A trait which provides access to single value CFs.
+///
+/// This trait extends `ProvidesDbContext` with a convenience method for
+/// accessing column families that store only a single value (global variables).
 pub trait ProvidesTypedDbSingleAccess: ProvidesDbContext {
     fn access_value<'a, CF: SingleScaleEncodedValueCf>(
         &'a self,
@@ -685,6 +902,10 @@ pub trait ProvidesTypedDbSingleAccess: ProvidesDbContext {
     }
 }
 
+/// A trait which provides access to all column families.
+///
+/// This trait extends `ProvidesDbContext` with a convenience method for
+/// accessing any column family in a type-safe manner.
 pub trait ProvidesTypedDbAccess: ProvidesDbContext {
     fn access<'a, CF: TypedCf>(
         &'a self,
@@ -695,6 +916,14 @@ pub trait ProvidesTypedDbAccess: ProvidesDbContext {
 }
 
 /// A trait for a deque-like on top of RocksDb.
+///
+/// This trait implements queue operations (push_back, pop_front, etc.) using
+/// three column families:
+/// - A left index CF that tracks the front of the queue
+/// - A right index CF that tracks the back of the queue
+/// - A data CF that stores the actual values
+///
+/// This allows efficient queue operations on persisted data.
 pub trait CFDequeAPI: ProvidesTypedDbSingleAccess {
     /// The type of the value stored in the deque.
     type Value;
@@ -776,6 +1005,10 @@ where
 
 /// A trait for a hashset-like structure on top of RocksDB.
 /// This trait provides common operations for working with sets of keys.
+///
+/// This implements set operations (insert, remove, contains, etc.) using
+/// a single column family where the keys are the set elements and the values are
+/// empty (unit type). This is useful for implementing collections of unique items.
 pub trait CFHashSetAPI: ProvidesTypedDbAccess {
     /// The type of the key stored in the hashset.
     type Value: Encode + Decode;
@@ -880,12 +1113,18 @@ pub trait CFHashSetAPI: ProvidesTypedDbAccess {
 }
 
 /// A composite key that combines a primary key and a value for efficient range queries
+///
+/// This struct is used with `CFRangeMapAPI` to implement a multi-value map
+/// by encoding both the key and value into a single composite key. This allows
+/// efficient range queries for all values associated with a specific key.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CompositeKey<K, V> {
     pub key: K,
     pub value: V,
 }
 
+/// Implement the Encode trait for the CompositeKey struct.
+/// This allows the CompositeKey struct to be encoded using the SCALE codec.
 impl<K: Encode, V: Encode> Encode for CompositeKey<K, V> {
     fn encode(&self) -> Vec<u8> {
         // Encode key and value separately, then concatenate
@@ -895,6 +1134,8 @@ impl<K: Encode, V: Encode> Encode for CompositeKey<K, V> {
     }
 }
 
+/// Implement the Decode trait for the CompositeKey struct.
+/// This allows the CompositeKey struct to be decoded using the SCALE codec.
 impl<K: Decode, V: Decode> Decode for CompositeKey<K, V> {
     fn decode<I: codec::Input>(input: &mut I) -> Result<Self, codec::Error> {
         // This is a simplified implementation that assumes we can decode the key and value
@@ -909,6 +1150,10 @@ impl<K: Decode, V: Decode> Decode for CompositeKey<K, V> {
 /// A trait for a hashmap-like structure on top of RocksDB that supports efficient range queries within keys.
 /// This implementation uses a composite key approach where the key and value are combined into a single key,
 /// and the actual value stored is empty (unit type).
+///
+/// This trait implements map operations with the ability to store multiple values per key
+/// and efficiently query ranges of values for a specific key. It's particularly useful for
+/// implementing relationships like tracking chunks belonging to a file.
 pub trait CFRangeMapAPI: ProvidesTypedDbAccess {
     /// The type of the key stored in the hashmap.
     type Key: Encode + Decode + Clone + PartialEq + Eq + PartialOrd + Ord;
