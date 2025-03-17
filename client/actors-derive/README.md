@@ -7,6 +7,7 @@ This crate provides procedural macros to reduce boilerplate code in the StorageH
 - `ActorEvent` derive macro: Implements `EventBusMessage` for event structs and registers them with a specific actor.
 - `ActorEventBus` attribute macro: Generates the event bus provider struct and implements all the required methods and traits.
 - `subscribe_actor_event` macro: Simplifies event subscription code with named parameters for better readability.
+- `subscribe_actor_event_map` macro: Simplifies subscribing multiple events to tasks with shared parameters and per-mapping overrides.
 
 ## Usage
 
@@ -106,6 +107,40 @@ let event_bus_listener: EventBusListener<FinalisedBspConfirmStoppedStoring, _> =
     task.subscribe_to(&task_spawner, &service, true);
 event_bus_listener.start();
 ```
+
+### 4. Mapping Multiple Events to Tasks
+
+Use the `subscribe_actor_event_map` macro to simplify subscribing multiple events to tasks with shared parameters:
+
+```rust
+use shc_actors_derive::subscribe_actor_event_map;
+
+subscribe_actor_event_map!(
+    service: &self.blockchain,
+    spawner: &self.task_spawner,
+    context: self.clone(),
+    critical: true,
+    [
+        // Override critical for specific mapping
+        NewStorageRequest => { task: MspUploadFileTask, critical: false },
+        // Use default critical value
+        ProcessMspRespondStoringRequest => MspUploadFileTask,
+        FinalisedMspStoppedStoringBucket => MspDeleteBucketTask,
+    ]
+);
+```
+
+#### Parameters for `subscribe_actor_event_map`:
+
+- `service`: The service that provides the event bus (required)
+- `spawner`: The task spawner for spawning event handlers (required)
+- `context`: The context to create new tasks (required)
+- `critical`: Default critical value for all mappings (optional, defaults to false)
+- An array of mappings, where each mapping is either:
+  - `EventType => TaskType`: Uses default critical value
+  - `EventType => { task: TaskType, critical: bool }`: Overrides critical value for this mapping
+
+This macro is particularly useful when you need to subscribe multiple events to tasks with shared parameters, as it reduces boilerplate code and makes the relationships between events and tasks more explicit.
 
 ## Refactoring Example
 
