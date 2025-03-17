@@ -106,3 +106,57 @@ let event_bus_listener: EventBusListener<FinalisedBspConfirmStoppedStoring, _> =
     task.subscribe_to(&task_spawner, &service, true);
 event_bus_listener.start();
 ```
+
+## Refactoring Example
+
+### Before
+
+```rust
+#[derive(Clone)]
+pub struct NewChallengeSeed {
+    pub provider_id: String,
+    pub tick: u32,
+    pub seed: Vec<u8>,
+}
+
+impl EventBusMessage for NewChallengeSeed {}
+
+#[derive(Clone, Default)]
+pub struct BlockchainServiceEventBusProvider {
+    new_challenge_seed_event_bus: EventBus<NewChallengeSeed>,
+    // Many more fields...
+}
+
+impl BlockchainServiceEventBusProvider {
+    pub fn new() -> Self {
+        Self {
+            new_challenge_seed_event_bus: EventBus::new(),
+            // Many more initializations...
+        }
+    }
+}
+
+impl ProvidesEventBus<NewChallengeSeed> for BlockchainServiceEventBusProvider {
+    fn event_bus(&self) -> &EventBus<NewChallengeSeed> {
+        &self.new_challenge_seed_event_bus
+    }
+}
+// Many more implementations...
+```
+
+### After
+
+```rust
+use shc_actors_derive::{ActorEvent, ActorEventBus};
+
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "blockchain_service")]
+pub struct NewChallengeSeed {
+    pub provider_id: String,
+    pub tick: u32,
+    pub seed: Vec<u8>,
+}
+
+#[ActorEventBus("blockchain_service")]
+pub struct BlockchainServiceEventBusProvider;
+```
