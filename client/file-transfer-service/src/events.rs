@@ -1,5 +1,5 @@
 use sc_network::PeerId;
-use shc_actors_framework::event_bus::{EventBus, EventBusMessage, ProvidesEventBus};
+use shc_actors_derive::{ActorEvent, ActorEventBus};
 use shc_common::types::{
     BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
 };
@@ -13,7 +13,8 @@ use std::collections::HashSet;
 /// `BspUploadFileTask`) enforce their own chunk count restrictions.
 ///
 /// The proof must contain at least one chunk to be considered valid.
-#[derive(Clone)]
+#[derive(Clone, ActorEvent)]
+#[actor(actor = "file_transfer_service")]
 pub struct RemoteUploadRequest {
     /// The peer ID of the receiver node.
     pub peer: PeerId,
@@ -27,10 +28,9 @@ pub struct RemoteUploadRequest {
     pub request_id: UploadRequestId,
 }
 
-impl EventBusMessage for RemoteUploadRequest {}
-
 /// A request to download chunks from a remote peer
-#[derive(Clone)]
+#[derive(Clone, ActorEvent)]
+#[actor(actor = "file_transfer_service")]
 pub struct RemoteDownloadRequest {
     /// The key of the file to download chunks from
     pub file_key: FileKey,
@@ -42,47 +42,12 @@ pub struct RemoteDownloadRequest {
     pub request_id: DownloadRequestId,
 }
 
-impl EventBusMessage for RemoteDownloadRequest {}
-
 /// Event triggered to retry pending bucket move downloads.
 /// This is emitted on startup and will be periodically emitted later to ensure
 /// any interrupted downloads can be resumed.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, ActorEvent)]
+#[actor(actor = "file_transfer_service")]
 pub struct RetryBucketMoveDownload;
 
-impl EventBusMessage for RetryBucketMoveDownload {}
-
-#[derive(Clone, Default)]
-pub struct FileTransferServiceEventBusProvider {
-    remote_upload_request_event_bus: EventBus<RemoteUploadRequest>,
-    remote_download_request_event_bus: EventBus<RemoteDownloadRequest>,
-    retry_bucket_move_download_event_bus: EventBus<RetryBucketMoveDownload>,
-}
-
-impl FileTransferServiceEventBusProvider {
-    pub fn new() -> Self {
-        Self {
-            remote_upload_request_event_bus: EventBus::new(),
-            remote_download_request_event_bus: EventBus::new(),
-            retry_bucket_move_download_event_bus: EventBus::new(),
-        }
-    }
-}
-
-impl ProvidesEventBus<RemoteUploadRequest> for FileTransferServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<RemoteUploadRequest> {
-        &self.remote_upload_request_event_bus
-    }
-}
-
-impl ProvidesEventBus<RemoteDownloadRequest> for FileTransferServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<RemoteDownloadRequest> {
-        &self.remote_download_request_event_bus
-    }
-}
-
-impl ProvidesEventBus<RetryBucketMoveDownload> for FileTransferServiceEventBusProvider {
-    fn event_bus(&self) -> &EventBus<RetryBucketMoveDownload> {
-        &self.retry_bucket_move_download_event_bus
-    }
-}
+#[ActorEventBus("file_transfer_service")]
+pub struct FileTransferServiceEventBusProvider;
