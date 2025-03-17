@@ -72,6 +72,11 @@ thiserror = "1.0.48"
 tokio = "1.36.0"
 toml = "0.8.19"
 trie-db = { version = "0.29.1", default-features = false }
+trybuild = "1.0"
+proc-macro2 = "1.0.79"
+quote = "1.0.35"
+syn = { version = "2.0.52", features = ["full", "extra-traits"] }
+once_cell = "1.18.0"
 
 # Substrate
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }

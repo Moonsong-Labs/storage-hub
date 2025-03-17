@@ -138,6 +138,125 @@ impl Parse for ActorEventBusArgs {
     }
 }
 
+/// Arguments for the subscribe_actor_event macro with named parameters
+struct SubscribeActorEventArgs {
+    task_type: syn::Type,
+    event_type: syn::Type,
+    service: syn::Expr,
+    task_spawner: syn::Expr,
+    context: Option<syn::Expr>,
+    critical: Option<syn::LitBool>,
+    task_instance: Option<syn::Expr>,
+}
+
+impl Default for SubscribeActorEventArgs {
+    fn default() -> Self {
+        Self {
+            task_type: syn::parse_str("()").unwrap(),
+            event_type: syn::parse_str("()").unwrap(),
+            service: syn::parse_str("()").unwrap(),
+            task_spawner: syn::parse_str("()").unwrap(),
+            context: None,
+            critical: None,
+            task_instance: None,
+        }
+    }
+}
+
+impl Parse for SubscribeActorEventArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut args = SubscribeActorEventArgs::default();
+
+        // Parse all named parameters
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            let _: Token![:] = input.parse()?;
+
+            if key == "task" {
+                // This can either be a type or a task instance
+                if input.peek(syn::token::Paren)
+                    || input.peek(syn::token::Bracket)
+                    || input.peek(syn::token::Brace)
+                {
+                    // Looks like an expression (task instance)
+                    args.task_instance = Some(input.parse()?);
+                } else {
+                    // Assume it's a type
+                    args.task_type = input.parse()?;
+                }
+            } else if key == "event" {
+                args.event_type = input.parse()?;
+            } else if key == "service" {
+                args.service = input.parse()?;
+            } else if key == "spawner" {
+                args.task_spawner = input.parse()?;
+            } else if key == "context" {
+                args.context = Some(input.parse()?);
+            } else if key == "critical" {
+                args.critical = Some(input.parse()?);
+            } else {
+                return Err(syn::Error::new(
+                    key.span(),
+                    format!("Unknown parameter: {}", key),
+                ));
+            }
+
+            // Parse comma if there are more fields
+            if input.peek(Token![,]) {
+                let _: Token![,] = input.parse()?;
+            }
+        }
+
+        // Validate required fields
+        if args.event_type.to_token_stream().to_string() == "()" {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "Missing required parameter 'event'",
+            ));
+        }
+
+        if args.task_spawner.to_token_stream().to_string() == "()" {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "Missing required parameter 'spawner'",
+            ));
+        }
+
+        if args.service.to_token_stream().to_string() == "()" {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "Missing required parameter 'service'",
+            ));
+        }
+
+        if args.task_type.to_token_stream().to_string() == "()" && args.task_instance.is_none() {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "Missing required parameter 'task'",
+            ));
+        }
+
+        if args.task_instance.is_some() && args.context.is_some() {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "Cannot specify both 'task' as an instance and 'context'. 'context' is only valid when 'task' is a type.",
+            ));
+        }
+
+        if args.task_type.to_token_stream().to_string() != "()"
+            && args.context.is_none()
+            && args.task_instance.is_none()
+        {
+            return Err(syn::Error::new(
+                Span::call_site(),
+                "When 'task' is a type, 'context' is required to create a new task instance.",
+            ));
+        }
+
+        Ok(args)
+    }
+}
+
 /// A registry to store and generate code for actor event types
 #[derive(Default)]
 struct ActorRegistry {
@@ -362,6 +481,90 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+/// A macro to simplify event subscription code with named parameters for better readability.
+///
+/// This macro creates and starts an event bus listener for the specified event type and task.
+///
+/// # Parameters
+///
+/// - `event`: The event type to subscribe to (required)
+/// - `task`: Either a task type (if creating a new task) or a task instance (required)
+/// - `service`: The service that provides the event bus (required)
+/// - `spawner`: The task spawner for spawning the event handler (required)
+/// - `context`: The context to create a new task (required when `task` is a type)
+/// - `critical`: Whether the event is critical (optional, defaults to false)
+///
+/// # Examples
+///
+/// ```rust
+/// // Basic usage with task type and context
+/// subscribe_actor_event!(
+///     event: FinalisedBspConfirmStoppedStoring,
+///     task: BspDeleteFileTask,
+///     service: &self.blockchain,
+///     spawner: &self.task_spawner,
+///     context: self,
+///     critical: true,
+/// );
+///
+/// // With an existing task instance
+/// let task = BspDeleteFileTask::new(self.clone());
+/// subscribe_actor_event!(
+///     event: FinalisedBspConfirmStoppedStoring,
+///     task: task.clone(),
+///     service: &self.blockchain,
+///     spawner: &self.task_spawner,
+///     critical: true,
+/// );
+/// ```
+#[proc_macro]
+pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(input as SubscribeActorEventArgs);
+
+    let event_type = args.event_type;
+    let task_spawner = args.task_spawner;
+    let service = args.service;
+
+    // Generate a unique variable name based on the event type
+    let type_str = event_type.to_token_stream().to_string();
+    let var_name = format!("{}_event_bus_listener", to_snake_case(&type_str));
+    let var_ident = syn::Ident::new(&var_name, Span::call_site());
+
+    // Determine if the event is critical
+    let critical = args.critical.map_or(false, |lit| lit.value);
+    let critical_lit = syn::LitBool::new(critical, Span::call_site());
+
+    // If a task instance is provided, use it
+    // Otherwise, create a new task using the task type and context
+    let result = if let Some(task) = args.task_instance {
+        quote! {
+            let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
+                #task.subscribe_to(#task_spawner, #service, #critical_lit);
+            #var_ident.start();
+        }
+    } else {
+        let task_type = args.task_type;
+
+        if let Some(context) = args.context {
+            quote! {
+                let task = #task_type::new(#context.clone());
+                let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
+                    task.subscribe_to(#task_spawner, #service, #critical_lit);
+                #var_ident.start();
+            }
+        } else {
+            // This shouldn't happen due to validation in the Parse implementation
+            syn::Error::new(
+                Span::call_site(),
+                "Internal error: Task type provided without context",
+            )
+            .to_compile_error()
+        }
+    };
+
+    result.into()
 }
 
 /// Helper function to convert CamelCase to snake_case
