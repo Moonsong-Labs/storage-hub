@@ -76,8 +76,7 @@ const addContainer = async (
     await docker.listContainers({
       filters: { ancestor: [DOCKER_IMAGE] }
     })
-  )
-    .flatMap(({ Command }) => Command).length
+  ).flatMap(({ Command }) => Command).length;
 
   const p2pPort = 30350 + containerCount;
   const rpcPort = 9888 + allContainersCount * 7;
