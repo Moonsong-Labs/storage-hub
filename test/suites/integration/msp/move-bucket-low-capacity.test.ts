@@ -21,7 +21,7 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 describeMspNet(
   "MSP rejects bucket move requests due to low capacity",
   { initialised: false, indexer: true },
-  ({ before, createMsp1Api, it, createUserApi, createApi }) => {
+  ({ before, after, createMsp1Api, it, createUserApi, createApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
     let msp3Api: EnrichedBspApi;
@@ -39,6 +39,10 @@ describeMspNet(
         throw new Error("Failed to create MSP API");
       }
       mspApi = maybeMspApi;
+    });
+
+    after(async () => {
+      msp3Api.disconnect();
     });
 
     it("postgres DB is ready", async () => {
@@ -89,17 +93,6 @@ describeMspNet(
     });
 
     it("Add new MSP with low capacity", async () => {
-      // const { mspApi: newMspApi } = await onboardMsp(userApi, {
-      //     mspSigner: mspTwoKey,
-      //     name: "sh-msp-2",
-      //     mspId: ShConsts.DUMMY_MSP_ID_2,
-      //     maxStorageCapacity: 1024 * 1024, // 1MB capacity
-      //     jumpCapacity: 1024 * 1024,
-      //     waitForIdle: true,
-      //     nodeKey: ShConsts.NODE_INFOS.msp2.nodeKey,
-      //     keystoreFolder: "msp-two"
-      // });
-
       const { containerName, p2pPort, peerId, rpcPort } = await addMspContainer({
         name: "sleepy",
         additionalArgs: [
@@ -369,8 +362,6 @@ describeMspNet(
 
       // Verify that the move request was rejected
       assertEventPresent(userApi, "fileSystem", "MoveBucketRejected", events);
-
-      msp3Api.disconnect();
     });
   }
 );
