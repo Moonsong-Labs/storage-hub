@@ -72,8 +72,15 @@ const addContainer = async (
 
   assert(containerCount > 0, `No existing ${providerType.toUpperCase()} containers`);
 
+  const allContainersCount = (
+    await docker.listContainers({
+      filters: { ancestor: [DOCKER_IMAGE] }
+    })
+  )
+    .flatMap(({ Command }) => Command).length
+
   const p2pPort = 30350 + containerCount;
-  const rpcPort = 9888 + containerCount * 7;
+  const rpcPort = 9888 + allContainersCount * 7;
   const containerName = options?.name || `docker-sh-${providerType}-${containerCount + 1}`;
 
   // Get bootnode from docker args
