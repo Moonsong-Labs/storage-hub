@@ -58,7 +58,7 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     await userApi.docker.waitForLog({
-      searchString: "Failed to send file",
+      searchString: "Unable to upload final batch to peer",
       containerName: userApi.shConsts.NODE_INFOS.user.containerName
     });
   });
