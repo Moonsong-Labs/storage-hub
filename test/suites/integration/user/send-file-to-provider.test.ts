@@ -152,7 +152,7 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
 
     // Fail to connect to the first libp2p address because it is a phony one.
     await userApi.docker.waitForLog({
-      searchString: "Failed to upload batch to peer",
+      searchString: "Unable to upload final batch to peer",
       containerName: userApi.shConsts.NODE_INFOS.user.containerName
     });
 
