@@ -215,8 +215,15 @@ where
             storage_path,
             max_storage_capacity,
             jump_capacity,
-            extrinsic_retry_timeout,
             msp_charging_period,
+            msp_delete_file,
+            msp_charge_fees,
+            msp_move_bucket,
+            bsp_upload_file,
+            bsp_move_bucket,
+            bsp_charge_fees,
+            bsp_submit_proof,
+            blockchain_service,
             ..
         }) => {
             info!(
@@ -244,17 +251,28 @@ where
             // Setup the `ShStorageLayer` and additional configuration parameters.
             storage_hub_builder
                 .setup_storage_layer(storage_path.clone())
-                .with_retry_timeout(*extrinsic_retry_timeout)
                 .with_capacity_config(Some(CapacityConfig::new(
                     max_storage_capacity.unwrap_or_default(),
                     jump_capacity.unwrap_or_default(),
                 )));
+
+            storage_hub_builder.with_msp_delete_file_config(msp_delete_file.clone());
+            storage_hub_builder.with_msp_charge_fees_config(msp_charge_fees.clone());
+            storage_hub_builder.with_msp_move_bucket_config(msp_move_bucket.clone());
+            storage_hub_builder.with_bsp_upload_file_config(bsp_upload_file.clone());
+            storage_hub_builder.with_bsp_move_bucket_config(bsp_move_bucket.clone());
+            storage_hub_builder.with_bsp_charge_fees_config(bsp_charge_fees.clone());
+            storage_hub_builder.with_bsp_submit_proof_config(bsp_submit_proof.clone());
 
             // Setup specific configuration for the MSP node.
             if *provider_type == ProviderType::Msp {
                 storage_hub_builder
                     .with_notify_period(*msp_charging_period)
                     .with_indexer_db_pool(maybe_db_pool);
+            }
+
+            if let Some(c) = blockchain_service {
+                storage_hub_builder.with_blockchain_service_config(c.clone());
             }
 
             // Get the RPC configuration to use for this StorageHub node client.
