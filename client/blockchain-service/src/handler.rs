@@ -134,7 +134,7 @@ pub struct BlockchainServiceConfig {
 impl Default for BlockchainServiceConfig {
     fn default() -> Self {
         Self {
-            extrinsic_retry_timeout: 60,
+            extrinsic_retry_timeout: 10,
             sync_mode_min_blocks_behind: 5,
             check_for_pending_proofs_period: 4,
             max_blocks_behind_to_catch_up_root_changes: 10,
