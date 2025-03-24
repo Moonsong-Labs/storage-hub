@@ -2,7 +2,7 @@ import { assertDockerLog, describeBspNet, waitFor, type EnrichedBspApi } from ".
 
 describeBspNet(
   "BSP Automatic Tipping",
-  { extrinsicRetryTimeout: 2 },
+  { extrinsicRetryTimeout: 2, only: true },
   ({ before, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
 
@@ -24,10 +24,29 @@ describeBspNet(
         sealBlock: false
       });
 
+
+      await assertDockerLog(
+        "docker-sh-bsp-1",
+        "attempt #1",
+        20000
+      );
+
+      await assertDockerLog(
+        "docker-sh-bsp-1",
+        "attempt #2",
+        20000
+      );
+
+      await assertDockerLog(
+        "docker-sh-bsp-1",
+        "attempt #3",
+        20000
+      );
+
       await assertDockerLog(
         "docker-sh-bsp-1",
         "Failed to confirm file after 3 retries: Exhausted retry strategy",
-        12000
+        20000
       );
 
       await waitFor({

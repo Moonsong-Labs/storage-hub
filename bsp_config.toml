@@ -8,7 +8,7 @@ max_storage_capacity = 4294967295
 # Jump capacity in bytes (1GB)
 jump_capacity = 1073741824
 # Extrinsic retry timeout in seconds
-extrinsic_retry_timeout = 60
+extrinsic_retry_timeout = 10
 # The minimum number of blocks behind the current best block to consider the node out of sync.
 sync_mode_min_blocks_behind = 5
 # On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
@@ -43,7 +43,7 @@ max_submission_attempts = 5
 
 # Configuration for the Blockchain Service
 [provider.blockchain_service]
-extrinsic_retry_timeout = 60
+extrinsic_retry_timeout = 10
 
 # Optional indexer configuration
 [indexer]
