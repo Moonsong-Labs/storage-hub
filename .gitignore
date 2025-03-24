@@ -36,6 +36,8 @@ cspell.json
 config.toml
 
 
+nohup.out
+
 # IDE
 
 .DS_Store

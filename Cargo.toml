@@ -21,6 +21,7 @@ members = [
 	"client/*",
 	"primitives/*",
 	"xcm-simulator",
+	"e2e-test",
 ]
 resolver = "2"
 
