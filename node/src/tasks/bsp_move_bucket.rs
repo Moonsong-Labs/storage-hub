@@ -6,7 +6,9 @@ use shc_blockchain_service::{
     commands::BlockchainServiceInterface,
     events::{MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested},
 };
-use shc_file_transfer_service::commands::FileTransferServiceInterface;
+use shc_file_transfer_service::commands::{
+    FileTransferServiceCommandInterface, FileTransferServiceCommandInterfaceExt,
+};
 
 use crate::services::{
     handler::StorageHubHandler,

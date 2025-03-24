@@ -99,7 +99,7 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input,
     spanned::Spanned,
-    Attribute, DeriveInput, Ident, LitStr, Token,
+    Attribute, DeriveInput, Ident, LitStr, Token, Type,
 };
 
 /// Parser for the `#[actor(actor = "...")]` attribute that accompanies the `ActorEvent` derive macro.
@@ -828,4 +828,688 @@ fn to_snake_case(s: &str) -> String {
         }
     }
     result
+}
+
+/// Parser for the `#[actor_command(...)]` attribute macro
+///
+/// # Usage
+///
+/// ```rust
+/// #[actor_command(
+///     service = ServiceType,
+///     default_mode = "SyncAwait",
+///     default_error_type = CustomError,
+///     default_inner_channel_type = "futures::channel::oneshot::Receiver"
+/// )]
+/// pub enum CommandEnum {
+///     // command variants
+/// }
+/// ```
+struct ActorCommandArgs {
+    service: Type,
+    default_mode: String,
+    default_error_type: Option<Type>,
+    default_inner_channel_type: Option<Type>,
+}
+
+impl Parse for ActorCommandArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut service = None;
+        let mut default_mode = String::from("SyncAwait");
+        let mut default_error_type = None;
+        let mut default_inner_channel_type = None;
+
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            let _: Token![=] = input.parse()?;
+
+            if key == "service" {
+                service = Some(input.parse()?);
+            } else if key == "default_mode" {
+                let mode: LitStr = input.parse()?;
+                default_mode = mode.value();
+            } else if key == "default_error_type" {
+                default_error_type = Some(input.parse()?);
+            } else if key == "default_inner_channel_type" {
+                default_inner_channel_type = Some(input.parse()?);
+            } else {
+                return Err(syn::Error::new(
+                    key.span(),
+                    format!("Unknown parameter: {}", key),
+                ));
+            }
+
+            // Parse comma if there are more fields
+            if input.peek(Token![,]) {
+                let _: Token![,] = input.parse()?;
+            }
+        }
+
+        let service = service.ok_or_else(|| {
+            syn::Error::new(Span::call_site(), "Missing required parameter 'service'")
+        })?;
+
+        Ok(ActorCommandArgs {
+            service,
+            default_mode,
+            default_error_type,
+            default_inner_channel_type,
+        })
+    }
+}
+
+/// Parser for the `#[command(...)]` attribute
+///
+/// # Usage
+///
+/// ```rust
+/// #[command(
+///     mode = "AsyncAwait",
+///     success_type = SomeType,
+///     error_type = CustomError,
+///     inner_channel_type = "futures::channel::oneshot::Receiver"
+/// )]
+/// CommandVariant { ... }
+/// ```
+struct CommandVariantArgs {
+    mode: Option<String>,
+    success_type: Option<Type>,
+    error_type: Option<Type>,
+    inner_channel_type: Option<Type>,
+}
+
+impl Parse for CommandVariantArgs {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let mut mode = None;
+        let mut success_type = None;
+        let mut error_type = None;
+        let mut inner_channel_type = None;
+
+        while !input.is_empty() {
+            let key: Ident = input.parse()?;
+            let _: Token![=] = input.parse()?;
+
+            if key == "mode" {
+                let mode_lit: LitStr = input.parse()?;
+                mode = Some(mode_lit.value());
+            } else if key == "success_type" {
+                success_type = Some(input.parse()?);
+            } else if key == "error_type" {
+                error_type = Some(input.parse()?);
+            } else if key == "inner_channel_type" {
+                inner_channel_type = Some(input.parse()?);
+            } else {
+                return Err(syn::Error::new(
+                    key.span(),
+                    format!("Unknown parameter: {}", key),
+                ));
+            }
+
+            // Parse comma if there are more fields
+            if input.peek(Token![,]) {
+                let _: Token![,] = input.parse()?;
+            }
+        }
+
+        Ok(CommandVariantArgs {
+            mode,
+            success_type,
+            error_type,
+            inner_channel_type,
+        })
+    }
+}
+
+/// Parse attributes to find and extract the command variant args
+fn extract_command_variant_args(attrs: &[Attribute]) -> Option<CommandVariantArgs> {
+    for attr in attrs {
+        if attr.path().is_ident("command") {
+            return match attr.parse_args() {
+                Ok(args) => Some(args),
+                Err(_) => None,
+            };
+        }
+    }
+    None
+}
+
+/// Generate callback field and type for a command variant based on mode and return types
+fn generate_callback_type(
+    mode: &str,
+    success_type: &Option<Type>,
+    error_type: &Option<Type>,
+    default_error_type: &Option<Type>,
+    inner_channel_type: &Option<Type>,
+) -> proc_macro2::TokenStream {
+    match mode {
+        "FireAndForget" => {
+            // No callback needed for fire and forget
+            quote! {}
+        }
+        "SyncAwait" => {
+            let success_type = success_type
+                .clone()
+                .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
+
+            let error_type = error_type
+                .clone()
+                .or_else(|| default_error_type.clone())
+                .unwrap_or_else(|| {
+                    syn::parse_str("anyhow::Error").expect("Failed to parse default error type")
+                });
+
+            quote! {
+                callback: tokio::sync::oneshot::Sender<Result<#success_type, #error_type>>
+            }
+        }
+        "AsyncAwait" => {
+            let success_type = success_type
+                .clone()
+                .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
+
+            let error_type = error_type.clone().unwrap_or_else(|| {
+                syn::parse_str("anyhow::Error").expect("Failed to parse default error type")
+            });
+
+            // Use custom channel type if provided
+            if let Some(channel_type) = inner_channel_type {
+                quote! {
+                    callback: tokio::sync::oneshot::Sender<#channel_type<Result<#success_type, #error_type>>>
+                }
+            } else {
+                quote! {
+                    callback: tokio::sync::oneshot::Sender<
+                        futures::channel::oneshot::Receiver<Result<#success_type, #error_type>>
+                    >
+                }
+            }
+        }
+        _ => panic!("Invalid mode: {}", mode),
+    }
+}
+
+/// Generate method parameters from command variant fields
+fn generate_method_params(fields: &syn::Fields) -> Vec<proc_macro2::TokenStream> {
+    let mut params = Vec::new();
+
+    match fields {
+        syn::Fields::Named(fields_named) => {
+            for field in &fields_named.named {
+                if let Some(name) = &field.ident {
+                    if name != "callback" {
+                        let ty = &field.ty;
+                        params.push(quote! { #name: #ty });
+                    }
+                }
+            }
+        }
+        syn::Fields::Unnamed(fields_unnamed) => {
+            for (i, field) in fields_unnamed.unnamed.iter().enumerate() {
+                let name = Ident::new(&format!("arg{}", i), Span::call_site());
+                let ty = &field.ty;
+                params.push(quote! { #name: #ty });
+            }
+        }
+        syn::Fields::Unit => {}
+    }
+
+    params
+}
+
+/// Generate method arguments to be used in command construction
+fn generate_method_args(fields: &syn::Fields) -> Vec<proc_macro2::TokenStream> {
+    let mut args = Vec::new();
+
+    match fields {
+        syn::Fields::Named(fields_named) => {
+            for field in &fields_named.named {
+                if let Some(name) = &field.ident {
+                    if name != "callback" {
+                        args.push(quote! { #name });
+                    }
+                }
+            }
+        }
+        syn::Fields::Unnamed(fields_unnamed) => {
+            for i in 0..fields_unnamed.unnamed.len() {
+                let name = Ident::new(&format!("arg{}", i), Span::call_site());
+                args.push(quote! { #name });
+            }
+        }
+        syn::Fields::Unit => {}
+    }
+
+    args
+}
+
+/// Generate method implementation for a command variant
+fn generate_method_impl(
+    enum_name: &Ident,
+    variant_name: &Ident,
+    fields: &syn::Fields,
+    mode: &str,
+    success_type: &Option<Type>,
+    error_type: &Option<Type>,
+    inner_channel_type: &Option<Type>,
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let method_name = Ident::new(&to_snake_case(&variant_name.to_string()), Span::call_site());
+    let params = generate_method_params(fields);
+    let args = generate_method_args(fields);
+
+    // Determine if this is a unit variant with a callback field
+    let is_unit_variant_with_callback =
+        matches!(fields, syn::Fields::Unit) && mode != "FireAndForget";
+
+    // Method signature for the trait (no implementation)
+    let method_signature = match mode {
+        "FireAndForget" => {
+            quote! {
+                async fn #method_name(&self, #(#params),*);
+            }
+        }
+        "SyncAwait" => {
+            let success_type = success_type
+                .clone()
+                .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
+
+            let error_type = error_type.clone().unwrap_or_else(|| {
+                syn::parse_str("anyhow::Error").expect("Failed to parse default error type")
+            });
+
+            quote! {
+                async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type>;
+            }
+        }
+        "AsyncAwait" => {
+            let success_type = success_type
+                .clone()
+                .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
+
+            let error_type = error_type.clone().unwrap_or_else(|| {
+                syn::parse_str("anyhow::Error").expect("Failed to parse default error type")
+            });
+
+            quote! {
+                async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type>;
+            }
+        }
+        _ => panic!("Invalid mode: {}", mode),
+    };
+
+    // Method implementation for the impl block
+    let method_impl = match mode {
+        "FireAndForget" => {
+            if matches!(fields, syn::Fields::Unit) {
+                quote! {
+                    async fn #method_name(&self, #(#params),*) {
+                        let command = #enum_name::#variant_name;
+                        self.send(command).await;
+                    }
+                }
+            } else {
+                quote! {
+                    async fn #method_name(&self, #(#params),*) {
+                        let command = #enum_name::#variant_name {
+                            #(#args),*
+                        };
+                        self.send(command).await;
+                    }
+                }
+            }
+        }
+        "SyncAwait" => {
+            let success_type = success_type
+                .clone()
+                .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
+
+            let error_type = error_type.clone().unwrap_or_else(|| {
+                syn::parse_str("anyhow::Error").expect("Failed to parse default error type")
+            });
+
+            if is_unit_variant_with_callback {
+                quote! {
+                    async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type> {
+                        let (callback, rx) = tokio::sync::oneshot::channel();
+                        let command = #enum_name::#variant_name {
+                            callback,
+                        };
+                        self.send(command).await;
+                        rx.await.expect("Failed to receive response from service. Probably means service has crashed.")
+                    }
+                }
+            } else {
+                quote! {
+                    async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type> {
+                        let (callback, rx) = tokio::sync::oneshot::channel();
+                        let command = #enum_name::#variant_name {
+                            #(#args),*,
+                            callback,
+                        };
+                        self.send(command).await;
+                        rx.await.expect("Failed to receive response from service. Probably means service has crashed.")
+                    }
+                }
+            }
+        }
+        "AsyncAwait" => {
+            let success_type = success_type
+                .clone()
+                .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
+
+            let error_type = error_type.clone().unwrap_or_else(|| {
+                syn::parse_str("anyhow::Error").expect("Failed to parse default error type")
+            });
+
+            // Use custom channel type if provided
+            if let Some(channel_type) = inner_channel_type {
+                if is_unit_variant_with_callback {
+                    quote! {
+                        async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type> {
+                            let (callback, service_rx) = tokio::sync::oneshot::channel();
+                            let command = #enum_name::#variant_name {
+                                callback,
+                            };
+                            self.send(command).await;
+
+                            // Wait for the response from the service
+                            let network_rx: #channel_type<Result<#success_type, #error_type>> = service_rx.await
+                                .expect("Failed to receive response from service. Probably means service has crashed.");
+
+                            // Now we wait on the actual response from the async operation
+                            network_rx.await
+                                .expect("Failed to receive response from the async operation. Probably means it has crashed.")
+                        }
+                    }
+                } else {
+                    quote! {
+                        async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type> {
+                            let (callback, service_rx) = tokio::sync::oneshot::channel();
+                            let command = #enum_name::#variant_name {
+                                #(#args),*,
+                                callback,
+                            };
+                            self.send(command).await;
+
+                            // Wait for the response from the service
+                            let network_rx: #channel_type<Result<#success_type, #error_type>> = service_rx.await
+                                .expect("Failed to receive response from service. Probably means service has crashed.");
+
+                            // Now we wait on the actual response from the async operation
+                            network_rx.await
+                                .expect("Failed to receive response from the async operation. Probably means it has crashed.")
+                        }
+                    }
+                }
+            } else {
+                // Default implementation using futures::channel::oneshot::Receiver
+                if is_unit_variant_with_callback {
+                    quote! {
+                        async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type> {
+                            let (callback, service_rx) = tokio::sync::oneshot::channel();
+                            let command = #enum_name::#variant_name {
+                                callback,
+                            };
+                            self.send(command).await;
+
+                            // First we wait for the response from the service
+                            let inner_rx = service_rx.await.expect("Failed to receive response from service. Probably means service has crashed.");
+
+                            // Now we wait on the actual response from the async operation
+                            let response = inner_rx.await.expect(
+                                "Failed to receive response from the async operation. Probably means it has crashed.",
+                            );
+
+                            response
+                        }
+                    }
+                } else {
+                    quote! {
+                        async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type> {
+                            let (callback, service_rx) = tokio::sync::oneshot::channel();
+                            let command = #enum_name::#variant_name {
+                                #(#args),*,
+                                callback,
+                            };
+                            self.send(command).await;
+
+                            // First we wait for the response from the service
+                            let inner_rx = service_rx.await.expect("Failed to receive response from service. Probably means service has crashed.");
+
+                            // Now we wait on the actual response from the async operation
+                            let response = inner_rx.await.expect(
+                                "Failed to receive response from the async operation. Probably means it has crashed.",
+                            );
+
+                            response
+                        }
+                    }
+                }
+            }
+        }
+        _ => panic!("Invalid mode: {}", mode),
+    };
+
+    (method_signature, method_impl)
+}
+
+/// Macro implementation for actor_command attribute
+#[proc_macro_attribute]
+pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as ActorCommandArgs);
+    let input = parse_macro_input!(input as syn::ItemEnum);
+
+    let enum_name = &input.ident;
+    let service_type = &args.service;
+    let default_mode = args.default_mode;
+    let default_error_type = args.default_error_type;
+    let default_inner_channel_type = args.default_inner_channel_type;
+
+    // Generate interface trait name
+    let interface_name = Ident::new(&format!("{}Interface", enum_name), Span::call_site());
+
+    // Generate each variant with callback field if needed
+    let mut updated_variants = Vec::new();
+    let mut trait_method_signatures = Vec::new();
+    let mut trait_method_implementations = Vec::new();
+
+    for variant in &input.variants {
+        let variant_name = &variant.ident;
+        let variant_args = extract_command_variant_args(&variant.attrs);
+
+        // Get mode and types
+        let mode = variant_args
+            .as_ref()
+            .and_then(|args| args.mode.clone())
+            .unwrap_or_else(|| default_mode.clone());
+
+        let success_type = variant_args
+            .as_ref()
+            .and_then(|args| args.success_type.clone());
+        let error_type = variant_args
+            .as_ref()
+            .and_then(|args| args.error_type.clone())
+            .or_else(|| default_error_type.clone());
+
+        let inner_channel_type = variant_args
+            .as_ref()
+            .and_then(|args| args.inner_channel_type.clone())
+            .or_else(|| default_inner_channel_type.clone());
+
+        // Generate callback field if needed
+        let callback_field = generate_callback_type(
+            &mode,
+            &success_type,
+            &error_type,
+            &default_error_type,
+            &inner_channel_type,
+        );
+
+        // Add variant with callback field
+        match &variant.fields {
+            syn::Fields::Named(fields_named) => {
+                let named_fields = fields_named.named.iter().map(|f| {
+                    let name = &f.ident;
+                    let ty = &f.ty;
+                    quote! { #name: #ty }
+                });
+
+                let variant_quote = if callback_field.is_empty() {
+                    quote! {
+                        #variant_name {
+                            #(#named_fields),*
+                        }
+                    }
+                } else {
+                    // Check if there are named fields, and add a comma only if there are
+                    if fields_named.named.is_empty() {
+                        quote! {
+                            #variant_name {
+                                #callback_field
+                            }
+                        }
+                    } else {
+                        quote! {
+                            #variant_name {
+                                #(#named_fields),*,
+                                #callback_field
+                            }
+                        }
+                    }
+                };
+
+                // Add the attributes (except 'command' which we processed separately)
+                let mut final_variant_quote = variant_quote;
+                for attr in &variant.attrs {
+                    if !attr.path().is_ident("command") {
+                        final_variant_quote = quote! {
+                            #attr
+                            #final_variant_quote
+                        };
+                    }
+                }
+
+                updated_variants.push(final_variant_quote);
+            }
+            syn::Fields::Unnamed(fields_unnamed) => {
+                let unnamed_fields = fields_unnamed.unnamed.iter().map(|f| {
+                    let ty = &f.ty;
+                    quote! { #ty }
+                });
+
+                let mut variant_quote = quote! {
+                    #variant_name(#(#unnamed_fields,)* #callback_field)
+                };
+
+                // Add the attributes (except 'command' which we processed separately)
+                for attr in &variant.attrs {
+                    if !attr.path().is_ident("command") {
+                        variant_quote = quote! {
+                            #attr
+                            #variant_quote
+                        };
+                    }
+                }
+
+                updated_variants.push(variant_quote);
+            }
+            syn::Fields::Unit => {
+                // For unit variants, if they need a callback, convert them to named fields
+                let mut variant_quote = if !callback_field.is_empty() {
+                    quote! {
+                        #variant_name {
+                            #callback_field
+                        }
+                    }
+                } else {
+                    quote! {
+                        #variant_name
+                    }
+                };
+
+                // Add the attributes (except 'command' which we processed separately)
+                for attr in &variant.attrs {
+                    if !attr.path().is_ident("command") {
+                        variant_quote = quote! {
+                            #attr
+                            #variant_quote
+                        };
+                    }
+                }
+
+                updated_variants.push(variant_quote);
+            }
+        }
+
+        // Generate trait method signature and implementation
+        let (method_signature, method_impl) = generate_method_impl(
+            enum_name,
+            variant_name,
+            &variant.fields,
+            &mode,
+            &success_type,
+            &error_type,
+            &inner_channel_type,
+        );
+        trait_method_signatures.push(method_signature);
+        trait_method_implementations.push(method_impl);
+    }
+
+    // Build the updated enum
+    let vis = &input.vis;
+    let generics = &input.generics;
+
+    // Extract generic parameters from service_type if any
+    let service_type_str = service_type.to_token_stream().to_string();
+    let has_generics = service_type_str.contains('<') && service_type_str.contains('>');
+
+    // Generate the interface trait and implementation
+    let trait_def = if has_generics {
+        // If the service type has generics, we need to implement for all generic parameters
+        quote! {
+            #[async_trait::async_trait]
+            pub trait #interface_name {
+                #(#trait_method_signatures)*
+            }
+
+            #[async_trait::async_trait]
+            impl<T> #interface_name for shc_actors_framework::actor::ActorHandle<#service_type>
+            where
+                T: Send + Sync + 'static,
+            {
+                #(#trait_method_implementations)*
+            }
+        }
+    } else {
+        // If the service type doesn't have generics, implement without adding any
+        quote! {
+            #[async_trait::async_trait]
+            pub trait #interface_name {
+                #(#trait_method_signatures)*
+            }
+
+            #[async_trait::async_trait]
+            impl #interface_name for shc_actors_framework::actor::ActorHandle<#service_type> {
+                #(#trait_method_implementations)*
+            }
+        }
+    };
+
+    // Output the result without generating a module
+    let result = quote! {
+        #vis enum #enum_name #generics {
+            #(#updated_variants,)*
+        }
+
+        #trait_def
+    };
+
+    result.into()
+}
+
+// Helper to add support for the command attribute
+#[proc_macro_attribute]
+pub fn command(_args: TokenStream, _input: TokenStream) -> TokenStream {
+    // This is just a marker attribute that is processed by the actor_command macro
+    // Return the input unchanged
+    _input
 }

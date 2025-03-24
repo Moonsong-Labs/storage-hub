@@ -2,7 +2,7 @@ use sc_tracing::tracing::{error, trace};
 use shc_actors_framework::event_bus::EventHandler;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
-    commands::FileTransferServiceInterface, events::RemoteDownloadRequest,
+    commands::FileTransferServiceCommandInterface, events::RemoteDownloadRequest,
 };
 
 use crate::services::{
@@ -99,7 +99,7 @@ where
                 // Send the chunk data and proof back to the requester.
                 self.storage_hub_handler
                     .file_transfer
-                    .download_response(file_key_proof, request_id)
+                    .download_response(request_id, file_key_proof)
                     .await?;
             }
             Err(error) => {

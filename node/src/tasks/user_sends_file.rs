@@ -13,7 +13,9 @@ use shc_common::types::{
     FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
 };
 use shc_file_manager::traits::FileStorage;
-use shc_file_transfer_service::commands::{FileTransferServiceInterface, RequestError};
+use shc_file_transfer_service::commands::{
+    FileTransferServiceCommandInterface, FileTransferServiceCommandInterfaceExt,
+};
 use shp_file_metadata::ChunkId;
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
@@ -299,6 +301,17 @@ where
                                 peer_id
                             );
 
+                            let r = self
+                                .storage_hub_handler
+                                .file_transfer
+                                .parse_remote_upload_data_response(&r.0)
+                                .map_err(|e| {
+                                    anyhow::anyhow!(
+                                        "Failed to parse remote upload data response: {:?}",
+                                        e
+                                    )
+                                })?;
+
                             // If the provider signals they have the entire file, we can stop
                             if r.file_complete {
                                 info!(
@@ -312,9 +325,7 @@ where
 
                             break;
                         }
-                        Err(RequestError::RequestFailure(RequestFailure::Refused))
-                            if retry_attempts < 3 =>
-                        {
+                        Err(RequestFailure::Refused) if retry_attempts < 3 => {
                             warn!(
                                 target: LOG_TARGET,
                                 "Final batch upload rejected by peer {:?}, retrying... (attempt {})",
@@ -326,8 +337,7 @@ where
                             // Wait for a short time before retrying
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
-                        Err(RequestError::RequestFailure(RequestFailure::Network(_)))
-                        | Err(RequestError::RequestFailure(RequestFailure::NotConnected))
+                        Err(RequestFailure::Network(_)) | Err(RequestFailure::NotConnected)
                             if retry_attempts < 10 =>
                         {
                             warn!(
@@ -344,9 +354,9 @@ where
                                 .wait_for_num_blocks(5)
                                 .await?;
                         }
-                        Err(RequestError::RequestFailure(RequestFailure::Refused))
-                        | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
-                        | Err(RequestError::RequestFailure(RequestFailure::NotConnected)) => {
+                        Err(RequestFailure::Refused)
+                        | Err(RequestFailure::Network(_))
+                        | Err(RequestFailure::NotConnected) => {
                             // Return an error if the provider refused to answer.
                             return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                         }
@@ -417,6 +427,17 @@ where
                                 peer_id
                             );
 
+                            let r = self
+                                .storage_hub_handler
+                                .file_transfer
+                                .parse_remote_upload_data_response(&r.0)
+                                .map_err(|e| {
+                                    anyhow::anyhow!(
+                                        "Failed to parse remote upload data response: {:?}",
+                                        e
+                                    )
+                                })?;
+
                             if r.file_complete {
                                 info!(
                                     target: LOG_TARGET,
@@ -427,9 +448,7 @@ where
                             }
                             break;
                         }
-                        Err(RequestError::RequestFailure(RequestFailure::Refused))
-                            if retry_attempts < 3 =>
-                        {
+                        Err(RequestFailure::Refused) if retry_attempts < 3 => {
                             warn!(
                                 target: LOG_TARGET,
                                 "Final batch upload rejected by peer {:?}, retrying... (attempt {})",
@@ -441,8 +460,7 @@ where
                             // Wait for a short time before retrying
                             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
                         }
-                        Err(RequestError::RequestFailure(RequestFailure::Network(_)))
-                        | Err(RequestError::RequestFailure(RequestFailure::NotConnected))
+                        Err(RequestFailure::Network(_)) | Err(RequestFailure::NotConnected)
                             if retry_attempts < 10 =>
                         {
                             warn!(
@@ -459,9 +477,9 @@ where
                                 .wait_for_num_blocks(5)
                                 .await?;
                         }
-                        Err(RequestError::RequestFailure(RequestFailure::Refused))
-                        | Err(RequestError::RequestFailure(RequestFailure::Network(_)))
-                        | Err(RequestError::RequestFailure(RequestFailure::NotConnected)) => {
+                        Err(RequestFailure::Refused)
+                        | Err(RequestFailure::Network(_))
+                        | Err(RequestFailure::NotConnected) => {
                             // Return an error if the provider refused to answer.
                             return Err(anyhow::anyhow!("Failed to send file {:?}", file_key));
                         }
