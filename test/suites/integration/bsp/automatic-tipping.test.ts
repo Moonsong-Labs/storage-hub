@@ -24,24 +24,11 @@ describeBspNet(
         sealBlock: false
       });
 
+      await assertDockerLog("docker-sh-bsp-1", "attempt #1", 20000);
 
-      await assertDockerLog(
-        "docker-sh-bsp-1",
-        "attempt #1",
-        20000
-      );
+      await assertDockerLog("docker-sh-bsp-1", "attempt #2", 20000);
 
-      await assertDockerLog(
-        "docker-sh-bsp-1",
-        "attempt #2",
-        20000
-      );
-
-      await assertDockerLog(
-        "docker-sh-bsp-1",
-        "attempt #3",
-        20000
-      );
+      await assertDockerLog("docker-sh-bsp-1", "attempt #3", 20000);
 
       await assertDockerLog(
         "docker-sh-bsp-1",
