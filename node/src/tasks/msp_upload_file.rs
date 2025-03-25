@@ -15,7 +15,9 @@ use sp_runtime::AccountId32;
 use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
+use shc_blockchain_service::{
+    commands::BlockchainServiceCommandInterface, events::NewStorageRequest,
+};
 use shc_common::types::{
     FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
     StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,

@@ -3,7 +3,7 @@ use sc_tracing::tracing::*;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface,
+    commands::BlockchainServiceCommandInterface,
     events::{MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested},
 };
 use shc_file_transfer_service::commands::{

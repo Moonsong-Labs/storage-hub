@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface,
+    commands::BlockchainServiceCommandInterface,
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
 use shc_common::types::{
@@ -66,7 +66,8 @@ where
             .storage_hub_handler
             .blockchain
             .get_node_public_key()
-            .await;
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to get node public key: {:?}", e))?;
 
         if event.who != node_pub_key.into() {
             // Skip if the storage request was not created by this user node.

@@ -864,7 +864,9 @@ impl Parse for ActorCommandArgs {
             let _: Token![=] = input.parse()?;
 
             if key == "service" {
-                service = Some(input.parse()?);
+                // Parse the service type with its bounds
+                let service_type: Type = input.parse()?;
+                service = Some(service_type);
             } else if key == "default_mode" {
                 let mode: LitStr = input.parse()?;
                 default_mode = mode.value();
@@ -1255,11 +1257,7 @@ fn generate_method_impl(
                             let inner_rx = service_rx.await.expect("Failed to receive response from service. Probably means service has crashed.");
 
                             // Now we wait on the actual response from the async operation
-                            let response = inner_rx.await.expect(
-                                "Failed to receive response from the async operation. Probably means it has crashed.",
-                            );
-
-                            response
+                            inner_rx.await.expect("Failed to receive response from the async operation. Probably means it has crashed.")
                         }
                     }
                 } else {
@@ -1276,11 +1274,7 @@ fn generate_method_impl(
                             let inner_rx = service_rx.await.expect("Failed to receive response from service. Probably means service has crashed.");
 
                             // Now we wait on the actual response from the async operation
-                            let response = inner_rx.await.expect(
-                                "Failed to receive response from the async operation. Probably means it has crashed.",
-                            );
-
-                            response
+                            inner_rx.await.expect("Failed to receive response from the async operation. Probably means it has crashed.")
                         }
                     }
                 }
@@ -1335,7 +1329,7 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
             .and_then(|args| args.inner_channel_type.clone())
             .or_else(|| default_inner_channel_type.clone());
 
-        // Generate callback field if needed
+        // Generate callback field
         let callback_field = generate_callback_type(
             &mode,
             &success_type,
@@ -1360,7 +1354,6 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
                         }
                     }
                 } else {
-                    // Check if there are named fields, and add a comma only if there are
                     if fields_named.named.is_empty() {
                         quote! {
                             #variant_name {
@@ -1377,7 +1370,6 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 };
 
-                // Add the attributes (except 'command' which we processed separately)
                 let mut final_variant_quote = variant_quote;
                 for attr in &variant.attrs {
                     if !attr.path().is_ident("command") {
@@ -1400,7 +1392,6 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
                     #variant_name(#(#unnamed_fields,)* #callback_field)
                 };
 
-                // Add the attributes (except 'command' which we processed separately)
                 for attr in &variant.attrs {
                     if !attr.path().is_ident("command") {
                         variant_quote = quote! {
@@ -1413,7 +1404,6 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
                 updated_variants.push(variant_quote);
             }
             syn::Fields::Unit => {
-                // For unit variants, if they need a callback, convert them to named fields
                 let mut variant_quote = if !callback_field.is_empty() {
                     quote! {
                         #variant_name {
@@ -1426,7 +1416,6 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
                     }
                 };
 
-                // Add the attributes (except 'command' which we processed separately)
                 for attr in &variant.attrs {
                     if !attr.path().is_ident("command") {
                         variant_quote = quote! {
@@ -1458,43 +1447,26 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let vis = &input.vis;
     let generics = &input.generics;
 
-    // Extract generic parameters from service_type if any
-    let service_type_str = service_type.to_token_stream().to_string();
-    let has_generics = service_type_str.contains('<') && service_type_str.contains('>');
+    // Process the service type
+    let (service_type_path, impl_generics, _type_generics, where_clause) =
+        process_service_type(service_type);
 
     // Generate the interface trait and implementation
-    let trait_def = if has_generics {
-        // If the service type has generics, we need to implement for all generic parameters
-        quote! {
-            #[async_trait::async_trait]
-            pub trait #interface_name {
-                #(#trait_method_signatures)*
-            }
-
-            #[async_trait::async_trait]
-            impl<T> #interface_name for shc_actors_framework::actor::ActorHandle<#service_type>
-            where
-                T: Send + Sync + 'static,
-            {
-                #(#trait_method_implementations)*
-            }
+    let trait_def = quote! {
+        #[async_trait::async_trait]
+        pub trait #interface_name {
+            #(#trait_method_signatures)*
         }
-    } else {
-        // If the service type doesn't have generics, implement without adding any
-        quote! {
-            #[async_trait::async_trait]
-            pub trait #interface_name {
-                #(#trait_method_signatures)*
-            }
 
-            #[async_trait::async_trait]
-            impl #interface_name for shc_actors_framework::actor::ActorHandle<#service_type> {
-                #(#trait_method_implementations)*
-            }
+        #[async_trait::async_trait]
+        impl #impl_generics #interface_name for shc_actors_framework::actor::ActorHandle<#service_type_path>
+        #where_clause
+        {
+            #(#trait_method_implementations)*
         }
     };
 
-    // Output the result without generating a module
+    // Output the result
     let result = quote! {
         #vis enum #enum_name #generics {
             #(#updated_variants,)*
@@ -1504,6 +1476,158 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     };
 
     result.into()
+}
+
+/// Process a service type to extract its path, generics, and where clause
+fn process_service_type(
+    service_type: &Type,
+) -> (
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+    proc_macro2::TokenStream,
+) {
+    // Default values for when we have no generics
+    let default_result = (quote! { #service_type }, quote! {}, quote! {}, quote! {});
+
+    // Parse the service type to extract its parts
+    match service_type {
+        Type::Path(type_path) if !type_path.path.segments.is_empty() => {
+            // Get the last segment which may contain generics
+            let last_segment = type_path.path.segments.last().unwrap();
+
+            // Create a "clean" path without angle brackets for the implementation
+            let service_type_clean = {
+                let mut segments = type_path.path.segments.clone();
+
+                // Only process the last segment, keeping all other segments unchanged
+                if let Some(last) = segments.last_mut() {
+                    // Keep only the identifier, removing any angle brackets
+                    last.arguments = syn::PathArguments::None;
+                }
+
+                let path = syn::Path {
+                    leading_colon: type_path.path.leading_colon,
+                    segments,
+                };
+
+                quote! { #path }
+            };
+
+            // Extract the raw text of the type with its generics
+            let full_type_str = quote!(#service_type).to_string();
+
+            // Process generics only if we have angle bracketed arguments
+            match &last_segment.arguments {
+                syn::PathArguments::AngleBracketed(_) => {
+                    // Extract the raw generics part from the angle brackets
+                    if let Some(start) = full_type_str.find('<') {
+                        if let Some(end) = full_type_str.rfind('>') {
+                            let generics_text = full_type_str[start + 1..end].trim();
+
+                            // Parse the generic parameters
+                            let mut generic_entries = Vec::new();
+
+                            // Handle the case with nested angle brackets
+                            let mut current = String::new();
+                            let mut angle_depth = 0;
+
+                            for c in generics_text.chars() {
+                                match c {
+                                    '<' => {
+                                        angle_depth += 1;
+                                        current.push(c);
+                                    }
+                                    '>' => {
+                                        angle_depth -= 1;
+                                        current.push(c);
+                                    }
+                                    ',' if angle_depth == 0 => {
+                                        if !current.trim().is_empty() {
+                                            generic_entries.push(current.trim().to_string());
+                                        }
+                                        current.clear();
+                                    }
+                                    _ => current.push(c),
+                                }
+                            }
+
+                            if !current.trim().is_empty() {
+                                generic_entries.push(current.trim().to_string());
+                            }
+
+                            let mut generic_params = Vec::new();
+                            let mut where_bounds = Vec::new();
+
+                            // Process each generic entry
+                            for entry in &generic_entries {
+                                // If the entry has a colon, it has constraints
+                                if let Some(colon_idx) = entry.find(':') {
+                                    let param_name = &entry[..colon_idx].trim();
+                                    let full_constraint = entry.clone();
+
+                                    if let Ok(ident) = syn::parse_str::<syn::Ident>(param_name) {
+                                        generic_params.push(ident);
+
+                                        // Create a where predicate for the constraints
+                                        if let Ok(predicate) =
+                                            syn::parse_str::<syn::WherePredicate>(&full_constraint)
+                                        {
+                                            where_bounds.push(quote!(#predicate));
+                                        }
+                                    }
+                                } else {
+                                    // Simple generic parameter without constraints
+                                    if let Ok(ident) = syn::parse_str::<syn::Ident>(entry) {
+                                        generic_params.push(ident);
+                                    }
+                                }
+                            }
+
+                            // Generate the impl and type generics
+                            let impl_generics = if !generic_params.is_empty() {
+                                quote! { <#(#generic_params),*> }
+                            } else {
+                                quote! {}
+                            };
+
+                            // Generate the type generics (used in ActorHandle<Service<T>>)
+                            let type_generics = if !generic_params.is_empty() {
+                                quote! { <#(#generic_params),*> }
+                            } else {
+                                quote! {}
+                            };
+
+                            // Generate the where clause if we have any bounds
+                            let where_clause = if !where_bounds.is_empty() {
+                                quote! {
+                                    where
+                                        #(#where_bounds),*
+                                }
+                            } else {
+                                quote! {}
+                            };
+
+                            return (
+                                quote! { #service_type_clean #type_generics },
+                                impl_generics,
+                                type_generics,
+                                where_clause,
+                            );
+                        }
+                    }
+
+                    // Fallback to default if we couldn't parse the generics properly
+                    default_result
+                }
+
+                // For path with no angle brackets (simple types)
+                _ => (quote! { #service_type }, quote! {}, quote! {}, quote! {}),
+            }
+        }
+        // Fallback for any other type - just use it as is
+        _ => default_result,
+    }
 }
 
 // Helper to add support for the command attribute

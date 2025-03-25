@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NotifyPeriod};
+use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
 use shc_common::types::{MaxUsersToCharge, StorageProviderId};
 use sp_core::Get;
 use storage_hub_runtime::Balance;

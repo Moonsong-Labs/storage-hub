@@ -3,7 +3,9 @@ use std::time::Duration;
 use sc_tracing::tracing::*;
 
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::SlashableProvider};
+use shc_blockchain_service::{
+    commands::BlockchainServiceCommandInterface, events::SlashableProvider,
+};
 
 use crate::services::{handler::StorageHubHandler, types::ShNodeType};
 

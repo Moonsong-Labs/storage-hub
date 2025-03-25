@@ -14,7 +14,7 @@ use sp_runtime::AccountId32;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
-    commands::BlockchainServiceInterface,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy},
 };
