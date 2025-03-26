@@ -272,12 +272,14 @@ impl FileTransferServiceInterfaceExt for ActorHandle<FileTransferService> {
 - `service`: (Required) The service type that processes these commands
 - `default_mode`: (Optional) Default command mode, one of: "FireAndForget", "SyncAwait", "AsyncAwait"
 - `default_error_type`: (Optional) Default error type for command responses
+- `default_inner_channel_type`: (Optional) Default channel type for AsyncAwait mode
 
 ### `command` Parameters
 
 - `mode`: (Optional) Override the default command mode
 - `success_type`: (Optional) The success type returned in the Result
 - `error_type`: (Optional) Override the default error type
+- `inner_channel_type`: (Optional) Override the default channel type for AsyncAwait mode
 
 ## Generated Code
 
@@ -288,3 +290,34 @@ The macro automatically:
 3. Implements the trait for ActorHandle<ServiceType>
 
 This eliminates boilerplate code and ensures consistent error handling.
+
+## Real World Example
+
+Here's an example from the StorageHub codebase:
+
+```rust
+#[actor_command(
+    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
+    default_mode = "SyncAwait",
+    default_inner_channel_type = tokio::sync::oneshot::Receiver,
+)]
+pub enum BlockchainServiceCommand {
+    #[command(success_type = SubmittedTransaction)]
+    SendExtrinsic {
+        call: storage_hub_runtime::RuntimeCall,
+        options: SendExtrinsicOptions,
+    },
+    #[command(success_type = Extrinsic)]
+    GetExtrinsicFromBlock {
+        block_hash: H256,
+        extrinsic_hash: H256,
+    },
+    #[command(mode = "AsyncAwait", inner_channel_type = tokio::sync::oneshot::Receiver)]
+    WaitForBlock {
+        block_number: BlockNumber,
+    },
+    // ... more commands
+}
+```
+
+This generates a trait `BlockchainServiceCommandInterface` with methods like `send_extrinsic`, `get_extrinsic_from_block`, etc., which can be called on an `ActorHandle<BlockchainService>`.
