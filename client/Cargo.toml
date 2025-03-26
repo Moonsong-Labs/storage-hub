@@ -1,7 +1,7 @@
 [package]
 name = "shc-client"
 version = "0.1.0"
-description = "Storage Hub Client."
+description = "StorageHub Client."
 homepage = { workspace = true }
 license = { workspace = true }
 authors = { workspace = true }
@@ -18,11 +18,8 @@ workspace = true
 anyhow = { workspace = true }
 array-bytes = { workspace = true }
 async-channel = { workspace = true }
-async-io = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-color-print = { workspace = true }
-futures-timer = { workspace = true }
 hex = { workspace = true, default-features = true }
 kvdb = { workspace = true }
 kvdb-rocksdb = { workspace = true }
@@ -32,7 +29,6 @@ priority-queue = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-toml = { workspace = true }
 
 # Local
 pallet-file-system = { workspace = true }
@@ -50,14 +46,11 @@ shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-indexer-db = { workspace = true }
-shc-indexer-service = { workspace = true }
 shc-rpc = { workspace = true }
 shp-constants = { workspace = true }
-shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-traits = { workspace = true }
 
-clap = { workspace = true }
 log = { workspace = true }
 codec = { workspace = true }
 serde = { workspace = true, default-features = true }
@@ -71,77 +64,18 @@ frame-benchmarking-cli = { workspace = true }
 frame-system = { workspace = true }
 frame-support = { workspace = true }
 pallet-transaction-payment = { workspace = true }
-pallet-transaction-payment-rpc = { workspace = true }
-sc-basic-authorship = { workspace = true }
-sc-chain-spec = { workspace = true }
-sc-cli = { workspace = true }
 sc-client-api = { workspace = true }
-sc-offchain = { workspace = true }
-sc-consensus = { workspace = true }
-sc-consensus-aura = { workspace = true }
-sc-consensus-manual-seal = { workspace = true }
-sc-executor = { workspace = true }
 sc-network = { workspace = true }
-sc-network-sync = { workspace = true }
-sc-rpc = { workspace = true }
 sc-service = { workspace = true }
-sc-sysinfo = { workspace = true }
-sc-telemetry = { workspace = true }
 sc-tracing = { workspace = true }
-sc-transaction-pool = { workspace = true }
-sc-transaction-pool-api = { workspace = true }
-sc-utils = { workspace = true }
-sp-api = { workspace = true }
-sp-block-builder = { workspace = true }
-sp-blockchain = { workspace = true }
-sp-consensus-aura = { workspace = true }
+
 sp-core = { workspace = true, default-features = true }
-sp-keyring = { workspace = true, default-features = true }
 sp-keystore = { workspace = true }
-sp-io = { workspace = true, default-features = true }
-sp-inherents = { workspace = true }
 sp-runtime = { workspace = true, default-features = true }
-sp-timestamp = { workspace = true }
 sp-trie = { workspace = true }
-substrate-frame-rpc-system = { workspace = true }
-substrate-prometheus-endpoint = { workspace = true }
 
 # Polkadot
-polkadot-cli = { workspace = true }
 polkadot-primitives = { workspace = true }
-polkadot-runtime-common = { workspace = true }
-xcm = { workspace = true }
-
-# Cumulus
-cumulus-client-cli = { workspace = true }
-cumulus-client-collator = { workspace = true }
-cumulus-client-consensus-aura = { workspace = true }
-cumulus-client-consensus-common = { workspace = true }
-cumulus-client-consensus-proposer = { workspace = true }
-cumulus-client-parachain-inherent = { workspace = true }
-cumulus-client-service = { workspace = true }
-cumulus-primitives-core = { workspace = true }
-cumulus-primitives-parachain-inherent = { workspace = true }
-cumulus-primitives-storage-weight-reclaim = { workspace = true }
-cumulus-relay-chain-interface = { workspace = true }
 
 [build-dependencies]
 substrate-build-script-utils = { workspace = true }
-
-[features]
-default = []
-runtime-benchmarks = [
-    "cumulus-primitives-core/runtime-benchmarks",
-    "frame-benchmarking-cli/runtime-benchmarks",
-    "frame-benchmarking/runtime-benchmarks",
-    "polkadot-cli/runtime-benchmarks",
-    "polkadot-primitives/runtime-benchmarks",
-    "sc-service/runtime-benchmarks",
-    "sp-runtime/runtime-benchmarks",
-    "storage-hub-runtime/runtime-benchmarks",
-]
-try-runtime = [
-    "polkadot-cli/try-runtime",
-    "sp-runtime/try-runtime",
-    "storage-hub-runtime/try-runtime",
-]
