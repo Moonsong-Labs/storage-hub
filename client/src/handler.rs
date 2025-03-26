@@ -34,17 +34,8 @@ use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
 use crate::{
-<<<<<<< HEAD:node/src/services/handler.rs
-    services::{
-        bsp_peer_manager::BspPeerManager,
-        file_download_manager::FileDownloadManager,
-        types::{
-            BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider,
-            ShNodeType, ShStorageLayer, UserRole,
-        },
-    },
-=======
->>>>>>> 882afd5a (added a client crate that includes the tasks):client/src/handler.rs
+    bsp_peer_manager::BspPeerManager,
+    file_download_manager::FileDownloadManager,
     tasks::{
         bsp_charge_fees::{BspChargeFeesConfig, BspChargeFeesTask},
         bsp_delete_file::BspDeleteFileTask,

@@ -209,17 +209,13 @@ where
                     "Successfully downloaded bucket {:?}", event.bucket_id
                 );
             }
-            Err(
-                crate::services::file_download_manager::BucketDownloadError::AlreadyBeingDownloaded(
-                    _,
-                ),
-            ) => {
+            Err(crate::file_download_manager::BucketDownloadError::AlreadyBeingDownloaded(_)) => {
                 info!(
                     target: LOG_TARGET,
                     "Bucket {:?} is already being downloaded by another task", event.bucket_id
                 );
             }
-            Err(crate::services::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
+            Err(crate::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
                 error!(
                     target: LOG_TARGET,
                     "Failed to download bucket {:?}: {:?}", event.bucket_id, e

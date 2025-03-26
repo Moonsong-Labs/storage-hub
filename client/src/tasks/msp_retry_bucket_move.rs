@@ -4,7 +4,7 @@ use shc_common::types::{HashT, StorageProofsMerkleTrieLayout};
 use shc_file_transfer_service::events::RetryBucketMoveDownload;
 use std::sync::Arc;
 
-use crate::services::{
+use crate::{
     download_state_store::DownloadStateStore,
     file_download_manager::BucketDownloadError,
     handler::StorageHubHandler,

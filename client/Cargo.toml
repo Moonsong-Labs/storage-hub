@@ -29,6 +29,7 @@ priority-queue = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+rocksdb = { workspace = true }
 
 # Local
 pallet-file-system = { workspace = true }
@@ -40,6 +41,7 @@ pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
+shc-actors-derive = { workspace = true }
 shc-blockchain-service = { workspace = true }
 shc-file-transfer-service = { workspace = true }
 shc-common = { workspace = true }
