@@ -72,6 +72,11 @@ thiserror = "1.0.48"
 tokio = "1.36.0"
 toml = "0.8.19"
 trie-db = { version = "0.29.1", default-features = false }
+trybuild = "1.0"
+proc-macro2 = "1.0.79"
+quote = "1.0.35"
+syn = { version = "2.0.52", features = ["full", "extra-traits"] }
+once_cell = "1.18.0"
 
 # Substrate
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409", default-features = false }
@@ -202,6 +207,7 @@ pallet-storage-providers-runtime-api = { path = "pallets/providers/runtime-api",
 
 # Local - StorageHub Client (used by the node, can be std or no_std)
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
+shc-actors-derive = { path = "client/actors-derive", default-features = false }
 shc-blockchain-service = { path = "client/blockchain-service", default-features = false }
 shc-file-transfer-service = { path = "client/file-transfer-service", default-features = false }
 shc-indexer-service = { path = "client/indexer-service", default-features = false }

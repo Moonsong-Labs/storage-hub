@@ -96,9 +96,8 @@ where
                 }
             },
             None => {
-                let err_msg = "Failed to get own MSP ID.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
+                warn!(target: LOG_TARGET, "Provider not registred yet. We can't charge users.");
+                return Ok(());
             }
         };
 

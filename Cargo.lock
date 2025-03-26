@@ -13669,6 +13669,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "shc-actors-derive"
+version = "0.1.0"
+dependencies = [
+ "once_cell",
+ "proc-macro2",
+ "quote",
+ "shc-actors-framework",
+ "syn 2.0.94",
+ "trybuild",
+]
+
+[[package]]
 name = "shc-actors-framework"
 version = "0.1.0"
 dependencies = [
@@ -13720,6 +13732,7 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-actors-derive",
  "shc-actors-framework",
  "shc-common",
  "shc-forest-manager",
@@ -13820,6 +13833,7 @@ dependencies = [
  "sc-service",
  "sc-tracing",
  "sc-utils",
+ "shc-actors-derive",
  "shc-actors-framework",
  "shc-common",
  "shp-file-key-verifier",
@@ -16237,6 +16251,7 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-actors-derive",
  "shc-actors-framework",
  "shc-blockchain-service",
  "shc-common",
@@ -16655,6 +16670,12 @@ name = "target-lexicon"
 version = "0.12.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
+
+[[package]]
+name = "target-triple"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1ac9aa371f599d22256307c24a9d748c041e548cbf599f35d890f9d365361790"
 
 [[package]]
 name = "tempfile"
@@ -17344,6 +17365,21 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "trybuild"
+version = "1.0.104"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ae08be68c056db96f0e6c6dd820727cca756ced9e1f4cc7fdd20e2a55e23898"
+dependencies = [
+ "glob",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "target-triple",
+ "termcolor",
+ "toml 0.8.19",
+]
 
 [[package]]
 name = "tt-call"
