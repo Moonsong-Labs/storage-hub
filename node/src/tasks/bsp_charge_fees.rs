@@ -9,12 +9,11 @@ use shc_blockchain_service::{
         LastChargeableInfoUpdated, ProcessStopStoringForInsolventUserRequest,
         SpStopStoringInsolventUser, UserWithoutFunds,
     },
-    types::StopStoringForInsolventUserRequest,
+    types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
 use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
-use storage_hub_runtime::Balance;
 
 use crate::services::{
     handler::StorageHubHandler,
@@ -22,7 +21,21 @@ use crate::services::{
 };
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
-const MIN_DEBT: Balance = 0;
+
+/// Configuration for the BspChargeFeesTask
+#[derive(Debug, Clone)]
+pub struct BspChargeFeesConfig {
+    /// Minimum debt threshold for charging users
+    pub min_debt: u64,
+}
+
+impl Default for BspChargeFeesConfig {
+    fn default() -> Self {
+        Self {
+            min_debt: 0, // Default value that was in command.rs
+        }
+    }
+}
 
 /// BSP Charge Fees Task: Handles the debt collection from users served by a BSP.
 ///
@@ -58,6 +71,8 @@ where
     NT::FSH: BspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
+    /// Configuration for this task
+    config: BspChargeFeesConfig,
 }
 
 impl<NT> Clone for BspChargeFeesTask<NT>
@@ -68,6 +83,7 @@ where
     fn clone(&self) -> BspChargeFeesTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -80,13 +96,12 @@ where
     async fn handle_event(&mut self, event: LastChargeableInfoUpdated) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
 
-        // TODO: Allow for customizable threshold, for example using YAML files.
-        // Retrieves users with debt over the `min_debt` threshold
+        // Retrieves users with debt over the min_debt threshold from config
         // using a Runtime API.
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(event.provider_id, MIN_DEBT)
+            .query_users_with_debt(event.provider_id, self.config.min_debt as u128)
             .await
             .map_err(|e| {
                 anyhow!(
@@ -305,14 +320,15 @@ where
             // continue only if it is successful.
             self.storage_hub_handler
                 .blockchain
-                .send_extrinsic(stop_storing_for_insolvent_user_call, Default::default())
-                .await?
-                .with_timeout(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .extrinsic_retry_timeout,
-                ))
-                .watch_for_success(&self.storage_hub_handler.blockchain)
+                .send_extrinsic(
+                    stop_storing_for_insolvent_user_call,
+                    SendExtrinsicOptions::new(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    )),
+                )
                 .await?;
 
             trace!(target: LOG_TARGET, "Stop storing submitted successfully");
@@ -357,7 +373,8 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
+            config: storage_hub_handler.provider_config.bsp_charge_fees.clone(),
         }
     }
 }

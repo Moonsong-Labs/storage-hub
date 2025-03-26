@@ -9,7 +9,7 @@ use shc_blockchain_service::{
         FileDeletionRequest, FinalisedProofSubmittedForPendingFileDeletionRequest,
         ProcessFileDeletionRequest,
     },
-    types::{self, RetryStrategy},
+    types::{self, RetryStrategy, SendExtrinsicOptions},
 };
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -20,8 +20,24 @@ use crate::services::{
 };
 
 const LOG_TARGET: &str = "msp-delete-file-task";
-const MAX_DELETE_FILE_REQUEST_TRY_COUNT: u32 = 5;
-const MAX_DELETE_FILE_REQUEST_TIP: u128 = 100;
+
+/// Configuration for the MspDeleteFileTask
+#[derive(Debug, Clone)]
+pub struct MspDeleteFileConfig {
+    /// Maximum number of attempts to try submitting file deletion request
+    pub max_try_count: u32,
+    /// Maximum tip amount to use when submitting file deletion transactions
+    pub max_tip: f64,
+}
+
+impl Default for MspDeleteFileConfig {
+    fn default() -> Self {
+        Self {
+            max_try_count: 5, // Default value that was in command.rs
+            max_tip: 100.0,   // Default value that was in command.rs
+        }
+    }
+}
 
 /// MSP Delete File Task: Handles the whole flow of a file being deleted from an MSP.
 ///
@@ -40,6 +56,8 @@ where
     NT::FSH: MspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
+    /// Configuration for this task
+    config: MspDeleteFileConfig,
 }
 
 impl<NT> Clone for MspDeleteFileTask<NT>
@@ -50,6 +68,7 @@ where
     fn clone(&self) -> MspDeleteFileTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -61,6 +80,7 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
+            config: storage_hub_handler.provider_config.msp_delete_file.clone(),
             storage_hub_handler,
         }
     }
@@ -182,19 +202,24 @@ where
             },
         );
 
+        // Get the MSP delete file configuration options from the local config
+        let max_try_count = self.config.max_try_count;
+        let max_tip = self.config.max_tip;
+
         // Submit extrinsic with retry and wait for it to be included in a block
         self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
-                    .with_max_retries(MAX_DELETE_FILE_REQUEST_TRY_COUNT)
-                    .with_max_tip(MAX_DELETE_FILE_REQUEST_TIP as f64)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .extrinsic_retry_timeout,
-                    ))
+                    .with_max_retries(max_try_count)
+                    .with_max_tip(max_tip)
                     .retry_only_if_timeout(),
                 false,
             )
@@ -202,7 +227,7 @@ where
             .map_err(|e| {
                 anyhow!(
                     "Failed to submit file deletion proof after {} retries: {:?}",
-                    MAX_DELETE_FILE_REQUEST_TRY_COUNT,
+                    max_try_count,
                     e
                 )
             })?;

@@ -46,11 +46,12 @@ use shc_common::types::{
 };
 use shp_file_metadata::ChunkId;
 
-use crate::events::{RemoteUploadRequest, RetryBucketMoveDownload};
-
 use super::{
     commands::{FileTransferServiceCommand, RequestError},
-    events::{FileTransferServiceEventBusProvider, RemoteDownloadRequest},
+    events::{
+        FileTransferServiceEventBusProvider, RemoteDownloadRequest, RemoteUploadRequest,
+        RetryBucketMoveDownload,
+    },
     schema,
 };
 

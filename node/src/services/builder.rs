@@ -2,6 +2,7 @@ use async_channel::Receiver;
 use log::*;
 use sc_network::{config::IncomingRequest, service::traits::NetworkService, ProtocolName};
 use sc_service::RpcHandlers;
+use serde::Deserialize;
 use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use std::{path::PathBuf, sync::Arc};
@@ -9,7 +10,8 @@ use tokio::sync::RwLock;
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{
-    capacity_manager::CapacityConfig, spawn_blockchain_service, BlockchainService,
+    capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
+    BlockchainService,
 };
 use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
@@ -17,7 +19,12 @@ use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::StorageHubClientRpcConfig;
 
-const DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS: u64 = 60;
+use crate::tasks::{
+    bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
+    bsp_submit_proof::BspSubmitProofConfig, bsp_upload_file::BspUploadFileConfig,
+    msp_charge_fees::MspChargeFeesConfig, msp_delete_file::MspDeleteFileConfig,
+    msp_move_bucket::MspMoveBucketConfig,
+};
 
 use super::{
     bsp_peer_manager::BspPeerManager,
@@ -46,9 +53,17 @@ where
     file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
     forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
     capacity_config: Option<CapacityConfig>,
-    extrinsic_retry_timeout: u64,
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
+    // Configuration options for tasks and services
+    msp_delete_file_config: Option<MspDeleteFileConfig>,
+    msp_charge_fees_config: Option<MspChargeFeesConfig>,
+    msp_move_bucket_config: Option<MspMoveBucketConfig>,
+    bsp_upload_file_config: Option<BspUploadFileConfig>,
+    bsp_move_bucket_config: Option<BspMoveBucketConfig>,
+    bsp_charge_fees_config: Option<BspChargeFeesConfig>,
+    bsp_submit_proof_config: Option<BspSubmitProofConfig>,
+    blockchain_service_config: Option<BlockchainServiceConfig>,
     peer_manager: Option<Arc<BspPeerManager>>,
 }
 
@@ -66,9 +81,16 @@ where
             file_storage: None,
             forest_storage_handler: None,
             capacity_config: None,
-            extrinsic_retry_timeout: DEFAULT_EXTRINSIC_RETRY_TIMEOUT_SECONDS,
             indexer_db_pool: None,
             notify_period: None,
+            msp_delete_file_config: None,
+            msp_charge_fees_config: None,
+            msp_move_bucket_config: None,
+            bsp_upload_file_config: None,
+            bsp_move_bucket_config: None,
+            bsp_charge_fees_config: None,
+            bsp_submit_proof_config: None,
+            blockchain_service_config: None,
             peer_manager: None,
         }
     }
@@ -100,14 +122,6 @@ where
     /// This is meant to reflect the actual physical storage capacity of the node.
     pub fn with_capacity_config(&mut self, capacity_config: Option<CapacityConfig>) -> &mut Self {
         self.capacity_config = capacity_config;
-        self
-    }
-
-    /// Set the timeout for retrying extrinsics.
-    ///
-    /// The default value is `60` seconds.
-    pub fn with_retry_timeout(&mut self, extrinsic_retry_timeout: u64) -> &mut Self {
-        self.extrinsic_retry_timeout = extrinsic_retry_timeout;
         self
     }
 
@@ -147,10 +161,13 @@ where
 
         let capacity_config = self.capacity_config.clone();
 
+        let blockchain_service_config = self.blockchain_service_config.clone().unwrap_or_default();
+
         let blockchain_service_handle = spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH>(
             self.task_spawner
                 .as_ref()
                 .expect("Task spawner is not set."),
+            blockchain_service_config,
             client.clone(),
             keystore.clone(),
             rpc_handlers.clone(),
@@ -214,6 +231,100 @@ where
                 .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
             keystore,
         )
+    }
+
+    /// Set configuration options for the MSP delete file task.
+    pub fn with_msp_delete_file_config(
+        &mut self,
+        config: Option<MspDeleteFileOptions>,
+    ) -> &mut Self {
+        self.msp_delete_file_config = config.map(Into::into);
+        self
+    }
+
+    /// Set configuration options for the MSP charge fees task.
+    pub fn with_msp_charge_fees_config(
+        &mut self,
+        config: Option<MspChargeFeesOptions>,
+    ) -> &mut Self {
+        self.msp_charge_fees_config = config.map(Into::into);
+        self
+    }
+
+    /// Set configuration options for the MSP move bucket task.
+    pub fn with_msp_move_bucket_config(
+        &mut self,
+        config: Option<MspMoveBucketOptions>,
+    ) -> &mut Self {
+        self.msp_move_bucket_config = config.map(Into::into);
+        self
+    }
+
+    /// Set configuration options for the BSP upload file task.
+    pub fn with_bsp_upload_file_config(
+        &mut self,
+        config: Option<BspUploadFileOptions>,
+    ) -> &mut Self {
+        self.bsp_upload_file_config = config.map(Into::into);
+        self
+    }
+
+    /// Set configuration options for the BSP move bucket task.
+    pub fn with_bsp_move_bucket_config(
+        &mut self,
+        config: Option<BspMoveBucketOptions>,
+    ) -> &mut Self {
+        self.bsp_move_bucket_config = config.map(Into::into);
+        self
+    }
+
+    /// Set configuration options for the BSP charge fees task.
+    pub fn with_bsp_charge_fees_config(
+        &mut self,
+        config: Option<BspChargeFeesOptions>,
+    ) -> &mut Self {
+        self.bsp_charge_fees_config = config.map(Into::into);
+        self
+    }
+
+    /// Set configuration options for the BSP submit proof task.
+    pub fn with_bsp_submit_proof_config(
+        &mut self,
+        config: Option<BspSubmitProofOptions>,
+    ) -> &mut Self {
+        self.bsp_submit_proof_config = config.map(Into::into);
+        self
+    }
+
+    /// Set configuration options for the blockchain service.
+    pub fn with_blockchain_service_config(
+        &mut self,
+        config: BlockchainServiceOptions,
+    ) -> &mut Self {
+        let mut blockchain_service_config = BlockchainServiceConfig::default();
+
+        if let Some(extrinsic_retry_timeout) = config.extrinsic_retry_timeout {
+            blockchain_service_config.extrinsic_retry_timeout = extrinsic_retry_timeout;
+        }
+
+        if let Some(sync_mode_min_blocks_behind) = config.sync_mode_min_blocks_behind {
+            blockchain_service_config.sync_mode_min_blocks_behind = sync_mode_min_blocks_behind;
+        }
+
+        if let Some(check_for_pending_proofs_period) = config.check_for_pending_proofs_period {
+            blockchain_service_config.check_for_pending_proofs_period =
+                check_for_pending_proofs_period;
+        }
+
+        if let Some(max_blocks_behind_to_catch_up_root_changes) =
+            config.max_blocks_behind_to_catch_up_root_changes
+        {
+            blockchain_service_config.max_blocks_behind_to_catch_up_root_changes =
+                max_blocks_behind_to_catch_up_root_changes;
+        }
+
+        self.blockchain_service_config = Some(blockchain_service_config);
+        self
     }
 }
 
@@ -329,7 +440,14 @@ where
                 .clone(),
             ProviderConfig {
                 capacity_config: self.capacity_config.expect("Capacity Config not set"),
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_config.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
@@ -366,7 +484,14 @@ where
                 .clone(),
             ProviderConfig {
                 capacity_config: self.capacity_config.expect("Capacity Config not set"),
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_config.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
@@ -404,10 +529,170 @@ where
                 .clone(),
             ProviderConfig {
                 capacity_config: self.capacity_config.expect("Capacity Config not set"),
-                extrinsic_retry_timeout: self.extrinsic_retry_timeout,
+                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
+                msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
+                msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
+                bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
+                bsp_move_bucket: self.bsp_move_bucket_config.unwrap_or_default(),
+                bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
+                bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
         )
     }
+}
+
+/// Configuration options for the MSP Delete File task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspDeleteFileOptions {
+    /// Maximum number of times to retry a file deletion request.
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting a file deletion request extrinsic.
+    pub max_tip: Option<f64>,
+}
+
+impl Into<MspDeleteFileConfig> for MspDeleteFileOptions {
+    fn into(self) -> MspDeleteFileConfig {
+        MspDeleteFileConfig {
+            max_try_count: self.max_try_count.unwrap_or_default(),
+            max_tip: self.max_tip.unwrap_or_default(),
+        }
+    }
+}
+
+/// Configuration options for the MSP Charge Fees task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspChargeFeesOptions {
+    /// Minimum debt threshold for charging users.
+    pub min_debt: Option<u64>,
+}
+
+impl Into<MspChargeFeesConfig> for MspChargeFeesOptions {
+    fn into(self) -> MspChargeFeesConfig {
+        MspChargeFeesConfig {
+            min_debt: self.min_debt.unwrap_or_default(),
+        }
+    }
+}
+
+/// Configuration options for the MSP Move Bucket task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct MspMoveBucketOptions {
+    /// Maximum number of times to retry a move bucket request.
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting a move bucket request extrinsic.
+    pub max_tip: Option<f64>,
+}
+
+impl Into<MspMoveBucketConfig> for MspMoveBucketOptions {
+    fn into(self) -> MspMoveBucketConfig {
+        MspMoveBucketConfig {
+            max_try_count: self.max_try_count.unwrap_or_default(),
+            max_tip: self.max_tip.unwrap_or_default(),
+        }
+    }
+}
+
+/// Configuration options for the BSP Upload File task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspUploadFileOptions {
+    /// Maximum number of times to retry an upload file request.
+    pub max_try_count: Option<u32>,
+    /// Maximum tip amount to use when submitting an upload file request extrinsic.
+    pub max_tip: Option<f64>,
+}
+
+impl Into<BspUploadFileConfig> for BspUploadFileOptions {
+    fn into(self) -> BspUploadFileConfig {
+        BspUploadFileConfig {
+            max_try_count: self.max_try_count.unwrap_or_default(),
+            max_tip: self.max_tip.unwrap_or_default(),
+        }
+    }
+}
+
+/// Configuration options for the BSP Move Bucket task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspMoveBucketOptions {
+    /// Grace period in seconds to accept download requests after a bucket move is accepted.
+    pub move_bucket_accepted_grace_period: Option<u64>,
+}
+
+impl Into<BspMoveBucketConfig> for BspMoveBucketOptions {
+    fn into(self) -> BspMoveBucketConfig {
+        BspMoveBucketConfig {
+            move_bucket_accepted_grace_period: self
+                .move_bucket_accepted_grace_period
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// Configuration options for the BSP Charge Fees task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspChargeFeesOptions {
+    /// Minimum debt threshold for charging users.
+    pub min_debt: Option<u64>,
+}
+
+impl Into<BspChargeFeesConfig> for BspChargeFeesOptions {
+    fn into(self) -> BspChargeFeesConfig {
+        BspChargeFeesConfig {
+            min_debt: self.min_debt.unwrap_or_default(),
+        }
+    }
+}
+
+/// Configuration options for the BSP Submit Proof task.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BspSubmitProofOptions {
+    /// Maximum number of attempts to submit a proof.
+    pub max_submission_attempts: Option<u32>,
+}
+
+impl Into<BspSubmitProofConfig> for BspSubmitProofOptions {
+    fn into(self) -> BspSubmitProofConfig {
+        BspSubmitProofConfig {
+            max_submission_attempts: self.max_submission_attempts.unwrap_or_default(),
+        }
+    }
+}
+
+/// Configuration options for the Blockchain Service.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct BlockchainServiceOptions {
+    /// Extrinsic retry timeout in seconds.
+    pub extrinsic_retry_timeout: Option<u64>,
+    /// The minimum number of blocks behind the current best block to consider the node out of sync.
+    pub sync_mode_min_blocks_behind: Option<u32>,
+    /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
+    pub check_for_pending_proofs_period: Option<u32>,
+    /// The maximum number of blocks from the past that will be processed for catching up the root changes.
+    pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
+}
+
+impl Into<BlockchainServiceConfig> for BlockchainServiceOptions {
+    fn into(self) -> BlockchainServiceConfig {
+        BlockchainServiceConfig {
+            extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
+            sync_mode_min_blocks_behind: self.sync_mode_min_blocks_behind.unwrap_or_default(),
+            check_for_pending_proofs_period: self
+                .check_for_pending_proofs_period
+                .unwrap_or_default(),
+            max_blocks_behind_to_catch_up_root_changes: self
+                .max_blocks_behind_to_catch_up_root_changes
+                .unwrap_or_default(),
+        }
+    }
+}
+
+/// Configuration for the indexer.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct IndexerOptions {
+    /// Whether to enable the indexer.
+    pub indexer: bool,
+    /// Postgres database URL.
+    pub database_url: Option<String>,
 }

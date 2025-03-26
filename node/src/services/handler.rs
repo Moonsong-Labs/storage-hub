@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    fmt::{self, Debug},
+    sync::Arc,
+};
 use tokio::sync::RwLock;
 
 use shc_actors_derive::{subscribe_actor_event, subscribe_actor_event_map};
@@ -19,6 +22,7 @@ use shc_blockchain_service::{
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
     },
+    handler::BlockchainServiceConfig,
     BlockchainService,
 };
 use shc_common::consts::CURRENT_FOREST_KEY;
@@ -39,27 +43,45 @@ use crate::{
         },
     },
     tasks::{
-        bsp_charge_fees::BspChargeFeesTask, bsp_delete_file::BspDeleteFileTask,
-        bsp_download_file::BspDownloadFileTask, bsp_move_bucket::BspMoveBucketTask,
-        bsp_submit_proof::BspSubmitProofTask, bsp_upload_file::BspUploadFileTask,
-        msp_charge_fees::MspChargeFeesTask, msp_delete_bucket::MspDeleteBucketTask,
-        msp_delete_file::MspDeleteFileTask, msp_move_bucket::MspRespondMoveBucketTask,
+        bsp_charge_fees::{BspChargeFeesConfig, BspChargeFeesTask},
+        bsp_delete_file::BspDeleteFileTask,
+        bsp_download_file::BspDownloadFileTask,
+        bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
+        bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
+        bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
+        msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
+        msp_delete_bucket::MspDeleteBucketTask,
+        msp_delete_file::{MspDeleteFileConfig, MspDeleteFileTask},
+        msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
         msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
-        msp_upload_file::MspUploadFileTask, sp_slash_provider::SlashProviderTask,
+        msp_upload_file::MspUploadFileTask,
+        sp_slash_provider::SlashProviderTask,
         user_sends_file::UserSendsFileTask,
     },
 };
 
 /// Configuration parameters for Storage Providers.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ProviderConfig {
-    /// Configuration parameters necessary to run the capacity manager.
-    ///
+    /// Configuration for MSP delete file task.
+    pub msp_delete_file: MspDeleteFileConfig,
+    /// Configuration for MSP charge fees task.
+    pub msp_charge_fees: MspChargeFeesConfig,
+    /// Configuration for MSP move bucket task.
+    pub msp_move_bucket: MspMoveBucketConfig,
+    /// Configuration for BSP upload file task.
+    pub bsp_upload_file: BspUploadFileConfig,
+    /// Configuration for BSP move bucket task.
+    pub bsp_move_bucket: BspMoveBucketConfig,
+    /// Configuration for BSP charge fees task.
+    pub bsp_charge_fees: BspChargeFeesConfig,
+    /// Configuration for BSP submit proof task.
+    pub bsp_submit_proof: BspSubmitProofConfig,
+    /// Configuration for blockchain service.
+    pub blockchain_service: BlockchainServiceConfig,
     /// This is only required if running as a storage provider node.
     pub capacity_config: CapacityConfig,
-    /// The time in seconds to wait before retrying an extrinsic.
-    pub extrinsic_retry_timeout: u64,
 }
 
 /// Represents the handler for the Storage Hub service.
@@ -85,6 +107,17 @@ where
     pub peer_manager: Arc<BspPeerManager>,
     /// The file download manager for rate-limiting downloads.
     pub file_download_manager: Arc<FileDownloadManager>,
+}
+
+impl<NT> Debug for StorageHubHandler<NT>
+where
+    NT: ShNodeType,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("StorageHubHandler")
+            .field("provider_config", &self.provider_config)
+            .finish()
+    }
 }
 
 impl<NT> Clone for StorageHubHandler<NT>
