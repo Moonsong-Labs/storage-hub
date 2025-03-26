@@ -63,7 +63,7 @@ pub enum RequestError {
 pub enum FileTransferServiceCommand {
     #[command(
         mode = "AsyncAwait", 
-        success_type = (Vec<u8>, ProtocolName), 
+        success_type = (Vec<u8>, ProtocolName),
         inner_channel_type = futures::channel::oneshot::Receiver,
         error_type = RequestFailure
     )]
@@ -118,8 +118,13 @@ pub enum FileTransferServiceCommand {
         peer_id: PeerId,
         multiaddress: Multiaddr,
     },
-    RegisterNewFile { peer_id: PeerId, file_key: FileKey },
-    UnregisterFile { file_key: FileKey },
+    RegisterNewFile {
+        peer_id: PeerId,
+        file_key: FileKey,
+    },
+    UnregisterFile {
+        file_key: FileKey,
+    },
     RegisterNewBucketPeer {
         peer_id: PeerId,
         bucket_id: BucketId,
