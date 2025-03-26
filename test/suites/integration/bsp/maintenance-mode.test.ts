@@ -36,7 +36,11 @@ describeBspNet("BSPNet: Maintenance Mode Test", ({ before, it, createUserApi, cr
       name: "sh-bsp-maintenance",
       bspKeySeed: bspTwoSeed,
       bspId: ShConsts.BSP_TWO_ID,
-      additionalArgs: ["--keystore-path=/keystore/bsp-two", "--maintenance-mode", "--extrinsic-retry-timeout=60"],
+      additionalArgs: [
+        "--keystore-path=/keystore/bsp-two",
+        "--maintenance-mode",
+        "--extrinsic-retry-timeout=60"
+      ],
       waitForIdle: true
     });
 
