@@ -1287,6 +1287,70 @@ fn generate_method_impl(
 }
 
 /// Macro implementation for actor_command attribute
+/// An attribute macro for generating an actor command interface for enum commands.
+///
+/// This macro automatically:
+/// - Adds appropriate callback fields to each command variant based on the specified mode
+/// - Generates an interface trait with methods for each command variant
+/// - Implements the interface trait for ActorHandle<ServiceType>
+///
+/// # Parameters
+///
+/// - `service`: (Required) The service type that processes these commands
+/// - `default_mode`: (Optional) Default command mode, one of: "FireAndForget", "SyncAwait", "AsyncAwait"
+/// - `default_error_type`: (Optional) Default error type for command responses
+/// - `default_inner_channel_type`: (Optional) Default channel type for AsyncAwait mode
+///
+/// # Command Mode Options
+///
+/// - `FireAndForget`: No response is expected
+/// - `SyncAwait`: Wait for a direct response from the actor
+/// - `AsyncAwait`: Wait for an asynchronous response (e.g., from a network operation)
+///
+/// # Usage
+///
+/// ```rust
+/// #[actor_command(
+///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
+///     default_mode = "SyncAwait",
+///     default_inner_channel_type = tokio::sync::oneshot::Receiver,
+/// )]
+/// pub enum BlockchainServiceCommand {
+///     #[command(success_type = SubmittedTransaction)]
+///     SendExtrinsic {
+///         call: storage_hub_runtime::RuntimeCall,
+///         options: SendExtrinsicOptions,
+///     },
+///     
+///     #[command(success_type = Extrinsic)]
+///     GetExtrinsicFromBlock {
+///         block_hash: H256,
+///         extrinsic_hash: H256,
+///     },
+///     
+///     #[command(mode = "AsyncAwait", inner_channel_type = tokio::sync::oneshot::Receiver)]
+///     WaitForBlock {
+///         block_number: BlockNumber,
+///     },
+/// }
+/// ```
+///
+/// This generates a trait `BlockchainServiceCommandInterface` with methods like `send_extrinsic`,
+/// `get_extrinsic_from_block`, etc., which can be called on an `ActorHandle<BlockchainService>`.
+///
+/// # Command Variant Attributes
+///
+/// Each command variant can be annotated with a `#[command(...)]` attribute to specify its behavior:
+///
+/// - `mode`: Override the default command mode
+/// - `success_type`: The success type returned in the Result
+/// - `error_type`: Override the default error type
+/// - `inner_channel_type`: Override the default channel type for AsyncAwait mode
+///
+/// # Generated Interface
+///
+/// The generated interface trait will have method names in snake_case derived from the variant names.
+/// For example, a variant named `SendExtrinsic` will generate a method named `send_extrinsic`.
 #[proc_macro_attribute]
 pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as ActorCommandArgs);
@@ -1630,7 +1694,54 @@ fn process_service_type(
     }
 }
 
-// Helper to add support for the command attribute
+/// An attribute macro for specifying behavior for individual command variants.
+///
+/// This macro is used in conjunction with the `actor_command` attribute macro to specify
+/// the behavior of individual command variants.
+///
+/// # Parameters
+///
+/// - `mode`: (Optional) Override the default command mode ("FireAndForget", "SyncAwait", or "AsyncAwait")
+/// - `success_type`: (Optional) The success type returned in the Result
+/// - `error_type`: (Optional) Override the default error type
+/// - `inner_channel_type`: (Optional) Override the default channel type for AsyncAwait mode
+///
+/// # Usage
+///
+/// ```rust
+/// #[actor_command(
+///     service = BlockchainService,
+///     default_mode = "SyncAwait"
+/// )]
+/// pub enum BlockchainServiceCommand {
+///     // Using default mode (SyncAwait) with specified success type
+///     #[command(success_type = SubmittedTransaction)]
+///     SendExtrinsic {
+///         call: RuntimeCall,
+///         options: SendExtrinsicOptions,
+///     },
+///     
+///     // Overriding mode to AsyncAwait with custom inner channel type
+///     #[command(
+///         mode = "AsyncAwait",
+///         success_type = BlockNumber,
+///         error_type = ApiError,
+///         inner_channel_type = tokio::sync::oneshot::Receiver
+///     )]
+///     WaitForBlock {
+///         block_number: BlockNumber,
+///     },
+///     
+///     // Using FireAndForget mode (no response expected)
+///     #[command(mode = "FireAndForget")]
+///     UnwatchExtrinsic {
+///         subscription_id: Number,
+///     }
+/// }
+/// ```
+///
+/// This is a marker attribute that is processed by the `actor_command` macro.
+/// When used, it signals that a command variant has specific behavior requirements.
 #[proc_macro_attribute]
 pub fn command(_args: TokenStream, _input: TokenStream) -> TokenStream {
     // This is just a marker attribute that is processed by the actor_command macro
