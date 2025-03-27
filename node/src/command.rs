@@ -15,11 +15,11 @@ use crate::{
     cli::{Cli, ProviderType, RelayChainCli, StorageLayer, Subcommand},
     config,
     service::new_partial,
-    services::builder::{
-        BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions,
-        BspSubmitProofOptions, BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions,
-        MspMoveBucketOptions,
-    },
+};
+
+use shc_client::builder::{
+    BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
+    BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
 };
 
 /// Configuration for the provider.
