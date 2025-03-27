@@ -24,10 +24,16 @@ describeBspNet(
         sealBlock: false
       });
 
+      await assertDockerLog("docker-sh-bsp-1", "attempt #1", 40000);
+
+      await assertDockerLog("docker-sh-bsp-1", "attempt #2", 40000);
+
+      await assertDockerLog("docker-sh-bsp-1", "attempt #3", 40000);
+
       await assertDockerLog(
         "docker-sh-bsp-1",
         "Failed to confirm file after 3 retries: Exhausted retry strategy",
-        12000
+        40000
       );
 
       await waitFor({

@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::StorageHubEventsVec;
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -30,20 +30,18 @@ pub struct SubmittedTransaction {
     watcher: Receiver<String>,
     /// The hash of the transaction.
     hash: ExtrinsicHash,
-    /// The maximum amount of time to wait for the transaction to either be successful or fail.
-    timeout: Option<Duration>,
     /// The nonce of the transaction.
     nonce: u32,
+    /// The maximum amount of time to wait for the transaction to either be successful or fail.
+    timeout: Duration,
 }
 
-const NO_TIMEOUT_INTERVAL_WARNING: Duration = Duration::from_secs(60);
-
 impl SubmittedTransaction {
-    pub fn new(watcher: Receiver<String>, hash: H256, nonce: u32) -> Self {
+    pub fn new(watcher: Receiver<String>, hash: H256, nonce: u32, timeout: Duration) -> Self {
         Self {
             watcher,
             hash,
-            timeout: None,
+            timeout,
             nonce,
         }
     }
@@ -56,15 +54,6 @@ impl SubmittedTransaction {
     /// Getter for the transaction nonce.
     pub fn nonce(&self) -> u32 {
         self.nonce
-    }
-
-    /// Sets the timeout for the transaction.
-    ///
-    /// If the transaction is not successful within the specified timeout, it will be considered
-    /// failed and an error will be returned.
-    pub fn with_timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
     }
 
     /// Handles the lifecycle of a submitted transaction.
@@ -167,18 +156,14 @@ impl SubmittedTransaction {
             // Get the elapsed time since submit.
             let elapsed = start_time.elapsed();
             // Calculate the remaining time to wait.
-            let remaining = match self.timeout {
-                Some(timeout) => {
-                    // Check if the timeout has been reached.
-                    if elapsed > timeout {
-                        error!(target: LOG_TARGET, "Timeout waiting for transaction {} to be included in a block", self.hash);
-                        return Err(WatchTransactionError::Timeout);
-                    }
 
-                    timeout - elapsed
-                }
-                None => NO_TIMEOUT_INTERVAL_WARNING,
-            };
+            // Check if the timeout has been reached.
+            if elapsed > self.timeout {
+                error!(target: LOG_TARGET, "Timeout waiting for transaction {} to be included in a block", self.hash);
+                return Err(WatchTransactionError::Timeout);
+            }
+
+            let remaining = self.timeout - elapsed;
 
             // Wait for either a new message from the watcher, or the timeout to be reached.
             let result = match tokio::time::timeout(remaining, self.watcher.recv()).await {
@@ -191,20 +176,11 @@ impl SubmittedTransaction {
                 },
                 Err(_) => {
                     // Timeout reached, exit the loop.
-                    match self.timeout {
-                        Some(_) => {
-                            error!(target: LOG_TARGET, "Timeout waiting for transaction to be included in a block");
-                            return Err(WatchTransactionError::Timeout);
-                        }
-                        None => {
-                            // No timeout set, continue waiting.
-                            warn!(target: LOG_TARGET, "No timeout set and {:?} elapsed, continuing to wait for transaction to be included in a block.", NO_TIMEOUT_INTERVAL_WARNING);
-
-                            continue;
-                        }
-                    }
+                    error!(target: LOG_TARGET, "Timeout waiting for transaction to be included in a block");
+                    return Err(WatchTransactionError::Timeout);
                 }
             };
+
             // Parse the JSONRPC string. The strings sent by the RPC wacher should be valid JSONRPC strings.
             let json: serde_json::Value = serde_json::from_str(&result).map_err(|_| {
                 let err_msg = format!(

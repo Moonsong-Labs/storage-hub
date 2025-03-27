@@ -11,7 +11,7 @@ use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
-    types::RetryStrategy,
+    types::{RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::types::{
     BucketId, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
@@ -31,6 +31,24 @@ lazy_static::lazy_static! {
     static ref GLOBAL_RNG: Mutex<StdRng> = Mutex::new(StdRng::from_entropy());
 }
 
+/// Configuration for the MspMoveBucketTask
+#[derive(Debug, Clone)]
+pub struct MspMoveBucketConfig {
+    /// Maximum number of times to retry a move bucket request
+    pub max_try_count: u32,
+    /// Maximum tip amount to use when submitting a move bucket request extrinsic
+    pub max_tip: f64,
+}
+
+impl Default for MspMoveBucketConfig {
+    fn default() -> Self {
+        Self {
+            max_try_count: 5,
+            max_tip: 500.0,
+        }
+    }
+}
+
 /// Handles requests for MSP (Main Storage Provider) to respond to bucket move requests.
 /// Downloads bucket files from BSPs (Backup Storage Providers).
 pub struct MspRespondMoveBucketTask<NT>
@@ -41,6 +59,8 @@ where
     storage_hub_handler: StorageHubHandler<NT>,
     pending_bucket_id: Option<BucketId>,
     file_storage_inserted_file_keys: Vec<H256>,
+    /// Configuration for this task
+    config: MspMoveBucketConfig,
 }
 
 impl<NT> Clone for MspRespondMoveBucketTask<NT>
@@ -53,6 +73,7 @@ where
             storage_hub_handler: self.storage_hub_handler.clone(),
             pending_bucket_id: self.pending_bucket_id,
             file_storage_inserted_file_keys: self.file_storage_inserted_file_keys.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -64,9 +85,10 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
             pending_bucket_id: None,
             file_storage_inserted_file_keys: Vec::new(),
+            config: storage_hub_handler.provider_config.msp_move_bucket.clone(),
         }
     }
 }
@@ -422,14 +444,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
-                    .with_max_retries(3)
-                    .with_max_tip(10.0)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .extrinsic_retry_timeout,
-                    )),
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip),
                 false,
             )
             .await
@@ -467,20 +490,22 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
-                    .with_max_retries(3)
-                    .with_max_tip(10.0)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .extrinsic_retry_timeout,
-                    )),
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip),
                 false,
             )
             .await
             .map_err(|e| {
                 anyhow!(
-                    "Failed to submit move bucket acceptance after 3 retries: {:?}",
+                    "Failed to submit move bucket acceptance after {} retries: {:?}",
+                    self.config.max_try_count,
                     e
                 )
             })?;

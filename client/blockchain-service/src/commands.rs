@@ -205,6 +205,7 @@ pub trait BlockchainServiceCommandInterfaceExt: BlockchainServiceCommandInterfac
     async fn submit_extrinsic_with_retry(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        options: SendExtrinsicOptions,
         retry_strategy: RetryStrategy,
         with_events: bool,
     ) -> Result<Option<StorageHubEventsVec>>;
@@ -247,6 +248,7 @@ where
     async fn submit_extrinsic_with_retry(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        options: SendExtrinsicOptions,
         retry_strategy: RetryStrategy,
         with_events: bool,
     ) -> Result<Option<StorageHubEventsVec>> {
@@ -259,14 +261,11 @@ where
         for retry_count in 0..=retry_strategy.max_retries {
             debug!(target: LOG_TARGET, "Submitting transaction {:?} with tip {}", call, tip);
 
-            let extrinsic_options = SendExtrinsicOptions::new()
+            let extrinsic_options = SendExtrinsicOptions::new(options.timeout())
                 .with_tip(tip as u128)
                 .with_nonce(nonce);
 
-            let mut transaction = self
-                .send_extrinsic(call.clone(), extrinsic_options)
-                .await?
-                .with_timeout(retry_strategy.timeout);
+            let mut transaction = self.send_extrinsic(call.clone(), extrinsic_options).await?;
 
             let result: Result<Option<StorageHubEventsVec>, _> = if with_events {
                 transaction

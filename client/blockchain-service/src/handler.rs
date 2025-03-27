@@ -7,6 +7,7 @@ use sc_client_api::{
 };
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
+use serde::Deserialize;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
@@ -53,29 +54,6 @@ use crate::{
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
 
-/// The minimum number of blocks behind the current best block to consider the node out of sync.
-///
-/// This triggers a catch-up of proofs and Forest root changes in the blockchain service, before
-/// continuing to process incoming events.
-///
-/// TODO: Define properly the number of blocks to come out of sync mode
-/// TODO: Make this configurable in the config file
-pub(crate) const SYNC_MODE_MIN_BLOCKS_BEHIND: BlockNumber = 5;
-
-/// On blocks that are multiples of this number, the blockchain service will trigger the catch
-/// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
-///
-/// TODO: Make this configurable in the config file
-pub(crate) const CHECK_FOR_PENDING_PROOFS_PERIOD: BlockNumber = 4;
-
-/// The maximum number of blocks from the past that will be processed for catching up the root
-/// changes (see [`BlockchainService::forest_root_changes_catchup`]). This constant determines
-/// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
-/// variant.
-///
-/// TODO: Make this configurable in the config file
-pub(crate) const MAX_BLOCKS_BEHIND_TO_CATCH_UP_ROOT_CHANGES: BlockNumber = 10;
-
 /// The BlockchainService actor.
 ///
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
@@ -85,6 +63,8 @@ pub struct BlockchainService<FSH>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
+    /// The configuration for the BlockchainService.
+    pub(crate) config: BlockchainServiceConfig,
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
     /// The parachain client. Used to interact with the runtime.
@@ -128,6 +108,38 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BlockchainServiceConfig {
+    /// Extrinsic retry timeout in seconds.
+    pub extrinsic_retry_timeout: u64,
+    /// The minimum number of blocks behind the current best block to consider the node out of sync.
+    ///
+    /// This triggers a catch-up of proofs and Forest root changes in the blockchain service, before
+    /// continuing to process incoming events.
+    pub sync_mode_min_blocks_behind: BlockNumber,
+
+    /// On blocks that are multiples of this number, the blockchain service will trigger the catch
+    /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
+    pub check_for_pending_proofs_period: BlockNumber,
+
+    /// The maximum number of blocks from the past that will be processed for catching up the root
+    /// changes (see [`BlockchainService::forest_root_changes_catchup`]). This constant determines
+    /// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
+    /// variant.
+    pub max_blocks_behind_to_catch_up_root_changes: BlockNumber,
+}
+
+impl Default for BlockchainServiceConfig {
+    fn default() -> Self {
+        Self {
+            extrinsic_retry_timeout: 30,
+            sync_mode_min_blocks_behind: 5,
+            check_for_pending_proofs_period: 4,
+            max_blocks_behind_to_catch_up_root_changes: 10,
+        }
+    }
 }
 
 /// Event loop for the BlockchainService actor.
@@ -223,13 +235,14 @@ where
                     call,
                     options,
                     callback,
-                } => match self.send_extrinsic(call, options).await {
+                } => match self.send_extrinsic(call, &options).await {
                     Ok(output) => {
                         debug!(target: LOG_TARGET, "Extrinsic sent successfully: {:?}", output);
                         match callback.send(Ok(SubmittedTransaction::new(
                             output.receiver,
                             output.hash,
                             output.nonce,
+                            options.timeout(),
                         ))) {
                             Ok(_) => {
                                 trace!(target: LOG_TARGET, "Receiver sent successfully");
@@ -1132,6 +1145,7 @@ where
 {
     /// Create a new [`BlockchainService`].
     pub fn new(
+        config: BlockchainServiceConfig,
         client: Arc<ParachainClient>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
@@ -1142,6 +1156,7 @@ where
         maintenance_mode: bool,
     ) -> Self {
         Self {
+            config,
             event_bus_provider: BlockchainServiceEventBusProvider::new(),
             client,
             keystore,
@@ -1205,7 +1220,9 @@ where
         // Check if we just came out of syncing mode.
         // We use saturating_sub because in a reorg, there is a potential scenario where the last
         // block processed is higher than the current block number.
-        if block_number.saturating_sub(last_block_processed.number) > SYNC_MODE_MIN_BLOCKS_BEHIND {
+        if block_number.saturating_sub(last_block_processed.number)
+            > self.config.sync_mode_min_blocks_behind
+        {
             self.handle_initial_sync(notification).await;
         }
 
