@@ -3,13 +3,11 @@ use serde::{Deserialize, Deserializer};
 use std::{path::PathBuf, str::FromStr};
 use storage_hub_runtime::StorageDataUnit;
 
-use crate::{
-    command::ProviderOptions,
-    services::builder::{
-        BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions,
-        BspSubmitProofOptions, BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions,
-        MspMoveBucketOptions,
-    },
+use crate::command::ProviderOptions;
+
+use shc_client::builder::{
+    BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
+    BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
 };
 
 /// Sub-commands supported by the collator.

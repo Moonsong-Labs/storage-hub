@@ -18,7 +18,16 @@ members = [
 	"runtime",
 	"pallets/*",
 	"node",
-	"client/*",
+	"client",
+	"client/actors-framework",
+	"client/blockchain-service",
+	"client/common",
+	"client/file-manager",
+	"client/file-transfer-service",
+	"client/forest-manager",
+	"client/indexer-db",
+	"client/indexer-service",
+	"client/rpc",
 	"primitives/*",
 	"xcm-simulator",
 ]
@@ -216,6 +225,7 @@ shc-common = { path = "client/common", default-features = false }
 shc-file-manager = { path = "client/file-manager", default-features = false }
 shc-forest-manager = { path = "client/forest-manager", default-features = false }
 shc-rpc = { path = "client/rpc", default-features = false }
+shc-client = { path = "client", default-features = false }
 
 # Local - StorageHub Primitives (used by the runtime and the node, must be no_std compatible)
 shp-constants = { path = "primitives/constants", default-features = false }
