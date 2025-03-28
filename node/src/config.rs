@@ -5,7 +5,9 @@ use std::io::prelude::*;
 use std::path::Path;
 use toml;
 
-use crate::{command::ProviderOptions, services::builder::IndexerOptions};
+use shc_client::builder::IndexerOptions;
+
+use crate::command::ProviderOptions;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {

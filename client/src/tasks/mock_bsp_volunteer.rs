@@ -10,7 +10,7 @@ use shc_blockchain_service::{
     types::SendExtrinsicOptions,
 };
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };

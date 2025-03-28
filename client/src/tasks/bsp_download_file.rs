@@ -5,7 +5,7 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceCommandInterface, events::RemoteDownloadRequest,
 };
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };

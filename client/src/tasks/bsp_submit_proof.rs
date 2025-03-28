@@ -24,7 +24,7 @@ use shc_common::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };

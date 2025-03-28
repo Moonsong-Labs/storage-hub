@@ -5,7 +5,7 @@ use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events
 use shc_common::types::{MaxUsersToCharge, StorageProviderId};
 use sp_core::Get;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{MspForestStorageHandlerT, ShNodeType},
 };

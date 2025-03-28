@@ -10,7 +10,7 @@ use shc_file_transfer_service::commands::{
     FileTransferServiceCommandInterface, FileTransferServiceCommandInterfaceExt,
 };
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };

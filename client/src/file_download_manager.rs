@@ -25,7 +25,7 @@ use shc_file_transfer_service::{
 };
 use shp_file_metadata::{Chunk, ChunkId};
 
-use crate::services::{bsp_peer_manager::BspPeerManager, download_state_store::DownloadStateStore};
+use crate::{bsp_peer_manager::BspPeerManager, download_state_store::DownloadStateStore};
 
 const LOG_TARGET: &str = "file_download_manager";
 

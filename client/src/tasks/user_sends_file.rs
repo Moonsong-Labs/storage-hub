@@ -18,7 +18,7 @@ use shc_file_transfer_service::commands::{
 };
 use shp_file_metadata::ChunkId;
 
-use crate::services::{handler::StorageHubHandler, types::ShNodeType};
+use crate::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "user-sends-file-task";
 

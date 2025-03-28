@@ -14,7 +14,7 @@ use shc_blockchain_service::{
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{MspForestStorageHandlerT, ShNodeType},
 };

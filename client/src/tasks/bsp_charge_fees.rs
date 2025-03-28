@@ -15,7 +15,7 @@ use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
