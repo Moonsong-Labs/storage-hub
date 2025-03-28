@@ -9,7 +9,7 @@ use shc_blockchain_service::{
 };
 use sp_core::H256;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };

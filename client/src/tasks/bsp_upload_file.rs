@@ -31,7 +31,7 @@ use shc_file_transfer_service::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
