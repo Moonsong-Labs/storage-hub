@@ -1,7 +1,4 @@
-// Utility functions for E2E testing
-
 use anyhow::Result;
-use futures::StreamExt;
 use std::time::{Duration, Instant};
 use subxt::{blocks::Block, events::EventDetails, OnlineClient, PolkadotConfig};
 use tracing::info;

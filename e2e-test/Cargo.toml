@@ -11,11 +11,11 @@ repository = "https://github.com/Moonsong-Labs/storage-hub-runtime.git"
 [dependencies]
 # Substrate dependencies
 subxt = { version = "0.41.0", features = ["native"] }
-subxt-signer = { version = "0.41.0" }
+subxt-signer = "0.41.0"
 parity-scale-codec = { version = "3.6.12", features = ["derive"] }
 
 # Async runtime
-tokio = { version = "1.36.0", features = ["full"] }
+tokio = { version = "1.36.0", features = ["full", "rt-multi-thread", "macros"] }
 
 # General utilities
 env_logger = "0.10.0"
@@ -35,6 +35,8 @@ async-trait = "0.1.42"
 # Keep the same PolkadotSDK version as the main project
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409" }
 sp-keyring = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409" }
+tracing-test = "0.2.5"
+reqwest = { version = "0.12.15", features = ["json"] }
 
 # Local dependencies - add as needed
 # shp-constants = { path = "../primitives/constants" }

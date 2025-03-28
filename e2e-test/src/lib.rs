@@ -34,7 +34,8 @@ impl Default for TestConfig {
 }
 
 /// Create a new subxt client connected to the specified node
-pub async fn create_client(config: &TestConfig) -> Result<OnlineClient<PolkadotConfig>> {
+pub async fn create_subxt_api() -> Result<OnlineClient<PolkadotConfig>> {
+    let config = TestConfig::default();
     let client = OnlineClient::<PolkadotConfig>::from_url(&config.node_url)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to connect to node: {}", e))?;

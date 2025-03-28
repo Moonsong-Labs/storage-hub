@@ -13,6 +13,7 @@ import {
   sendTransaction
 } from "../../util";
 import { strictEqual } from "node:assert";
+import { u8aToHex } from "@polkadot/util";
 
 describe("Full Network Suite", { concurrency: 2 }, async () => {
   const { relayApi, storageApi } = await getZombieClients({
@@ -23,6 +24,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
   after(() => {
     relayApi.disconnect();
     storageApi.disconnect();
+    u8aToHex()
   });
 
   describe("Relay Tests", async () => {

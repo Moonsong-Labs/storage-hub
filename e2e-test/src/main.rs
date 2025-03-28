@@ -4,7 +4,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use parity_scale_codec::Encode;
 use sh_e2e::{
-    create_client,
+    create_subxt_api,
     node::{Node, NodeConfig},
     TestConfig, DEFAULT_NODE_URL,
 };
@@ -134,7 +134,7 @@ async fn main() -> Result<()> {
             info!("Downloading metadata from {}", test_config.node_url);
 
             // Create a client connection to the node
-            let client = create_client(&test_config).await?;
+            let client = create_subxt_api().await?;
 
             // Fetch the metadata and convert to bytes
             let metadata = client.metadata();
