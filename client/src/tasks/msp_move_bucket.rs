@@ -137,7 +137,6 @@ where
             target: LOG_TARGET,
             "Waiting for BSPs to be ready to serve files for bucket {:?}", event.bucket_id
         );
-        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         // Get all files for this bucket from the indexer
         let indexer_db_pool =
