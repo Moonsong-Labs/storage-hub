@@ -24,7 +24,6 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
   after(() => {
     relayApi.disconnect();
     storageApi.disconnect();
-    u8aToHex()
   });
 
   describe("Relay Tests", async () => {

@@ -1,21 +1,18 @@
-use reqwest;
 #[cfg(test)]
 pub mod basic_subxt_checks {
     #![allow(missing_docs)]
-
-    use super::*;
     use crate::create_subxt_api;
     use anyhow::Result;
+    use rand;
+    use reqwest;
     use std::str::FromStr;
-    use std::time::Duration;
     use subxt::backend::legacy::LegacyRpcMethods;
     use subxt::backend::rpc::RpcClient;
     use subxt::config::polkadot::PolkadotExtrinsicParamsBuilder as Params;
     use subxt::utils::AccountId32;
     use subxt::PolkadotConfig;
-    use subxt_signer::sr25519::{dev, Keypair, PublicKey};
-    use subxt_signer::{sr25519, SecretUri};
-    use tokio::time::sleep;
+    use subxt_signer::sr25519::{dev, Keypair};
+    use subxt_signer::SecretUri;
     use tracing::{debug, info};
     use tracing_test::traced_test;
 
@@ -67,28 +64,35 @@ pub mod basic_subxt_checks {
         debug!("Block num: {}", api.blocks().at_latest().await?.number());
         let block_api = api.blocks().at_latest().await?;
 
-        let tx_dest = dev::bob().public_key().into();
-        let tx = storage_hub::tx()
-            .balances()
-            .transfer_allow_death(tx_dest, 10000000000000);
+        let uri = SecretUri::from_str(&format!("//rand-{}", rand::random::<u32>()))
+            .expect("Failed to create random account");
+        let dest: AccountId32 = Keypair::from_uri(&uri)
+            .expect("valid keypair")
+            .public_key()
+            .into();
 
-        let tx_dest: AccountId32 = dev::bob().public_key().into();
-        let storage_query = storage_hub::storage().system().account(&tx_dest);
-        let bal_before = api
-            .storage()
-            .at_latest()
-            .await?
-            .fetch(&storage_query)
-            .await?
-            .unwrap();
-        debug!("Bal Before: {:?}", &bal_before);
+        let storage_query = storage_hub::storage().system().account(dest);
+        // let bal_before = api
+        //     .storage()
+        //     .at_latest()
+        //     .await?
+        //     .fetch(&storage_query)
+        //     .await?
+        //     .unwrap();
+        // debug!("Bal Before: {:?}", &bal_before);
 
         let alice = dev::alice();
         let start_block = block_api.header().number;
         debug!("Current block before transaction: {}", start_block);
 
+        let to = Keypair::from_uri(&uri)
+            .expect("valid keypair")
+            .public_key()
+            .into();
+        let tx = storage_hub::tx()
+            .balances()
+            .transfer_allow_death(to, 10000000000000);
         let tx_params = Params::new().build();
-
         let ext_success = api
             .tx()
             .sign_and_submit_then_watch(&tx, &alice, tx_params)
@@ -109,17 +113,22 @@ pub mod basic_subxt_checks {
         ext_success.await?;
 
         debug!("Block num: {}", api.blocks().at_latest().await?.number());
-        let new_storage_query = storage_hub::storage().system().account(&tx_dest);
         let bal_after = api
             .storage()
             .at_latest()
             .await?
-            .fetch(&new_storage_query)
+            .fetch(&storage_query)
             .await?
             .unwrap();
         debug!("Bal After: {:?}", &bal_after);
-        assert!(bal_after.data.free > bal_before.data.free);
+        assert!(bal_after.data.free > 0);
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    #[traced_test]
+    async fn can_submit_runtime_api_calls() -> Result<()> {
         Ok(())
     }
 
@@ -128,25 +137,25 @@ pub mod basic_subxt_checks {
     async fn can_submit_rpcs() -> Result<()> {
         Ok(())
     }
-}
 
-async fn create_block() -> anyhow::Result<()> {
-    let response = reqwest::Client::new()
-        .post("http://localhost:9944")
-        .json(&serde_json::json!({
-            "jsonrpc": "2.0",
-            "method": "engine_createBlock",
-            "params": [true, true],
-            "id": 1
-        }))
-        .send()
-        .await?
-        .json::<serde_json::Value>()
-        .await?;
+    pub async fn create_block() -> anyhow::Result<()> {
+        let response = reqwest::Client::new()
+            .post("http://localhost:9944")
+            .json(&serde_json::json!({
+                "jsonrpc": "2.0",
+                "method": "engine_createBlock",
+                "params": [true, true],
+                "id": 1
+            }))
+            .send()
+            .await?
+            .json::<serde_json::Value>()
+            .await?;
 
-    println!("Response: {:?}", response);
+        println!("Response: {:?}", response);
 
-    //add check that response is ok
+        //add check that response is ok
 
-    Ok(())
+        Ok(())
+    }
 }

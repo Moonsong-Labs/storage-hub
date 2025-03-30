@@ -36,7 +36,7 @@ pub async fn wait_for_blocks(
         }
     }
 
-    Ok(last_block.ok_or_else(|| anyhow::anyhow!("No blocks received"))?)
+    last_block.ok_or_else(|| anyhow::anyhow!("No blocks received"))
 }
 
 /// Wait for a specific event to occur in the blockchain

@@ -37,6 +37,7 @@ sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "st
 sp-keyring = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = "stable2409" }
 tracing-test = "0.2.5"
 reqwest = { version = "0.12.15", features = ["json"] }
+rand.workspace = true
 
 # Local dependencies - add as needed
 # shp-constants = { path = "../primitives/constants" }

@@ -7,6 +7,7 @@ use subxt::{OnlineClient, PolkadotConfig};
 use tracing::{info, warn};
 
 /// Configuration for running a local node
+#[derive(Debug)]
 pub struct NodeConfig {
     /// The command to run
     pub binary_path: String,
@@ -37,7 +38,8 @@ impl Default for NodeConfig {
 /// Represents a running Storage Hub node
 pub struct Node {
     process: Child,
-    config: NodeConfig,
+    #[allow(dead_code)]
+    pub config: NodeConfig,
 }
 
 impl Node {
@@ -60,6 +62,8 @@ impl Node {
     /// Wait for the node to be ready by attempting to connect
     pub async fn wait_for_ready(&self, url: &str, timeout: Duration) -> Result<()> {
         let start_time = Instant::now();
+
+        info!("Using config: {:?}", self.config);
 
         loop {
             if start_time.elapsed() > timeout {
