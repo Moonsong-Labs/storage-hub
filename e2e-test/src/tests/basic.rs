@@ -169,12 +169,10 @@ pub mod basic_subxt_checks {
     #[traced_test]
     async fn can_decode_v15_metadata() -> Result<()> {
         use subxt_codegen::Metadata;
-        #[subxt::subxt(runtime_metadata_path = "./storage-hub-v15.scale")]
-        mod api_v15 {}
 
         let metadata_bytes = std::fs::read("./storage-hub-v15.scale").expect("metadata not found");
         let metadata = Metadata::decode(&mut &*metadata_bytes).expect("the metadata must decode");
-        dbg!(metadata);
+        debug!("{:?}", metadata);
 
         // fn main() {
         //     println!("cargo:rerun-if-changed=phala_metadata.scale");
