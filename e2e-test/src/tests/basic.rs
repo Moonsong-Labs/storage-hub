@@ -6,6 +6,7 @@ pub mod basic_subxt_checks {
     use parity_scale_codec::Decode;
     use rand;
     use reqwest;
+    use rstest::rstest;
     use serde::{Deserialize, Serialize};
     use std::str::FromStr;
     use subxt::backend::chain_head::ChainHeadRpcMethods;
@@ -34,12 +35,12 @@ pub mod basic_subxt_checks {
         /// Token decimal places for each token (if specified)
         /// This is typically a vector, as a chain may have multiple tokens
         #[serde(rename = "tokenDecimals")]
-        pub token_decimals: Option<Vec<u8>>,
+        pub token_decimals: Option<u32>,
 
         /// Token symbols for each token (if specified)
         /// This is typically a vector, as a chain may have multiple tokens
         #[serde(rename = "tokenSymbol")]
-        pub token_symbol: Option<Vec<String>>,
+        pub token_symbol: Option<String>,
     }
 
     // Example of how to use this struct for deserialization
@@ -52,6 +53,7 @@ pub mod basic_subxt_checks {
 
     #[subxt::subxt(runtime_metadata_path = "./storage-hub-v15.scale")]
     pub mod storage_hub {}
+    #[rstest]
     #[tokio::test]
     #[traced_test]
     async fn can_read_constants() -> Result<()> {
@@ -70,6 +72,7 @@ pub mod basic_subxt_checks {
         Ok(())
     }
 
+    #[rstest]
     #[tokio::test]
     #[traced_test]
     async fn can_query_storage() -> Result<()> {
@@ -91,6 +94,7 @@ pub mod basic_subxt_checks {
         Ok(())
     }
 
+    #[rstest]
     #[tokio::test]
     #[traced_test]
     async fn can_submit_extrinsic() -> Result<()> {
@@ -160,6 +164,7 @@ pub mod basic_subxt_checks {
         Ok(())
     }
 
+    #[rstest]
     #[tokio::test]
     #[traced_test]
     async fn can_decode_v15_metadata() -> Result<()> {
@@ -202,6 +207,7 @@ pub mod basic_subxt_checks {
     }
 
     #[ignore] // Need to look at how we expose runtime apis in metadata v15
+    #[rstest]
     #[tokio::test]
     #[traced_test]
     async fn can_submit_runtime_api_calls() -> Result<()> {
@@ -223,10 +229,10 @@ pub mod basic_subxt_checks {
         Ok(())
     }
 
+    #[rstest]
     #[tokio::test]
-    #[traced_test]
     async fn can_submit_rpcs() -> Result<()> {
-        let rpc_client = RpcClient::from_url("ws://127.0.0.1:9944").await?;
+        let rpc_client = RpcClient::from_url("ws://localhost:9944").await?;
         let rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client.clone());
 
         println!(
