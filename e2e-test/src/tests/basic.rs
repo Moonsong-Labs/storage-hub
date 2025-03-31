@@ -3,20 +3,54 @@ pub mod basic_subxt_checks {
     #![allow(missing_docs)]
     use crate::create_subxt_api;
     use anyhow::Result;
+    use parity_scale_codec::Decode;
     use rand;
     use reqwest;
+    use serde::{Deserialize, Serialize};
     use std::str::FromStr;
+    use subxt::backend::chain_head::ChainHeadRpcMethods;
     use subxt::backend::legacy::LegacyRpcMethods;
     use subxt::backend::rpc::RpcClient;
     use subxt::config::polkadot::PolkadotExtrinsicParamsBuilder as Params;
+    use subxt::dynamic::Value;
     use subxt::utils::AccountId32;
-    use subxt::PolkadotConfig;
+    use subxt::{PolkadotConfig, SubstrateConfig};
     use subxt_signer::sr25519::{dev, Keypair};
     use subxt_signer::SecretUri;
     use tracing::{debug, info};
     use tracing_test::traced_test;
 
-    #[subxt::subxt(runtime_metadata_path = "./storage-hub.scale")]
+    /// Represents the chain properties returned by system_properties RPC call
+    #[derive(Debug, Clone, Serialize, Deserialize)]
+    pub struct ChainProperties {
+        /// Whether the chain is Ethereum-compatible
+        #[serde(rename = "isEthereum")]
+        pub is_ethereum: Option<bool>,
+
+        /// The SS58 address format (if specified)
+        #[serde(rename = "ss58Format")]
+        pub ss58_format: Option<u32>,
+
+        /// Token decimal places for each token (if specified)
+        /// This is typically a vector, as a chain may have multiple tokens
+        #[serde(rename = "tokenDecimals")]
+        pub token_decimals: Option<Vec<u8>>,
+
+        /// Token symbols for each token (if specified)
+        /// This is typically a vector, as a chain may have multiple tokens
+        #[serde(rename = "tokenSymbol")]
+        pub token_symbol: Option<Vec<String>>,
+    }
+
+    // Example of how to use this struct for deserialization
+    impl ChainProperties {
+        /// Parse ChainProperties from a JSON string
+        pub fn from_json(json: &str) -> std::result::Result<Self, serde_json::Error> {
+            serde_json::from_str(json)
+        }
+    }
+
+    #[subxt::subxt(runtime_metadata_path = "./storage-hub-v15.scale")]
     pub mod storage_hub {}
     #[tokio::test]
     #[traced_test]
@@ -100,7 +134,7 @@ pub mod basic_subxt_checks {
             .wait_for_finalized_success();
 
         let rpc_client = RpcClient::from_url("ws://127.0.0.1:9944").await?;
-        let rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client.clone());
+        let rpc = LegacyRpcMethods::<SubstrateConfig>::new(rpc_client.clone());
         println!(
             "📛 System Name: {:?}\n🩺 Health: {:?}\n🖫 Properties: {:?}\n🔗 Chain: {:?}\n",
             rpc.system_name().await?,
@@ -128,13 +162,87 @@ pub mod basic_subxt_checks {
 
     #[tokio::test]
     #[traced_test]
+    async fn can_decode_v15_metadata() -> Result<()> {
+        use subxt_codegen::Metadata;
+        #[subxt::subxt(runtime_metadata_path = "./storage-hub-v15.scale")]
+        mod api_v15 {}
+
+        let metadata_bytes = std::fs::read("./storage-hub-v15.scale").expect("metadata not found");
+        let metadata = Metadata::decode(&mut &*metadata_bytes).expect("the metadata must decode");
+        dbg!(metadata);
+
+        // fn main() {
+        //     println!("cargo:rerun-if-changed=phala_metadata.scale");
+        //
+        //     let output_filename = "src/phala_metadata.rs";
+        //
+        //     let metadata = include_bytes!("./phala_metadata.scale");
+        //     let metadata = Metadata::decode(&mut &metadata[..]).unwrap();
+        //     let mut builder = CodegenBuilder::new();
+        //     builder.set_target_module(syn::parse_quote! { mod phala {} });
+        //     builder.add_derives_for_type(
+        //         syn::parse_quote!(phala_pallets::wapod_workers::pallet::TicketInfo),
+        //         [syn::parse_quote! { Clone }],
+        //         true,
+        //     );
+        //     builder.add_derives_for_type(
+        //         syn::parse_quote!(wapod_types::ticket::Prices),
+        //         [syn::parse_quote! { Default }],
+        //         true,
+        //     );
+        //
+        //     let code = builder.generate(metadata).unwrap().to_string();
+        //     std::fs::write(output_filename, code).unwrap();
+        //     std::process::Command::new("rustfmt")
+        //         .arg(output_filename)
+        //         .status()
+        //         .unwrap();
+        // }
+        Ok(())
+    }
+
+    #[ignore] // Need to look at how we expose runtime apis in metadata v15
+    #[tokio::test]
+    #[traced_test]
     async fn can_submit_runtime_api_calls() -> Result<()> {
+        let api = create_subxt_api().await.unwrap();
+        // let runtime_api_call = storage_hub::apis()
+        // let runtime_call = storage_hub::apis().metadata().metadata_versions();
+        let runtime_call = subxt::dynamic::runtime_api_call(
+            "Metadata",
+            "metadata_versions",
+            Vec::<Value<()>>::new(),
+        );
+        let result = api
+            .runtime_api()
+            .at_latest()
+            .await?
+            .call(runtime_call)
+            .await?;
+        println!("result from runtimeapi call is : {:?}", result.to_value());
         Ok(())
     }
 
     #[tokio::test]
     #[traced_test]
     async fn can_submit_rpcs() -> Result<()> {
+        let rpc_client = RpcClient::from_url("ws://127.0.0.1:9944").await?;
+        let rpc = LegacyRpcMethods::<PolkadotConfig>::new(rpc_client.clone());
+
+        println!(
+            "🚀 System Name: {:?}\n🩺 Health: {:?}\n📋 Properties: {:?}\n⛓️ Chain: {:?}",
+            rpc.system_name().await?,
+            rpc.system_health().await?,
+            rpc.system_properties().await?,
+            rpc.system_chain().await?
+        );
+
+        let rpc = ChainHeadRpcMethods::<SubstrateConfig>::new(rpc_client.clone());
+        let properties = rpc.chainspec_v1_properties::<ChainProperties>().await?;
+
+        // Log raw JSON to understand its structure
+        println!("Raw system properties: {:?}", properties);
+
         Ok(())
     }
 

@@ -10,7 +10,7 @@ repository = "https://github.com/Moonsong-Labs/storage-hub-runtime.git"
 
 [dependencies]
 # Substrate dependencies
-subxt = { version = "0.41.0", features = ["native"] }
+subxt = { version = "0.41.0", features = ["native", "unstable-metadata"] }
 subxt-signer = "0.41.0"
 parity-scale-codec = { version = "3.6.12", features = ["derive"] }
 
@@ -38,6 +38,7 @@ sp-keyring = { git = "https://github.com/paritytech/polkadot-sdk.git", branch = 
 tracing-test = "0.2.5"
 reqwest = { version = "0.12.15", features = ["json"] }
 rand.workspace = true
+subxt-codegen = {version   = "0.41.0", features = ["frame-metadata"] }
 
 # Local dependencies - add as needed
 # shp-constants = { path = "../primitives/constants" }
