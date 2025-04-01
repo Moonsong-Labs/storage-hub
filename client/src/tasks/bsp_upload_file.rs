@@ -16,12 +16,12 @@ use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
     commands::BlockchainServiceInterface,
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
-    types::{ConfirmStoringRequest, RetryStrategy},
+    types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
-        Balance, FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
+        FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
     },
 };
@@ -30,17 +30,31 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
-use storage_hub_runtime::MILLIUNIT;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-upload-file-task";
 
-const MAX_CONFIRM_STORING_REQUEST_TRY_COUNT: u32 = 3;
-const MAX_CONFIRM_STORING_REQUEST_TIP: Balance = 500 * MILLIUNIT;
+/// Configuration for the BspUploadFileTask
+#[derive(Debug, Clone)]
+pub struct BspUploadFileConfig {
+    /// Maximum number of times to retry an upload file request
+    pub max_try_count: u32,
+    /// Maximum tip amount to use when submitting an upload file request extrinsic
+    pub max_tip: f64,
+}
+
+impl Default for BspUploadFileConfig {
+    fn default() -> Self {
+        Self {
+            max_try_count: 3,
+            max_tip: 500.0,
+        }
+    }
+}
 
 /// BSP Upload File Task: Handles the whole flow of a file being uploaded to a BSP, from
 /// the BSP's perspective.
@@ -64,6 +78,8 @@ where
 {
     storage_hub_handler: StorageHubHandler<NT>,
     file_key_cleanup: Option<H256>,
+    /// Configuration for this task
+    config: BspUploadFileConfig,
 }
 
 impl<NT> Clone for BspUploadFileTask<NT>
@@ -75,6 +91,7 @@ where
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
+            config: self.config.clone(),
         }
     }
 }
@@ -86,8 +103,9 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
             file_key_cleanup: None,
+            config: storage_hub_handler.provider_config.bsp_upload_file.clone(),
         }
     }
 }
@@ -258,10 +276,10 @@ where
                 Err(e) => {
                     let mut confirm_storing_request = confirm_storing_request.clone();
                     confirm_storing_request.increment_try_count();
-                    if confirm_storing_request.try_count > MAX_CONFIRM_STORING_REQUEST_TRY_COUNT {
+                    if confirm_storing_request.try_count > self.config.max_try_count {
                         error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key, e);
                     } else {
-                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, MAX_CONFIRM_STORING_REQUEST_TRY_COUNT);
+                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, self.config.max_try_count);
                         self.storage_hub_handler
                             .blockchain
                             .queue_confirm_bsp_request(confirm_storing_request)
@@ -295,10 +313,10 @@ where
                 _ => {
                     let mut confirm_storing_request = confirm_storing_request.clone();
                     confirm_storing_request.increment_try_count();
-                    if confirm_storing_request.try_count > MAX_CONFIRM_STORING_REQUEST_TRY_COUNT {
+                    if confirm_storing_request.try_count > self.config.max_try_count {
                         error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key);
                     } else {
-                        error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, confirm_storing_request.try_count, MAX_CONFIRM_STORING_REQUEST_TRY_COUNT);
+                        error!(target: LOG_TARGET, "Failed to generate proof or get metadatas for file {:?}.\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, confirm_storing_request.try_count, self.config.max_try_count);
                         self.storage_hub_handler
                             .blockchain
                             .queue_confirm_bsp_request(confirm_storing_request)
@@ -350,14 +368,15 @@ where
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
                 RetryStrategy::default()
-                    .with_max_retries(MAX_CONFIRM_STORING_REQUEST_TRY_COUNT)
-                    .with_max_tip(MAX_CONFIRM_STORING_REQUEST_TIP as f64)
-                    .with_timeout(Duration::from_secs(
-                        self.storage_hub_handler
-                            .provider_config
-                            .extrinsic_retry_timeout,
-                    ))
+                    .with_max_retries(self.config.max_try_count)
+                    .with_max_tip(self.config.max_tip)
                     .retry_only_if_timeout(),
                 true,
             )
@@ -365,7 +384,7 @@ where
             .map_err(|e| {
                 anyhow!(
                     "Failed to confirm file after {} retries: {:?}",
-                    MAX_CONFIRM_STORING_REQUEST_TRY_COUNT,
+                    self.config.max_try_count,
                     e
                 )
             })?;
@@ -624,13 +643,16 @@ where
         let result = self
             .storage_hub_handler
             .blockchain
-            .send_extrinsic(call.clone(), Default::default())
+            .send_extrinsic(
+                call.clone(),
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
+            )
             .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .extrinsic_retry_timeout,
-            ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await;
 
@@ -653,13 +675,16 @@ where
             let result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Default::default())
+                .send_extrinsic(
+                    call,
+                    SendExtrinsicOptions::new(Duration::from_secs(
+                        self.storage_hub_handler
+                            .provider_config
+                            .blockchain_service
+                            .extrinsic_retry_timeout,
+                    )),
+                )
                 .await?
-                .with_timeout(Duration::from_secs(
-                    self.storage_hub_handler
-                        .provider_config
-                        .extrinsic_retry_timeout,
-                ))
                 .watch_for_success(&self.storage_hub_handler.blockchain)
                 .await;
 

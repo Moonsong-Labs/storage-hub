@@ -5,6 +5,11 @@ use storage_hub_runtime::StorageDataUnit;
 
 use crate::command::ProviderOptions;
 
+use shc_client::builder::{
+    BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
+    BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
+};
+
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
@@ -122,16 +127,22 @@ pub struct ProviderConfigurations {
     pub provider_type: Option<ProviderType>,
 
     /// Maximum storage capacity of the provider (bytes).
-    #[clap(long, required_if_eq_any([
+    #[clap(long, required_if_eq_all([
+        ("provider", "true"),
         ("provider_type", "msp"),
-        ("provider_type", "bsp")
+    ]), required_if_eq_all([
+        ("provider", "true"),
+        ("provider_type", "bsp"),
     ]))]
     pub max_storage_capacity: Option<StorageDataUnit>,
 
     /// Jump capacity (bytes).
-    #[clap(long, required_if_eq_any([
+    #[clap(long, required_if_eq_all([
+        ("provider", "true"),
         ("provider_type", "msp"),
-        ("provider_type", "bsp")
+    ]), required_if_eq_all([
+        ("provider", "true"),
+        ("provider_type", "bsp"),
     ]))]
     pub jump_capacity: Option<StorageDataUnit>,
 
@@ -151,34 +162,298 @@ pub struct ProviderConfigurations {
 
     /// Extrinsic retry timeout in seconds.
     #[clap(long, default_value = "60")]
-    pub extrinsic_retry_timeout: u64,
+    pub extrinsic_retry_timeout: Option<u64>,
+
+    /// The minimum number of blocks behind the current best block to consider the node out of sync.
+    #[clap(long, default_value = "5")]
+    pub sync_mode_min_blocks_behind: Option<u32>,
+
+    /// On blocks that are multiples of this number, the blockchain service will trigger the catch of proofs.
+    #[clap(long, default_value = "4")]
+    pub check_for_pending_proofs_period: Option<u32>,
+
+    /// The maximum number of blocks from the past that will be processed for catching up the root changes.
+    #[clap(long, default_value = "10")]
+    pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
 
     /// MSP charging fees period (in blocks).
     /// Setting it to 600 with a block every 6 seconds will charge user every hour.
-    #[clap(long, required_if_eq_any([
+    #[clap(long, required_if_eq_all([
+        ("provider", "true"),
         ("provider_type", "msp"),
     ]))]
     pub msp_charging_period: Option<u32>,
+
+    // ============== MSP Delete File task options ==============
+    /// Enable and configure MSP Delete File task.
+    #[clap(long)]
+    pub msp_delete_file_task: bool,
+
+    /// Maximum number of times to retry a file deletion request.
+    #[clap(
+        long,
+        value_name = "COUNT",
+        help_heading = "MSP Delete File Options",
+        required_if_eq_all([
+            ("msp_delete_file_task", "true"),
+            ("provider_type", "msp"),
+        ])
+    )]
+    pub msp_delete_file_max_try_count: Option<u32>,
+
+    /// Maximum tip amount to use when submitting a file deletion request extrinsic.
+    #[clap(
+        long,
+        value_name = "AMOUNT",
+        help_heading = "MSP Delete File Options",
+        required_if_eq_all([
+            ("msp_delete_file_task", "true"),
+            ("provider_type", "msp"),
+        ])
+    )]
+    pub msp_delete_file_max_tip: Option<f64>,
+
+    // ============== MSP Charge Fees task options ==============
+    /// Enable and configure MSP Charge Fees task.
+    #[clap(long)]
+    pub msp_charge_fees_task: bool,
+
+    /// Minimum debt threshold for charging users.
+    #[clap(
+        long,
+        value_name = "AMOUNT",
+        help_heading = "MSP Charge Fees Options",
+        required_if_eq_all([
+            ("msp_charge_fees_task", "true"),
+            ("provider_type", "msp"),
+        ])
+    )]
+    pub msp_charge_fees_min_debt: Option<u64>,
+
+    // ============== MSP Move Bucket task options ==============
+    /// Enable and configure MSP Move Bucket task.
+    #[clap(long)]
+    pub msp_move_bucket_task: bool,
+
+    /// Maximum number of times to retry a move bucket request.
+    #[clap(
+        long,
+        value_name = "COUNT",
+        help_heading = "MSP Move Bucket Options",
+        required_if_eq_all([
+            ("msp_move_bucket_task", "true"),
+            ("provider_type", "msp"),
+        ])
+    )]
+    pub msp_move_bucket_max_try_count: Option<u32>,
+
+    /// Maximum tip amount to use when submitting a move bucket request extrinsic.
+    #[clap(
+        long,
+        value_name = "AMOUNT",
+        help_heading = "MSP Move Bucket Options",
+        required_if_eq_all([
+            ("msp_move_bucket_task", "true"),
+            ("provider_type", "msp"),
+        ])
+    )]
+    pub msp_move_bucket_max_tip: Option<f64>,
+
+    // ============== BSP Upload File task options ==============
+    /// Enable and configure BSP Upload File task.
+    #[clap(long)]
+    pub bsp_upload_file_task: bool,
+
+    /// Maximum number of times to retry an upload file request.
+    #[clap(
+        long,
+        value_name = "COUNT",
+        help_heading = "BSP Upload File Options",
+        required_if_eq_all([
+            ("bsp_upload_file_task", "true"),
+            ("provider_type", "bsp"),
+        ])
+    )]
+    pub bsp_upload_file_max_try_count: Option<u32>,
+
+    /// Maximum tip amount to use when submitting an upload file request extrinsic.
+    #[clap(
+        long,
+        value_name = "AMOUNT",
+        help_heading = "BSP Upload File Options",
+        required_if_eq_all([
+            ("bsp_upload_file_task", "true"),
+            ("provider_type", "bsp"),
+        ])
+    )]
+    pub bsp_upload_file_max_tip: Option<f64>,
+
+    // ============== BSP Move Bucket task options ==============
+    /// Enable and configure BSP Move Bucket task.
+    #[clap(long)]
+    pub bsp_move_bucket_task: bool,
+
+    /// Grace period in seconds to accept download requests after a bucket move is accepted.
+    #[clap(
+        long,
+        value_name = "SECONDS",
+        help_heading = "BSP Move Bucket Options",
+        required_if_eq_all([
+            ("bsp_move_bucket_task", "true"),
+            ("provider_type", "bsp"),
+        ])
+    )]
+    pub bsp_move_bucket_grace_period: Option<u64>,
+
+    // ============== BSP Charge Fees task options ==============
+    /// Enable and configure BSP Charge Fees task.
+    #[clap(long)]
+    pub bsp_charge_fees_task: bool,
+
+    /// Minimum debt threshold for charging users.
+    #[clap(
+        long,
+        value_name = "AMOUNT",
+        help_heading = "BSP Charge Fees Options",
+        required_if_eq_all([
+            ("bsp_charge_fees_task", "true"),
+            ("provider_type", "bsp"),
+        ])
+    )]
+    pub bsp_charge_fees_min_debt: Option<u64>,
+
+    // ============== BSP Submit Proof task options ==============
+    /// Enable and configure BSP Submit Proof task.
+    #[clap(long)]
+    pub bsp_submit_proof_task: bool,
+
+    /// Maximum number of attempts to submit a proof.
+    #[clap(
+        long,
+        value_name = "COUNT",
+        help_heading = "BSP Submit Proof Options",
+        required_if_eq_all([
+            ("bsp_submit_proof_task", "true"),
+            ("provider_type", "bsp"),
+        ])
+    )]
+    pub bsp_submit_proof_max_attempts: Option<u32>,
 }
 
 impl ProviderConfigurations {
     pub fn provider_options(&self) -> ProviderOptions {
+        // Get provider type to conditionally apply options
+        let provider_type = self
+            .provider_type
+            .clone()
+            .expect("Provider type is required");
+
+        let mut msp_delete_file = None;
+        let mut msp_charge_fees = None;
+        let mut msp_move_bucket = None;
+        let mut bsp_upload_file = None;
+        let mut bsp_move_bucket = None;
+        let mut bsp_charge_fees = None;
+        let mut bsp_submit_proof = None;
+
+        // Only set MSP options if provider_type is MSP
+        if provider_type == ProviderType::Msp {
+            // If specific task flags are enabled, use the provided options
+            if self.msp_delete_file_task {
+                let mut options = MspDeleteFileOptions::default();
+                options.max_try_count = self.msp_delete_file_max_try_count;
+                options.max_tip = self.msp_delete_file_max_tip;
+                msp_delete_file = Some(options);
+            }
+
+            if self.msp_charge_fees_task {
+                let mut options = MspChargeFeesOptions::default();
+                options.min_debt = self.msp_charge_fees_min_debt;
+                msp_charge_fees = Some(options);
+            }
+
+            if self.msp_move_bucket_task {
+                let mut options = MspMoveBucketOptions::default();
+                options.max_try_count = self.msp_move_bucket_max_try_count;
+                options.max_tip = self.msp_move_bucket_max_tip;
+                msp_move_bucket = Some(options);
+            }
+        }
+
+        // Only set BSP options if provider_type is BSP
+        if provider_type == ProviderType::Bsp {
+            if self.bsp_upload_file_task {
+                let mut options = BspUploadFileOptions::default();
+                options.max_try_count = self.bsp_upload_file_max_try_count;
+                options.max_tip = self.bsp_upload_file_max_tip;
+                bsp_upload_file = Some(options);
+            }
+
+            if self.bsp_move_bucket_task {
+                let mut options = BspMoveBucketOptions::default();
+                options.move_bucket_accepted_grace_period = self.bsp_move_bucket_grace_period;
+                bsp_move_bucket = Some(options);
+            }
+
+            if self.bsp_charge_fees_task {
+                let mut options = BspChargeFeesOptions::default();
+                options.min_debt = self.bsp_charge_fees_min_debt;
+                bsp_charge_fees = Some(options);
+            }
+
+            if self.bsp_submit_proof_task {
+                let mut options = BspSubmitProofOptions::default();
+                options.max_submission_attempts = self.bsp_submit_proof_max_attempts;
+                bsp_submit_proof = Some(options);
+            }
+        }
+
+        let mut blockchain_service = None;
+        if let Some(extrinsic_retry_timeout) = self.extrinsic_retry_timeout {
+            let mut default_config = BlockchainServiceOptions::default();
+            default_config.extrinsic_retry_timeout = Some(extrinsic_retry_timeout);
+            blockchain_service = Some(default_config);
+        }
+
+        if let Some(sync_mode_min_blocks_behind) = self.sync_mode_min_blocks_behind {
+            let mut default_config = BlockchainServiceOptions::default();
+            default_config.sync_mode_min_blocks_behind = Some(sync_mode_min_blocks_behind);
+            blockchain_service = Some(default_config);
+        }
+
+        if let Some(check_for_pending_proofs_period) = self.check_for_pending_proofs_period {
+            let mut default_config = BlockchainServiceOptions::default();
+            default_config.check_for_pending_proofs_period = Some(check_for_pending_proofs_period);
+            blockchain_service = Some(default_config);
+        }
+
+        if let Some(max_blocks_behind_to_catch_up_root_changes) =
+            self.max_blocks_behind_to_catch_up_root_changes
+        {
+            let mut default_config = BlockchainServiceOptions::default();
+            default_config.max_blocks_behind_to_catch_up_root_changes =
+                Some(max_blocks_behind_to_catch_up_root_changes);
+            blockchain_service = Some(default_config);
+        }
+
         ProviderOptions {
-            provider_type: self
-                .provider_type
-                .clone()
-                .expect("Provider type is required"),
+            provider_type,
             storage_layer: self
                 .storage_layer
                 .clone()
                 .expect("Storage layer is required"),
             storage_path: self.storage_path.clone(),
-            // We can default since the clap would have errored out if it was not provided when required.
-            // In any other case, max_storage_capacity is not required and can be set to default.
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
-            extrinsic_retry_timeout: self.extrinsic_retry_timeout,
             msp_charging_period: self.msp_charging_period,
+            msp_delete_file,
+            msp_charge_fees,
+            msp_move_bucket,
+            bsp_upload_file,
+            bsp_move_bucket,
+            bsp_charge_fees,
+            bsp_submit_proof,
+            blockchain_service,
             maintenance_mode: self.maintenance_mode,
         }
     }
@@ -273,7 +548,18 @@ pub struct Cli {
     pub provider_config: ProviderConfigurations,
 
     /// Provider configurations file path (allow to specify the provider configuration in a file instead of the cli)
-    #[clap(long, conflicts_with_all = ["provider", "provider_type", "max_storage_capacity", "jump_capacity", "storage_layer", "storage_path", "extrinsic_retry_timeout", "msp_charging_period"])]
+    #[clap(long, conflicts_with_all = [
+        "provider", "provider_type", "max_storage_capacity", "jump_capacity", 
+        "storage_layer", "storage_path", "extrinsic_retry_timeout", "sync_mode_min_blocks_behind",
+        "check_for_pending_proofs_period", "max_blocks_behind_to_catch_up_root_changes",
+        "msp_charging_period",  "msp_delete_file_task", "msp_delete_file_max_try_count",
+        "msp_delete_file_max_tip", "msp_charge_fees_task", "msp_charge_fees_min_debt",
+        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", 
+        "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
+        "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
+        "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
+        "bsp_submit_proof_task", "bsp_submit_proof_max_attempts",
+    ])]
     pub provider_config_file: Option<String>,
 
     /// Indexer configurations

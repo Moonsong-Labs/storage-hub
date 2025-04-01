@@ -8,14 +8,27 @@ use shc_blockchain_service::{
 };
 use shc_file_transfer_service::commands::FileTransferServiceInterface;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "bsp-move-bucket-task";
 
-const MOVE_BUCKET_ACCEPTED_GRACE_PERIOD_SECONDS: u64 = 4 * 60 * 60; // 4 hours
+/// Configuration for the BspMoveBucketTask
+#[derive(Debug, Clone)]
+pub struct BspMoveBucketConfig {
+    /// Grace period in seconds to accept download requests after a bucket move is accepted
+    pub move_bucket_accepted_grace_period: u64,
+}
+
+impl Default for BspMoveBucketConfig {
+    fn default() -> Self {
+        Self {
+            move_bucket_accepted_grace_period: 4 * 60 * 60, // 4 hours - Default value that was in command.rs
+        }
+    }
+}
 
 /// Task that handles the [`MoveBucketRequested`], [`MoveBucketAccepted`], [`MoveBucketRejected`]
 /// and [`MoveBucketExpired`] events from the BSP point of view.
@@ -25,6 +38,8 @@ where
     NT::FSH: BspForestStorageHandlerT,
 {
     storage_hub_handler: StorageHubHandler<NT>,
+    /// Configuration for this task
+    config: BspMoveBucketConfig,
 }
 
 impl<NT> Clone for BspMoveBucketTask<NT>
@@ -35,6 +50,7 @@ where
     fn clone(&self) -> BspMoveBucketTask<NT> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
+            config: self.config.clone(),
         }
     }
 }
@@ -46,7 +62,8 @@ where
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
         Self {
-            storage_hub_handler,
+            storage_hub_handler: storage_hub_handler.clone(),
+            config: storage_hub_handler.provider_config.bsp_move_bucket.clone(),
         }
     }
 }
@@ -123,7 +140,7 @@ where
             .file_transfer
             .schedule_unregister_bucket(
                 event.bucket_id,
-                Some(MOVE_BUCKET_ACCEPTED_GRACE_PERIOD_SECONDS),
+                Some(self.config.move_bucket_accepted_grace_period),
             )
             .await
             .map_err(|e| anyhow!("Failed to unregister bucket: {:?}", e))?;

@@ -15,7 +15,7 @@ use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_core::H256;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{MspForestStorageHandlerT, ShNodeType},
 };
@@ -279,14 +279,14 @@ where
             .blockchain
             .send_extrinsic(
                 stop_storing_bucket_for_insolvent_user_call,
-                SendExtrinsicOptions::default(),
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
             )
             .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .extrinsic_retry_timeout,
-            ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await
         {

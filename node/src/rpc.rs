@@ -24,7 +24,7 @@ use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::H256;
 use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
 
-use crate::services::types::FileStorageT;
+use shc_client::types::FileStorageT;
 
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;

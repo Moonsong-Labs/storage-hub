@@ -351,14 +351,10 @@ impl<const H_LENGTH: usize> PartialEq<[u8]> for Fingerprint<H_LENGTH> {
 }
 
 /// Typed u64 representing the index of a file [`Chunk`]. Indexed from 0.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TypeInfo, Encode, Decode, Ord, PartialOrd, Hash)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, TypeInfo, Encode, Decode, Ord, PartialOrd, Hash,
+)]
 pub struct ChunkId(u64);
-
-impl Default for ChunkId {
-    fn default() -> Self {
-        Self(0)
-    }
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChunkIdError {

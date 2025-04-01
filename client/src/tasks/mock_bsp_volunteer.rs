@@ -4,10 +4,12 @@ use std::time::Duration;
 
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::{commands::BlockchainServiceInterface, events::NewStorageRequest};
+use shc_blockchain_service::{
+    commands::BlockchainServiceInterface, events::NewStorageRequest, types::SendExtrinsicOptions,
+};
 use sp_core::H256;
 
-use crate::services::{
+use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
@@ -66,13 +68,16 @@ where
 
         self.storage_hub_handler
             .blockchain
-            .send_extrinsic(call, Default::default())
+            .send_extrinsic(
+                call,
+                SendExtrinsicOptions::new(Duration::from_secs(
+                    self.storage_hub_handler
+                        .provider_config
+                        .blockchain_service
+                        .extrinsic_retry_timeout,
+                )),
+            )
             .await?
-            .with_timeout(Duration::from_secs(
-                self.storage_hub_handler
-                    .provider_config
-                    .extrinsic_retry_timeout,
-            ))
             .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
 

@@ -5,11 +5,14 @@ use std::io::prelude::*;
 use std::path::Path;
 use toml;
 
+use shc_client::builder::IndexerOptions;
+
 use crate::command::ProviderOptions;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub provider: ProviderOptions,
+    pub indexer: Option<IndexerOptions>,
 }
 
 pub fn read_config(path: &str) -> Option<Config> {
