@@ -14375,7 +14375,7 @@ dependencies = [
  "parity-scale-codec",
  "polkadot-primitives 16.0.0",
  "priority-queue",
- "rand",
+ "rand 0.8.5",
  "rocksdb",
  "sc-client-api",
  "sc-network",
