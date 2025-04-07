@@ -7,7 +7,7 @@ use scale_info::TypeInfo;
 use serde::{Deserialize, Serialize};
 use shp_traits::{AsCompact, FileMetadataInterface};
 use sp_arithmetic::traits::SaturatedConversion;
-use sp_core::{crypto::AccountId32, H256};
+use sp_core::H256;
 use sp_std::fmt;
 use sp_std::vec::Vec;
 
@@ -184,7 +184,6 @@ pub enum FileMetadataError {
 impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64>
     FileMetadataInterface for FileMetadata<H_LENGTH, CHUNK_SIZE, SIZE_TO_CHALLENGES>
 {
-    type AccountId = AccountId32;
     type Metadata = Self;
     type StorageDataUnit = u64;
 
@@ -200,8 +199,8 @@ impl<const H_LENGTH: usize, const CHUNK_SIZE: u64, const SIZE_TO_CHALLENGES: u64
         metadata.file_size
     }
 
-    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
-        Self::AccountId::decode(&mut metadata.owner.as_slice())
+    fn owner(metadata: &Self::Metadata) -> &Vec<u8> {
+        metadata.owner()
     }
 }
 

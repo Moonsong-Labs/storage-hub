@@ -1,5 +1,5 @@
 use crate::{types::*, *};
-use codec::Encode;
+use codec::{Decode, Encode};
 use frame_support::{
     ensure,
     pallet_prelude::DispatchResult,
@@ -2589,10 +2589,10 @@ impl<T: pallet::Config> MutateChallengeableProvidersInterface for pallet::Pallet
             <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::get_file_size(
                 &file_metadata,
             );
-        let owner =
-            <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::get_file_owner(
-                &file_metadata,
-            )
+        let raw_owner = <<T as crate::Config>::FileMetadataManager as FileMetadataInterface>::owner(
+            &file_metadata,
+        );
+        let owner = <T as frame_system::Config>::AccountId::decode(&mut raw_owner.as_slice())
             .map_err(|_| Error::<T>::InvalidEncodedAccountId)?;
 
         // Decrease the used capacity of the provider
