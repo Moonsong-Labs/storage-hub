@@ -64,7 +64,7 @@ where
         {
             keys_to_remove.push(*block_number);
             for waiter in waiters.drain(..) {
-                match waiter.send(()) {
+                match waiter.send(Ok(())) {
                     Ok(_) => {}
                     Err(_) => {
                         error!(target: LOG_TARGET, "Failed to notify task about block number.");
