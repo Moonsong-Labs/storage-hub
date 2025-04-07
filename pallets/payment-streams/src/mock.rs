@@ -136,7 +136,6 @@ impl Get<AccountId> for TreasuryAccount {
 
 pub struct MockFileMetadataManager;
 impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
-    type AccountId = AccountId;
     type Metadata = shp_file_metadata::FileMetadata<
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },
@@ -160,8 +159,8 @@ impl shp_traits::FileMetadataInterface for MockFileMetadataManager {
         metadata.file_size()
     }
 
-    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
-        Self::AccountId::decode(&mut metadata.owner().as_slice())
+    fn owner(metadata: &Self::Metadata) -> &Vec<u8> {
+        metadata.owner()
     }
 }
 
