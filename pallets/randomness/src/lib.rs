@@ -40,7 +40,6 @@ pub mod pallet {
     use super::{weights::WeightInfo, *};
     use frame_support::pallet_prelude::*;
     use frame_system::pallet_prelude::{BlockNumberFor, *};
-    use polkadot_parachain_primitives::primitives::RelayChainBlockNumber;
     use shp_session_keys::{InherentError, INHERENT_IDENTIFIER};
     use sp_runtime::traits::{BlockNumberProvider, Saturating};
 
@@ -56,11 +55,15 @@ pub mod pallet {
         /// Get the BABE data from the runtime
         type BabeDataGetter: GetBabeData<u64, Self::Hash>;
 
-        /// Interface to get the relay chain block number which was used as an anchor for the last block in the parachain.
-        type RelayBlockGetter: BlockNumberProvider<BlockNumber = RelayChainBlockNumber>;
+        /// Interface to get the relay (or other) chain block number which was used as an anchor for the last block in the parachain.
+        type BabeBlockGetter: BlockNumberProvider<BlockNumber = Self::BabeDataGetterBlockNumber>;
+        // CurrentBlockNumber
 
         /// Weight info
         type WeightInfo: crate::weights::WeightInfo;
+
+        ///
+        type BabeDataGetterBlockNumber: sp_runtime::traits::BlockNumber;
     }
 
     #[pallet::event]
@@ -89,7 +92,7 @@ pub mod pallet {
     /// The relay chain block (and anchored parachain block) to use when epoch changes
     #[pallet::storage]
     pub(crate) type LastRelayBlockAndParaBlockValidForNextEpoch<T: Config> =
-        StorageValue<_, (RelayChainBlockNumber, BlockNumberFor<T>), ValueQuery>;
+        StorageValue<_, (T::BabeDataGetterBlockNumber, BlockNumberFor<T>), ValueQuery>;
 
     /// Ensures the mandatory inherent was included in the block
     #[pallet::storage]
@@ -153,7 +156,7 @@ pub mod pallet {
             }
 
             // Update the last relay block and parachain block anchored to it to have ready for next block in case epoch changes
-            let previous_relay_block = T::RelayBlockGetter::current_block_number(); // This returns the relay chain block anchor for the PREVIOUS parachain block
+            let previous_relay_block = T::BabeBlockGetter::current_block_number(); // This returns the relay chain block anchor for the PREVIOUS parachain block
             let previous_parachain_block = frame_system::Pallet::<T>::block_number()
                 .saturating_sub(sp_runtime::traits::One::one());
             LastRelayBlockAndParaBlockValidForNextEpoch::<T>::put((
