@@ -302,7 +302,7 @@ async function generateBenchmarkProofs() {
     // For each bucket, generate the non-inclusion proof for the first i file keys.
     for (let j = 0; j < bucketIds.length; j++) {
       const fileKeysToAcceptForBucket = nonStoredFileKeysPerBucket[j].slice(0, i);
-      const bucketIdOption: Option<H256> = userApi.createType("Option<H256>", bucketIds[j]);
+      const bucketIdOption = userApi.createType<Option<H256>>("Option<H256>", bucketIds[j]);
       const nonInclusionProof = await mspApi.rpc.storagehubclient.generateForestProof(
         bucketIdOption,
         fileKeysToAcceptForBucket
