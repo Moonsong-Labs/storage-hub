@@ -14,7 +14,7 @@ use sp_runtime::AccountId32;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
-    commands::BlockchainServiceInterface,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
@@ -27,7 +27,7 @@ use shc_common::{
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
-    commands::FileTransferServiceInterface, events::RemoteUploadRequest,
+    commands::FileTransferServiceCommandInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
@@ -160,7 +160,7 @@ where
                 if let Err(e) = self
                     .storage_hub_handler
                     .file_transfer
-                    .upload_response(false, event.request_id)
+                    .upload_response(event.request_id, false)
                     .await
                 {
                     error!(target: LOG_TARGET, "Failed to send error response: {:?}", e);
@@ -173,7 +173,7 @@ where
         if let Err(e) = self
             .storage_hub_handler
             .file_transfer
-            .upload_response(file_complete, event.request_id)
+            .upload_response(event.request_id, file_complete)
             .await
         {
             error!(target: LOG_TARGET, "Failed to send response: {:?}", e);
@@ -628,7 +628,7 @@ where
             };
             self.storage_hub_handler
                 .file_transfer
-                .register_new_file_peer(peer_id, file_key)
+                .register_new_file(peer_id, file_key)
                 .await
                 .map_err(|e| anyhow!("Failed to register new file peer: {:?}", e))?;
         }
