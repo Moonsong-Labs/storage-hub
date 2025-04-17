@@ -321,7 +321,7 @@ describeMspNet(
         await sleep(500);
         const block = await userApi.block.seal();
         for (let event of block.events) {
-          console.log(event.event)
+          console.log(event.event.toHuman())
         }
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
       }
