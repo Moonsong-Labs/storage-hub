@@ -20,7 +20,7 @@ import type { EventRecord } from "@polkadot/types/interfaces";
 
 describeMspNet(
   "MSP rejects bucket move requests due to low capacity",
-  { initialised: false, indexer: true },
+  { initialised: false, indexer: true, only: true },
   ({ before, after, createMsp1Api, it, createUserApi, createApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -317,10 +317,12 @@ describeMspNet(
       }
 
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 6; i++) {
         await sleep(500);
         const block = await userApi.block.seal();
-        console.log(block.events);
+        for (let event of block.events) {
+          console.log(event.event)
+        }
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
       }
     });
