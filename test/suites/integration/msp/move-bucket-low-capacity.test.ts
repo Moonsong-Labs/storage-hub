@@ -317,14 +317,22 @@ describeMspNet(
       }
 
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
+
+      let counter = 0;
       for (let i = 0; i < 6; i++) {
         await sleep(500);
         const block = await userApi.block.seal();
+        console.log(i)
+
         for (let event of block.events) {
-          console.log(event.event.toHuman())
+          console.log(event.event.toHuman().method)
+          if (event.event.toHuman().method == 'StorageRequestFulfilled') {
+            counter = + 1
+          }
         }
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
       }
+      console.log(counter)
     });
 
     it("New MSP rejects move request due to low capacity", async () => {
