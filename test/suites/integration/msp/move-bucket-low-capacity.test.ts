@@ -327,7 +327,7 @@ describeMspNet(
         for (let event of block.events) {
           console.log(event.event.toHuman().method)
           if (event.event.toHuman().method == 'StorageRequestFulfilled') {
-            counter = + 1
+            counter += 1
           }
         }
         await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
