@@ -316,8 +316,14 @@ describeMspNet(
         allBucketFiles.push(fileKey);
       }
 
-      // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
+      await userApi.assert.extrinsicPresent({
+        method: "bspConfirmStoring",
+        module: "fileSystem",
+        checkTxPool: true,
+        assertLength: 3
+      });
 
+      // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
       let counter = 0;
       for (let i = 0; i < 6; i++) {
         await sleep(500);
