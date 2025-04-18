@@ -317,11 +317,13 @@ describeMspNet(
       }
 
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
+
       let counterStorageRequestFullfilledEvents = 0;
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 5; i++) {
         await sleep(500);
         const block = await userApi.block.seal();
         for (let event of block.events) {
+          console.log(event.event.toHuman().method)
           if (event.event.toHuman().method == 'StorageRequestFulfilled') {
             counterStorageRequestFullfilledEvents += 1
           }
