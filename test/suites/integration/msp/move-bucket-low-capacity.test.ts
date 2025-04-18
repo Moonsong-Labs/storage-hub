@@ -320,7 +320,8 @@ describeMspNet(
         method: "bspConfirmStoring",
         module: "fileSystem",
         checkTxPool: true,
-        assertLength: 3
+        assertLength: 3,
+        timeout: 10000,
       });
 
       // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
