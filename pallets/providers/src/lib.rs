@@ -76,10 +76,7 @@ pub mod pallet {
         type ProofDealer: shp_traits::ProofsDealerInterface<ProviderId = ProviderIdFor<Self>>;
 
         /// Trait that allows the pallet to manage generic file metadatas
-        type FileMetadataManager: FileMetadataInterface<
-            AccountId = Self::AccountId,
-            StorageDataUnit = Self::StorageDataUnit,
-        >;
+        type FileMetadataManager: FileMetadataInterface<StorageDataUnit = Self::StorageDataUnit>;
 
         /// Type to access the Balances pallet (using the fungible trait from frame_support)
         type NativeBalance: Inspect<Self::AccountId>
