@@ -45,7 +45,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 /// Commands that can be sent to the BlockchainService actor.
 #[actor_command(
     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
-    default_mode = "SyncAwait",
+    default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 )]
 pub enum BlockchainServiceCommand {
@@ -64,15 +64,15 @@ pub enum BlockchainServiceCommand {
     },
     #[command(success_type = MinimalBlockInfo)]
     GetBestBlockInfo,
-    #[command(mode = "AsyncAwait", inner_channel_type = tokio::sync::oneshot::Receiver)]
+    #[command(mode = "AsyncResponse")]
     WaitForBlock {
         block_number: BlockNumber,
     },
-    #[command(mode = "AsyncAwait")]
+    #[command(mode = "AsyncResponse")]
     WaitForNumBlocks {
         number_of_blocks: BlockNumber,
     },
-    #[command(mode = "AsyncAwait", error_type = ApiError)]
+    #[command(mode = "AsyncResponse", error_type = ApiError)]
     WaitForTick {
         tick_number: TickNumber,
     },
@@ -183,7 +183,7 @@ pub enum BlockchainServiceCommand {
     QueueFileDeletionRequest {
         request: FileDeletionRequest,
     },
-    #[command(mode = "AsyncAwait")]
+    #[command(mode = "AsyncResponse")]
     IncreaseCapacity {
         request: CapacityRequestData,
     },

@@ -837,7 +837,7 @@ fn to_snake_case(s: &str) -> String {
 /// ```rust
 /// #[actor_command(
 ///     service = ServiceType,
-///     default_mode = "SyncAwait",
+///     default_mode = "ImmediateResponse",
 ///     default_error_type = CustomError,
 ///     default_inner_channel_type = "futures::channel::oneshot::Receiver"
 /// )]
@@ -855,7 +855,7 @@ struct ActorCommandArgs {
 impl Parse for ActorCommandArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut service = None;
-        let mut default_mode = String::from("SyncAwait");
+        let mut default_mode = String::from("ImmediateResponse");
         let mut default_error_type = None;
         let mut default_inner_channel_type = None;
 
@@ -906,7 +906,7 @@ impl Parse for ActorCommandArgs {
 ///
 /// ```rust
 /// #[command(
-///     mode = "AsyncAwait",
+///     mode = "ImmediateResponse",
 ///     success_type = SomeType,
 ///     error_type = CustomError,
 ///     inner_channel_type = "futures::channel::oneshot::Receiver"
@@ -988,7 +988,7 @@ fn generate_callback_type(
             // No callback needed for fire and forget
             quote! {}
         }
-        "SyncAwait" => {
+        "ImmediateResponse" => {
             let success_type = success_type
                 .clone()
                 .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
@@ -1004,7 +1004,7 @@ fn generate_callback_type(
                 callback: tokio::sync::oneshot::Sender<Result<#success_type, #error_type>>
             }
         }
-        "AsyncAwait" => {
+        "AsyncResponse" => {
             let success_type = success_type
                 .clone()
                 .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
@@ -1109,7 +1109,7 @@ fn generate_method_impl(
                 async fn #method_name(&self, #(#params),*);
             }
         }
-        "SyncAwait" => {
+        "ImmediateResponse" => {
             let success_type = success_type
                 .clone()
                 .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
@@ -1122,7 +1122,7 @@ fn generate_method_impl(
                 async fn #method_name(&self, #(#params),*) -> Result<#success_type, #error_type>;
             }
         }
-        "AsyncAwait" => {
+        "AsyncResponse" => {
             let success_type = success_type
                 .clone()
                 .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
@@ -1159,7 +1159,7 @@ fn generate_method_impl(
                 }
             }
         }
-        "SyncAwait" => {
+        "ImmediateResponse" => {
             let success_type = success_type
                 .clone()
                 .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
@@ -1193,7 +1193,7 @@ fn generate_method_impl(
                 }
             }
         }
-        "AsyncAwait" => {
+        "AsyncResponse" => {
             let success_type = success_type
                 .clone()
                 .unwrap_or_else(|| syn::parse_str("()").expect("Failed to parse unit type"));
@@ -1297,22 +1297,22 @@ fn generate_method_impl(
 /// # Parameters
 ///
 /// - `service`: (Required) The service type that processes these commands
-/// - `default_mode`: (Optional) Default command mode, one of: "FireAndForget", "SyncAwait", "AsyncAwait"
+/// - `default_mode`: (Optional) Default command mode, one of: "FireAndForget", "ImmediateResponse", "AsyncResponse"
 /// - `default_error_type`: (Optional) Default error type for command responses
-/// - `default_inner_channel_type`: (Optional) Default channel type for AsyncAwait mode
+/// - `default_inner_channel_type`: (Optional) Default channel type for AsyncResponse mode
 ///
 /// # Command Mode Options
 ///
 /// - `FireAndForget`: No response is expected
-/// - `SyncAwait`: Wait for a direct response from the actor
-/// - `AsyncAwait`: Wait for an asynchronous response (e.g., from a network operation)
+/// - `ImmediateResponse`: Wait for a direct response from the actor
+/// - `AsyncResponse`: Wait for an asynchronous response (e.g., from a network operation)
 ///
 /// # Usage
 ///
 /// ```rust
 /// #[actor_command(
 ///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
-///     default_mode = "SyncAwait",
+///     default_mode = "ImmediateResponse",
 ///     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 /// )]
 /// pub enum BlockchainServiceCommand {
@@ -1328,7 +1328,7 @@ fn generate_method_impl(
 ///         extrinsic_hash: H256,
 ///     },
 ///     
-///     #[command(mode = "AsyncAwait", inner_channel_type = tokio::sync::oneshot::Receiver)]
+///     #[command(mode = "AsyncResponse", inner_channel_type = tokio::sync::oneshot::Receiver)]
 ///     WaitForBlock {
 ///         block_number: BlockNumber,
 ///     },
@@ -1340,12 +1340,12 @@ fn generate_method_impl(
 ///
 /// # Command Variant Attributes
 ///
-/// Each command variant can be annotated with a `#[command(...)]` attribute to specify its behavior:
+/// Each command variant can be annotated with a `#[command(...)]` attribute to specify its behaviour:
 ///
 /// - `mode`: Override the default command mode
 /// - `success_type`: The success type returned in the Result
 /// - `error_type`: Override the default error type
-/// - `inner_channel_type`: Override the default channel type for AsyncAwait mode
+/// - `inner_channel_type`: Override the default channel type for AsyncResponse mode
 ///
 /// # Generated Interface
 ///
@@ -1694,36 +1694,36 @@ fn process_service_type(
     }
 }
 
-/// An attribute macro for specifying behavior for individual command variants.
+/// An attribute macro for specifying behaviour for individual command variants.
 ///
 /// This macro is used in conjunction with the `actor_command` attribute macro to specify
-/// the behavior of individual command variants.
+/// the behaviour of individual command variants.
 ///
 /// # Parameters
 ///
-/// - `mode`: (Optional) Override the default command mode ("FireAndForget", "SyncAwait", or "AsyncAwait")
+/// - `mode`: (Optional) Override the default command mode ("FireAndForget", "ImmediateResponse", or "AsyncResponse")
 /// - `success_type`: (Optional) The success type returned in the Result
 /// - `error_type`: (Optional) Override the default error type
-/// - `inner_channel_type`: (Optional) Override the default channel type for AsyncAwait mode
+/// - `inner_channel_type`: (Optional) Override the default channel type for AsyncResponse mode
 ///
 /// # Usage
 ///
 /// ```rust
 /// #[actor_command(
 ///     service = BlockchainService,
-///     default_mode = "SyncAwait"
+///     default_mode = "ImmediateResponse"
 /// )]
 /// pub enum BlockchainServiceCommand {
-///     // Using default mode (SyncAwait) with specified success type
+///     // Using default mode (ImmediateResponse) with specified success type
 ///     #[command(success_type = SubmittedTransaction)]
 ///     SendExtrinsic {
 ///         call: RuntimeCall,
 ///         options: SendExtrinsicOptions,
 ///     },
 ///     
-///     // Overriding mode to AsyncAwait with custom inner channel type
+///     // Overriding mode to AsyncResponse with custom inner channel type
 ///     #[command(
-///         mode = "AsyncAwait",
+///         mode = "AsyncResponse",
 ///         success_type = BlockNumber,
 ///         error_type = ApiError,
 ///         inner_channel_type = tokio::sync::oneshot::Receiver
@@ -1741,7 +1741,7 @@ fn process_service_type(
 /// ```
 ///
 /// This is a marker attribute that is processed by the `actor_command` macro.
-/// When used, it signals that a command variant has specific behavior requirements.
+/// When used, it signals that a command variant has specific behaviour requirements.
 #[proc_macro_attribute]
 pub fn command(_args: TokenStream, _input: TokenStream) -> TokenStream {
     // This is just a marker attribute that is processed by the actor_command macro

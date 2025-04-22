@@ -57,12 +57,12 @@ pub enum RequestError {
 /// Messages understood by the FileTransfer service actor
 #[actor_command(
     service = FileTransferService,
-    default_mode = "SyncAwait",
+    default_mode = "ImmediateResponse",
     default_error_type = RequestError
 )]
 pub enum FileTransferServiceCommand {
     #[command(
-        mode = "AsyncAwait", 
+        mode = "AsyncResponse", 
         success_type = (Vec<u8>, ProtocolName),
         inner_channel_type = futures::channel::oneshot::Receiver,
         error_type = RequestFailure
@@ -90,7 +90,7 @@ pub enum FileTransferServiceCommand {
         file_complete: bool,
     },
     #[command(
-        mode = "AsyncAwait", 
+        mode = "AsyncResponse", 
         success_type = (Vec<u8>, ProtocolName),
         error_type = RequestFailure,
         inner_channel_type = futures::channel::oneshot::Receiver
