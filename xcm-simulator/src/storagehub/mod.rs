@@ -7,7 +7,7 @@ mod weights;
 use crate::mock_message_queue;
 use smallvec::smallvec;
 use sp_runtime::{
-    create_runtime_str, generic, impl_opaque_keys,
+    generic, impl_opaque_keys,
     traits::{BlakeTwo256, IdentifyAccount, Verify},
     MultiSignature,
 };
@@ -22,6 +22,8 @@ use frame_support::weights::{
 pub use parachains_common::BlockNumber;
 pub use sp_runtime::{MultiAddress, Perbill};
 use sp_std::prelude::Vec;
+
+extern crate alloc;
 
 use weights::ExtrinsicBaseWeight;
 
