@@ -421,7 +421,6 @@ impl<T: TrieConfiguration> Get<HasherOutT<T>> for DefaultMerkleRoot<T> {
 
 pub struct MockFileMetadataManager;
 impl FileMetadataInterface for MockFileMetadataManager {
-    type AccountId = AccountId;
     type Metadata = FileMetadata<
         { shp_constants::H_LENGTH },
         { shp_constants::FILE_CHUNK_SIZE },
@@ -445,8 +444,8 @@ impl FileMetadataInterface for MockFileMetadataManager {
         metadata.file_size()
     }
 
-    fn get_file_owner(metadata: &Self::Metadata) -> Result<Self::AccountId, codec::Error> {
-        Self::AccountId::decode(&mut metadata.owner().as_slice())
+    fn owner(metadata: &Self::Metadata) -> &Vec<u8> {
+        metadata.owner()
     }
 }
 
