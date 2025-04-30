@@ -87,7 +87,7 @@ where
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
     pub(crate) wait_for_block_request_by_number:
-        BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<()>>>,
+        BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<anyhow::Result<()>>>>,
     /// A registry of waiters for a tick number.
     pub(crate) wait_for_tick_request_by_number:
         BTreeMap<TickNumber, Vec<tokio::sync::oneshot::Sender<Result<(), ApiError>>>>,
@@ -327,7 +327,7 @@ where
                 },
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
                     let best_block_info = self.best_block;
-                    match callback.send(best_block_info) {
+                    match callback.send(Ok(best_block_info)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Best block info sent successfully");
                         }
@@ -345,7 +345,7 @@ where
                     let (tx, rx) = tokio::sync::oneshot::channel();
 
                     if current_block_number >= block_number {
-                        match tx.send(()) {
+                        match tx.send(Ok(())) {
                             Ok(_) => {}
                             Err(_) => {
                                 error!(target: LOG_TARGET, "Failed to notify task about waiting block number. \nThis should never happen, in this same code we have both the sender and receiver of the oneshot channel, so it should always be possible to send the message.");
@@ -517,7 +517,7 @@ where
                 }
                 BlockchainServiceCommand::GetNodePublicKey { callback } => {
                     let pub_key = Self::caller_pub_key(self.keystore.clone());
-                    match callback.send(pub_key) {
+                    match callback.send(Ok(pub_key)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Node's public key sent successfully");
                         }

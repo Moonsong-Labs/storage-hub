@@ -37,10 +37,11 @@ config.toml
 
 
 # IDE
-
 .DS_Store
 .vscode/
 .zed/
 .idea/
 .cursorignore
 .worktrees/
+.cursorindexingignore
+.specstory/
