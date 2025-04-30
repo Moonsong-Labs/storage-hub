@@ -2,7 +2,7 @@
 
 // std
 use futures::{Stream, StreamExt};
-use log::info;
+use log::{error, info};
 use shc_blockchain_service::capacity_manager::CapacityConfig;
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
@@ -42,7 +42,9 @@ use cumulus_primitives_core::{
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
+use cumulus_primitives_core::CollectCollationInfo;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
+use polkadot_primitives::UpgradeGoAhead;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
@@ -63,6 +65,7 @@ use shc_client::{
     },
 };
 use shc_file_transfer_service::configure_file_transfer_network;
+use sp_api::ProvideRuntimeApi;
 use sp_keystore::{Keystore, KeystorePtr};
 use substrate_prometheus_endpoint::Registry;
 
@@ -683,6 +686,22 @@ where
 						.expect("Expected parachain header should exist")
 						.encode();
 
+                    let current_para_head = client_for_cidp
+                        .header(block)
+                        .expect("Header lookup should succeed")
+                        .expect("Header passed in as parent should be present in backend.");
+
+                    let should_send_go_ahead = match client_for_cidp
+                        .runtime_api()
+                        .collect_collation_info(block, &current_para_head)
+                        {
+                            Ok(info) => info.new_validation_code.is_some(),
+                            Err(e) => {
+                                error!("Failed to collect collation info: {:?}", e);
+                                false
+                            },
+                        };
+
 					let raw_para_head_data = HeadData(para_header);
 					let para_head_data = raw_para_head_data.encode();
 
@@ -734,6 +753,12 @@ where
                                 raw_downward_messages: vec![],
                                 raw_horizontal_messages: vec![],
                                 additional_key_values: Some(additional_keys),
+                                upgrade_go_ahead: should_send_go_ahead.then(|| {
+                                    log::info!(
+                                        "Detected pending validation code, sending go-ahead signal."
+                                    );
+                                    UpgradeGoAhead::GoAhead
+                                }),
                             }
                         };
 
