@@ -20,7 +20,8 @@ use shc_common::types::{
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
-    commands::FileTransferServiceInterface, schema::v1::provider::RemoteDownloadDataResponse,
+    commands::{FileTransferServiceCommandInterface, FileTransferServiceCommandInterfaceExt},
+    schema::v1::provider::RemoteDownloadDataResponse,
 };
 use shp_file_metadata::{Chunk, ChunkId};
 
@@ -390,7 +391,10 @@ impl FileDownloadManager {
         file_storage: &mut FS,
     ) -> Result<bool>
     where
-        FT: FileTransferServiceInterface + Send + Sync,
+        FT: FileTransferServiceCommandInterface
+            + FileTransferServiceCommandInterfaceExt
+            + Send
+            + Sync,
         FS: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     {
         // Retry the download up to the configured number of times
@@ -412,6 +416,11 @@ impl FileDownloadManager {
                 .await
             {
                 Ok(response) => {
+                    let response = file_transfer
+                        .parse_remote_download_data_response(&response.0)
+                        .map_err(|e| {
+                            anyhow!("Failed to parse remote download data response: {:?}", e)
+                        })?;
                     return self
                         .process_chunk_download_response(
                             file_key,
@@ -461,7 +470,12 @@ impl FileDownloadManager {
         file_storage: Arc<RwLock<FS>>,
     ) -> Result<()>
     where
-        FT: FileTransferServiceInterface + Send + Sync + Clone + 'static,
+        FT: FileTransferServiceCommandInterface
+            + FileTransferServiceCommandInterfaceExt
+            + Send
+            + Sync
+            + Clone
+            + 'static,
         FS: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
     {
         // Acquire the file semaphore permit
@@ -682,7 +696,12 @@ impl FileDownloadManager {
         file_storage: Arc<RwLock<FS>>,
     ) -> Result<(), BucketDownloadError>
     where
-        FT: FileTransferServiceInterface + Send + Sync + Clone + 'static,
+        FT: FileTransferServiceCommandInterface
+            + FileTransferServiceCommandInterfaceExt
+            + Send
+            + Sync
+            + Clone
+            + 'static,
         FS: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
     {
         // Check if bucket is already being downloaded

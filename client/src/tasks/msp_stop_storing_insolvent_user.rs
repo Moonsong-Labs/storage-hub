@@ -6,7 +6,7 @@ use tokio::sync::Semaphore;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface,
+    commands::BlockchainServiceCommandInterface,
     events::{FinalisedMspStopStoringBucketInsolventUser, UserWithoutFunds},
     types::SendExtrinsicOptions,
 };

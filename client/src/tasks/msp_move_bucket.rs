@@ -9,7 +9,7 @@ use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
     capacity_manager::CapacityRequestData,
-    commands::BlockchainServiceInterface,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
     types::{RetryStrategy, SendExtrinsicOptions},
 };

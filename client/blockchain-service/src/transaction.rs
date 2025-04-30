@@ -11,7 +11,7 @@ use sp_core::H256;
 use tokio::sync::mpsc::Receiver;
 
 use crate::{
-    commands::BlockchainServiceInterface,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     types::{Extrinsic, ExtrinsicHash, ExtrinsicResult, WatchTransactionError},
     BlockchainService,
 };
