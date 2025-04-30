@@ -264,7 +264,7 @@ where
                     .delete();
                 state_store_context.commit();
             } else {
-                info!(target: LOG_TARGET, "HELLO THERE! Forest root write lock not assigned to any task");
+                info!(target: LOG_TARGET, "Forest root write lock not assigned to any task");
             }
 
             // Clear the lock, given that at this point we know that the lock is released.
