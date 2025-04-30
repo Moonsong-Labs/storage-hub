@@ -30,7 +30,7 @@ use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     types::{
         BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
-        TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
+        StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -44,8 +44,8 @@ use crate::{
     },
     handler::LOG_TARGET,
     types::{
-        BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, NewBlockNotificationKind,
-        SendExtrinsicOptions, Tip,
+        BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
+        NewBlockNotificationKind, SendExtrinsicOptions, Tip,
     },
     BlockchainService,
 };
@@ -414,7 +414,50 @@ where
 
         // Case: There is exactly one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
         let provider_id = *provider_ids_found.get(0).expect("There is exactly one Provider ID linked to any of the BCSV keys in this node's keystore; qed");
-        self.maybe_managed_provider = Some(ManagedProvider::new(provider_id));
+
+        // Replace the provider ID only if it is not already managed.
+        match (&self.maybe_managed_provider, provider_id) {
+            // Case: The node was not managing any Provider.
+            (None, _) => {
+                info!(target: LOG_TARGET, "🔑 This node is not managing any Provider. Starting to manage Provider ID {:?}", provider_id);
+                self.maybe_managed_provider = Some(ManagedProvider::new(provider_id));
+            }
+            // Case: The node goes from managing a BSP, to managing another BSP with a different ID.
+            (
+                Some(ManagedProvider::Bsp(bsp_handler)),
+                StorageProviderId::BackupStorageProvider(bsp_id),
+            ) if bsp_handler.bsp_id != bsp_id => {
+                warn!(target: LOG_TARGET, "🔄 This node is already managing a BSP. Stopping managing BSP ID {:?} in favour of BSP ID {:?}", bsp_handler.bsp_id, bsp_id);
+                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(bsp_id)));
+            }
+            // Case: The node goes from managing a MSP, to managing a MSP with a different ID.
+            (
+                Some(ManagedProvider::Msp(msp_handler)),
+                StorageProviderId::MainStorageProvider(msp_id),
+            ) if msp_handler.msp_id != msp_id => {
+                warn!(target: LOG_TARGET, "🔄 This node is already managing a MSP. Stopping managing MSP ID {:?} in favour of MSP ID {:?}", msp_handler.msp_id, msp_id);
+                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(msp_id)));
+            }
+            // Case: The node goes from managing a BSP, to managing a MSP   .
+            (
+                Some(ManagedProvider::Bsp(bsp_handler)),
+                StorageProviderId::MainStorageProvider(msp_id),
+            ) => {
+                warn!(target: LOG_TARGET, "🔄 This node is already managing a BSP. Stopping managing BSP ID {:?} in favour of MSP ID {:?}", bsp_handler.bsp_id, msp_id);
+                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(msp_id)));
+            }
+            // Case: The node goes from managing a MSP, to managing a BSP.
+            (
+                Some(ManagedProvider::Msp(msp_handler)),
+                StorageProviderId::BackupStorageProvider(bsp_id),
+            ) => {
+                warn!(target: LOG_TARGET, "🔄 This node is already managing a MSP. Stopping managing MSP ID {:?} in favour of BSP ID {:?}", msp_handler.msp_id, bsp_id);
+                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(bsp_id)));
+            }
+            // Rest of the cases are ignored.
+            (Some(ManagedProvider::Bsp(_)), StorageProviderId::BackupStorageProvider(_))
+            | (Some(ManagedProvider::Msp(_)), StorageProviderId::MainStorageProvider(_)) => {}
+        }
     }
 
     /// Send an extrinsic to this node using an RPC call.
@@ -1032,41 +1075,6 @@ where
                 user_peer_ids: peer_ids,
                 expires_at,
             }),
-            // A Provider's challenge cycle has been initialised.
-            RuntimeEvent::ProofsDealer(
-                pallet_proofs_dealer::Event::NewChallengeCycleInitialised {
-                    current_tick: _,
-                    next_challenge_deadline: _,
-                    provider: provider_id,
-                    maybe_provider_account,
-                },
-            ) => {
-                // This node only cares if the Provider account matches one of the accounts in the keystore.
-                if let Some(account) = maybe_provider_account {
-                    let account: Vec<u8> =
-                        <sp_runtime::AccountId32 as AsRef<[u8; 32]>>::as_ref(&account).to_vec();
-                    if self.keystore.has_keys(&[(account.clone(), BCSV_KEY_TYPE)]) {
-                        // If so, add the Provider ID to the list of Providers that this node is monitoring.
-                        info!(target: LOG_TARGET, "🔑 New Provider ID to monitor [{:?}] for account [{:?}]", provider_id, account);
-
-                        // Managing more than one Provider is not supported, so if this node is already managing another Provider, emit a warning
-                        // and stop managing it, in favour of the new Provider.
-                        if let Some(managed_provider) = &self.maybe_managed_provider {
-                            let managed_provider_id = match managed_provider {
-                                ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
-                                ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
-                            };
-                            if managed_provider_id != &provider_id {
-                                warn!(target: LOG_TARGET, "🔄 This node is already managing a Provider. Stopping managing Provider ID {:?} in favour of Provider ID {:?}", managed_provider, provider_id);
-                            }
-                        }
-
-                        // Only BSPs can be challenged, therefore this is a BSP.
-                        self.maybe_managed_provider =
-                            Some(ManagedProvider::Bsp(BspHandler::new(provider_id)));
-                    }
-                }
-            }
             // A provider has been marked as slashable.
             RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
                 provider,
