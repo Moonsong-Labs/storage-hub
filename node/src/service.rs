@@ -52,6 +52,7 @@ use sc_network::{
 };
 use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
+use sc_transaction_pool::BasicPool;
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use shc_client::{
     builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
@@ -148,13 +149,14 @@ pub fn new_partial(
         telemetry
     });
 
-    let transaction_pool = sc_transaction_pool::BasicPool::new_full(
-        config.transaction_pool.clone(),
+    // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
+    let transaction_pool = Arc::from(BasicPool::new_full(
+        Default::default(),
         config.role.is_authority().into(),
         config.prometheus_registry(),
         task_manager.spawn_essential_handle(),
         client.clone(),
-    );
+    ));
 
     let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
 
