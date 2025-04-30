@@ -1,13 +1,14 @@
 #![allow(dead_code)]
-
+use log::*;
 use std::time::Duration;
 
-use log::*;
+use sp_core::H256;
+
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface, events::NewStorageRequest, types::SendExtrinsicOptions,
+    commands::BlockchainServiceCommandInterface, events::NewStorageRequest,
+    types::SendExtrinsicOptions,
 };
-use sp_core::H256;
 
 use crate::{
     handler::StorageHubHandler,
