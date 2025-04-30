@@ -52,8 +52,8 @@ use sc_network::{
 };
 use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
-use sc_transaction_pool::BasicPool;
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use sc_transaction_pool_api::TransactionPool;
 use shc_client::{
     builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
     handler::{RunnableTasks, StorageHubHandler},
@@ -150,13 +150,24 @@ pub fn new_partial(
     });
 
     // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
-    let transaction_pool = Arc::from(BasicPool::new_full(
-        Default::default(),
-        config.role.is_authority().into(),
-        config.prometheus_registry(),
-        task_manager.spawn_essential_handle(),
-        client.clone(),
-    ));
+    // let transaction_pool = Arc::from(BasicPool::new_full(
+    //     Default::default(),
+    //     config.role.is_authority().into(),
+    //     config.prometheus_registry(),
+    //     task_manager.spawn_essential_handle(),
+    //     client.clone(),
+    // ));
+
+    let transaction_pool = Arc::from(
+        sc_transaction_pool::Builder::new(
+            task_manager.spawn_essential_handle(),
+            client.clone(),
+            config.role.is_authority().into(),
+        )
+        .with_options(config.transaction_pool.clone())
+        .with_prometheus(config.prometheus_registry())
+        .build(),
+    );
 
     let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
 
@@ -483,16 +494,14 @@ where
             cli::Sealing::Instant => {
                 Box::new(
                     // This bit cribbed from the implementation of instant seal.
-                    transaction_pool
-                        .pool()
-                        .validated_pool()
-                        .import_notification_stream()
-                        .map(|_| EngineCommand::SealNewBlock {
+                    transaction_pool.import_notification_stream().map(|_| {
+                        EngineCommand::SealNewBlock {
                             create_empty: false,
                             finalize: false,
                             parent_hash: None,
                             sender: None,
-                        }),
+                        }
+                    }),
                 )
             }
             cli::Sealing::Manual => {
