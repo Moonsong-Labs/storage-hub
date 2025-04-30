@@ -239,14 +239,11 @@ where
                 Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
                 _ => unreachable!("We just checked this is a BSP"),
             };
-
-            if let Some(mut rx) = forest_root_write_lock.take() {
+            if let Some(rx) = forest_root_write_lock.as_mut() {
                 // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
                 match rx.try_recv() {
                     // If the channel is empty, means we still need to wait for the current task to finish.
                     Err(TryRecvError::Empty) => {
-                        // If we have a task writing to the runtime, we don't want to start another one.
-                        *forest_root_write_lock = Some(rx);
                         trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
                         return;
                     }
@@ -266,7 +263,12 @@ where
                     .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
                     .delete();
                 state_store_context.commit();
+            } else {
+                info!(target: LOG_TARGET, "Forest root write lock not assigned to any task");
             }
+
+            // Clear the lock, given that at this point we know that the lock is released.
+            *forest_root_write_lock = None;
         }
 
         // At this point we know that the lock is released and we can start processing new requests.
