@@ -132,6 +132,7 @@ impl pallet_balances::Config for Test {
     type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
     type MaxFreezes = ConstU32<10>;
+    type DoneSlashHandler = ();
 }
 
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;

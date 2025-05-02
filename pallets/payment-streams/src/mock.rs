@@ -98,6 +98,13 @@ impl frame_system::Config for Test {
     type SS58Prefix = SS58Prefix;
     type OnSetCode = ();
     type MaxConsumers = frame_support::traits::ConstU32<16>;
+    type RuntimeTask = ();
+    type ExtensionsWeightInfo = ();
+    type SingleBlockMigrations = ();
+    type MultiBlockMigrator = ();
+    type PreInherents = ();
+    type PostInherents = ();
+    type PostTransactions = ();
 }
 
 impl pallet_balances::Config for Test {
@@ -114,6 +121,7 @@ impl pallet_balances::Config for Test {
     type RuntimeFreezeReason = ();
     type FreezeIdentifier = ();
     type MaxFreezes = ConstU32<10>;
+    type DoneSlashHandler = ();
 }
 
 parameter_types! {
