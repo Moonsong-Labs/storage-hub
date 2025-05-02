@@ -1,7 +1,6 @@
 use codec::Encode;
 use frame_support::{
     assert_ok,
-    dispatch::GetDispatchInfo,
     traits::{fungible::Inspect, OnFinalize, OnPoll},
     BoundedVec,
 };
@@ -15,6 +14,7 @@ use sp_weights::WeightMeter;
 use xcm::prelude::*;
 use xcm_executor::traits::ConvertLocation;
 use xcm_simulator::TestExt;
+use xcm_simulator::XcmError::UntrustedReserveLocation;
 
 use crate::{
     constants::{ALICE, BOB, CENTS, INITIAL_BALANCE},
@@ -376,7 +376,7 @@ mod relay_token {
             crate::storagehub::System::assert_has_event(crate::storagehub::RuntimeEvent::MsgQueue(
                 crate::mock_message_queue::Event::ExecutedDownward {
                     outcome: Outcome::Incomplete {
-                        error: xcm::v3::Error::UntrustedReserveLocation,
+                        error: UntrustedReserveLocation,
                         used: Weight::zero(),
                     },
                     message_id: [
@@ -1505,7 +1505,7 @@ mod users {
             // funds from the parachain's sovereign account into the holding register, and then sends
             // a teleport of those funds from the Relay chain to StorageHub, which deposits those funds
             // into Charlie's account there
-            let message: VersionedXcm<parachain::RuntimeCall> = VersionedXcm::V4(
+            let message: VersionedXcm<parachain::RuntimeCall> = VersionedXcm::V5(
                 vec![
                     WithdrawAsset(
                         (
