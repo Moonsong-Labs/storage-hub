@@ -192,14 +192,7 @@ where
             event.data.respond_storing_requests,
         );
 
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
+        let _permit = event.ticket.lock().await;
 
         let own_provider_id = self
             .storage_hub_handler
@@ -353,11 +346,7 @@ where
             }
         }
 
-        // Release the forest root write "lock" and finish the task.
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await
+        Ok(())
     }
 }
 

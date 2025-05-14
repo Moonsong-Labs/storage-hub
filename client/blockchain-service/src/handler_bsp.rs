@@ -1,6 +1,4 @@
 use log::{debug, error, info, trace};
-use std::sync::Arc;
-use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
@@ -213,13 +211,8 @@ where
     ///
     /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
     pub(crate) fn bsp_assign_forest_root_write_lock(&mut self) {
-        let client_best_hash = self.client.info().best_hash;
-        let client_best_number = self.client.info().best_number;
-
         // Skip if the latest processed block doesn't match the current best block
-        if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
-        {
-            trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
+        if !self.is_latest_processed_block_current() {
             return;
         }
 
@@ -232,53 +225,7 @@ where
             }
         };
 
-        // This is done in a closure to avoid borrowing `self` immutably and then mutably.
-        // Inside of this closure, we borrow `self` mutably when taking ownership of the lock.
-        {
-            let forest_root_write_lock = match &mut self.maybe_managed_provider {
-                Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
-                _ => unreachable!("We just checked this is a BSP"),
-            };
-            if let Some(rx) = forest_root_write_lock.as_mut() {
-                // Note: tasks that get ownership of the lock are responsible for sending a message back when done processing.
-                match rx.try_recv() {
-                    // If the channel is empty, means we still need to wait for the current task to finish.
-                    Err(TryRecvError::Empty) => {
-                        trace!(target: LOG_TARGET, "Waiting for current Forest root write task to finish");
-                        return;
-                    }
-                    Ok(_) => {
-                        trace!(target: LOG_TARGET, "Forest root write task finished, lock is released!");
-                    }
-                    Err(TryRecvError::Closed) => {
-                        error!(target: LOG_TARGET, "Forest root write task channel closed unexpectedly. Lock is released anyway!");
-                    }
-                }
-
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessConfirmStoringRequestCf)
-                    .delete();
-                state_store_context
-                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                    .delete();
-                state_store_context.commit();
-            } else {
-                info!(target: LOG_TARGET, "Forest root write lock not assigned to any task");
-            }
-
-            // Clear the lock, given that at this point we know that the lock is released.
-            *forest_root_write_lock = None;
-        }
-
-        // At this point we know that the lock is released and we can start processing new requests.
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        let mut next_event_data = None;
-
         // Process proof requests one at a time, releasing the mutable borrow between iterations.
-        // This is because when matching on `maybe_managed_provider`, we need to borrow it mutably
-        // to remove the request from the pending list. This mutable borrow is released after used
-        // and before needing to borrow immutably again when calling `self.get_next_challenge_tick_for_provider`.
         'submit_proof_requests_loop: loop {
             // Get the next request if any. Mutable borrow of `maybe_managed_provider` is released after use.
             let request = match &mut self.maybe_managed_provider {
@@ -311,67 +258,75 @@ where
 
             // If the proof is still the next one to be submitted, we can process it.
             trace!(target: LOG_TARGET, "Proof for tick [{:?}] is the next one to be submitted. Processing it.", request.tick);
-            next_event_data = Some(ForestWriteLockTaskData::SubmitProofRequest(
-                ProcessSubmitProofRequestData {
+            let task_data =
+                ForestWriteLockTaskData::SubmitProofRequest(ProcessSubmitProofRequestData {
                     seed: request.seed,
                     provider_id: request.provider_id,
                     tick: request.tick,
                     forest_challenges: request.forest_challenges,
                     checkpoint_challenges: request.checkpoint_challenges,
-                },
-            ));
+                });
+
+            self.bsp_emit_forest_write_event(task_data);
+
+            // Process the forest root write queue after adding a new task
+            self.process_forest_root_write_queue();
 
             // Exit the loop since we have found the next proof to be submitted.
             break 'submit_proof_requests_loop;
         }
 
-        // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
-        if next_event_data.is_none() {
-            let max_batch_confirm = <MaxBatchConfirmStorageRequests as Get<u32>>::get();
+        // Open the state store context
+        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
+        let max_batch_confirm = <MaxBatchConfirmStorageRequests as Get<u32>>::get();
 
-            // Batch multiple confirm file storing taking the runtime maximum.
-            let mut confirm_storing_requests = Vec::new();
-            for _ in 0..max_batch_confirm {
-                if let Some(request) = state_store_context
-                    .pending_confirm_storing_request_deque()
-                    .pop_front()
-                {
-                    trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
-                    confirm_storing_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-
-            // If we have at least 1 confirm storing request, send the process event.
-            if confirm_storing_requests.len() > 0 {
-                next_event_data = Some(
-                    ProcessConfirmStoringRequestData {
-                        confirm_storing_requests,
-                    }
-                    .into(),
-                );
-            }
-        }
-
-        // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
-        if next_event_data.is_none() {
+        // Extract pending storing requests
+        let mut confirm_storing_requests = Vec::new();
+        for _ in 0..max_batch_confirm {
             if let Some(request) = state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque()
+                .pending_confirm_storing_request_deque()
                 .pop_front()
             {
-                next_event_data = Some(
-                    ProcessStopStoringForInsolventUserRequestData { who: request.user }.into(),
-                );
+                trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
+                confirm_storing_requests.push(request);
+            } else {
+                break;
             }
         }
 
-        // Commit the state store context.
+        // Extract pending stop storing requests
+        let pending_stop_storing_request = state_store_context
+            .pending_stop_storing_for_insolvent_user_request_deque()
+            .pop_front();
+
+        // Commit state context to persist changes
         state_store_context.commit();
 
-        // If there is any event data to process, emit the event.
-        if let Some(event_data) = next_event_data {
-            self.bsp_emit_forest_write_event(event_data);
+        // Process confirm storing requests if any
+        if confirm_storing_requests.len() > 0 {
+            let task_data: crate::events::ForestWriteLockTaskData =
+                ProcessConfirmStoringRequestData {
+                    confirm_storing_requests,
+                }
+                .into();
+
+            self.bsp_emit_forest_write_event(task_data);
+
+            // Process the forest root write queue after adding a new task
+            self.process_forest_root_write_queue();
+
+            return;
+        }
+
+        // Process stop storing request if any
+        if let Some(request) = pending_stop_storing_request {
+            let task_data: crate::events::ForestWriteLockTaskData =
+                ProcessStopStoringForInsolventUserRequestData { who: request.user }.into();
+
+            self.bsp_emit_forest_write_event(task_data);
+
+            // Process the forest root write queue after adding a new task
+            self.process_forest_root_write_queue();
         }
     }
 
@@ -542,71 +497,45 @@ where
     }
 
     fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
-        // Get the BSP's Forest root write lock.
-        let forest_root_write_lock = match &mut self.maybe_managed_provider {
-            Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
-            _ => {
-                error!(target: LOG_TARGET, "`bsp_emit_forest_write_event` should only be called if the node is managing a BSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
+        let task_data = data.into();
+
+        // Get priority from the task data
+        let priority = task_data.priority();
+
+        let ticket = tokio::runtime::Handle::current()
+            .block_on(self.forest_root_lock_manager.create_ticket(priority));
+
+        match &task_data {
+            ForestWriteLockTaskData::SubmitProofRequest(data) => {
+                self.emit(ProcessSubmitProofRequest {
+                    data: data.clone(),
+                    ticket,
+                });
             }
-        };
-
-        // Create a new channel to assign ownership of the BSP's Forest root write lock.
-        let (tx, rx) = tokio::sync::oneshot::channel();
-        *forest_root_write_lock = Some(rx);
-
-        // If this is a confirm storing request or a stop storing for insolvent user request,
-        // we need to store it in the state store.
-        let data = data.into();
-        match &data {
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
+                // Store the request in the state store for persistence
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
                     .access_value(&OngoingProcessConfirmStoringRequestCf)
                     .write(data);
                 state_store_context.commit();
+
+                self.emit(ProcessConfirmStoringRequest {
+                    data: data.clone(),
+                    ticket,
+                });
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
+                // Store the request in the state store for persistence
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
                     .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
                     .write(data);
                 state_store_context.commit();
-            }
-            ForestWriteLockTaskData::MspRespondStorageRequest(_) => {
-                unreachable!("BSPs do not respond to storage requests as MSPs do.")
-            }
-            ForestWriteLockTaskData::FileDeletionRequest(_) => {
-                unreachable!("BSPs do not respond to file deletions as MSPs do.")
-            }
-            ForestWriteLockTaskData::SubmitProofRequest(_) => {
-                // We don't need to store anything in the state store for submit proof requests.
-                // They are periodically checked by the BSP's block processing loop.
-            }
-        }
 
-        // This is an [`Arc<Mutex<Option<T>>>`] (in this case [`oneshot::Sender<()>`]) instead of just
-        // T so that we can keep using the current actors event bus (emit) which requires Clone on the
-        // event. Clone is required because there is no constraint on the number of listeners that can
-        // subscribe to the event (and each is guaranteed to receive all emitted events).
-        let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
-        match data {
-            ForestWriteLockTaskData::SubmitProofRequest(data) => {
-                self.emit(ProcessSubmitProofRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                self.emit(ProcessConfirmStoringRequest {
-                    data,
-                    forest_root_write_tx,
-                });
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 self.emit(ProcessStopStoringForInsolventUserRequest {
-                    data,
-                    forest_root_write_tx,
+                    data: data.clone(),
+                    ticket,
                 });
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(_) => {

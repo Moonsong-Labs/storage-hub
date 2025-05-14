@@ -177,9 +177,6 @@ pub enum BlockchainServiceCommand {
     QueryMspIdOfBucketId {
         bucket_id: BucketId,
     },
-    ReleaseForestRootWriteLock {
-        forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
-    },
     QueueFileDeletionRequest {
         request: FileDeletionRequest,
     },

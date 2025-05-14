@@ -142,15 +142,7 @@ where
         );
 
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
-        // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_tx` is dropped.
-        let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
-            Some(tx) => tx,
-            None => {
-                let err_msg = "CRITICAL❗️❗️ This is a bug! Forest root write tx already taken. This is a critical bug. Please report it to the StorageHub team.";
-                error!(target: LOG_TARGET, err_msg);
-                return Err(anyhow!(err_msg));
-            }
-        };
+        let _permit = event.ticket.lock().await;
 
         // TODO: Remove this once batching is supported by the runtime.
         if event.data.file_deletion_requests.len() > 1 {
@@ -254,11 +246,7 @@ where
             delete_file_request.file_key
         );
 
-        // Release the forest root write lock
-        self.storage_hub_handler
-            .blockchain
-            .release_forest_root_write_lock(forest_root_write_tx)
-            .await
+        Ok(())
     }
 }
 

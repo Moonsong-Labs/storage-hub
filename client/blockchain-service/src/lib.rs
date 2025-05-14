@@ -4,6 +4,7 @@ pub mod events;
 pub mod handler;
 pub mod handler_bsp;
 pub mod handler_msp;
+pub mod lock_manager;
 pub mod state;
 pub mod transaction;
 pub mod types;

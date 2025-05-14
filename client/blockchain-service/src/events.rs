@@ -1,6 +1,3 @@
-use std::sync::Arc;
-use tokio::sync::{oneshot, Mutex};
-
 use codec::{Decode, Encode};
 use sc_network::Multiaddr;
 use shc_actors_derive::{ActorEvent, ActorEventBus};
@@ -13,8 +10,12 @@ use shc_common::types::{
     StorageData, TrieMutation, ValuePropId,
 };
 
-use crate::types::{
-    ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType, RespondStorageRequest,
+use crate::{
+    lock_manager::ForestRootWriteTicket,
+    types::{
+        ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType,
+        RespondStorageRequest,
+    },
 };
 
 // TODO: Add the events from the `pallet-cr-randomness` here to process them in the BlockchainService.
@@ -107,6 +108,19 @@ pub enum ForestWriteLockTaskData {
     FileDeletionRequest(ProcessFileDeletionRequestData),
 }
 
+impl ForestWriteLockTaskData {
+    /// Returns the priority value for this task type
+    pub fn priority(&self) -> crate::lock_manager::PriorityValue {
+        match self {
+            Self::SubmitProofRequest(_) => crate::handler::Priorities::SUBMIT_PROOF,
+            Self::ConfirmStoringRequest(_) => crate::handler::Priorities::CONFIRM_STORING,
+            Self::FileDeletionRequest(_) => crate::handler::Priorities::FILE_DELETION,
+            Self::MspRespondStorageRequest(_) => crate::handler::Priorities::RESPOND_STORAGE,
+            Self::StopStoringForInsolventUserRequest(_) => crate::handler::Priorities::STOP_STORING,
+        }
+    }
+}
+
 impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
     fn from(data: ProcessSubmitProofRequestData) -> Self {
         Self::SubmitProofRequest(data)
@@ -160,7 +174,7 @@ pub struct ProcessSubmitProofRequestData {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessSubmitProofRequest {
     pub data: ProcessSubmitProofRequestData,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub ticket: ForestRootWriteTicket,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -172,7 +186,7 @@ pub struct ProcessConfirmStoringRequestData {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessConfirmStoringRequest {
     pub data: ProcessConfirmStoringRequestData,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub ticket: ForestRootWriteTicket,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -184,7 +198,7 @@ pub struct ProcessMspRespondStoringRequestData {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessMspRespondStoringRequest {
     pub data: ProcessMspRespondStoringRequestData,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub ticket: ForestRootWriteTicket,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -196,7 +210,7 @@ pub struct ProcessStopStoringForInsolventUserRequestData {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessStopStoringForInsolventUserRequest {
     pub data: ProcessStopStoringForInsolventUserRequestData,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub ticket: ForestRootWriteTicket,
 }
 
 /// Slashable Provider event.
@@ -386,7 +400,7 @@ pub struct ProcessFileDeletionRequestData {
 #[actor(actor = "blockchain_service")]
 pub struct ProcessFileDeletionRequest {
     pub data: ProcessFileDeletionRequestData,
-    pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub ticket: ForestRootWriteTicket,
 }
 
 /// Finalised proof submitted by an MSP for a pending file deletion request event.

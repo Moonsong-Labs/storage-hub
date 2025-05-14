@@ -599,12 +599,6 @@ pub struct BspHandler {
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node.
     pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
-    ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
     /// A set of Forest Storage snapshots, ordered by block number and block hash.
     ///
     /// A BSP can have multiple Forest Storage snapshots.
@@ -618,7 +612,6 @@ impl BspHandler {
         Self {
             bsp_id,
             pending_submit_proof_requests: BTreeSet::new(),
-            forest_root_write_lock: None,
             forest_root_snapshots: BTreeSet::new(),
         }
     }
@@ -630,14 +623,6 @@ impl BspHandler {
 pub struct MspHandler {
     /// The MSP ID.
     pub(crate) msp_id: MainStorageProviderId,
-    /// TODO: CHANGE THIS INTO MULTIPLE LOCKS, ONE FOR EACH BUCKET.
-    ///
-    /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
-    ///
-    /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
-    /// thread (Blockchain Service) and unlock it at the end of the spawned task. The alternative
-    /// would be to send a [`MutexGuard`].
-    pub(crate) forest_root_write_lock: Option<tokio::sync::oneshot::Receiver<()>>,
     /// A map of [`BucketId`] to the Forest Storage snapshots.
     ///
     /// Forest Storage snapshots are stored in a BTreeSet, ordered by block number and block hash.
@@ -651,7 +636,6 @@ impl MspHandler {
     pub fn new(msp_id: MainStorageProviderId) -> Self {
         Self {
             msp_id,
-            forest_root_write_lock: None,
             forest_root_snapshots: BTreeMap::new(),
         }
     }

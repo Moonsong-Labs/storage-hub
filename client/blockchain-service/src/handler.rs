@@ -40,6 +40,7 @@ use crate::{
     capacity_manager::{CapacityRequest, CapacityRequestQueue},
     commands::BlockchainServiceCommand,
     events::BlockchainServiceEventBusProvider,
+    lock_manager::PriorityValue,
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
         OngoingProcessConfirmStoringRequestCf, OngoingProcessMspRespondStorageRequestCf,
@@ -53,6 +54,22 @@ use crate::{
 };
 
 pub(crate) const LOG_TARGET: &str = "blockchain-service";
+
+/// Priority constants for different forest root write operation types
+pub struct Priorities;
+
+impl Priorities {
+    /// Highest priority - for proof submission
+    pub const SUBMIT_PROOF: PriorityValue = 0;
+    /// Priority for confirm storing requests
+    pub const CONFIRM_STORING: PriorityValue = 1;
+    /// Priority for file deletion requests
+    pub const FILE_DELETION: PriorityValue = 2;
+    /// Priority for MSP respond storage requests
+    pub const RESPOND_STORAGE: PriorityValue = 3;
+    /// Lowest priority - for stop storing requests
+    pub const STOP_STORING: PriorityValue = 4;
+}
 
 /// The BlockchainService actor.
 ///
@@ -108,6 +125,8 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
+    /// Manages access to the forest root write lock
+    pub(crate) forest_root_lock_manager: crate::lock_manager::ForestRootWriteLockManager,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1075,46 +1094,6 @@ where
                         }
                     }
                 }
-                BlockchainServiceCommand::ReleaseForestRootWriteLock {
-                    forest_root_write_tx,
-                    callback,
-                } => {
-                    if let Some(managed_bsp_or_msp) = &self.maybe_managed_provider {
-                        // Release the forest root write "lock".
-                        let forest_root_write_result = forest_root_write_tx.send(()).map_err(|e| {
-                            error!(target: LOG_TARGET, "CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team. \nError while sending the release message: {:?}", e);
-                            anyhow!("CRITICAL❗️❗️ This is a bug! Failed to release forest root write lock. This is a critical bug. Please report it to the StorageHub team.")
-                        });
-
-                        // Check if there are any pending requests to use the forest root write lock.
-                        // If so, we give them the lock right away.
-                        if forest_root_write_result.is_ok() {
-                            match managed_bsp_or_msp {
-                                ManagedProvider::Msp(_) => {
-                                    self.msp_assign_forest_root_write_lock();
-                                }
-                                ManagedProvider::Bsp(_) => {
-                                    self.bsp_assign_forest_root_write_lock();
-                                }
-                            }
-                        }
-
-                        match callback.send(forest_root_write_result) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send forest write lock release result: {:?}", e);
-                            }
-                        }
-                    } else {
-                        error!(target: LOG_TARGET, "Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team.");
-                        match callback.send(Err(anyhow!("Received a ReleaseForestRootWriteLock command while not managing a MSP or BSP. This should never happen. Please report it to the StorageHub team."))) {
-                            Ok(_) => {}
-                            Err(e) => {
-                                error!(target: LOG_TARGET, "Failed to send receiver: {:?}", e);
-                            }
-                        }
-                    }
-                }
                 BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
                     let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                     state_store_context
@@ -1171,6 +1150,7 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
+            forest_root_lock_manager: crate::lock_manager::ForestRootWriteLockManager::new(),
         }
     }
 
@@ -1461,5 +1441,40 @@ where
                 error!(target: LOG_TARGET, "Failed to get events storage element: {:?}", e);
             }
         }
+    }
+
+    /// Checks if the latest processed block matches the current best block.
+    /// This is used to ensure that operations that should only run on the latest block do so.
+    /// This is mainly used to check that we are not starting forest root write operations on an
+    /// outdated block (e.g. while syncing).
+    ///
+    /// Returns:
+    /// - `true` if the latest processed block matches the current best block
+    /// - `false` otherwise, with a trace log explaining the mismatch
+    pub(crate) fn is_latest_processed_block_current(&self) -> bool {
+        let client_best_hash = self.client.info().best_hash;
+        let client_best_number = self.client.info().best_number;
+
+        if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
+        {
+            trace!(
+                target: LOG_TARGET,
+                "Skipping operation because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])",
+                self.best_block.hash,
+                self.best_block.number,
+                client_best_hash,
+                client_best_number
+            );
+            false
+        } else {
+            true
+        }
+    }
+
+    /// Process the forest root write queue by calling process_next_ticket on the lock manager
+    pub(crate) fn process_forest_root_write_queue(&self) {
+        // Call process_next_ticket on the lock manager
+        tokio::runtime::Handle::current()
+            .block_on(self.forest_root_lock_manager.process_next_ticket());
     }
 }
