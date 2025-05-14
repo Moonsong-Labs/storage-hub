@@ -83,8 +83,7 @@ import type {
   SpRuntimeDigest,
   SpTrieStorageProof,
   SpWeightsWeightV2Weight,
-  StagingXcmV4Instruction,
-  StagingXcmV4Xcm,
+  StagingXcmV5Instruction,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   StorageHubRuntimeRuntimeHoldReason,
@@ -1151,7 +1150,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       recordedXcm: AugmentedQuery<
         ApiType,
-        () => Observable<Option<Vec<StagingXcmV4Instruction>>>,
+        () => Observable<Option<Vec<StagingXcmV5Instruction>>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -1163,7 +1162,7 @@ declare module "@polkadot/api-base/types/storage" {
         (
           arg1: u32 | AnyNumber | Uint8Array,
           arg2: AccountId32 | string | Uint8Array,
-          arg3: XcmVersionedAssetId | { V3: any } | { V4: any } | string | Uint8Array
+          arg3: XcmVersionedAssetId | { V3: any } | { V4: any } | { V5: any } | string | Uint8Array
         ) => Observable<Option<PalletXcmRemoteLockedFungibleRecord>>,
         [u32, AccountId32, XcmVersionedAssetId]
       > &
@@ -1192,7 +1191,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: XcmVersionedLocation | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
+          arg2: XcmVersionedLocation | { V3: any } | { V4: any } | { V5: any } | string | Uint8Array
         ) => Observable<Option<u32>>,
         [u32, XcmVersionedLocation]
       > &
@@ -1215,7 +1214,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: XcmVersionedLocation | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
+          arg2: XcmVersionedLocation | { V3: any } | { V4: any } | { V5: any } | string | Uint8Array
         ) => Observable<Option<u64>>,
         [u32, XcmVersionedLocation]
       > &
@@ -1228,7 +1227,7 @@ declare module "@polkadot/api-base/types/storage" {
         ApiType,
         (
           arg1: u32 | AnyNumber | Uint8Array,
-          arg2: XcmVersionedLocation | { V2: any } | { V3: any } | { V4: any } | string | Uint8Array
+          arg2: XcmVersionedLocation | { V3: any } | { V4: any } | { V5: any } | string | Uint8Array
         ) => Observable<Option<ITuple<[u64, SpWeightsWeightV2Weight, u32]>>>,
         [u32, XcmVersionedLocation]
       > &
