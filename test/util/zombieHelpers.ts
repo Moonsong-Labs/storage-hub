@@ -38,15 +38,15 @@ export const waitForChain = async (
   const startTime = performance.now();
 
   process.stdout.write(
-    `Waiting a maximum of ${
-      options?.timeoutMs || 60_000 / 1000
+    `Waiting a maximum of ${options?.timeoutMs || 60_000 / 1000
     } seconds for ${await api.rpc.system.chain()} chain to be ready...`
   );
   const startingHeight = (await api.rpc.chain.getHeader()).number.toNumber();
 
-  for (;;) {
+  for (; ;) {
     try {
       const blockHeight = (await api.rpc.chain.getHeader()).number.toNumber();
+      console.log("Block Height {}", blockHeight);
       if (blockHeight - startingHeight > (options?.blocks || 0)) {
         process.stdout.write("✅\n");
         break;
