@@ -8,7 +8,7 @@ use sp_core::H256;
 
 use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface,
+    commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
     events::{
         FinalisedTrieRemoveMutationsApplied, MultipleNewChallengeSeeds, ProcessSubmitProofRequest,
     },
@@ -474,7 +474,7 @@ where
         let challenges_tick = self
             .storage_hub_handler
             .blockchain
-            .get_next_challenge_tick_for_provider(provider_id)
+            .query_next_challenge_tick_for_provider(provider_id)
             .await
             .map_err(|e| anyhow!("Failed to get next challenge tick for provider: {:?}", e))?;
 
@@ -511,7 +511,7 @@ where
     ) -> anyhow::Result<()> {
         // Get the next challenge tick for this provider.
         let next_challenge_tick = blockchain
-            .get_next_challenge_tick_for_provider(event.data.provider_id)
+            .query_next_challenge_tick_for_provider(event.data.provider_id)
             .await
             .map_err(|e| anyhow!("Failed to get next challenge tick for provider, to see if the proof is outdated: {:?}", e))?;
 

@@ -5,7 +5,7 @@ use std::time::Duration;
 use log::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface, events::MultipleNewChallengeSeeds,
+    commands::BlockchainServiceCommandInterface, events::MultipleNewChallengeSeeds,
     types::SendExtrinsicOptions,
 };
 

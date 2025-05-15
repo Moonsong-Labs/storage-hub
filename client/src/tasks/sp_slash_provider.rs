@@ -4,7 +4,8 @@ use sc_tracing::tracing::*;
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
-    commands::BlockchainServiceInterface, events::SlashableProvider, types::SendExtrinsicOptions,
+    commands::BlockchainServiceCommandInterface, events::SlashableProvider,
+    types::SendExtrinsicOptions,
 };
 
 use crate::{handler::StorageHubHandler, types::ShNodeType};

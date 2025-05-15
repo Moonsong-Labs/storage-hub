@@ -195,3 +195,129 @@ pub struct NewChallengeSeed {
 #[ActorEventBus("blockchain_service")]
 pub struct BlockchainServiceEventBusProvider;
 ```
+
+# StorageHub Actors Command Macros
+
+This crate provides procedural macros to simplify actor command boilerplate code in the StorageHub actors framework.
+
+## Features
+
+- `actor_command` attribute macro: Automatically enhances command enums with callbacks and generates the Interface trait.
+- `command` attribute macro: Specifies behavior for individual command variants.
+
+## Usage
+
+### Basic Command Definition
+
+```rust
+#[actor_command(
+    service = FileTransferService,
+    default_mode = "SyncAwait",
+    default_error_type = RequestError
+)]
+pub enum FileTransferServiceCommand {
+    #[command(mode = "AsyncAwait", success_type = (Vec<u8>, ProtocolName), error_type = RequestFailure)]
+    UploadRequest {
+        peer_id: PeerId,
+        file_key: FileKey,
+        file_key_proof: FileKeyProof,
+        bucket_id: Option<BucketId>,
+    },
+    
+    UploadResponse {
+        request_id: UploadRequestId,
+        file_complete: bool,
+    },
+    
+    // Other commands...
+}
+```
+
+### Command Modes
+
+The macro supports three command modes:
+
+1. **FireAndForget**: No response is expected
+2. **SyncAwait**: Wait for a direct response from the actor
+3. **AsyncAwait**: Wait for an asynchronous response (e.g., from a network operation)
+
+### Extension Traits
+
+You can define extension traits in addition to the automatically generated Interface trait:
+
+```rust
+#[async_trait::async_trait]
+pub trait FileTransferServiceInterfaceExt {
+    fn parse_remote_upload_data_response(
+        &self,
+        data: Vec<u8>,
+    ) -> Result<schema::v1::provider::RemoteUploadDataResponse, RequestError>;
+
+    async fn extract_peer_ids_and_register_known_addresses(
+        &self,
+        multiaddresses: Vec<Multiaddr>,
+    ) -> Vec<PeerId>;
+}
+
+#[async_trait::async_trait]
+impl FileTransferServiceInterfaceExt for ActorHandle<FileTransferService> {
+    // Implementations...
+}
+```
+
+## Attribute Parameters
+
+### `actor_command` Parameters
+
+- `service`: (Required) The service type that processes these commands
+- `default_mode`: (Optional) Default command mode, one of: "FireAndForget", "SyncAwait", "AsyncAwait"
+- `default_error_type`: (Optional) Default error type for command responses
+- `default_inner_channel_type`: (Optional) Default channel type for AsyncAwait mode
+
+### `command` Parameters
+
+- `mode`: (Optional) Override the default command mode
+- `success_type`: (Optional) The success type returned in the Result
+- `error_type`: (Optional) Override the default error type
+- `inner_channel_type`: (Optional) Override the default channel type for AsyncAwait mode
+
+## Generated Code
+
+The macro automatically:
+
+1. Adds a `callback` field to each command variant based on the mode
+2. Generates a trait with a method for each command
+3. Implements the trait for ActorHandle<ServiceType>
+
+This eliminates boilerplate code and ensures consistent error handling.
+
+## Real World Example
+
+Here's an example from the StorageHub codebase:
+
+```rust
+#[actor_command(
+    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
+    default_mode = "SyncAwait",
+    default_inner_channel_type = tokio::sync::oneshot::Receiver,
+)]
+pub enum BlockchainServiceCommand {
+    #[command(success_type = SubmittedTransaction)]
+    SendExtrinsic {
+        call: storage_hub_runtime::RuntimeCall,
+        options: SendExtrinsicOptions,
+    },
+    #[command(success_type = Extrinsic)]
+    GetExtrinsicFromBlock {
+        block_hash: H256,
+        extrinsic_hash: H256,
+    },
+    #[command(mode = "AsyncAwait", inner_channel_type = tokio::sync::oneshot::Receiver)]
+    WaitForBlock {
+        block_number: BlockNumber,
+    },
+    // ... more commands
+}
+```
+
+This generates a trait `BlockchainServiceCommandInterface` with methods like `send_extrinsic`, `get_extrinsic_from_block`, etc., which can be called on an `ActorHandle<BlockchainService>`.
