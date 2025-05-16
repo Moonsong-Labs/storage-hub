@@ -46,7 +46,6 @@ export const waitForChain = async (
   for (; ;) {
     try {
       const blockHeight = (await api.rpc.chain.getHeader()).number.toNumber();
-      console.log("Block Height {}", blockHeight);
       if (blockHeight - startingHeight > (options?.blocks || 0)) {
         process.stdout.write("✅\n");
         break;
