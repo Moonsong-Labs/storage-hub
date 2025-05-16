@@ -51,6 +51,7 @@ export const waitForChain = async (
         process.stdout.write("✅\n");
         break;
       }
+      await sleep(1000);
     } catch (e) {
       await sleep(1000);
     }
