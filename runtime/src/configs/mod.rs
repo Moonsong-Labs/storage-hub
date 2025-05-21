@@ -404,8 +404,9 @@ impl pallet_parameters::Config for Runtime {
 impl pallet_randomness::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
-    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
+    type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();
+    type BabeDataGetterBlockNumber = BlockNumber;
 }
 
 /// Only callable after `set_validation_data` is called which forms this proof the same way
@@ -417,6 +418,15 @@ fn relay_chain_state_proof() -> RelayChainStateProof {
         .expect("set in `set_validation_data`");
     RelayChainStateProof::new(ParachainInfo::get(), relay_storage_root, relay_chain_state)
         .expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
+}
+
+pub struct BlockNumberGetter {}
+impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
+    type BlockNumber = BlockNumberFor<Runtime>;
+
+    fn current_block_number() -> Self::BlockNumber {
+        cumulus_pallet_parachain_system::RelaychainDataProvider::<Runtime>::current_block_number()
+    }
 }
 
 pub struct BabeDataGetter;

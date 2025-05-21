@@ -462,8 +462,18 @@ parameter_types! {
 impl pallet_randomness::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
-    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
+    type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();
+    type BabeDataGetterBlockNumber = BlockNumber;
+}
+
+pub struct BlockNumberGetter {}
+impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
+    type BlockNumber = BlockNumberFor<Runtime>;
+
+    fn current_block_number() -> Self::BlockNumber {
+        cumulus_pallet_parachain_system::RelaychainDataProvider::<Runtime>::current_block_number()
+    }
 }
 
 /// Type representing the storage data units in StorageHub.

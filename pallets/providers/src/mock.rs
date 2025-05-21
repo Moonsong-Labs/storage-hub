@@ -162,8 +162,18 @@ impl GetBabeData<u64, H256> for BabeDataGetter {
 impl pallet_randomness::Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();
+    type BabeDataGetterBlockNumber = BlockNumberFor<Test>;
+}
+
+pub struct BlockNumberGetter {}
+impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
+    type BlockNumber = BlockNumberFor<Test>;
+
+    fn current_block_number() -> Self::BlockNumber {
+        frame_system::Pallet::<Test>::block_number()
+    }
 }
 
 parameter_types! {
