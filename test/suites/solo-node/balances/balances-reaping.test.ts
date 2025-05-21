@@ -1,4 +1,4 @@
-import { strictEqual } from "node:assert";
+import assert, { strictEqual } from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
   alice,
@@ -58,16 +58,23 @@ describe("Balances Pallet: Reaping", async () => {
     const randomAccount = await createSr25519Account();
     const amount = 10n * UNIT;
 
+    const {
+      data: { free }
+    } = await api.query.system.account(alice.address);
+    console.log("Alice balance: ", free.toHuman());
+
+
     await api.tx.balances.transferAllowDeath(randomAccount.address, amount).signAndSend(alice);
     await api.createBlock();
 
     const {
       data: { free: balAvail }
     } = await api.query.system.account(randomAccount.address);
-    console.log(balAvail.toHuman());
+
+    const amountSend = balAvail.toBigInt() - ROUGH_TRANSFER_FEE;
 
     await api.tx.balances
-      .transferAllowDeath(alice.address, balAvail.toBigInt() - ROUGH_TRANSFER_FEE - 10000n)
+      .transferAllowDeath(alice.address, amountSend) // In case this fail check if the transfer fee is high enough for the transfer to be successful 
       .signAndSend(randomAccount);
     await api.createBlock();
 

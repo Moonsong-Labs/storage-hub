@@ -15,7 +15,7 @@ extern crate alloc;
 
 use smallvec::smallvec;
 use sp_runtime::{
-    create_runtime_str, generic, impl_opaque_keys,
+    generic, impl_opaque_keys,
     traits::{BlakeTwo256, IdentifyAccount, Verify},
     MultiSignature,
 };
@@ -157,14 +157,14 @@ impl_opaque_keys! {
 
 #[sp_version::runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
-    spec_name: create_runtime_str!("storage-hub-runtime"),
-    impl_name: create_runtime_str!("storage-hub-runtime"),
+    spec_name: alloc::borrow::Cow::Borrowed("storage-hub-runtime"),
+    impl_name: alloc::borrow::Cow::Borrowed("storage-hub-runtime"),
     authoring_version: 1,
     spec_version: 1,
     impl_version: 0,
     apis: apis::RUNTIME_API_VERSIONS,
     transaction_version: 1,
-    state_version: 1,
+    system_version: 1,
 };
 
 /// Blocks will be produced at a minimum duration defined by `SLOT_DURATION`.

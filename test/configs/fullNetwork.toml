@@ -11,7 +11,7 @@ default_args = [
 [[relaychain.nodes]]
 name = "relay-0"
 validator = true
-ws_port = 31000
+rpc_port = 31000
 add_to_bootnodes = true
 
 [[relaychain.nodes]]
@@ -26,13 +26,13 @@ id = 2000
 image = "moonsonglabs/storage-hub:test-local"
 command = "storage-hub-node"
 name = "sh-collator"
-ws_port = 32000
+rpc_port = 32000
 args = ["--no-hardware-benchmarks", "-lparachain=debug"]
 
 [[parachains.collators]]
 name = "sh-BSP"
 validator = false
-ws_port = 35000
+rpc_port = 35000
 image = "moonsonglabs/storage-hub:test-local"
 command = "storage-hub-node"
 args = [

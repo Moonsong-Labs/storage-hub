@@ -5,7 +5,9 @@ pub mod xcm_config;
 use crate::mock_message_queue;
 use crate::storagehub::{configs::xcm_config::XcmConfig, MessageQueue, ParachainInfo, PolkadotXcm};
 use core::marker::PhantomData;
-use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
+use cumulus_pallet_parachain_system::{
+    DefaultCoreSelector, RelayChainStateProof, RelayNumberMonotonicallyIncreases,
+};
 use cumulus_primitives_core::{
     relay_chain::well_known_keys, AggregateMessageOrigin, AssetId, ParaId,
 };
@@ -158,6 +160,7 @@ impl pallet_balances::Config for Runtime {
     type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
     type MaxFreezes = ConstU32<0>;
+    type DoneSlashHandler = ();
 }
 
 parameter_types! {
@@ -172,6 +175,7 @@ impl pallet_transaction_payment::Config for Runtime {
     type LengthToFee = ConstantMultiplier<Balance, TransactionByteFee>;
     type FeeMultiplierUpdate = SlowAdjustingFeeUpdate<Self>;
     type OperationalFeeMultiplier = ConstU8<5>;
+    type WeightInfo = ();
 }
 
 impl pallet_sudo::Config for Runtime {
@@ -203,6 +207,7 @@ impl cumulus_pallet_parachain_system::Config for Runtime {
     type ReservedXcmpWeight = ReservedXcmpWeight;
     type CheckAssociatedRelayNumber = RelayNumberMonotonicallyIncreases;
     type ConsensusHook = ConsensusHook;
+    type SelectCore = DefaultCoreSelector<Runtime>;
 }
 pub(crate) type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
     Runtime,
