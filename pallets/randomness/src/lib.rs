@@ -62,7 +62,7 @@ pub mod pallet {
         /// Weight info
         type WeightInfo: crate::weights::WeightInfo;
 
-        ///
+        /// Get chain block number (relay or other)
         type BabeDataGetterBlockNumber: sp_runtime::traits::BlockNumber;
     }
 
