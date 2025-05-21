@@ -21,7 +21,7 @@ async function main() {
         continue;
       }
 
-      const downloadUri = `${ghRoot}polkadot-v${version}/${binary}`;
+      const downloadUri = `${ghRoot}polkadot-${version}/${binary}`;
       console.log(`💾 Downloading ${binary} from ${downloadUri}`);
       const blob = await fetch(downloadUri);
       const arrayBuffer = await blob.arrayBuffer();

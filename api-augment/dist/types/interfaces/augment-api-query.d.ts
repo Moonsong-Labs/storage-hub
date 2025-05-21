@@ -77,7 +77,7 @@ import type {
   SpRuntimeDigest,
   SpTrieStorageProof,
   SpWeightsWeightV2Weight,
-  StagingXcmV4Instruction,
+  StagingXcmV5Instruction,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
   StorageHubRuntimeRuntimeHoldReason,
@@ -1164,7 +1164,7 @@ declare module "@polkadot/api-base/types/storage" {
        **/
       recordedXcm: AugmentedQuery<
         ApiType,
-        () => Observable<Option<Vec<StagingXcmV4Instruction>>>,
+        () => Observable<Option<Vec<StagingXcmV5Instruction>>>,
         []
       > &
         QueryableStorageEntry<ApiType, []>;
@@ -1183,6 +1183,9 @@ declare module "@polkadot/api-base/types/storage" {
               }
             | {
                 V4: any;
+              }
+            | {
+                V5: any;
               }
             | string
             | Uint8Array
@@ -1217,13 +1220,13 @@ declare module "@polkadot/api-base/types/storage" {
           arg2:
             | XcmVersionedLocation
             | {
-                V2: any;
-              }
-            | {
                 V3: any;
               }
             | {
                 V4: any;
+              }
+            | {
+                V5: any;
               }
             | string
             | Uint8Array
@@ -1252,13 +1255,13 @@ declare module "@polkadot/api-base/types/storage" {
           arg2:
             | XcmVersionedLocation
             | {
-                V2: any;
-              }
-            | {
                 V3: any;
               }
             | {
                 V4: any;
+              }
+            | {
+                V5: any;
               }
             | string
             | Uint8Array
@@ -1277,13 +1280,13 @@ declare module "@polkadot/api-base/types/storage" {
           arg2:
             | XcmVersionedLocation
             | {
-                V2: any;
-              }
-            | {
                 V3: any;
               }
             | {
                 V4: any;
+              }
+            | {
+                V5: any;
               }
             | string
             | Uint8Array

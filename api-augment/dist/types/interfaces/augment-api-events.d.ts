@@ -17,9 +17,9 @@ import type { ITuple } from "@polkadot/types-codec/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
 import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
-  FrameSupportDispatchDispatchInfo,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
+  FrameSystemDispatchEventInfo,
   PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
@@ -34,14 +34,14 @@ import type {
   ShpTraitsTrieMutation,
   SpRuntimeDispatchError,
   SpWeightsWeightV2Weight,
-  StagingXcmV4AssetAssets,
-  StagingXcmV4Location,
-  StagingXcmV4Response,
-  StagingXcmV4TraitsOutcome,
-  StagingXcmV4Xcm,
+  StagingXcmV5AssetAssets,
+  StagingXcmV5Location,
+  StagingXcmV5Response,
+  StagingXcmV5TraitsOutcome,
+  StagingXcmV5Xcm,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey,
   StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue,
-  XcmV3TraitsError,
+  XcmV5TraitsError,
   XcmVersionedAssets,
   XcmVersionedLocation
 } from "@polkadot/types/lookup";
@@ -460,7 +460,7 @@ declare module "@polkadot/api-base/types/events" {
        * Downward message executed with the given outcome.
        * \[ id, outcome \]
        **/
-      ExecutedDownward: AugmentedEvent<ApiType, [U8aFixed, StagingXcmV4TraitsOutcome]>;
+      ExecutedDownward: AugmentedEvent<ApiType, [U8aFixed, StagingXcmV5TraitsOutcome]>;
       /**
        * Downward message is invalid XCM.
        * \[ id \]
@@ -1798,10 +1798,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       AssetsClaimed: AugmentedEvent<
         ApiType,
-        [hash_: H256, origin: StagingXcmV4Location, assets: XcmVersionedAssets],
+        [hash_: H256, origin: StagingXcmV5Location, assets: XcmVersionedAssets],
         {
           hash_: H256;
-          origin: StagingXcmV4Location;
+          origin: StagingXcmV5Location;
           assets: XcmVersionedAssets;
         }
       >;
@@ -1810,10 +1810,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       AssetsTrapped: AugmentedEvent<
         ApiType,
-        [hash_: H256, origin: StagingXcmV4Location, assets: XcmVersionedAssets],
+        [hash_: H256, origin: StagingXcmV5Location, assets: XcmVersionedAssets],
         {
           hash_: H256;
-          origin: StagingXcmV4Location;
+          origin: StagingXcmV5Location;
           assets: XcmVersionedAssets;
         }
       >;
@@ -1822,9 +1822,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       Attempted: AugmentedEvent<
         ApiType,
-        [outcome: StagingXcmV4TraitsOutcome],
+        [outcome: StagingXcmV5TraitsOutcome],
         {
-          outcome: StagingXcmV4TraitsOutcome;
+          outcome: StagingXcmV5TraitsOutcome;
         }
       >;
       /**
@@ -1832,10 +1832,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       FeesPaid: AugmentedEvent<
         ApiType,
-        [paying: StagingXcmV4Location, fees: StagingXcmV4AssetAssets],
+        [paying: StagingXcmV5Location, fees: StagingXcmV5AssetAssets],
         {
-          paying: StagingXcmV4Location;
-          fees: StagingXcmV4AssetAssets;
+          paying: StagingXcmV5Location;
+          fees: StagingXcmV5AssetAssets;
         }
       >;
       /**
@@ -1846,16 +1846,16 @@ declare module "@polkadot/api-base/types/events" {
       InvalidQuerier: AugmentedEvent<
         ApiType,
         [
-          origin: StagingXcmV4Location,
+          origin: StagingXcmV5Location,
           queryId: u64,
-          expectedQuerier: StagingXcmV4Location,
-          maybeActualQuerier: Option<StagingXcmV4Location>
+          expectedQuerier: StagingXcmV5Location,
+          maybeActualQuerier: Option<StagingXcmV5Location>
         ],
         {
-          origin: StagingXcmV4Location;
+          origin: StagingXcmV5Location;
           queryId: u64;
-          expectedQuerier: StagingXcmV4Location;
-          maybeActualQuerier: Option<StagingXcmV4Location>;
+          expectedQuerier: StagingXcmV5Location;
+          maybeActualQuerier: Option<StagingXcmV5Location>;
         }
       >;
       /**
@@ -1869,9 +1869,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       InvalidQuerierVersion: AugmentedEvent<
         ApiType,
-        [origin: StagingXcmV4Location, queryId: u64],
+        [origin: StagingXcmV5Location, queryId: u64],
         {
-          origin: StagingXcmV4Location;
+          origin: StagingXcmV5Location;
           queryId: u64;
         }
       >;
@@ -1883,14 +1883,14 @@ declare module "@polkadot/api-base/types/events" {
       InvalidResponder: AugmentedEvent<
         ApiType,
         [
-          origin: StagingXcmV4Location,
+          origin: StagingXcmV5Location,
           queryId: u64,
-          expectedLocation: Option<StagingXcmV4Location>
+          expectedLocation: Option<StagingXcmV5Location>
         ],
         {
-          origin: StagingXcmV4Location;
+          origin: StagingXcmV5Location;
           queryId: u64;
-          expectedLocation: Option<StagingXcmV4Location>;
+          expectedLocation: Option<StagingXcmV5Location>;
         }
       >;
       /**
@@ -1904,9 +1904,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       InvalidResponderVersion: AugmentedEvent<
         ApiType,
-        [origin: StagingXcmV4Location, queryId: u64],
+        [origin: StagingXcmV5Location, queryId: u64],
         {
-          origin: StagingXcmV4Location;
+          origin: StagingXcmV5Location;
           queryId: u64;
         }
       >;
@@ -1990,11 +1990,11 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NotifyTargetSendFail: AugmentedEvent<
         ApiType,
-        [location: StagingXcmV4Location, queryId: u64, error: XcmV3TraitsError],
+        [location: StagingXcmV5Location, queryId: u64, error: XcmV5TraitsError],
         {
-          location: StagingXcmV4Location;
+          location: StagingXcmV5Location;
           queryId: u64;
-          error: XcmV3TraitsError;
+          error: XcmV5TraitsError;
         }
       >;
       /**
@@ -2003,10 +2003,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ResponseReady: AugmentedEvent<
         ApiType,
-        [queryId: u64, response: StagingXcmV4Response],
+        [queryId: u64, response: StagingXcmV5Response],
         {
           queryId: u64;
-          response: StagingXcmV4Response;
+          response: StagingXcmV5Response;
         }
       >;
       /**
@@ -2025,15 +2025,15 @@ declare module "@polkadot/api-base/types/events" {
       Sent: AugmentedEvent<
         ApiType,
         [
-          origin: StagingXcmV4Location,
-          destination: StagingXcmV4Location,
-          message: StagingXcmV4Xcm,
+          origin: StagingXcmV5Location,
+          destination: StagingXcmV5Location,
+          message: StagingXcmV5Xcm,
           messageId: U8aFixed
         ],
         {
-          origin: StagingXcmV4Location;
-          destination: StagingXcmV4Location;
-          message: StagingXcmV4Xcm;
+          origin: StagingXcmV5Location;
+          destination: StagingXcmV5Location;
+          message: StagingXcmV5Xcm;
           messageId: U8aFixed;
         }
       >;
@@ -2043,9 +2043,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       SupportedVersionChanged: AugmentedEvent<
         ApiType,
-        [location: StagingXcmV4Location, version: u32],
+        [location: StagingXcmV5Location, version: u32],
         {
-          location: StagingXcmV4Location;
+          location: StagingXcmV5Location;
           version: u32;
         }
       >;
@@ -2056,9 +2056,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       UnexpectedResponse: AugmentedEvent<
         ApiType,
-        [origin: StagingXcmV4Location, queryId: u64],
+        [origin: StagingXcmV5Location, queryId: u64],
         {
-          origin: StagingXcmV4Location;
+          origin: StagingXcmV5Location;
           queryId: u64;
         }
       >;
@@ -2070,15 +2070,15 @@ declare module "@polkadot/api-base/types/events" {
       VersionChangeNotified: AugmentedEvent<
         ApiType,
         [
-          destination: StagingXcmV4Location,
+          destination: StagingXcmV5Location,
           result: u32,
-          cost: StagingXcmV4AssetAssets,
+          cost: StagingXcmV5AssetAssets,
           messageId: U8aFixed
         ],
         {
-          destination: StagingXcmV4Location;
+          destination: StagingXcmV5Location;
           result: u32;
-          cost: StagingXcmV4AssetAssets;
+          cost: StagingXcmV5AssetAssets;
           messageId: U8aFixed;
         }
       >;
@@ -2097,10 +2097,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       VersionNotifyRequested: AugmentedEvent<
         ApiType,
-        [destination: StagingXcmV4Location, cost: StagingXcmV4AssetAssets, messageId: U8aFixed],
+        [destination: StagingXcmV5Location, cost: StagingXcmV5AssetAssets, messageId: U8aFixed],
         {
-          destination: StagingXcmV4Location;
-          cost: StagingXcmV4AssetAssets;
+          destination: StagingXcmV5Location;
+          cost: StagingXcmV5AssetAssets;
           messageId: U8aFixed;
         }
       >;
@@ -2110,10 +2110,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       VersionNotifyStarted: AugmentedEvent<
         ApiType,
-        [destination: StagingXcmV4Location, cost: StagingXcmV4AssetAssets, messageId: U8aFixed],
+        [destination: StagingXcmV5Location, cost: StagingXcmV5AssetAssets, messageId: U8aFixed],
         {
-          destination: StagingXcmV4Location;
-          cost: StagingXcmV4AssetAssets;
+          destination: StagingXcmV5Location;
+          cost: StagingXcmV5AssetAssets;
           messageId: U8aFixed;
         }
       >;
@@ -2123,10 +2123,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       VersionNotifyUnrequested: AugmentedEvent<
         ApiType,
-        [destination: StagingXcmV4Location, cost: StagingXcmV4AssetAssets, messageId: U8aFixed],
+        [destination: StagingXcmV5Location, cost: StagingXcmV5AssetAssets, messageId: U8aFixed],
         {
-          destination: StagingXcmV4Location;
-          cost: StagingXcmV4AssetAssets;
+          destination: StagingXcmV5Location;
+          cost: StagingXcmV5AssetAssets;
           messageId: U8aFixed;
         }
       >;
@@ -2673,10 +2673,10 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ExtrinsicFailed: AugmentedEvent<
         ApiType,
-        [dispatchError: SpRuntimeDispatchError, dispatchInfo: FrameSupportDispatchDispatchInfo],
+        [dispatchError: SpRuntimeDispatchError, dispatchInfo: FrameSystemDispatchEventInfo],
         {
           dispatchError: SpRuntimeDispatchError;
-          dispatchInfo: FrameSupportDispatchDispatchInfo;
+          dispatchInfo: FrameSystemDispatchEventInfo;
         }
       >;
       /**
@@ -2684,9 +2684,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       ExtrinsicSuccess: AugmentedEvent<
         ApiType,
-        [dispatchInfo: FrameSupportDispatchDispatchInfo],
+        [dispatchInfo: FrameSystemDispatchEventInfo],
         {
-          dispatchInfo: FrameSupportDispatchDispatchInfo;
+          dispatchInfo: FrameSystemDispatchEventInfo;
         }
       >;
       /**

@@ -236,7 +236,7 @@ jobs:
           chmod -R 777 docker/dev-keystores
           cd test
           pnpm  install
-          pnpm  tsx scripts/downloadPolkadot.ts 1.8.0
+          pnpm  tsx scripts/downloadPolkadot.ts stable2412
       - name: Run Zombienet Test!
         run: |
           cd test
