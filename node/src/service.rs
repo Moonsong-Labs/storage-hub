@@ -77,7 +77,7 @@ use crate::{
 //* These type definitions were moved from this file to the common crate to be used by'
 //* the StorageHub services crates
 type ParachainExecutor = shc_common::types::ParachainExecutor;
-type ParachainClient = shc_common::types::ParachainClient;
+type ParachainClient = shc_common::types::ParachainClient<RuntimeApi>;
 
 pub(crate) type ParachainBackend = TFullBackend<Block>;
 

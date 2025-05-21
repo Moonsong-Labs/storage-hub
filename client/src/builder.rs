@@ -6,7 +6,7 @@ use serde::Deserialize;
 use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
 use std::{path::PathBuf, sync::Arc};
-use tokio::sync::RwLock;
+use tokio::{runtime::Runtime, sync::RwLock};
 
 use shc_actors_framework::actor::{ActorHandle, TaskSpawner};
 use shc_blockchain_service::{
@@ -142,7 +142,7 @@ where
     /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
     pub async fn with_blockchain(
         &mut self,
-        client: Arc<ParachainClient>,
+        client: Arc<ParachainClient<RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,

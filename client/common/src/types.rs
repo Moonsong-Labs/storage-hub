@@ -103,7 +103,7 @@ type HostFunctions = (
 );
 
 pub type ParachainExecutor = WasmExecutor<HostFunctions>;
-pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+pub type ParachainClient<RuntimeApi> = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 
 /// The type of key used for [`BlockchainService`]` operations.
 pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");

@@ -50,9 +50,10 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH> BlockchainService<FSH>
+impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
 {
     /// Notify tasks waiting for a block number.
     pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber) {
@@ -531,7 +532,7 @@ where
     /// Construct an extrinsic that can be applied to the runtime.
     pub fn construct_extrinsic(
         &self,
-        client: Arc<ParachainClient>,
+        client: Arc<ParachainClient<RuntimeApi>>,
         function: impl Into<storage_hub_runtime::RuntimeCall>,
         nonce: u32,
         tip: Tip,

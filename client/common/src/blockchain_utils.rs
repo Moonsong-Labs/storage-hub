@@ -37,8 +37,8 @@ pub enum EventsRetrievalError {
 }
 
 /// Get the events storage element for a given block.
-pub fn get_events_at_block(
-    client: &Arc<ParachainClient>,
+pub fn get_events_at_block<RuntimeApi>(
+    client: &Arc<ParachainClient<RuntimeApi>>,
     block_hash: &H256,
 ) -> Result<StorageHubEventsVec, EventsRetrievalError> {
     // Get the events storage.

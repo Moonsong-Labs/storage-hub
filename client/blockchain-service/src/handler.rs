@@ -29,6 +29,7 @@ use pallet_storage_providers_runtime_api::{
     QueryProviderMultiaddressesError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
+use shc_common::types::OpaqueBlock;
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -57,18 +58,19 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// The BlockchainService actor.
 ///
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
-/// For such purposes, it uses the [`ParachainClient`] to interact with the runtime, the [`RpcHandlers`] to send
+/// For such purposes, it uses the [`ParachainClient<RuntimeApi>`] to interact with the runtime, the [`RpcHandlers`] to send
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
-pub struct BlockchainService<FSH>
+pub struct BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
 {
     /// The configuration for the BlockchainService.
     pub(crate) config: BlockchainServiceConfig,
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
     /// The parachain client. Used to interact with the runtime.
-    pub(crate) client: Arc<ParachainClient>,
+    pub(crate) client: Arc<ParachainClient<RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
@@ -143,12 +145,13 @@ impl Default for BlockchainServiceConfig {
 }
 
 /// Event loop for the BlockchainService actor.
-pub struct BlockchainServiceEventLoop<FSH>
+pub struct BlockchainServiceEventLoop<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
 {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
-    actor: BlockchainService<FSH>,
+    actor: BlockchainService<FSH, RuntimeApi>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -162,12 +165,14 @@ where
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
-impl<FSH> ActorEventLoop<BlockchainService<FSH>> for BlockchainServiceEventLoop<FSH>
+impl<FSH, RuntimeApi> ActorEventLoop<BlockchainService<FSH, RuntimeApi>>
+    for BlockchainServiceEventLoop<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
 {
     fn new(
-        actor: BlockchainService<FSH>,
+        actor: BlockchainService<FSH, RuntimeApi>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
     ) -> Self {
         Self { actor, receiver }
@@ -217,12 +222,13 @@ where
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
-impl<FSH> Actor for BlockchainService<FSH>
+impl<FSH, RuntimeApi> Actor for BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
 {
     type Message = BlockchainServiceCommand;
-    type EventLoop = BlockchainServiceEventLoop<FSH>;
+    type EventLoop = BlockchainServiceEventLoop<FSH, RuntimeApi>;
     type EventBusProvider = BlockchainServiceEventBusProvider;
 
     fn handle_message(
@@ -1139,14 +1145,14 @@ where
     }
 }
 
-impl<FSH> BlockchainService<FSH>
+impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
 {
     /// Create a new [`BlockchainService`].
     pub fn new(
         config: BlockchainServiceConfig,
-        client: Arc<ParachainClient>,
+        client: Arc<ParachainClient<RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         forest_storage_handler: FSH,

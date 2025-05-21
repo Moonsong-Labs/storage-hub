@@ -12,6 +12,7 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
 };
 use shc_actors_framework::actor::Actor;
+use shc_common::types::OpaqueBlock;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -37,9 +38,10 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH> BlockchainService<FSH>
+impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
 {
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
     ///

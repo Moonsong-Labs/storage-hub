@@ -54,8 +54,9 @@ const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = {
 /// Returns the protocol name and the channel receiver to be used for reading requests.
 pub fn configure_file_transfer_network<
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
+    RuntimeApi,
 >(
-    client: Arc<ParachainClient>,
+    client: Arc<ParachainClient<RuntimeApi>>,
     parachain_config: &Configuration,
     net_config: &mut FullNetworkConfiguration<OpaqueBlock, BlockHash, Network>,
 ) -> (ProtocolName, async_channel::Receiver<IncomingRequest>) {
