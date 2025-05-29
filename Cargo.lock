@@ -13989,7 +13989,6 @@ dependencies = [
  "sp-core 35.0.0",
  "sp-keystore 0.41.0",
  "sp-runtime 40.1.0",
- "storage-hub-runtime",
  "substrate-frame-rpc-system",
  "thiserror 1.0.69",
  "tokio",
@@ -14051,7 +14050,6 @@ dependencies = [
  "sp-keystore 0.41.0",
  "sp-runtime 40.1.0",
  "sp-trie 38.0.0",
- "storage-hub-runtime",
  "substrate-build-script-utils",
  "thiserror 1.0.69",
  "tokio",
@@ -14070,9 +14068,14 @@ dependencies = [
  "lazy_static",
  "log",
  "pallet-file-system",
+ "pallet-file-system-runtime-api",
  "pallet-payment-streams",
+ "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",
+ "pallet-proofs-dealer-runtime-api",
  "pallet-storage-providers",
+ "pallet-storage-providers-runtime-api",
+ "pallet-transaction-payment-rpc",
  "parity-scale-codec",
  "polkadot-primitives 17.1.0",
  "rocksdb",
@@ -14085,7 +14088,10 @@ dependencies = [
  "shp-file-key-verifier",
  "shp-file-metadata",
  "shp-forest-verifier",
+ "shp-opaque",
  "shp-traits",
+ "sp-api 35.0.0",
+ "sp-block-builder",
  "sp-blockchain",
  "sp-core 35.0.0",
  "sp-io 39.0.0",
@@ -14093,6 +14099,7 @@ dependencies = [
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2412)",
  "sp-trie 38.0.0",
  "storage-hub-runtime",
+ "substrate-frame-rpc-system",
  "tempfile",
  "thiserror 1.0.69",
  "trie-db 0.29.1",
@@ -14236,7 +14243,6 @@ dependencies = [
  "sp-blockchain",
  "sp-core 35.0.0",
  "sp-runtime 40.1.0",
- "storage-hub-runtime",
  "substrate-frame-rpc-system",
  "thiserror 1.0.69",
  "tokio",
@@ -14347,6 +14353,20 @@ dependencies = [
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2412)",
  "sp-trie 38.0.0",
  "trie-db 0.29.1",
+]
+
+[[package]]
+name = "shp-opaque"
+version = "0.1.0"
+dependencies = [
+ "frame-support 39.1.0",
+ "parachains-common",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core 35.0.0",
+ "sp-runtime 40.1.0",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2412)",
+ "sp-trie 38.0.0",
 ]
 
 [[package]]
@@ -16342,6 +16362,7 @@ dependencies = [
  "pallet-proofs-dealer",
  "pallet-proofs-dealer-runtime-api",
  "pallet-storage-providers",
+ "pallet-storage-providers-runtime-api",
  "pallet-transaction-payment 39.1.0",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",

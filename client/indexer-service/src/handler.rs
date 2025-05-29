@@ -1,7 +1,8 @@
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
-use shc_common::types::{OpaqueBlock, StorageProviderId};
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::types::StorageProviderId;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -36,7 +37,8 @@ pub struct IndexerService<RuntimeApi> {
 // Implement the Actor trait for IndexerService
 impl<RuntimeApi> Actor for IndexerService<RuntimeApi>
 where
-    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     type Message = IndexerServiceCommand;
     type EventLoop = IndexerServiceEventLoop<RuntimeApi>;
@@ -61,7 +63,8 @@ where
 // Implement methods for IndexerService
 impl<RuntimeApi> IndexerService<RuntimeApi>
 where
-    RuntimeApi: Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool) -> Self {
         Self { client, db_pool }
@@ -661,7 +664,8 @@ where
 // Implement ActorEventLoop for IndexerServiceEventLoop
 impl<RuntimeApi> ActorEventLoop<IndexerService<RuntimeApi>> for IndexerServiceEventLoop<RuntimeApi>
 where
-    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     fn new(
         actor: IndexerService<RuntimeApi>,

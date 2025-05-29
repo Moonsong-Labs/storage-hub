@@ -10,7 +10,8 @@ use sp_core::H256;
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
-use shc_common::types::{BlockNumber, OpaqueBlock, StorageData};
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::types::{BlockNumber, StorageData};
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
@@ -21,7 +22,7 @@ use crate::{
 const LOG_TARGET: &str = "blockchain-service-capacity-manager";
 
 /// Queue of capacity requests for batching capacity increases in a single transaction.
-pub struct CapacityRequestQueue {
+pub struct CapacityRequestQueue<T: pallet_file_system::Config> {
     /// Configuration parameters determining values for capacity increases.
     capacity_config: CapacityConfig,
     /// Pending capacity requests which have yet to be part of a transaction.
@@ -34,13 +35,13 @@ pub struct CapacityRequestQueue {
     /// Total accumulated capacity required by the aggregate of all `pending_requests`.
     ///
     /// This is reset when the `pending_requests` is moved to `requests_waiting_for_inclusion` when they have been batched in a single transaction.
-    total_required: StorageData,
+    total_required: StorageData<T>,
     /// The last submitted transaction which `requests_waiting_for_inclusion` is waiting for.
     last_submitted_transaction: Option<SubmittedTransaction>,
 }
 
-impl CapacityRequestQueue {
-    pub fn new(capacity_config: CapacityConfig) -> Self {
+impl<T: pallet_file_system::Config> CapacityRequestQueue<T> {
+    pub fn new(capacity_config: CapacityConfig<T>) -> Self {
         Self {
             capacity_config,
             pending_requests: VecDeque::new(),
@@ -58,7 +59,7 @@ impl CapacityRequestQueue {
     /// Get the configured maximum capacity allowed.
     ///
     /// Capacity requests will be rejected if the current provider capacity is at this limit.
-    pub fn max_capacity_allowed(&self) -> StorageData {
+    pub fn max_capacity_allowed(&self) -> StorageData<T> {
         self.capacity_config.max_capacity
     }
 
@@ -69,7 +70,7 @@ impl CapacityRequestQueue {
     pub fn queue_capacity_request(
         &mut self,
         request: CapacityRequest,
-        current_capacity: StorageData,
+        current_capacity: StorageData<T>,
     ) {
         let Some(new_total_required) = self.total_required.checked_add(request.data.required)
         else {
@@ -88,7 +89,7 @@ impl CapacityRequestQueue {
     }
 
     /// Calculate the maximum capacity difference that can be requested.
-    fn max_capacity_diff(&self, current_capacity: StorageData) -> StorageData {
+    fn max_capacity_diff(&self, current_capacity: StorageData<T>) -> StorageData<T> {
         self.capacity_config
             .max_capacity
             .saturating_sub(current_capacity)
@@ -97,9 +98,9 @@ impl CapacityRequestQueue {
     /// Calculate the new capacity needed based on the total required capacity
     pub fn calculate_new_capacity(
         &self,
-        current_capacity: StorageData,
-        total_required: StorageData,
-    ) -> StorageData {
+        current_capacity: StorageData<T>,
+        total_required: StorageData<T>,
+    ) -> StorageData<T> {
         // Calculate how many jumps we need to cover the required capacity
         let jumps_needed = total_required.div_ceil(self.capacity_config.jump_capacity);
         let total_jump_capacity = jumps_needed * self.capacity_config.jump_capacity;
@@ -160,12 +161,12 @@ impl CapacityRequestQueue {
 
 /// Configuration parameters determining values for capacity increases.
 #[derive(Clone, Debug)]
-pub struct CapacityConfig {
+pub struct CapacityConfig<T: pallet_file_system::Config> {
     /// Maximum storage capacity of the provider in bytes.
     ///
     /// The node will not increase its on-chain capacity above this value.
     /// This is meant to reflect the actual physical storage capacity of the node.
-    max_capacity: StorageData,
+    max_capacity: StorageData<T>,
     /// Capacity increases by this amount in bytes a number of times based on the required capacity calculated
     /// by the [`calculate_new_capacity`](CapacityRequestQueue::calculate_new_capacity) method.
     ///
@@ -173,33 +174,33 @@ pub struct CapacityConfig {
     /// capacity by adding more stake. For example, if the jump capacity is set to 1k, and the
     /// node needs 100 units of storage more to store a file, the node will automatically increase
     /// its on-chain capacity by 1k units.
-    jump_capacity: StorageData,
+    jump_capacity: StorageData<T>,
 }
 
-impl CapacityConfig {
-    pub fn new(max_capacity: StorageData, jump_capacity: StorageData) -> Self {
+impl<T: pallet_file_system::Config> CapacityConfig<T> {
+    pub fn new(max_capacity: StorageData<T>, jump_capacity: StorageData<T>) -> Self {
         Self {
             max_capacity,
             jump_capacity,
         }
     }
 
-    pub fn max_capacity(&self) -> StorageData {
+    pub fn max_capacity(&self) -> StorageData<T> {
         self.max_capacity
     }
 }
 
 /// Individual capacity request for every caller.
-pub struct CapacityRequest {
+pub struct CapacityRequest<T> {
     /// Data needed to process the capacity request.
-    data: CapacityRequestData,
+    data: CapacityRequestData<T>,
     /// Callback to notify the caller when the capacity request is processed.
     callback: tokio::sync::oneshot::Sender<Result<(), anyhow::Error>>,
 }
 
 impl CapacityRequest {
     pub fn new(
-        data: CapacityRequestData,
+        data: CapacityRequestData<T>,
         callback: tokio::sync::oneshot::Sender<Result<(), anyhow::Error>>,
     ) -> Self {
         Self { data, callback }
@@ -213,21 +214,25 @@ impl CapacityRequest {
 }
 
 /// Data needed to process a capacity request.
-pub struct CapacityRequestData {
+pub struct CapacityRequestData<T: pallet_file_system::Config> {
     /// Capacity requested to be increased.
-    required: StorageData,
+    required: StorageData<T>,
 }
 
-impl CapacityRequestData {
-    pub fn new(required: StorageData) -> Self {
+impl<T: pallet_file_system::Config> CapacityRequestData<T> {
+    pub fn new(required: StorageData<T>) -> Self {
         Self { required }
     }
 }
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+    Runtime: pallet_file_system::Config
+        + pallet_proofs_dealer::Config
+        + pallet_storage_providers::Config,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     /// Queue a capacity request.
     ///
@@ -256,7 +261,7 @@ where
     /// and send the `total_required` value in a single `change_capacity` extrinsic.
     pub(crate) async fn process_capacity_requests(
         &mut self,
-        block_number: BlockNumber,
+        block_number: BlockNumber<Runtime>,
     ) -> Result<(), anyhow::Error> {
         debug!(target: LOG_TARGET, "[process_capacity_requests] Processing capacity requests");
         let (current_block_hash, current_capacity, inner_provider_id) = match self

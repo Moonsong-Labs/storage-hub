@@ -9,7 +9,10 @@ use codec::Decode;
 use sc_client_api::{backend::StorageProvider, StorageKey};
 use sp_core::H256;
 
-use crate::types::{Multiaddresses, ParachainClient, StorageHubEventsVec};
+use crate::{
+    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
+    types::{Multiaddresses, ParachainClient, StorageHubEventsVec},
+};
 
 lazy_static! {
     // Would be cool to be able to do this...
@@ -37,16 +40,25 @@ pub enum EventsRetrievalError {
 }
 
 /// Get the events storage element for a given block.
-pub fn get_events_at_block<RuntimeApi>(
+pub fn get_events_at_block<
+    RuntimeApi: StorageEnableRuntimeApi,
+    Runtime: pallet_file_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_storage_providers::Config,
+>(
     client: &Arc<ParachainClient<RuntimeApi>>,
     block_hash: &H256,
-) -> Result<StorageHubEventsVec, EventsRetrievalError> {
+) -> Result<StorageHubEventsVec<Runtime>, EventsRetrievalError>
+where
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
+{
     // Get the events storage.
     let raw_storage_opt = client.storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?;
 
     // Decode the events storage.
     raw_storage_opt
-        .map(|raw_storage| StorageHubEventsVec::decode(&mut raw_storage.0.as_slice()))
+        .map(|raw_storage| StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()))
         .transpose()?
         .ok_or(EventsRetrievalError::StorageNotFound)
 }
@@ -54,7 +66,14 @@ pub fn get_events_at_block<RuntimeApi>(
 /// Attempt to convert BoundedVec of BoundedVecs of bytes.
 ///
 /// Returns a list of [`Multiaddr`] objects that have successfully been parsed from the raw bytes.
-pub fn convert_raw_multiaddresses_to_multiaddr(multiaddresses: Multiaddresses) -> Vec<Multiaddr> {
+pub fn convert_raw_multiaddresses_to_multiaddr<
+    Runtime: pallet_file_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_storage_providers::Config,
+>(
+    multiaddresses: Multiaddresses<Runtime>,
+) -> Vec<Multiaddr> {
     let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
     for raw_multiaddr in multiaddresses.into_iter() {
         if let Some(multiaddress) = convert_raw_multiaddress_to_multiaddr(&raw_multiaddr) {

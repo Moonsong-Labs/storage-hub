@@ -29,16 +29,20 @@ thiserror = { workspace = true }
 frame-system = { workspace = true }
 frame-benchmarking = { workspace = true }
 frame-support = { workspace = true }
+pallet-transaction-payment-rpc = { workspace = true }
 sc-client-api = { workspace = true }
 sc-executor = { workspace = true }
 sc-network = { workspace = true }
 sc-service = { workspace = true }
+sp-api = { workspace = true }
+sp-block-builder = { workspace = true }
 sp-core = { workspace = true }
 sp-blockchain = { workspace = true }
 sp-trie = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }
 sp-std = { workspace = true }
+substrate-frame-rpc-system = { workspace = true }
 
 # Polkadot
 polkadot-primitives = { workspace = true }
@@ -53,12 +57,17 @@ shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
 shp-traits = { workspace = true }
+shp-opaque = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }
+pallet-file-system-runtime-api = { workspace = true }
 pallet-payment-streams = { workspace = true }
+pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
+pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
+pallet-storage-providers-runtime-api = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -77,7 +86,6 @@ std = [
 	"sp-std/std",
 	"trie-db/std",
 	"polkadot-primitives/std",
-	"storage-hub-runtime/std",
 	"shp-constants/std",
 	"shp-file-key-verifier/std",
 	"shp-file-metadata/std",

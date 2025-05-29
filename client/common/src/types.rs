@@ -4,17 +4,20 @@ use std::{
 };
 
 use codec::{Decode, Encode};
-use frame_system::EventRecord;
+use frame_system::{Config, EventRecord};
 use sc_executor::WasmExecutor;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
+use shp_opaque::Block;
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
+use sp_runtime::traits::BlakeTwo256;
 use sp_runtime::{traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
-use storage_hub_runtime::{apis::RuntimeApi, opaque::Block, Runtime};
+use sp_trie::LayoutV1;
+use storage_hub_runtime::Runtime;
 use trie_db::TrieLayout;
 
 /// Size of each batch in bytes (2 MiB)
@@ -36,61 +39,57 @@ pub type Fingerprint = shp_file_metadata::Fingerprint<H_LENGTH>;
 pub type FileMetadata =
     shp_file_metadata::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
 pub type FileKey = shp_file_metadata::FileKey<H_LENGTH>;
-pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
-pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
-pub type StorageData = pallet_file_system::types::StorageDataUnit<Runtime>;
-pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
-pub type StorageRequestMspBucketResponse =
-    pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;
-pub type StorageRequestMspResponse = pallet_file_system::types::StorageRequestMspResponse<Runtime>;
-pub type MaxUsersToCharge = pallet_payment_streams::types::MaxUsersToChargeFor<Runtime>;
+pub type BlockNumber<T> = frame_system::pallet_prelude::BlockNumberFor<T>;
+pub type TickNumber<T> = pallet_file_system::types::TickNumber<T>;
+pub type StorageData<T> = pallet_file_system::types::StorageDataUnit<T>;
+pub type FileLocation<T> = pallet_file_system::types::FileLocation<T>;
+pub type StorageRequestMspBucketResponse<T> =
+    pallet_file_system::types::StorageRequestMspBucketResponse<T>;
+pub type StorageRequestMspResponse<T> = pallet_file_system::types::StorageRequestMspResponse<T>;
+pub type MaxUsersToCharge<T> = pallet_payment_streams::types::MaxUsersToChargeFor<T>;
 pub type RejectedStorageRequestReason = pallet_file_system::types::RejectedStorageRequestReason;
-pub type RejectedStorageRequest = pallet_file_system::types::RejectedStorageRequest<Runtime>;
-pub type StorageRequestMspAcceptedFileKeys =
-    pallet_file_system::types::StorageRequestMspAcceptedFileKeys<Runtime>;
-pub type FileKeyWithProof = pallet_file_system::types::FileKeyWithProof<Runtime>;
-pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
-pub type BucketId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
-pub type ValuePropId = pallet_storage_providers::types::ValuePropId<Runtime>;
-pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
-pub type BackupStorageProviderId =
-    pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
-pub type MainStorageProviderId = pallet_storage_providers::types::MainStorageProviderId<Runtime>;
-pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
-pub type ProofsDealerProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
-pub type Multiaddresses = pallet_storage_providers::types::Multiaddresses<Runtime>;
-pub type MultiAddress = pallet_storage_providers::types::MultiAddress<Runtime>;
-pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
-pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
-pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
-pub type CustomChallenge = pallet_proofs_dealer::types::CustomChallenge<Runtime>;
+pub type RejectedStorageRequest<T> = pallet_file_system::types::RejectedStorageRequest<T>;
+pub type StorageRequestMspAcceptedFileKeys<T> =
+    pallet_file_system::types::StorageRequestMspAcceptedFileKeys<T>;
+pub type FileKeyWithProof<T> = pallet_file_system::types::FileKeyWithProof<T>;
+pub type PeerIds<T> = pallet_file_system::types::PeerIds<T>;
+pub type BucketId<T> = pallet_storage_providers::types::ProviderIdFor<T>;
+pub type ValuePropId<T> = pallet_storage_providers::types::ValuePropId<T>;
+pub type StorageProviderId<T> = pallet_storage_providers::types::StorageProviderId<T>;
+pub type BackupStorageProviderId<T> = pallet_storage_providers::types::BackupStorageProviderId<T>;
+pub type BackupStorageProviderInfo<T> = pallet_storage_providers::types::BackupStorageProvider<T>;
+pub type MainStorageProviderId<T> = pallet_storage_providers::types::MainStorageProviderId<T>;
+pub type ProviderId<T> = pallet_storage_providers::types::ProviderIdFor<T>;
+pub type ProofsDealerProviderId<T> = pallet_proofs_dealer::types::ProviderIdFor<T>;
+pub type Multiaddresses<T> = pallet_storage_providers::types::Multiaddresses<T>;
+pub type MultiAddress<T> = pallet_storage_providers::types::MultiAddress<T>;
+pub type RandomnessOutput<T> = pallet_proofs_dealer::types::RandomnessOutputFor<T>;
+pub type ForestLeaf<T> = pallet_proofs_dealer::types::KeyFor<T>;
+pub type ForestRoot<T> = pallet_proofs_dealer::types::ForestRootFor<T>;
+pub type CustomChallenge<T> = pallet_proofs_dealer::types::CustomChallenge<T>;
 pub type TrieMutation = shp_traits::TrieMutation;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
 pub type TrieAddMutation = shp_traits::TrieAddMutation;
-pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
-pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
-pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;
-pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
-pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
-pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
-pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
+pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
+pub type StorageProof<T> = pallet_proofs_dealer::types::Proof<T>;
+pub type ForestVerifierProof<T> = pallet_proofs_dealer::types::ForestVerifierProofFor<T>;
+pub type KeyProof<T> = pallet_proofs_dealer::types::KeyProof<T>;
+pub type KeyProofs<T> = BTreeMap<ForestLeaf<T>, KeyProof<T>>;
+pub type Balance<T> = pallet_storage_providers::types::BalanceOf<T>;
+pub type OpaqueBlock = shp_opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
-pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
-pub type StorageRequestMetadata = pallet_file_system::types::StorageRequestMetadata<Runtime>;
-pub type MaxBatchConfirmStorageRequests =
-    <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
+pub type PeerId<T> = pallet_file_system::types::PeerId<T>;
+pub type StorageRequestMetadata<T> = pallet_file_system::types::StorageRequestMetadata<T>;
+pub type MaxBatchConfirmStorageRequests<T> =
+    <T as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
+pub type ValuePropositionWithId<T> = pallet_storage_providers::types::ValuePropositionWithId<T>;
 
 /// Type alias for the events vector.
 ///
 /// The events vector is a storage element in the FRAME system pallet, which stores all the events
 /// that have occurred in a block. This is syntactic sugar to make the code more readable.
-pub type StorageHubEventsVec = Vec<
-    Box<
-        EventRecord<
-            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
-            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
-        >,
-    >,
+pub type StorageHubEventsVec<T> = Vec<
+    Box<EventRecord<<T as frame_system::Config>::RuntimeEvent, <T as frame_system::Config>::Hash>>,
 >;
 
 #[cfg(not(feature = "runtime-benchmarks"))]

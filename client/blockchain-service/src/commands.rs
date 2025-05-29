@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use sp_api::ApiError;
 use sp_core::H256;
 
@@ -21,14 +22,12 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_derive::actor_command;
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::OpaqueBlock;
 use shc_common::types::{
     BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf, MainStorageProviderId,
     ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId,
     TickNumber,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use sp_api::ProvideRuntimeApi;
 use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use crate::{
@@ -46,7 +45,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 
 /// Commands that can be sent to the BlockchainService actor.
 #[actor_command(
-    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,>,
+    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>>,
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 )]
@@ -219,7 +218,8 @@ impl<FSH, RuntimeApi> BlockchainServiceCommandInterfaceExt
     for ActorHandle<BlockchainService<FSH, RuntimeApi>>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {

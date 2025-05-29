@@ -17,15 +17,15 @@ use cumulus_client_parachain_inherent::{MockValidationDataInherentDataProvider, 
 use polkadot_primitives::{BlakeTwo256, HashT, HeadData};
 use sc_consensus_manual_seal::consensus::aura::AuraConsensusDataProvider;
 use shc_actors_framework::actor::TaskSpawner;
-use shc_common::types::{BlockHash, OpaqueBlock, BCSV_KEY_TYPE};
+use shc_common::types::*;
 use shc_rpc::StorageHubClientRpcConfig;
+use sp_blockchain::HeaderBackend;
 use sp_consensus_aura::Slot;
 use sp_core::H256;
+
 // Local Runtime Types
-use storage_hub_runtime::{
-    apis::RuntimeApi,
-    opaque::{Block, Hash},
-};
+use storage_hub_runtime::opaque::Block;
+use storage_hub_runtime::{apis::RuntimeApi, opaque::Hash};
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
@@ -45,7 +45,7 @@ use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 use cumulus_primitives_core::CollectCollationInfo;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
 use polkadot_primitives::UpgradeGoAhead;
-use sc_client_api::{Backend, HeaderBackend};
+use sc_client_api::Backend;
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
 use sc_network::{
@@ -216,14 +216,14 @@ async fn init_sh_builder<R, S>(
     keystore: KeystorePtr,
     maybe_db_pool: Option<DbPool>,
 ) -> Option<(
-    StorageHubBuilder<R, S>,
+    StorageHubBuilder<R, S, RuntimeApi>,
     StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH>,
 )>
 where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder,
+    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder,
 {
     match provider_options {
         Some(ProviderOptions {
@@ -249,7 +249,7 @@ where
 
             // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "sh-builder");
-            let mut storage_hub_builder = StorageHubBuilder::<R, S>::new(task_spawner);
+            let mut storage_hub_builder = StorageHubBuilder::<R, S, RuntimeApi>::new(task_spawner);
 
             // Setup and spawn the File Transfer Service.
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
@@ -301,7 +301,7 @@ where
 }
 
 async fn finish_sh_builder_and_run_tasks<R, S>(
-    mut sh_builder: StorageHubBuilder<R, S>,
+    mut sh_builder: StorageHubBuilder<R, S, RuntimeApi>,
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
@@ -312,8 +312,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
-    StorageHubHandler<(R, S)>: RunnableTasks,
+    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
+    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
 {
     let rocks_db_path = rocksdb_root_path.into();
 
@@ -353,8 +353,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
-    StorageHubHandler<(R, S)>: RunnableTasks,
+    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
+    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
@@ -785,8 +785,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
-    StorageHubHandler<(R, S)>: RunnableTasks,
+    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
+    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let sc_service::PartialComponents {
@@ -980,8 +980,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
-    StorageHubHandler<(R, S)>: RunnableTasks,
+    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
+    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     // Check if we're in maintenance mode and build the node in maintenance mode if so
@@ -1262,8 +1262,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S>: StorageLayerBuilder + Buildable<(R, S)>,
-    StorageHubHandler<(R, S)>: RunnableTasks,
+    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
+    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);
