@@ -1,4 +1,5 @@
 use log::{debug, error, info, trace};
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use std::sync::Arc;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
@@ -12,7 +13,6 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
 };
 use shc_actors_framework::actor::Actor;
-use shc_common::types::OpaqueBlock;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -41,7 +41,8 @@ use crate::{
 impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
     ///

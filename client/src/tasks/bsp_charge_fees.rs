@@ -11,6 +11,7 @@ use shc_blockchain_service::{
     },
     types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
@@ -65,22 +66,26 @@ impl Default for BspChargeFeesConfig {
 /// This flow works because the result of correctly deleting a file in the handler of the [`ProcessStopStoringForInsolventUserRequest`]
 /// is the runtime event [`SpStopStoringInsolventUser`], which triggers the handler of the [`SpStopStoringInsolventUser`] event and continues
 /// the file deletion flow until no more files from that user are stored.
-pub struct BspChargeFeesTask<NT>
+pub struct BspChargeFeesTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    storage_hub_handler: StorageHubHandler<NT>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
     /// Configuration for this task
     config: BspChargeFeesConfig,
 }
 
-impl<NT> Clone for BspChargeFeesTask<NT>
+impl<NT, RuntimeApi> Clone for BspChargeFeesTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    fn clone(&self) -> BspChargeFeesTask<NT> {
+    fn clone(&self) -> BspChargeFeesTask<NT, RuntimeApi> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             config: self.config.clone(),
@@ -88,10 +93,12 @@ where
     }
 }
 
-impl<NT> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<NT>
+impl<NT, RuntimeApi> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: LastChargeableInfoUpdated) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
@@ -141,10 +148,12 @@ where
     }
 }
 
-impl<NT> EventHandler<UserWithoutFunds> for BspChargeFeesTask<NT>
+impl<NT, RuntimeApi> EventHandler<UserWithoutFunds> for BspChargeFeesTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: UserWithoutFunds) -> anyhow::Result<()> {
         info!(
@@ -188,10 +197,12 @@ where
     }
 }
 
-impl<NT> EventHandler<SpStopStoringInsolventUser> for BspChargeFeesTask<NT>
+impl<NT, RuntimeApi> EventHandler<SpStopStoringInsolventUser> for BspChargeFeesTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: SpStopStoringInsolventUser) -> anyhow::Result<()> {
         info!(
@@ -239,10 +250,13 @@ where
 ///
 /// This event is triggered whenever a Forest write-lock can be acquired to process a `StopStoringForInsolventUserRequest`
 /// after receiving either a `UserWithoutFunds` or `SpStopStoringInsolventUser` event.
-impl<NT> EventHandler<ProcessStopStoringForInsolventUserRequest> for BspChargeFeesTask<NT>
+impl<NT, RuntimeApi> EventHandler<ProcessStopStoringForInsolventUserRequest>
+    for BspChargeFeesTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(
         &mut self,
@@ -366,12 +380,14 @@ where
     }
 }
 
-impl<NT> BspChargeFeesTask<NT>
+impl<NT, RuntimeApi> BspChargeFeesTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             config: storage_hub_handler.provider_config.bsp_charge_fees.clone(),

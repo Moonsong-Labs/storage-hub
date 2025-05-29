@@ -9,6 +9,7 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, events::NewStorageRequest,
     types::SendExtrinsicOptions,
 };
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 
 use crate::{
     handler::StorageHubHandler,
@@ -17,42 +18,50 @@ use crate::{
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
-pub struct BspVolunteerMockTask<NT>
+pub struct BspVolunteerMockTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    storage_hub_handler: StorageHubHandler<NT>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
 }
 
-impl<NT> Clone for BspVolunteerMockTask<NT>
+impl<NT, RuntimeApi> Clone for BspVolunteerMockTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    fn clone(&self) -> BspVolunteerMockTask<NT> {
+    fn clone(&self) -> BspVolunteerMockTask<NT, RuntimeApi> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT> BspVolunteerMockTask<NT>
+impl<NT, RuntimeApi> BspVolunteerMockTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT> EventHandler<NewStorageRequest> for BspVolunteerMockTask<NT>
+impl<NT, RuntimeApi> EventHandler<NewStorageRequest> for BspVolunteerMockTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(

@@ -13,13 +13,12 @@ use std::{path::PathBuf, sync::Arc};
 
 use handler::BlockchainServiceConfig;
 use sc_service::RpcHandlers;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::types::OpaqueBlock;
 use shc_common::types::ParachainClient;
-use sp_api::ProvideRuntimeApi;
 
 pub use self::handler::BlockchainService;
 
@@ -37,7 +36,8 @@ pub async fn spawn_blockchain_service<FSH, RuntimeApi>(
 ) -> ActorHandle<BlockchainService<FSH, RuntimeApi>>
 where
     FSH: shc_forest_manager::traits::ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     let task_spawner = task_spawner
         .with_name("blockchain-service")

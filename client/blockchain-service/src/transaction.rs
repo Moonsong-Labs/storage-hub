@@ -5,12 +5,11 @@ use std::{
 
 use log::{debug, error, info};
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::OpaqueBlock;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::StorageHubEventsVec;
 use shc_forest_manager::traits::ForestStorageHandler;
-use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
-use tokio::{runtime::Runtime, sync::mpsc::Receiver};
+use tokio::sync::mpsc::Receiver;
 
 use crate::{
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
@@ -69,7 +68,8 @@ impl SubmittedTransaction {
     ) -> Result<(), WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-        RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+        RuntimeApi: StorageEnableRuntimeApi,
+        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
@@ -114,7 +114,8 @@ impl SubmittedTransaction {
     ) -> Result<StorageHubEventsVec, WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-        RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+        RuntimeApi: StorageEnableRuntimeApi,
+        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
@@ -153,7 +154,8 @@ impl SubmittedTransaction {
     ) -> Result<Extrinsic, WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-        RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+        RuntimeApi: StorageEnableRuntimeApi,
+        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     {
         let block_hash;
         let start_time = Instant::now();

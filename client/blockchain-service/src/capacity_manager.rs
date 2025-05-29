@@ -10,7 +10,8 @@ use sp_core::H256;
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
-use shc_common::types::{BlockNumber, OpaqueBlock, StorageData};
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::types::{BlockNumber, StorageData};
 use shc_forest_manager::traits::ForestStorageHandler;
 
 use crate::{
@@ -227,7 +228,8 @@ impl CapacityRequestData {
 impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: ProvideRuntimeApi<OpaqueBlock> + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     /// Queue a capacity request.
     ///
