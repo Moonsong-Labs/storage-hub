@@ -22,6 +22,7 @@ use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
+use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -121,7 +122,7 @@ pub enum RemoveFilesFromForestStorageResult {
 /// TODO: After adding maintenance mode, make some RPC calls (such as `remove_files_from_file_storage`)
 /// only available in maintenance mode.
 #[rpc(server, namespace = "storagehubclient")]
-pub trait StorageHubClientApi {
+pub trait StorageHubClientApi<T: StorageEnableRuntimeConfig> {
     #[method(name = "loadFileInStorage", with_extensions)]
     async fn load_file_in_storage(
         &self,
@@ -230,7 +231,7 @@ pub trait StorageHubClientApi {
     #[method(name = "generateFileKeyProofBspConfirm")]
     async fn generate_file_key_proof_bsp_confirm(
         &self,
-        bsp_id: BackupStorageProviderId,
+        bsp_id: BackupStorageProviderId<T>,
         file_key: H256,
     ) -> RpcResult<Vec<u8>>;
 
@@ -239,7 +240,7 @@ pub trait StorageHubClientApi {
     #[method(name = "generateFileKeyProofMspAccept")]
     async fn generate_file_key_proof_msp_accept(
         &self,
-        msp_id: MainStorageProviderId,
+        msp_id: MainStorageProviderId<T>,
         file_key: H256,
     ) -> RpcResult<Vec<u8>>;
 
@@ -296,26 +297,27 @@ where
 // file uploads, even if the file is not in its storage. So we need a way to inform the task
 // to only react to its file.
 #[async_trait]
-impl<FL, FSH, C, Block> StorageHubClientApiServer for StorageHubClientRpc<FL, FSH, C, Block>
+impl<FL, FSH, C, Block, Runtime: StorageEnableRuntimeConfig> StorageHubClientApiServer
+    for StorageHubClientRpc<FL, FSH, C, Block, Runtime>
 where
     Block: BlockT,
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
             Block,
-            ProofsDealerProviderId,
-            BlockNumber,
-            ForestLeaf,
-            RandomnessOutput,
-            CustomChallenge,
+            ProofsDealerProviderId<Runtime>,
+            BlockNumber<Runtime>,
+            ForestLeaf<Runtime>,
+            RandomnessOutput<Runtime>,
+            CustomChallenge<Runtime>,
         > + FileSystemRuntimeApi<
             Block,
-            BackupStorageProviderId,
-            MainStorageProviderId,
+            BackupStorageProviderId<Runtime>,
+            MainStorageProviderId<Runtime>,
             H256,
-            BlockNumber,
+            BlockNumber<Runtime>,
             ChunkId,
-            BucketId,
-            StorageRequestMetadata,
+            BucketId<Runtime>,
+            StorageRequestMetadata<Runtime>,
         >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
@@ -825,7 +827,7 @@ where
 
     async fn generate_file_key_proof_bsp_confirm(
         &self,
-        bsp_id: BackupStorageProviderId,
+        bsp_id: BackupStorageProviderId<Runtime>,
         file_key: H256,
     ) -> RpcResult<Vec<u8>> {
         // Getting Runtime APIs
@@ -854,7 +856,7 @@ where
 
     async fn generate_file_key_proof_msp_accept(
         &self,
-        msp_id: MainStorageProviderId,
+        msp_id: MainStorageProviderId<Runtime>,
         file_key: H256,
     ) -> RpcResult<Vec<u8>> {
         // Getting Runtime APIs
@@ -990,25 +992,25 @@ fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
     )
 }
 
-async fn generate_key_proof<FL, C, Block>(
+async fn generate_key_proof<FL, C, Block, Runtime: StorageEnableRuntimeConfig>(
     client: Arc<C>,
     file_storage: Arc<RwLock<FL>>,
     file_key: H256,
-    provider_id: ProofsDealerProviderId,
-    seed: Option<RandomnessOutput>,
+    provider_id: ProofsDealerProviderId<Runtime>,
+    seed: Option<RandomnessOutput<Runtime>>,
     at: Option<Block::Hash>,
     chunks_to_prove: Option<Vec<ChunkId>>,
-) -> RpcResult<KeyProof>
+) -> RpcResult<KeyProof<Runtime>>
 where
     Block: BlockT,
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
         Block,
-        ProofsDealerProviderId,
-        BlockNumber,
-        ForestLeaf,
-        RandomnessOutput,
-        CustomChallenge,
+        ProofsDealerProviderId<Runtime>,
+        BlockNumber<Runtime>,
+        ForestLeaf<Runtime>,
+        RandomnessOutput<Runtime>,
+        CustomChallenge<Runtime>,
     >,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
 {

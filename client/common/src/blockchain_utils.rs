@@ -10,7 +10,7 @@ use sc_client_api::{backend::StorageProvider, StorageKey};
 use sp_core::H256;
 
 use crate::{
-    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
+    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi, StorageEnableRuntimeConfig},
     types::{Multiaddresses, ParachainClient, StorageHubEventsVec},
 };
 
@@ -42,10 +42,7 @@ pub enum EventsRetrievalError {
 /// Get the events storage element for a given block.
 pub fn get_events_at_block<
     RuntimeApi: StorageEnableRuntimeApi,
-    Runtime: pallet_file_system::Config
-        + pallet_storage_providers::Config
-        + pallet_proofs_dealer::Config
-        + pallet_storage_providers::Config,
+    Runtime: StorageEnableRuntimeConfig,
 >(
     client: &Arc<ParachainClient<RuntimeApi>>,
     block_hash: &H256,
@@ -66,12 +63,7 @@ where
 /// Attempt to convert BoundedVec of BoundedVecs of bytes.
 ///
 /// Returns a list of [`Multiaddr`] objects that have successfully been parsed from the raw bytes.
-pub fn convert_raw_multiaddresses_to_multiaddr<
-    Runtime: pallet_file_system::Config
-        + pallet_storage_providers::Config
-        + pallet_proofs_dealer::Config
-        + pallet_storage_providers::Config,
->(
+pub fn convert_raw_multiaddresses_to_multiaddr<Runtime: StorageEnableRuntimeConfig>(
     multiaddresses: Multiaddresses<Runtime>,
 ) -> Vec<Multiaddr> {
     let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();

@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntimeApi, StorageEnableRuntimeConfig,
+};
 use sp_api::ApiError;
 use sp_core::H256;
 
@@ -28,7 +30,7 @@ use shc_common::types::{
     TickNumber,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
+use tokio::runtime::Runtime;
 
 use crate::{
     capacity_manager::CapacityRequestData,
@@ -45,11 +47,11 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 
 /// Commands that can be sent to the BlockchainService actor.
 #[actor_command(
-    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>>,
+    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection<Runtime>>>,
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 )]
-pub enum BlockchainServiceCommand {
+pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntimeConfig> {
     #[command(success_type = SubmittedTransaction)]
     SendExtrinsic {
         call: storage_hub_runtime::RuntimeCall,
@@ -67,44 +69,44 @@ pub enum BlockchainServiceCommand {
     GetBestBlockInfo,
     #[command(mode = "AsyncResponse")]
     WaitForBlock {
-        block_number: BlockNumber,
+        block_number: BlockNumber<Runtime>,
     },
     #[command(mode = "AsyncResponse")]
     WaitForNumBlocks {
-        number_of_blocks: BlockNumber,
+        number_of_blocks: BlockNumber<Runtime>,
     },
     #[command(mode = "AsyncResponse", error_type = ApiError)]
     WaitForTick {
-        tick_number: TickNumber,
+        tick_number: TickNumber<Runtime>,
     },
     #[command(success_type = bool, error_type = IsStorageRequestOpenToVolunteersError)]
     IsStorageRequestOpenToVolunteers {
         file_key: H256,
     },
-    #[command(success_type = BlockNumber, error_type = QueryFileEarliestVolunteerTickError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = QueryFileEarliestVolunteerTickError)]
     QueryFileEarliestVolunteerTick {
-        bsp_id: ProviderId,
+        bsp_id: ProviderId<Runtime>,
         file_key: H256,
     },
-    #[command(success_type = BlockNumber, error_type = QueryEarliestChangeCapacityBlockError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = QueryEarliestChangeCapacityBlockError)]
     QueryEarliestChangeCapacityBlock {
-        bsp_id: ProviderId,
+        bsp_id: ProviderId<Runtime>,
     },
     #[command(success_type = sp_core::sr25519::Public)]
     GetNodePublicKey,
     #[command(success_type = Vec<ChunkId>, error_type = QueryBspConfirmChunksToProveForFileError)]
     QueryBspConfirmChunksToProveForFile {
-        bsp_id: ProofsDealerProviderId,
+        bsp_id: ProofsDealerProviderId<Runtime>,
         file_key: H256,
     },
     #[command(success_type = Vec<ChunkId>, error_type = QueryMspConfirmChunksToProveForFileError)]
     QueryMspConfirmChunksToProveForFile {
-        msp_id: ProofsDealerProviderId,
+        msp_id: ProofsDealerProviderId<Runtime>,
         file_key: H256,
     },
     #[command(success_type = Vec<Multiaddr>, error_type = QueryProviderMultiaddressesError)]
     QueryProviderMultiaddresses {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
     QueueSubmitProofRequest {
         request: SubmitProofRequest,

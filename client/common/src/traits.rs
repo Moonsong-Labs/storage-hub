@@ -12,11 +12,16 @@ use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::H256;
 
+pub trait StorageEnableRuntimeConfig:
+    pallet_file_system::Config
+    + pallet_storage_providers::Config
+    + pallet_proofs_dealer::Config
+    + pallet_storage_providers::Config
+{
+}
+
 pub trait StorageEnableApiCollection<
-    Runtime: pallet_file_system::Config
-        + pallet_storage_providers::Config
-        + pallet_proofs_dealer::Config
-        + pallet_storage_providers::Config,
+    Runtime: StorageEnableRuntimeConfig
 >:
     // pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
     substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
@@ -55,14 +60,7 @@ pub trait StorageEnableApiCollection<
 {
 }
 
-impl<
-        T,
-        Runtime: pallet_file_system::Config
-            + pallet_storage_providers::Config
-            + pallet_proofs_dealer::Config
-            + pallet_storage_providers::Config,
-    > StorageEnableApiCollection<Runtime> for T
-where
+impl<T, Runtime: StorageEnableRuntimeConfig> StorageEnableApiCollection<Runtime> for T where
     T: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
         + BlockBuilder<Block>
         + ProofsDealerRuntimeApi<
@@ -95,7 +93,7 @@ where
             BucketId<Runtime>,
             Multiaddresses<Runtime>,
             ValuePropositionWithId<Runtime>,
-        > + PaymentStreamsRuntimeApi<Block, ProviderId<Runtime>, Balance<Runtime>, AccountId>,
+        > + PaymentStreamsRuntimeApi<Block, ProviderId<Runtime>, Balance<Runtime>, AccountId>
 {
 }
 

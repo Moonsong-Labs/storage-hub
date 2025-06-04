@@ -25,6 +25,17 @@ use trie_db::TrieLayout;
 /// (request-response round-trip).
 pub const BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE: usize = 2 * 1024 * 1024;
 
+pub trait StorageHubRuntime {
+    type Runtime: pallet_file_system::Config;
+    type BlockNumber;
+}
+
+// impl StorageHubRuntime for storage_hub_runtime::Runtime {
+//     type Runtime = storage_hub_runtime::Runtime;
+
+//     type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
+// }
+
 /// The hash type of trie node keys
 pub type HashT<T> = <T as TrieLayout>::Hash;
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
