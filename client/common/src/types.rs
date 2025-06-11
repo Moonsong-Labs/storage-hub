@@ -4,7 +4,7 @@ use std::{
 };
 
 use codec::{Decode, Encode};
-use frame_system::{Config, EventRecord};
+use frame_system::EventRecord;
 use sc_executor::WasmExecutor;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
@@ -12,11 +12,9 @@ pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
 use shp_opaque::Block;
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
-use sp_runtime::traits::BlakeTwo256;
 use sp_runtime::{traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
-use sp_trie::LayoutV1;
 use storage_hub_runtime::Runtime;
 use trie_db::TrieLayout;
 
