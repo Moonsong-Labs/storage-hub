@@ -596,9 +596,6 @@ impl Ord for ForestStorageSnapshotInfo {
 pub struct BspHandler {
     /// The BSP ID.
     pub(crate) bsp_id: BackupStorageProviderId,
-    /// Pending submit proof requests. Note: this is not kept in the persistent state because of
-    /// various edge cases when restarting the node.
-    pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
     /// A set of Forest Storage snapshots, ordered by block number and block hash.
     ///
     /// A BSP can have multiple Forest Storage snapshots.
@@ -611,7 +608,6 @@ impl BspHandler {
     pub fn new(bsp_id: BackupStorageProviderId) -> Self {
         Self {
             bsp_id,
-            pending_submit_proof_requests: BTreeSet::new(),
             forest_root_snapshots: BTreeSet::new(),
         }
     }

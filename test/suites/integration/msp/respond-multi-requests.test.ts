@@ -3,6 +3,7 @@ import { describeMspNet, shUser, waitFor, type EnrichedBspApi } from "../../../u
 
 describeMspNet(
   "Single MSP accepting multiple storage requests",
+  { keepAlive: true },
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -18,7 +19,7 @@ describeMspNet(
       mspApi = maybeMspApi;
     });
 
-    it("Network launches and can be queried", async () => {
+    it.only("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -26,7 +27,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("User submits 3 storage requests in the same bucket", async () => {
+    it.only("User submits 3 storage requests in the same bucket", async () => {
       // Get value propositions form the MSP to use, and use the first one (can be any).
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
@@ -70,7 +71,7 @@ describeMspNet(
       await userApi.block.seal({ calls: txs, signer: shUser });
     });
 
-    it("MSP receives files from user and accepts them", async () => {
+    it.only("MSP receives files from user and accepts them", async () => {
       // Get the events of the storage requests to extract the file keys and check
       // that the MSP received them.
       const events = await userApi.assert.eventMany("fileSystem", "NewStorageRequest");

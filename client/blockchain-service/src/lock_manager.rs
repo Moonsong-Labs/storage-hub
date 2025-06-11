@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use tokio::sync::{oneshot, RwLock, Semaphore};
 
-use sc_tracing::tracing::{debug, error, trace};
+use sc_tracing::tracing::{error, trace, warn};
 
 use crate::handler::LOG_TARGET;
 
@@ -123,9 +123,9 @@ impl ForestRootWriteTicket {
                 let mut state = self.state.write().await;
                 state.is_active = true;
 
-                debug!(
+                warn!(
                     target: LOG_TARGET,
-                    "Ticket with priority {} acquired lock",
+                    "[LOCK_MANAGER] Ticket with priority {} acquired lock",
                     self.priority
                 );
 
@@ -145,18 +145,20 @@ impl ForestRootWriteTicket {
 
     /// Mark this ticket as inactive (release the lock)
     async fn release(&self) {
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] Releasing lock START");
         let mut state = self.state.write().await;
         if state.is_active {
             state.is_active = false;
-            debug!(
+            warn!(
                 target: LOG_TARGET,
-                "Ticket with priority {} released lock",
+                "[LOCK_MANAGER] Ticket with priority {} released lock",
                 self.priority
             );
 
             // Notify the manager that this ticket has been released
             self.manager.notify_lock_released().await;
         }
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] Releasing lock END");
     }
 }
 
@@ -217,6 +219,7 @@ impl ForestRootWriteLockManager {
 
     /// Try to process the next ticket in the queue
     pub async fn process_next_ticket(&self) {
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] Process next ticket START");
         // We use a loop to avoid recursion
         let mut should_continue = true;
 
@@ -246,6 +249,7 @@ impl ForestRootWriteLockManager {
             // Check if we need to continue (set to false by default)
             should_continue = false;
         }
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] Process next ticket END");
     }
 
     /// Try to assign the lock to the next ticket
@@ -255,9 +259,12 @@ impl ForestRootWriteLockManager {
             Ok(permit) => permit,
             Err(_) => {
                 // Lock is already taken
+                warn!(target: LOG_TARGET, "[LOCK_MANAGER] Lock already taken");
                 return;
             }
         };
+
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] Acquired lock");
 
         // Find the highest priority ticket
         let next_ticket = {
@@ -275,6 +282,8 @@ impl ForestRootWriteLockManager {
                 ticket
             }
         };
+
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] Next ticket: {:?}", next_ticket);
 
         match next_ticket {
             Some(ticket) => {
@@ -318,8 +327,15 @@ impl ForestRootWriteLockManager {
 
     /// Notify the manager that a lock has been released
     async fn notify_lock_released(&self) {
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] Notify lock released START");
         // Try to process the next ticket
         self.process_next_ticket().await;
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] Notify lock released END");
+    }
+
+    /// Check if the lock is available without acquiring it
+    pub fn is_lock_available(&self) -> bool {
+        self.lock.available_permits() > 0
     }
 }
 

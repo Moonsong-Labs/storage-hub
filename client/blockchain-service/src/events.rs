@@ -11,7 +11,8 @@ use shc_common::types::{
 };
 
 use crate::{
-    lock_manager::ForestRootWriteTicket,
+    handler::Priorities,
+    lock_manager::{ForestRootWriteTicket, PriorityValue},
     types::{
         ConfirmStoringRequest, FileDeletionRequest as FileDeletionRequestType,
         RespondStorageRequest,
@@ -108,19 +109,6 @@ pub enum ForestWriteLockTaskData {
     FileDeletionRequest(ProcessFileDeletionRequestData),
 }
 
-impl ForestWriteLockTaskData {
-    /// Returns the priority value for this task type
-    pub fn priority(&self) -> crate::lock_manager::PriorityValue {
-        match self {
-            Self::SubmitProofRequest(_) => crate::handler::Priorities::SUBMIT_PROOF,
-            Self::ConfirmStoringRequest(_) => crate::handler::Priorities::CONFIRM_STORING,
-            Self::FileDeletionRequest(_) => crate::handler::Priorities::FILE_DELETION,
-            Self::MspRespondStorageRequest(_) => crate::handler::Priorities::RESPOND_STORAGE,
-            Self::StopStoringForInsolventUserRequest(_) => crate::handler::Priorities::STOP_STORING,
-        }
-    }
-}
-
 impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
     fn from(data: ProcessSubmitProofRequestData) -> Self {
         Self::SubmitProofRequest(data)
@@ -148,6 +136,53 @@ impl From<ProcessStopStoringForInsolventUserRequestData> for ForestWriteLockTask
 impl From<ProcessFileDeletionRequestData> for ForestWriteLockTaskData {
     fn from(data: ProcessFileDeletionRequestData) -> Self {
         Self::FileDeletionRequest(data)
+    }
+}
+
+pub trait ForestWriteLockTaskPriority {
+    fn priority(&self) -> PriorityValue;
+}
+
+impl ForestWriteLockTaskPriority for ForestWriteLockTaskData {
+    /// Returns the priority value for this task type
+    fn priority(&self) -> PriorityValue {
+        match self {
+            Self::SubmitProofRequest(_) => Priorities::SUBMIT_PROOF,
+            Self::ConfirmStoringRequest(_) => Priorities::CONFIRM_STORING,
+            Self::FileDeletionRequest(_) => Priorities::FILE_DELETION,
+            Self::MspRespondStorageRequest(_) => Priorities::MSP_RESPOND_STORAGE,
+            Self::StopStoringForInsolventUserRequest(_) => Priorities::STOP_STORING,
+        }
+    }
+}
+
+impl ForestWriteLockTaskPriority for ProcessSubmitProofRequestData {
+    fn priority(&self) -> PriorityValue {
+        Priorities::SUBMIT_PROOF
+    }
+}
+
+impl ForestWriteLockTaskPriority for ProcessConfirmStoringRequestData {
+    fn priority(&self) -> PriorityValue {
+        Priorities::CONFIRM_STORING
+    }
+}
+
+impl ForestWriteLockTaskPriority for ProcessMspRespondStoringRequestData {
+    fn priority(&self) -> PriorityValue {
+        Priorities::MSP_RESPOND_STORAGE
+    }
+}
+
+impl ForestWriteLockTaskPriority for ProcessStopStoringForInsolventUserRequestData {
+    fn priority(&self) -> PriorityValue {
+        Priorities::STOP_STORING
+    }
+}
+
+impl ForestWriteLockTaskPriority for ProcessFileDeletionRequestData {
+    fn priority(&self) -> PriorityValue {
+        Priorities::FILE_DELETION
     }
 }
 

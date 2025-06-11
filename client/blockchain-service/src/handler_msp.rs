@@ -8,10 +8,7 @@ use sp_core::H256;
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
-use shc_common::{
-    typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BlockHash, BlockNumber, Fingerprint, ProviderId, StorageRequestMetadata},
-};
+use shc_common::types::{BlockHash, BlockNumber, Fingerprint, ProviderId, StorageRequestMetadata};
 use shc_forest_manager::traits::ForestStorageHandler;
 use storage_hub_runtime::RuntimeEvent;
 
@@ -19,23 +16,15 @@ use crate::{
     events::{
         FileDeletionRequest, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
         FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
-        ForestWriteLockTaskData, MoveBucketRequestedForMsp, NewStorageRequest,
-        ProcessFileDeletionRequest, ProcessFileDeletionRequestData,
-        ProcessMspRespondStoringRequest, ProcessMspRespondStoringRequestData,
-        ProcessStopStoringForInsolventUserRequest, ProcessStopStoringForInsolventUserRequestData,
-        StartMovedBucketDownload,
+        MoveBucketRequestedForMsp, NewStorageRequest, StartMovedBucketDownload,
     },
     handler::LOG_TARGET,
-    state::{
-        OngoingProcessFileDeletionRequestCf, OngoingProcessMspRespondStorageRequestCf,
-        OngoingProcessStopStoringForInsolventUserRequestCf,
-    },
     types::ManagedProvider,
     BlockchainService,
 };
 
 // TODO: Make this configurable in the config file
-const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
+pub(crate) const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
 impl<FSH> BlockchainService<FSH>
 where
@@ -249,121 +238,6 @@ where
         }
     }
 
-    /// TODO: UPDATE THIS FUNCTION TO HANDLE FOREST WRITE LOCKS PER-BUCKET, AND UPDATE DOCS.
-    /// Check if there are any pending requests to update the Forest root on the runtime, and process them.
-    ///
-    /// The priority is given by:
-    /// 1. `FileDeletionRequest` over...
-    /// 2. `RespondStorageRequest` over...
-    /// 3. `StopStoringForInsolventUserRequest`.
-    ///
-    /// This function is called every time a new block is imported and after each request is queued.
-    ///
-    /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
-    pub(crate) fn msp_assign_forest_root_write_lock(&mut self) {
-        // Skip if the latest processed block doesn't match the current best block
-        if !self.is_latest_processed_block_current() {
-            return;
-        }
-
-        match &self.maybe_managed_provider {
-            Some(ManagedProvider::Msp(_)) => {}
-            _ => {
-                error!(target: LOG_TARGET, "`msp_check_pending_forest_root_writes` should only be called if the node is managing a MSP. Found [{:?}] instead.", self.maybe_managed_provider);
-                return;
-            }
-        };
-
-        // Open the state store context and extract all pending requests
-        let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-
-        // Extract pending file deletion requests
-        let max_batch_delete: u32 = 1;
-        let mut file_deletion_requests = Vec::new();
-        for _ in 0..max_batch_delete {
-            if let Some(request) = state_store_context
-                .pending_file_deletion_request_deque()
-                .pop_front()
-            {
-                file_deletion_requests.push(request);
-            } else {
-                break;
-            }
-        }
-
-        // Extract pending respond storage requests
-        let max_batch_respond = MAX_BATCH_MSP_RESPOND_STORE_REQUESTS;
-        let mut respond_storage_requests = Vec::new();
-        if file_deletion_requests.is_empty() {
-            for _ in 0..max_batch_respond {
-                if let Some(request) = state_store_context
-                    .pending_msp_respond_storage_request_deque()
-                    .pop_front()
-                {
-                    respond_storage_requests.push(request);
-                } else {
-                    break;
-                }
-            }
-        }
-
-        // Extract pending stop storing requests
-        let pending_stop_storing_request =
-            if file_deletion_requests.is_empty() && respond_storage_requests.is_empty() {
-                state_store_context
-                    .pending_stop_storing_for_insolvent_user_request_deque()
-                    .pop_front()
-            } else {
-                None
-            };
-
-        // Commit the changes to the state store
-        state_store_context.commit();
-
-        // Process file deletion requests if any
-        if !file_deletion_requests.is_empty() {
-            let task_data: crate::events::ForestWriteLockTaskData =
-                ProcessFileDeletionRequestData {
-                    file_deletion_requests,
-                }
-                .into();
-
-            self.msp_emit_forest_write_event(task_data);
-
-            // Process the forest root write queue after adding a new task
-            self.process_forest_root_write_queue();
-
-            return;
-        }
-
-        // Process respond storage requests if any
-        if !respond_storage_requests.is_empty() {
-            let task_data: crate::events::ForestWriteLockTaskData =
-                ProcessMspRespondStoringRequestData {
-                    respond_storing_requests: respond_storage_requests,
-                }
-                .into();
-
-            self.msp_emit_forest_write_event(task_data);
-
-            // Process the forest root write queue after adding a new task
-            self.process_forest_root_write_queue();
-
-            return;
-        }
-
-        // Process stop storing request if any
-        if let Some(request) = pending_stop_storing_request {
-            let task_data: crate::events::ForestWriteLockTaskData =
-                ProcessStopStoringForInsolventUserRequestData { who: request.user }.into();
-
-            self.msp_emit_forest_write_event(task_data);
-
-            // Process the forest root write queue after adding a new task
-            self.process_forest_root_write_queue();
-        }
-    }
-
     pub(crate) async fn msp_process_forest_root_changing_events(
         &self,
         block_hash: &BlockHash,
@@ -468,64 +342,6 @@ where
                 info!(target: LOG_TARGET, "🌳 New local Forest root matches the one in the block for Bucket [{:?}]", bucket_id);
             }
             _ => {}
-        }
-    }
-
-    fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
-        let task_data = data.into();
-
-        // Get priority from the task data
-        let priority = task_data.priority();
-
-        let ticket = tokio::runtime::Handle::current()
-            .block_on(self.forest_root_lock_manager.create_ticket(priority));
-
-        match &task_data {
-            ForestWriteLockTaskData::FileDeletionRequest(data) => {
-                // Store the request in the state store for persistence
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf)
-                    .write(data);
-                state_store_context.commit();
-
-                self.emit(ProcessFileDeletionRequest {
-                    data: data.clone(),
-                    ticket,
-                });
-            }
-            ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
-                // Store the request in the state store for persistence
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
-                    .write(data);
-                state_store_context.commit();
-
-                self.emit(ProcessMspRespondStoringRequest {
-                    data: data.clone(),
-                    ticket,
-                });
-            }
-            ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                // Store the request in the state store for persistence
-                let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                state_store_context
-                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                    .write(data);
-                state_store_context.commit();
-
-                self.emit(ProcessStopStoringForInsolventUserRequest {
-                    data: data.clone(),
-                    ticket,
-                });
-            }
-            ForestWriteLockTaskData::ConfirmStoringRequest(_) => {
-                unreachable!("MSPs do not confirm storing requests the way BSPs do.")
-            }
-            ForestWriteLockTaskData::SubmitProofRequest(_) => {
-                unreachable!("MSPs do not submit proofs.")
-            }
         }
     }
 }
