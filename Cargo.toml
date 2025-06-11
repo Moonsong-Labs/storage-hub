@@ -235,6 +235,7 @@ shp-forest-verifier = { path = "primitives/forest-verifier", default-features = 
 shp-session-keys = { path = "primitives/session-keys", default-features = false }
 shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
+shp-opaque = { path = "primitives/opaque", default-features = false }
 
 
 # Lcoal - StorageHub Runtime

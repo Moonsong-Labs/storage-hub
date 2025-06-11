@@ -7,22 +7,19 @@
 
 use std::sync::Arc;
 
-use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
-use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use sc_consensus_manual_seal::{
     rpc::{ManualSeal, ManualSealApiServer},
     EngineCommand,
 };
 use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
-use shc_common::types::*;
+use shc_common::traits::StorageEnableApiCollection;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
 use sp_api::ProvideRuntimeApi;
-use sp_block_builder::BlockBuilder;
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::H256;
-use storage_hub_runtime::{opaque::Block, AccountId, Balance, Nonce};
+use storage_hub_runtime::opaque::Block;
 
 use shc_client::types::FileStorageT;
 
@@ -48,30 +45,9 @@ pub fn create_full<C, P, FL, FSH>(
 where
     C: ProvideRuntimeApi<Block>
         + HeaderBackend<Block>
-        + HeaderMetadata<Block, Error = BlockChainError>
-        + Send
-        + Sync
-        + 'static,
-    C::Api: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>,
-    C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
-    C::Api: BlockBuilder<Block>,
-    C::Api: ProofsDealerRuntimeApi<
-            Block,
-            ProofsDealerProviderId,
-            BlockNumber,
-            ForestLeaf,
-            RandomnessOutput,
-            CustomChallenge,
-        > + FileSystemRuntimeApi<
-            Block,
-            BackupStorageProviderId,
-            MainStorageProviderId,
-            H256,
-            BlockNumber,
-            ChunkId,
-            BucketId,
-            StorageRequestMetadata,
-        >,
+        + HeaderMetadata<Block, Error = BlockChainError>,
+    C: Send + Sync + 'static,
+    C::Api: StorageEnableApiCollection,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
     FSH: ForestStorageHandler + Send + Sync + 'static,

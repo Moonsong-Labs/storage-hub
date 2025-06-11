@@ -5,6 +5,8 @@ use std::{
 
 use log::{debug, error, info};
 use shc_actors_framework::actor::ActorHandle;
+use shc_common::traits::StorageEnableRuntimeConfig;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::StorageHubEventsVec;
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_core::H256;
@@ -61,17 +63,20 @@ impl SubmittedTransaction {
     /// Waits for the transaction to be included in a block AND the checks the transaction is successful.
     /// If the transaction is not included in a block within the specified timeout, it will be
     /// considered failed and an error will be returned.
-    pub async fn watch_for_success<FSH>(
+    pub async fn watch_for_success<FSH, RuntimeApi, Runtime>(
         &mut self,
-        blockchain: &ActorHandle<BlockchainService<FSH>>,
+        blockchain: &ActorHandle<BlockchainService<FSH, RuntimeApi, Runtime>>,
     ) -> Result<(), WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+        Runtime: StorageEnableRuntimeConfig,
+        RuntimeApi: StorageEnableRuntimeApi,
+        RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
     {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
         // Check if the extrinsic was successful.
-        let extrinsic_result = ActorHandle::<BlockchainService<FSH>>::extrinsic_result(extrinsic_in_block.clone())
+        let extrinsic_result = ActorHandle::<BlockchainService<FSH, RuntimeApi, Runtime>>::extrinsic_result(extrinsic_in_block.clone())
             .map_err(|_| {
               let err_msg = "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed";
               error!(target: LOG_TARGET, "{}", err_msg);
@@ -105,17 +110,20 @@ impl SubmittedTransaction {
     /// considered failed and an error will be returned.
     ///
     /// Returns the events emitted by the transaction.
-    pub async fn watch_for_success_with_events<FSH>(
+    pub async fn watch_for_success_with_events<FSH, RuntimeApi, Runtime>(
         &mut self,
-        blockchain: &ActorHandle<BlockchainService<FSH>>,
-    ) -> Result<StorageHubEventsVec, WatchTransactionError>
+        blockchain: &ActorHandle<BlockchainService<FSH, RuntimeApi, Runtime>>,
+    ) -> Result<StorageHubEventsVec<Runtime>, WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+        Runtime: StorageEnableRuntimeConfig,
+        RuntimeApi: StorageEnableRuntimeApi,
+        RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
     {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
         // Check if the extrinsic was successful.
-        let extrinsic_result = ActorHandle::<BlockchainService<FSH>>::extrinsic_result(extrinsic_in_block.clone())
+        let extrinsic_result = ActorHandle::<BlockchainService<FSH, RuntimeApi, Runtime>>::extrinsic_result(extrinsic_in_block.clone())
             .map_err(|_| {
               let err_msg = "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed";
               error!(target: LOG_TARGET, "{}", err_msg);
@@ -143,12 +151,15 @@ impl SubmittedTransaction {
         Ok(extrinsic_in_block.events)
     }
 
-    async fn watch_transaction<FSH>(
+    async fn watch_transaction<FSH, RuntimeApi, Runtime>(
         &mut self,
-        blockchain: &ActorHandle<BlockchainService<FSH>>,
-    ) -> Result<Extrinsic, WatchTransactionError>
+        blockchain: &ActorHandle<BlockchainService<FSH, RuntimeApi, Runtime>>,
+    ) -> Result<Extrinsic<Runtime>, WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+        Runtime: StorageEnableRuntimeConfig,
+        RuntimeApi: StorageEnableRuntimeApi,
+        RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
     {
         let block_hash;
         let start_time = Instant::now();

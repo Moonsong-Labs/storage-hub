@@ -26,6 +26,7 @@ use shc_blockchain_service::{
     BlockchainService,
 };
 use shc_common::consts::CURRENT_FOREST_KEY;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
@@ -83,16 +84,18 @@ pub struct ProviderConfig {
 }
 
 /// Represents the handler for the Storage Hub service.
-pub struct StorageHubHandler<NT>
+pub struct StorageHubHandler<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
     /// The actor handle for the file transfer service.
     pub file_transfer: ActorHandle<FileTransferService>,
     /// The actor handle for the blockchain service.
-    pub blockchain: ActorHandle<BlockchainService<NT::FSH>>,
+    pub blockchain: ActorHandle<BlockchainService<NT::FSH, RuntimeApi>>,
     /// The file storage layer which stores all files in chunks.
     pub file_storage: Arc<RwLock<NT::FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
@@ -107,9 +110,11 @@ where
     pub file_download_manager: Arc<FileDownloadManager>,
 }
 
-impl<NT> Debug for StorageHubHandler<NT>
+impl<NT, RuntimeApi> Debug for StorageHubHandler<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("StorageHubHandler")
@@ -118,11 +123,13 @@ where
     }
 }
 
-impl<NT> Clone for StorageHubHandler<NT>
+impl<NT, RuntimeApi> Clone for StorageHubHandler<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    fn clone(&self) -> StorageHubHandler<NT> {
+    fn clone(&self) -> StorageHubHandler<NT, RuntimeApi> {
         Self {
             task_spawner: self.task_spawner.clone(),
             file_transfer: self.file_transfer.clone(),
@@ -137,14 +144,16 @@ where
     }
 }
 
-impl<NT> StorageHubHandler<NT>
+impl<NT, RuntimeApi> StorageHubHandler<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     pub fn new(
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
-        blockchain: ActorHandle<BlockchainService<NT::FSH>>,
+        blockchain: ActorHandle<BlockchainService<NT::FSH, RuntimeApi>>,
         file_storage: Arc<RwLock<NT::FL>>,
         forest_storage_handler: NT::FSH,
         provider_config: ProviderConfig,
@@ -183,10 +192,13 @@ pub trait RunnableTasks {
     fn run_tasks(&mut self) -> impl std::future::Future<Output = ()> + Send;
 }
 
-impl<S: ShStorageLayer> RunnableTasks for StorageHubHandler<(BspProvider, S)>
+impl<S: ShStorageLayer, RuntimeApi> RunnableTasks
+    for StorageHubHandler<(BspProvider, S), RuntimeApi>
 where
     (BspProvider, S): ShNodeType + 'static,
     <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn run_tasks(&mut self) {
         self.initialise_bsp().await;
@@ -194,28 +206,35 @@ where
     }
 }
 
-impl<S: ShStorageLayer> RunnableTasks for StorageHubHandler<(MspProvider, S)>
+impl<S: ShStorageLayer, RuntimeApi> RunnableTasks
+    for StorageHubHandler<(MspProvider, S), RuntimeApi>
 where
     (MspProvider, S): ShNodeType + 'static,
     <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn run_tasks(&mut self) {
         self.start_msp_tasks();
     }
 }
 
-impl<S: ShStorageLayer> RunnableTasks for StorageHubHandler<(UserRole, S)>
+impl<S: ShStorageLayer, RuntimeApi> RunnableTasks for StorageHubHandler<(UserRole, S), RuntimeApi>
 where
     (UserRole, S): ShNodeType + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn run_tasks(&mut self) {
         self.start_user_tasks();
     }
 }
 
-impl<S> StorageHubHandler<(UserRole, S)>
+impl<S, RuntimeApi> StorageHubHandler<(UserRole, S), RuntimeApi>
 where
     (UserRole, S): ShNodeType + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     fn start_user_tasks(&self) {
         log::info!("Starting User tasks.");
@@ -240,10 +259,12 @@ where
     }
 }
 
-impl<S> StorageHubHandler<(MspProvider, S)>
+impl<S, RuntimeApi> StorageHubHandler<(MspProvider, S), RuntimeApi>
 where
     (MspProvider, S): ShNodeType + 'static,
     <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
@@ -290,10 +311,12 @@ where
     }
 }
 
-impl<S> StorageHubHandler<(BspProvider, S)>
+impl<S, RuntimeApi> StorageHubHandler<(BspProvider, S), RuntimeApi>
 where
     (BspProvider, S): ShNodeType + 'static,
     <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn initialise_bsp(&mut self) {
         // Create an empty Forest Storage instance.

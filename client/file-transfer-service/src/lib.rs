@@ -1,6 +1,7 @@
 use sc_client_api::BlockBackend;
 use sc_network::service::traits::NetworkService;
 use sc_network::ProtocolName;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,6 +9,7 @@ use sc_network::request_responses::IncomingRequest;
 use sc_network::{config::FullNetworkConfiguration, request_responses::ProtocolConfig};
 use sc_service::Configuration;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
+use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::types::{
     BlockHash, OpaqueBlock, ParachainClient, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
 };
@@ -54,8 +56,10 @@ const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = {
 /// Returns the protocol name and the channel receiver to be used for reading requests.
 pub fn configure_file_transfer_network<
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
+    Runtime: StorageEnableRuntimeConfig,
+    RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection<Runtime>>,
 >(
-    client: Arc<ParachainClient>,
+    client: Arc<ParachainClient<RuntimeApi>>,
     parachain_config: &Configuration,
     net_config: &mut FullNetworkConfiguration<OpaqueBlock, BlockHash, Network>,
 ) -> (ProtocolName, async_channel::Receiver<IncomingRequest>) {
@@ -85,12 +89,12 @@ pub fn configure_file_transfer_network<
     (protocol_config.name, request_receiver)
 }
 
-pub async fn spawn_file_transfer_service(
+pub async fn spawn_file_transfer_service<Runtime: StorageEnableRuntimeConfig>(
     task_spawner: &TaskSpawner,
     request_receiver: async_channel::Receiver<IncomingRequest>,
     protocol_name: ProtocolName,
     network: Arc<dyn NetworkService>,
-) -> ActorHandle<FileTransferService> {
+) -> ActorHandle<FileTransferService<Runtime>> {
     let task_spawner = task_spawner
         .with_name("file-transfer-service")
         .with_group("network");

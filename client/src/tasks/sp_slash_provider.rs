@@ -7,6 +7,7 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, events::SlashableProvider,
     types::SendExtrinsicOptions,
 };
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 
 use crate::{handler::StorageHubHandler, types::ShNodeType};
 
@@ -16,29 +17,35 @@ const LOG_TARGET: &str = "slash-provider-task";
 ///
 /// This task is responsible for slashing a provider. It listens for the [`SlashableProvider`] event and sends an extrinsic
 /// to StorageHub runtime to slash the provider.
-pub struct SlashProviderTask<NT>
+pub struct SlashProviderTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    storage_hub_handler: StorageHubHandler<NT>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
 }
 
-impl<NT> Clone for SlashProviderTask<NT>
+impl<NT, RuntimeApi> Clone for SlashProviderTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    fn clone(&self) -> SlashProviderTask<NT> {
+    fn clone(&self) -> SlashProviderTask<NT, RuntimeApi> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT> SlashProviderTask<NT>
+impl<NT, RuntimeApi> SlashProviderTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -48,9 +55,11 @@ where
 /// Handles the [`SlashableProvider`] event.
 ///
 /// This event is triggered by the runtime when a provider is marked as slashable.
-impl<NT> EventHandler<SlashableProvider> for SlashProviderTask<NT>
+impl<NT, RuntimeApi> EventHandler<SlashableProvider> for SlashProviderTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: SlashableProvider) -> anyhow::Result<()> {
         info!(
@@ -63,9 +72,11 @@ where
     }
 }
 
-impl<NT> SlashProviderTask<NT>
+impl<NT, RuntimeApi> SlashProviderTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_slashable_provider_event(
         &mut self,

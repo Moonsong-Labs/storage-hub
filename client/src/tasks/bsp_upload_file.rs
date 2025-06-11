@@ -18,6 +18,7 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
@@ -71,23 +72,27 @@ impl Default for BspUploadFileConfig {
 /// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
 ///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
 ///   extrinsic, waiting for it to be successfully included in a block.
-pub struct BspUploadFileTask<NT>
+pub struct BspUploadFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    storage_hub_handler: StorageHubHandler<NT>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
     file_key_cleanup: Option<H256>,
     /// Configuration for this task
     config: BspUploadFileConfig,
 }
 
-impl<NT> Clone for BspUploadFileTask<NT>
+impl<NT, RuntimeApi> Clone for BspUploadFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    fn clone(&self) -> BspUploadFileTask<NT> {
+    fn clone(&self) -> BspUploadFileTask<NT, RuntimeApi> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
@@ -96,12 +101,14 @@ where
     }
 }
 
-impl<NT> BspUploadFileTask<NT>
+impl<NT, RuntimeApi> BspUploadFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             file_key_cleanup: None,
@@ -117,10 +124,12 @@ where
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<NT> EventHandler<NewStorageRequest> for BspUploadFileTask<NT>
+impl<NT, RuntimeApi> EventHandler<NewStorageRequest> for BspUploadFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -145,10 +154,12 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<NT> EventHandler<RemoteUploadRequest> for BspUploadFileTask<NT>
+impl<NT, RuntimeApi> EventHandler<RemoteUploadRequest> for BspUploadFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -212,10 +223,13 @@ where
 ///
 /// This event is triggered by the runtime when it decides it is the right time to submit a confirm
 /// storing extrinsic (and update the local forest root).
-impl<NT> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<NT>
+impl<NT, RuntimeApi> EventHandler<ProcessConfirmStoringRequest>
+    for BspUploadFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
@@ -397,10 +411,12 @@ where
     }
 }
 
-impl<NT> BspUploadFileTask<NT>
+impl<NT, RuntimeApi> BspUploadFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_new_storage_request_event(
         &mut self,

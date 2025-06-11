@@ -9,6 +9,7 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface,
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::{
     FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
 };
@@ -26,16 +27,20 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// volunteering for that file.
 /// It can serve multiple BSPs volunteering to store each file, since
 /// it reacts to every [`AcceptedBspVolunteer`] from the runtime.
-pub struct UserSendsFileTask<NT>
+pub struct UserSendsFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    storage_hub_handler: StorageHubHandler<NT>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
 }
 
-impl<NT> Clone for UserSendsFileTask<NT>
+impl<NT, RuntimeApi> Clone for UserSendsFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     fn clone(&self) -> Self {
         Self {
@@ -44,20 +49,24 @@ where
     }
 }
 
-impl<NT> UserSendsFileTask<NT>
+impl<NT, RuntimeApi> UserSendsFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT> EventHandler<NewStorageRequest> for UserSendsFileTask<NT>
+impl<NT, RuntimeApi> EventHandler<NewStorageRequest> for UserSendsFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
     /// It generates the file metadata and sends it to the BSPs volunteering to store the file.
@@ -146,9 +155,11 @@ where
     }
 }
 
-impl<NT> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<NT>
+impl<NT, RuntimeApi> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
     /// establishes a connection to each BSPs through the p2p network and sends the file.
@@ -193,9 +204,11 @@ where
     }
 }
 
-impl<NT> UserSendsFileTask<NT>
+impl<NT, RuntimeApi> UserSendsFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn send_chunks_to_provider(
         &mut self,

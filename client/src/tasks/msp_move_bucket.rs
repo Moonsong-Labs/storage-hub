@@ -13,6 +13,7 @@ use shc_blockchain_service::{
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
     types::{RetryStrategy, SendExtrinsicOptions},
 };
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::{
     BucketId, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
@@ -51,24 +52,28 @@ impl Default for MspMoveBucketConfig {
 
 /// Handles requests for MSP (Main Storage Provider) to respond to bucket move requests.
 /// Downloads bucket files from BSPs (Backup Storage Providers).
-pub struct MspRespondMoveBucketTask<NT>
+pub struct MspRespondMoveBucketTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    storage_hub_handler: StorageHubHandler<NT>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
     pending_bucket_id: Option<BucketId>,
     file_storage_inserted_file_keys: Vec<H256>,
     /// Configuration for this task
     config: MspMoveBucketConfig,
 }
 
-impl<NT> Clone for MspRespondMoveBucketTask<NT>
+impl<NT, RuntimeApi> Clone for MspRespondMoveBucketTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    fn clone(&self) -> MspRespondMoveBucketTask<NT> {
+    fn clone(&self) -> MspRespondMoveBucketTask<NT, RuntimeApi> {
         MspRespondMoveBucketTask {
             storage_hub_handler: self.storage_hub_handler.clone(),
             pending_bucket_id: self.pending_bucket_id,
@@ -78,12 +83,14 @@ where
     }
 }
 
-impl<NT> MspRespondMoveBucketTask<NT>
+impl<NT, RuntimeApi> MspRespondMoveBucketTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             pending_bucket_id: None,
@@ -93,10 +100,13 @@ where
     }
 }
 
-impl<NT> EventHandler<MoveBucketRequestedForMsp> for MspRespondMoveBucketTask<NT>
+impl<NT, RuntimeApi> EventHandler<MoveBucketRequestedForMsp>
+    for MspRespondMoveBucketTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: MoveBucketRequestedForMsp) -> anyhow::Result<()> {
         info!(
@@ -119,10 +129,13 @@ where
     }
 }
 
-impl<NT> EventHandler<StartMovedBucketDownload> for MspRespondMoveBucketTask<NT>
+impl<NT, RuntimeApi> EventHandler<StartMovedBucketDownload>
+    for MspRespondMoveBucketTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: StartMovedBucketDownload) -> anyhow::Result<()> {
         info!(
@@ -234,10 +247,12 @@ where
     }
 }
 
-impl<NT> MspRespondMoveBucketTask<NT>
+impl<NT, RuntimeApi> MspRespondMoveBucketTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     /// Internal implementation of the move bucket request handling.
     /// This function contains the core logic for processing a bucket move request.

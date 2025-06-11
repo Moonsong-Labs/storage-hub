@@ -7,10 +7,13 @@ use shc_actors_derive::{ActorEvent, ActorEventBus};
 use sp_core::H256;
 use sp_runtime::AccountId32;
 
-use shc_common::types::{
-    Balance, BlockNumber, BucketId, CustomChallenge, FileKey, FileLocation, Fingerprint,
-    ForestRoot, KeyProofs, PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput,
-    StorageData, TrieMutation, ValuePropId,
+use shc_common::{
+    traits::StorageEnableRuntimeConfig,
+    types::{
+        Balance, BlockNumber, BucketId, CustomChallenge, FileKey, FileLocation, Fingerprint,
+        ForestRoot, KeyProofs, PeerIds, ProofsDealerProviderId, ProviderId, RandomnessOutput,
+        StorageData, TrieMutation, ValuePropId,
+    },
 };
 
 use crate::types::{
@@ -26,10 +29,10 @@ use crate::types::{
 /// period of this BSP.
 #[derive(Debug, Clone, Encode, Decode, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct NewChallengeSeed {
-    pub provider_id: ProofsDealerProviderId,
-    pub tick: BlockNumber,
-    pub seed: RandomnessOutput,
+pub struct NewChallengeSeed<Runtime: StorageEnableRuntimeConfig> {
+    pub provider_id: ProofsDealerProviderId<Runtime>,
+    pub tick: BlockNumber<Runtime>,
+    pub seed: RandomnessOutput<Runtime>,
 }
 
 /// Multiple new challenge seeds that have to be responded in order.
@@ -41,9 +44,9 @@ pub struct NewChallengeSeed {
 /// should be responded to last.
 #[derive(Debug, Clone, Encode, Decode, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct MultipleNewChallengeSeeds {
-    pub provider_id: ProofsDealerProviderId,
-    pub seeds: Vec<(BlockNumber, RandomnessOutput)>,
+pub struct MultipleNewChallengeSeeds<Runtime: StorageEnableRuntimeConfig> {
+    pub provider_id: ProofsDealerProviderId<Runtime>,
+    pub seeds: Vec<(BlockNumber<Runtime>, RandomnessOutput<Runtime>)>,
 }
 
 /// New storage request event.
@@ -51,23 +54,23 @@ pub struct MultipleNewChallengeSeeds {
 /// This event is emitted when a new storage request is created on-chain.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct NewStorageRequest {
+pub struct NewStorageRequest<Runtime: StorageEnableRuntimeConfig> {
     /// Account ID of the requester.
     pub who: AccountId32,
     /// Computed file key for the file.
     pub file_key: FileKey,
     /// Bucket ID of the file.
-    pub bucket_id: BucketId,
+    pub bucket_id: BucketId<Runtime>,
     /// Location of the file (as a file path).
-    pub location: FileLocation,
+    pub location: FileLocation<Runtime>,
     /// Fingerprint of the file (root hash of the merkelized file).
     pub fingerprint: Fingerprint,
     /// Size of the file.
-    pub size: StorageData,
+    pub size: StorageData<Runtime>,
     /// libp2p peer IDs from where the user would send the file.
-    pub user_peer_ids: PeerIds,
+    pub user_peer_ids: PeerIds<Runtime>,
     /// Block number at which the storage request will expire if not fulfilled.
-    pub expires_at: BlockNumber,
+    pub expires_at: BlockNumber<Runtime>,
 }
 
 /// MSP stopped storing bucket event.
@@ -75,12 +78,12 @@ pub struct NewStorageRequest {
 /// This event is emitted when an MSP stops storing a bucket.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FinalisedMspStoppedStoringBucket {
+pub struct FinalisedMspStoppedStoringBucket<Runtime: StorageEnableRuntimeConfig> {
     /// MSP ID who stopped storing the bucket.
-    pub msp_id: ProofsDealerProviderId,
+    pub msp_id: ProofsDealerProviderId<Runtime>,
     /// Account ID owner of the bucket.
     pub owner: AccountId32,
-    pub bucket_id: BucketId,
+    pub bucket_id: BucketId<Runtime>,
 }
 
 /// Accepted BSP volunteer event.
@@ -88,50 +91,60 @@ pub struct FinalisedMspStoppedStoringBucket {
 /// This event is emitted when a BSP volunteer is accepted to store a file.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct AcceptedBspVolunteer {
+pub struct AcceptedBspVolunteer<Runtime: StorageEnableRuntimeConfig> {
     pub bsp_id: H256,
-    pub bucket_id: BucketId,
-    pub location: FileLocation,
+    pub bucket_id: BucketId<Runtime>,
+    pub location: FileLocation<Runtime>,
     pub fingerprint: Fingerprint,
     pub multiaddresses: Vec<Multiaddr>,
     pub owner: AccountId32,
-    pub size: StorageData,
+    pub size: StorageData<Runtime>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub enum ForestWriteLockTaskData {
-    SubmitProofRequest(ProcessSubmitProofRequestData),
+pub enum ForestWriteLockTaskData<Runtime: StorageEnableRuntimeConfig> {
+    SubmitProofRequest(ProcessSubmitProofRequestData<Runtime>),
     ConfirmStoringRequest(ProcessConfirmStoringRequestData),
     MspRespondStorageRequest(ProcessMspRespondStoringRequestData),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData),
     FileDeletionRequest(ProcessFileDeletionRequestData),
 }
 
-impl From<ProcessSubmitProofRequestData> for ForestWriteLockTaskData {
-    fn from(data: ProcessSubmitProofRequestData) -> Self {
+impl<Runtime: StorageEnableRuntimeConfig> From<ProcessSubmitProofRequestData<Runtime>>
+    for ForestWriteLockTaskData<Runtime>
+{
+    fn from(data: ProcessSubmitProofRequestData<Runtime>) -> Self {
         Self::SubmitProofRequest(data)
     }
 }
 
-impl From<ProcessConfirmStoringRequestData> for ForestWriteLockTaskData {
+impl<Runtime: StorageEnableRuntimeConfig> From<ProcessConfirmStoringRequestData>
+    for ForestWriteLockTaskData<Runtime>
+{
     fn from(data: ProcessConfirmStoringRequestData) -> Self {
         Self::ConfirmStoringRequest(data)
     }
 }
 
-impl From<ProcessMspRespondStoringRequestData> for ForestWriteLockTaskData {
+impl<Runtime: StorageEnableRuntimeConfig> From<ProcessMspRespondStoringRequestData>
+    for ForestWriteLockTaskData<Runtime>
+{
     fn from(data: ProcessMspRespondStoringRequestData) -> Self {
         Self::MspRespondStorageRequest(data)
     }
 }
 
-impl From<ProcessStopStoringForInsolventUserRequestData> for ForestWriteLockTaskData {
+impl<Runtime: StorageEnableRuntimeConfig> From<ProcessStopStoringForInsolventUserRequestData>
+    for ForestWriteLockTaskData<Runtime>
+{
     fn from(data: ProcessStopStoringForInsolventUserRequestData) -> Self {
         Self::StopStoringForInsolventUserRequest(data)
     }
 }
 
-impl From<ProcessFileDeletionRequestData> for ForestWriteLockTaskData {
+impl<Runtime: StorageEnableRuntimeConfig> From<ProcessFileDeletionRequestData>
+    for ForestWriteLockTaskData<Runtime>
+{
     fn from(data: ProcessFileDeletionRequestData) -> Self {
         Self::FileDeletionRequest(data)
     }
@@ -139,27 +152,30 @@ impl From<ProcessFileDeletionRequestData> for ForestWriteLockTaskData {
 
 /// Data required to build a proof to submit to the runtime.
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct ProcessSubmitProofRequestData {
+pub struct ProcessSubmitProofRequestData<Runtime: StorageEnableRuntimeConfig> {
     /// The Provider ID of the BSP that is submitting the proof.
-    pub provider_id: ProofsDealerProviderId,
+    pub provider_id: ProofsDealerProviderId<Runtime>,
     /// The tick for which the proof is being built.
     ///
     /// This tick should be the tick where [`Self::seed`] was generated.
-    pub tick: BlockNumber,
+    pub tick: BlockNumber<Runtime>,
     /// The seed that was used to generate the challenges for this proof.
-    pub seed: RandomnessOutput,
+    pub seed: RandomnessOutput<Runtime>,
     /// All the Forest challenges that the proof to generate has to respond to.
     ///
     /// This includes the [`Self::checkpoint_challenges`].
     pub forest_challenges: Vec<H256>,
     /// The checkpoint challenges that the proof to generate has to respond to.
-    pub checkpoint_challenges: Vec<CustomChallenge>,
+    pub checkpoint_challenges: Vec<CustomChallenge<Runtime>>,
 }
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProcessSubmitProofRequest {
-    pub data: ProcessSubmitProofRequestData,
+pub struct ProcessSubmitProofRequest<Runtime>
+where
+    Runtime: StorageEnableRuntimeConfig,
+{
+    pub data: ProcessSubmitProofRequestData<Runtime>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
@@ -204,9 +220,9 @@ pub struct ProcessStopStoringForInsolventUserRequest {
 /// This event is emitted when a provider is marked as slashable by the runtime.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct SlashableProvider {
-    pub provider: ProofsDealerProviderId,
-    pub next_challenge_deadline: BlockNumber,
+pub struct SlashableProvider<Runtime: StorageEnableRuntimeConfig> {
+    pub provider: ProofsDealerProviderId<Runtime>,
+    pub next_challenge_deadline: BlockNumber<Runtime>,
 }
 
 /// Mutations applied event in a finalised block.
@@ -215,25 +231,25 @@ pub struct SlashableProvider {
 /// in which there is a `MutationsApplied` event for one of the providers that this node is tracking.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FinalisedTrieRemoveMutationsApplied {
-    pub provider_id: ProofsDealerProviderId,
-    pub mutations: Vec<(ForestRoot, TrieMutation)>,
+pub struct FinalisedTrieRemoveMutationsApplied<Runtime: StorageEnableRuntimeConfig> {
+    pub provider_id: ProofsDealerProviderId<Runtime>,
+    pub mutations: Vec<(ForestRoot<Runtime>, TrieMutation)>,
     pub new_root: H256,
 }
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProofAccepted {
-    pub provider_id: ProofsDealerProviderId,
-    pub proofs: KeyProofs,
+pub struct ProofAccepted<Runtime: StorageEnableRuntimeConfig> {
+    pub provider_id: ProofsDealerProviderId<Runtime>,
+    pub proofs: KeyProofs<Runtime>,
 }
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct LastChargeableInfoUpdated {
-    pub provider_id: ProofsDealerProviderId,
-    pub last_chargeable_tick: BlockNumber,
-    pub last_chargeable_price_index: Balance,
+pub struct LastChargeableInfoUpdated<Runtime: StorageEnableRuntimeConfig> {
+    pub provider_id: ProofsDealerProviderId<Runtime>,
+    pub last_chargeable_tick: BlockNumber<Runtime>,
+    pub last_chargeable_price_index: Balance<Runtime>,
 }
 
 /// User without funds event.
@@ -251,11 +267,11 @@ pub struct UserWithoutFunds {
 /// This event is emitted when a provider has stopped storing a file for an insolvent user.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct SpStopStoringInsolventUser {
-    pub sp_id: ProofsDealerProviderId,
+pub struct SpStopStoringInsolventUser<Runtime: StorageEnableRuntimeConfig> {
+    pub sp_id: ProofsDealerProviderId<Runtime>,
     pub file_key: FileKey,
     pub owner: AccountId32,
-    pub location: FileLocation,
+    pub location: FileLocation<Runtime>,
     pub new_root: H256,
 }
 
@@ -265,9 +281,9 @@ pub struct SpStopStoringInsolventUser {
 /// for an insolvent user event is anchored has been finalised.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FinalisedMspStopStoringBucketInsolventUser {
-    pub msp_id: ProofsDealerProviderId,
-    pub bucket_id: BucketId,
+pub struct FinalisedMspStopStoringBucketInsolventUser<Runtime: StorageEnableRuntimeConfig> {
+    pub msp_id: ProofsDealerProviderId<Runtime>,
+    pub bucket_id: BucketId<Runtime>,
 }
 
 /// A user has requested to move one of its bucket to a new MSP.
@@ -275,9 +291,9 @@ pub struct FinalisedMspStopStoringBucketInsolventUser {
 /// This event is emitted so the BSP can allow the new MSP to download the files from the bucket.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct MoveBucketRequested {
-    pub bucket_id: BucketId,
-    pub new_msp_id: ProviderId,
+pub struct MoveBucketRequested<Runtime: StorageEnableRuntimeConfig> {
+    pub bucket_id: BucketId<Runtime>,
+    pub new_msp_id: ProviderId<Runtime>,
 }
 
 /// A user has requested to move one of its buckets to a new MSP which matches a currently managed MSP.
@@ -286,9 +302,9 @@ pub struct MoveBucketRequested {
 /// respond to the user accepting the request, download the bucket's files and insert the bucket into their forest.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct MoveBucketRequestedForMsp {
-    pub bucket_id: BucketId,
-    pub value_prop_id: ValuePropId,
+pub struct MoveBucketRequestedForMsp<Runtime: StorageEnableRuntimeConfig> {
+    pub bucket_id: BucketId<Runtime>,
+    pub value_prop_id: ValuePropId<Runtime>,
 }
 
 /// The new MSP that the user chose to store a bucket has rejected the move request.
@@ -297,10 +313,10 @@ pub struct MoveBucketRequestedForMsp {
 /// from the bucket.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct MoveBucketRejected {
-    pub bucket_id: BucketId,
-    pub old_msp_id: Option<ProviderId>,
-    pub new_msp_id: ProviderId,
+pub struct MoveBucketRejected<Runtime: StorageEnableRuntimeConfig> {
+    pub bucket_id: BucketId<Runtime>,
+    pub old_msp_id: Option<ProviderId<Runtime>>,
+    pub new_msp_id: ProviderId<Runtime>,
 }
 
 /// The new MSP that the user chose to store a bucket has accepted the move request.
@@ -309,11 +325,11 @@ pub struct MoveBucketRejected {
 /// from the bucket.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct MoveBucketAccepted {
-    pub bucket_id: BucketId,
-    pub old_msp_id: Option<ProviderId>,
-    pub new_msp_id: ProviderId,
-    pub value_prop_id: ValuePropId,
+pub struct MoveBucketAccepted<Runtime: StorageEnableRuntimeConfig> {
+    pub bucket_id: BucketId<Runtime>,
+    pub old_msp_id: Option<ProviderId<Runtime>>,
+    pub new_msp_id: ProviderId<Runtime>,
+    pub value_prop_id: ValuePropId<Runtime>,
 }
 
 /// The move bucket request has expired without a response from the new MSP.
@@ -322,8 +338,8 @@ pub struct MoveBucketAccepted {
 /// from the bucket.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct MoveBucketExpired {
-    pub bucket_id: BucketId,
+pub struct MoveBucketExpired<Runtime: StorageEnableRuntimeConfig> {
+    pub bucket_id: BucketId<Runtime>,
 }
 
 /// BSP stopped storing a specific file.
@@ -359,17 +375,17 @@ pub struct NotifyPeriod {}
 /// File deletion request event.
 #[derive(Debug, Clone, Encode, Decode, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FileDeletionRequest {
+pub struct FileDeletionRequest<Runtime: StorageEnableRuntimeConfig> {
     /// Account ID of the user that requested the file deletion.
     pub user: AccountId32,
     /// File key that was requested to be deleted.
     pub file_key: FileKey,
     /// File size of the file that was requested to be deleted.
-    pub file_size: StorageData,
+    pub file_size: StorageData<Runtime>,
     /// Bucket ID in which the file key belongs to.
-    pub bucket_id: BucketId,
+    pub bucket_id: BucketId<Runtime>,
     /// The MSP ID that provided the proof of inclusion for a pending file deletion request.
-    pub msp_id: ProofsDealerProviderId,
+    pub msp_id: ProofsDealerProviderId<Runtime>,
     /// Whether a proof of inclusion was provided by the user.
     ///
     /// This means that the file key requested to be deleted was included in the user's submitted inclusion forest proof.
@@ -394,17 +410,18 @@ pub struct ProcessFileDeletionRequest {
 /// Fields are identical
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FinalisedProofSubmittedForPendingFileDeletionRequest {
+pub struct FinalisedProofSubmittedForPendingFileDeletionRequest<Runtime: StorageEnableRuntimeConfig>
+{
     /// Account ID of the user that requested the file deletion.
     pub user: AccountId32,
     /// File key that was requested to be deleted.
     pub file_key: FileKey,
     /// File size of the file that was requested to be deleted.
-    pub file_size: StorageData,
+    pub file_size: StorageData<Runtime>,
     /// Bucket ID in which the file key belongs to.
-    pub bucket_id: BucketId,
+    pub bucket_id: BucketId<Runtime>,
     /// The MSP ID that provided the proof of inclusion for a pending file deletion request.
-    pub msp_id: ProofsDealerProviderId,
+    pub msp_id: ProofsDealerProviderId<Runtime>,
     /// Whether a proof of inclusion was provided by the MSP.
     ///
     /// This means that the file key requested to be deleted was responded to by the MSP with an inclusion forest proof,
@@ -417,9 +434,9 @@ pub struct FinalisedProofSubmittedForPendingFileDeletionRequest {
 /// and the current node is the new MSP.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct StartMovedBucketDownload {
-    pub bucket_id: BucketId,
-    pub value_prop_id: ValuePropId,
+pub struct StartMovedBucketDownload<Runtime: StorageEnableRuntimeConfig> {
+    pub bucket_id: BucketId<Runtime>,
+    pub value_prop_id: ValuePropId<Runtime>,
 }
 
 /// Event emitted when a bucket is moved away from the current MSP to a new MSP.
@@ -427,10 +444,10 @@ pub struct StartMovedBucketDownload {
 /// on-chain, in a finalised block, and the current node is the old MSP that is losing the bucket.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FinalisedBucketMovedAway {
-    pub bucket_id: BucketId,
-    pub old_msp_id: ProviderId,
-    pub new_msp_id: ProviderId,
+pub struct FinalisedBucketMovedAway<Runtime: StorageEnableRuntimeConfig> {
+    pub bucket_id: BucketId<Runtime>,
+    pub old_msp_id: ProviderId<Runtime>,
+    pub new_msp_id: ProviderId<Runtime>,
 }
 
 /// The event bus provider for the BlockchainService actor.

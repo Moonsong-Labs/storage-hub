@@ -13,6 +13,9 @@ use std::{path::PathBuf, sync::Arc};
 
 use handler::BlockchainServiceConfig;
 use sc_service::RpcHandlers;
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntimeApi, StorageEnableRuntimeConfig,
+};
 use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
@@ -21,26 +24,29 @@ use shc_common::types::ParachainClient;
 
 pub use self::handler::BlockchainService;
 
-pub async fn spawn_blockchain_service<FSH>(
+pub async fn spawn_blockchain_service<FSH, RuntimeApi, Runtime>(
     task_spawner: &TaskSpawner,
-    config: BlockchainServiceConfig,
-    client: Arc<ParachainClient>,
+    config: BlockchainServiceConfig<Runtime>,
+    client: Arc<ParachainClient<RuntimeApi>>,
     keystore: KeystorePtr,
     rpc_handlers: Arc<RpcHandlers>,
     forest_storage_handler: FSH,
     rocksdb_root_path: impl Into<PathBuf>,
     notify_period: Option<u32>,
-    capacity_config: Option<CapacityConfig>,
+    capacity_config: Option<CapacityConfig<Runtime>>,
     maintenance_mode: bool,
-) -> ActorHandle<BlockchainService<FSH>>
+) -> ActorHandle<BlockchainService<FSH, RuntimeApi, Runtime>>
 where
     FSH: shc_forest_manager::traits::ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     let task_spawner = task_spawner
         .with_name("blockchain-service")
         .with_group("network");
 
-    let blockchain_service = BlockchainService::<FSH>::new(
+    let blockchain_service = BlockchainService::<FSH, RuntimeApi, Runtime>::new(
         config,
         client,
         keystore,

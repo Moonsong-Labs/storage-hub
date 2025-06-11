@@ -8,6 +8,7 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, events::MultipleNewChallengeSeeds,
     types::SendExtrinsicOptions,
 };
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 
 use crate::{handler::StorageHubHandler, types::ShNodeType};
 
@@ -20,38 +21,46 @@ pub type EventToReactTo = MultipleNewChallengeSeeds;
 ///
 /// This can be used for debugging purposes.
 /// The event to react to can be configured by setting the [`EventToReactTo`] type.
-pub struct SpReactToEventMockTask<NT>
+pub struct SpReactToEventMockTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    storage_hub_handler: StorageHubHandler<NT>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
 }
 
-impl<NT> Clone for SpReactToEventMockTask<NT>
+impl<NT, RuntimeApi> Clone for SpReactToEventMockTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    fn clone(&self) -> SpReactToEventMockTask<NT> {
+    fn clone(&self) -> SpReactToEventMockTask<NT, RuntimeApi> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT> SpReactToEventMockTask<NT>
+impl<NT, RuntimeApi> SpReactToEventMockTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT> EventHandler<EventToReactTo> for SpReactToEventMockTask<NT>
+impl<NT, RuntimeApi> EventHandler<EventToReactTo> for SpReactToEventMockTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: EventToReactTo) -> anyhow::Result<()> {
         info!(

@@ -3,15 +3,20 @@ use std::{collections::VecDeque, time::Duration};
 use anyhow::anyhow;
 use log::{debug, error};
 
-use sc_client_api::HeaderBackend;
-use sp_api::ProvideRuntimeApi;
-use sp_core::H256;
-
+use frame_support::traits::tokens::imbalance::Imbalance;
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
+use sc_client_api::HeaderBackend;
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntimeApi, StorageEnableRuntimeConfig,
+};
 use shc_common::types::{BlockNumber, StorageData};
 use shc_forest_manager::traits::ForestStorageHandler;
+use sp_api::ProvideRuntimeApi;
+use sp_core::H256;
+use sp_runtime::traits::CheckedAdd;
+use sp_runtime::Saturating;
 
 use crate::{
     transaction::SubmittedTransaction, types::ManagedProvider, types::SendExtrinsicOptions,
@@ -21,31 +26,31 @@ use crate::{
 const LOG_TARGET: &str = "blockchain-service-capacity-manager";
 
 /// Queue of capacity requests for batching capacity increases in a single transaction.
-pub struct CapacityRequestQueue {
+pub struct CapacityRequestQueue<Runtime: StorageEnableRuntimeConfig> {
     /// Configuration parameters determining values for capacity increases.
-    capacity_config: CapacityConfig,
+    capacity_config: CapacityConfig<Runtime>,
     /// Pending capacity requests which have yet to be part of a transaction.
-    pending_requests: VecDeque<CapacityRequest>,
+    pending_requests: VecDeque<CapacityRequest<Runtime>>,
     /// Capacity requests bundled in a single transaction waiting to be included in a block.
     ///
     /// All requesters will be notified via the callback when the transaction is included in the
     /// block important notification pipeline. This list will be cleared subsequently.
-    requests_waiting_for_inclusion: Vec<CapacityRequest>,
+    requests_waiting_for_inclusion: Vec<CapacityRequest<Runtime>>,
     /// Total accumulated capacity required by the aggregate of all `pending_requests`.
     ///
     /// This is reset when the `pending_requests` is moved to `requests_waiting_for_inclusion` when they have been batched in a single transaction.
-    total_required: StorageData,
+    total_required: StorageData<Runtime>,
     /// The last submitted transaction which `requests_waiting_for_inclusion` is waiting for.
     last_submitted_transaction: Option<SubmittedTransaction>,
 }
 
-impl CapacityRequestQueue {
-    pub fn new(capacity_config: CapacityConfig) -> Self {
+impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
+    pub fn new(capacity_config: CapacityConfig<Runtime>) -> Self {
         Self {
             capacity_config,
             pending_requests: VecDeque::new(),
             requests_waiting_for_inclusion: Vec::new(),
-            total_required: 0,
+            total_required: StorageData::zero(),
             last_submitted_transaction: None,
         }
     }
@@ -58,7 +63,7 @@ impl CapacityRequestQueue {
     /// Get the configured maximum capacity allowed.
     ///
     /// Capacity requests will be rejected if the current provider capacity is at this limit.
-    pub fn max_capacity_allowed(&self) -> StorageData {
+    pub fn max_capacity_allowed(&self) -> StorageData<Runtime> {
         self.capacity_config.max_capacity
     }
 
@@ -68,8 +73,8 @@ impl CapacityRequestQueue {
     /// If the request cannot be queued, the error will be sent back to the caller.
     pub fn queue_capacity_request(
         &mut self,
-        request: CapacityRequest,
-        current_capacity: StorageData,
+        request: CapacityRequest<Runtime>,
+        current_capacity: StorageData<Runtime>,
     ) {
         let Some(new_total_required) = self.total_required.checked_add(request.data.required)
         else {
@@ -88,7 +93,7 @@ impl CapacityRequestQueue {
     }
 
     /// Calculate the maximum capacity difference that can be requested.
-    fn max_capacity_diff(&self, current_capacity: StorageData) -> StorageData {
+    fn max_capacity_diff(&self, current_capacity: StorageData<Runtime>) -> StorageData<Runtime> {
         self.capacity_config
             .max_capacity
             .saturating_sub(current_capacity)
@@ -97,9 +102,9 @@ impl CapacityRequestQueue {
     /// Calculate the new capacity needed based on the total required capacity
     pub fn calculate_new_capacity(
         &self,
-        current_capacity: StorageData,
-        total_required: StorageData,
-    ) -> StorageData {
+        current_capacity: StorageData<Runtime>,
+        total_required: StorageData<Runtime>,
+    ) -> StorageData<Runtime> {
         // Calculate how many jumps we need to cover the required capacity
         let jumps_needed = total_required.div_ceil(self.capacity_config.jump_capacity);
         let total_jump_capacity = jumps_needed * self.capacity_config.jump_capacity;
@@ -154,18 +159,18 @@ impl CapacityRequestQueue {
     /// Reset the pending requests queue and total required capacity.
     pub fn reset_queue(&mut self) {
         self.pending_requests.clear();
-        self.total_required = 0;
+        self.total_required = StorageData::zeroed();
     }
 }
 
 /// Configuration parameters determining values for capacity increases.
 #[derive(Clone, Debug)]
-pub struct CapacityConfig {
+pub struct CapacityConfig<Runtime: StorageEnableRuntimeConfig> {
     /// Maximum storage capacity of the provider in bytes.
     ///
     /// The node will not increase its on-chain capacity above this value.
     /// This is meant to reflect the actual physical storage capacity of the node.
-    max_capacity: StorageData,
+    max_capacity: StorageData<Runtime>,
     /// Capacity increases by this amount in bytes a number of times based on the required capacity calculated
     /// by the [`calculate_new_capacity`](CapacityRequestQueue::calculate_new_capacity) method.
     ///
@@ -173,33 +178,33 @@ pub struct CapacityConfig {
     /// capacity by adding more stake. For example, if the jump capacity is set to 1k, and the
     /// node needs 100 units of storage more to store a file, the node will automatically increase
     /// its on-chain capacity by 1k units.
-    jump_capacity: StorageData,
+    jump_capacity: StorageData<Runtime>,
 }
 
-impl CapacityConfig {
-    pub fn new(max_capacity: StorageData, jump_capacity: StorageData) -> Self {
+impl<Runtime: StorageEnableRuntimeConfig> CapacityConfig<Runtime> {
+    pub fn new(max_capacity: StorageData<Runtime>, jump_capacity: StorageData<Runtime>) -> Self {
         Self {
             max_capacity,
             jump_capacity,
         }
     }
 
-    pub fn max_capacity(&self) -> StorageData {
+    pub fn max_capacity(&self) -> StorageData<Runtime> {
         self.max_capacity
     }
 }
 
 /// Individual capacity request for every caller.
-pub struct CapacityRequest {
+pub struct CapacityRequest<Runtime: StorageEnableRuntimeConfig> {
     /// Data needed to process the capacity request.
-    data: CapacityRequestData,
+    data: CapacityRequestData<Runtime>,
     /// Callback to notify the caller when the capacity request is processed.
     callback: tokio::sync::oneshot::Sender<Result<(), anyhow::Error>>,
 }
 
-impl CapacityRequest {
+impl<Runtime: StorageEnableRuntimeConfig> CapacityRequest<Runtime> {
     pub fn new(
-        data: CapacityRequestData,
+        data: CapacityRequestData<Runtime>,
         callback: tokio::sync::oneshot::Sender<Result<(), anyhow::Error>>,
     ) -> Self {
         Self { data, callback }
@@ -213,25 +218,31 @@ impl CapacityRequest {
 }
 
 /// Data needed to process a capacity request.
-pub struct CapacityRequestData {
+pub struct CapacityRequestData<Runtime: StorageEnableRuntimeConfig> {
     /// Capacity requested to be increased.
-    required: StorageData,
+    required: StorageData<Runtime>,
 }
 
-impl CapacityRequestData {
-    pub fn new(required: StorageData) -> Self {
+impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestData<Runtime> {
+    pub fn new(required: StorageData<Runtime>) -> Self {
         Self { required }
     }
 }
 
-impl<FSH> BlockchainService<FSH>
+impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     /// Queue a capacity request.
     ///
     /// If the capacity request cannot be queued for any reason, the error will be sent back to the caller.
-    pub(crate) async fn queue_capacity_request(&mut self, capacity_request: CapacityRequest) {
+    pub(crate) async fn queue_capacity_request(
+        &mut self,
+        capacity_request: CapacityRequest<Runtime>,
+    ) {
         match self.check_capacity_request_conditions().await {
             Ok((_, current_capacity, _)) => {
                 if let Some(capacity_manager) = self.capacity_manager.as_mut() {
@@ -255,7 +266,7 @@ where
     /// and send the `total_required` value in a single `change_capacity` extrinsic.
     pub(crate) async fn process_capacity_requests(
         &mut self,
-        block_number: BlockNumber,
+        block_number: BlockNumber<Runtime>,
     ) -> Result<(), anyhow::Error> {
         debug!(target: LOG_TARGET, "[process_capacity_requests] Processing capacity requests");
         let (current_block_hash, current_capacity, inner_provider_id) = match self
@@ -359,7 +370,7 @@ where
     /// by the node operator.
     async fn check_capacity_request_conditions(
         &mut self,
-    ) -> Result<(H256, StorageData, H256), anyhow::Error> {
+    ) -> Result<(H256, StorageData<Runtime>, H256), anyhow::Error> {
         // Any errors in this block is considered a critical error which would not allow processing any capacity requests.
         // Only process capacity requests if the capacity manager is initialized
         let Some(capacity_manager) = &self.capacity_manager else {

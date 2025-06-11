@@ -1,6 +1,9 @@
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntimeApi, StorageEnableRuntimeConfig,
+};
 use shc_common::types::StorageProviderId;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
@@ -15,9 +18,9 @@ use shc_common::{
     types::{BlockNumber, ParachainClient},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool};
-use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_runtime::traits::Header;
+use std::marker::PhantomData;
 use storage_hub_runtime::RuntimeEvent;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
@@ -28,15 +31,21 @@ pub(crate) const LOG_TARGET: &str = "indexer-service";
 pub enum IndexerServiceCommand {}
 
 // The IndexerService actor
-pub struct IndexerService {
-    client: Arc<ParachainClient>,
+pub struct IndexerService<RuntimeApi, Runtime> {
+    client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
+    _phantom: PhantomData<Runtime>,
 }
 
 // Implement the Actor trait for IndexerService
-impl Actor for IndexerService {
+impl<RuntimeApi, Runtime: StorageEnableRuntimeConfig> Actor for IndexerService<RuntimeApi, Runtime>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    Runtime: StorageEnableRuntimeConfig,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
+{
     type Message = IndexerServiceCommand;
-    type EventLoop = IndexerServiceEventLoop;
+    type EventLoop = IndexerServiceEventLoop<RuntimeApi, Runtime>;
     type EventBusProvider = (); // We're not using an event bus for now
 
     fn handle_message(
@@ -56,8 +65,12 @@ impl Actor for IndexerService {
 }
 
 // Implement methods for IndexerService
-impl IndexerService {
-    pub fn new(client: Arc<ParachainClient>, db_pool: DbPool) -> Self {
+impl<RuntimeApi, Runtime: StorageEnableRuntimeConfig> IndexerService<RuntimeApi, Runtime>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
+{
+    pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool) -> Self {
         Self { client, db_pool }
     }
 
@@ -67,7 +80,7 @@ impl IndexerService {
     ) -> Result<(), HandleFinalityNotificationError>
     where
         Block: sp_runtime::traits::Block,
-        Block::Header: Header<Number = BlockNumber>,
+        Block::Header: Header<Number = BlockNumber<Runtime>>,
     {
         let finalized_block_hash = notification.hash;
         let finalized_block_number = *notification.header.number();
@@ -78,15 +91,19 @@ impl IndexerService {
 
         let service_state = ServiceState::get(&mut db_conn).await?;
 
-        for block_number in
-            (service_state.last_processed_block as BlockNumber + 1)..=finalized_block_number
+        for block_number in (service_state.last_processed_block as BlockNumber<Runtime> + 1)
+            ..=finalized_block_number
         {
             let block_hash = self
                 .client
                 .block_hash(block_number)?
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
-            self.index_block(&mut db_conn, block_number as BlockNumber, block_hash)
-                .await?;
+            self.index_block(
+                &mut db_conn,
+                block_number as BlockNumber<Runtime>,
+                block_hash,
+            )
+            .await?;
         }
 
         Ok(())
@@ -95,7 +112,7 @@ impl IndexerService {
     async fn index_block<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        block_number: BlockNumber,
+        block_number: BlockNumber<Runtime>,
         block_hash: H256,
     ) -> Result<(), IndexBlockError> {
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
@@ -164,7 +181,7 @@ impl IndexerService {
     async fn index_bucket_nfts_event<'a, 'b: 'a>(
         &'b self,
         _conn: &mut DbConnection<'a>,
-        event: &pallet_bucket_nfts::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_bucket_nfts::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_bucket_nfts::Event::AccessShared { .. } => {}
@@ -357,7 +374,7 @@ impl IndexerService {
     async fn index_payment_streams_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_payment_streams::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_payment_streams::Event::DynamicRatePaymentStreamCreated {
@@ -639,9 +656,9 @@ impl IndexerService {
 }
 
 // Define the EventLoop for IndexerService
-pub struct IndexerServiceEventLoop {
+pub struct IndexerServiceEventLoop<RuntimeApi, Runtime> {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
-    actor: IndexerService,
+    actor: IndexerService<RuntimeApi, Runtime>,
 }
 
 enum MergedEventLoopMessage<Block>
@@ -653,9 +670,13 @@ where
 }
 
 // Implement ActorEventLoop for IndexerServiceEventLoop
-impl ActorEventLoop<IndexerService> for IndexerServiceEventLoop {
+impl<RuntimeApi> ActorEventLoop<IndexerService<RuntimeApi>> for IndexerServiceEventLoop<RuntimeApi>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+{
     fn new(
-        actor: IndexerService,
+        actor: IndexerService<RuntimeApi>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
     ) -> Self {
         Self { actor, receiver }
