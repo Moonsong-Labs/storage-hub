@@ -1,4 +1,5 @@
 use crate::types::*;
+use frame_system::Config;
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
@@ -13,10 +14,13 @@ use sp_block_builder::BlockBuilder;
 use sp_core::H256;
 
 pub trait StorageEnableRuntimeConfig:
-    pallet_file_system::Config
+    frame_system::Config
+    + pallet_file_system::Config
     + pallet_storage_providers::Config
     + pallet_proofs_dealer::Config
     + pallet_storage_providers::Config
+    + pallet_bucket_nfts::Config
+    + pallet_transaction_payment::Config
 {
 }
 

@@ -2,6 +2,7 @@ use log::info;
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
 use std::path::PathBuf;
 
+use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::{
     typed_store::{
         BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
@@ -24,8 +25,8 @@ use crate::{
 
 /// Last processed block number.
 pub struct LastProcessedBlockNumberCf;
-impl SingleScaleEncodedValueCf for LastProcessedBlockNumberCf {
-    type Value = BlockNumber;
+impl<Runtime: StorageEnableRuntimeConfig> SingleScaleEncodedValueCf for LastProcessedBlockNumberCf {
+    type Value = BlockNumber<Runtime>;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "last_processed_block_number";
 }
@@ -155,10 +156,12 @@ impl SingleScaleEncodedValueCf for OngoingProcessFileDeletionRequestCf {
 
 /// Pending file deletion requests.
 #[derive(Default)]
-pub struct FileDeletionRequestCf;
-impl ScaleEncodedCf for FileDeletionRequestCf {
+pub struct FileDeletionRequestCf<Runtime> {
+    _phantom: std::marker::PhantomData<Runtime>,
+}
+impl<Runtime: StorageEnableRuntimeConfig> ScaleEncodedCf for FileDeletionRequestCf<Runtime> {
     type Key = u64;
-    type Value = FileDeletionRequest;
+    type Value = FileDeletionRequest<Runtime>;
 
     const SCALE_ENCODED_NAME: &'static str = "pending_file_deletion_request";
 }
@@ -358,20 +361,28 @@ impl<'a> CFDequeAPI for PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
     type DataCF = PendingStopStoringForInsolventUserRequestCf;
 }
 
-pub struct PendingFileDeletionRequestDequeAPI<'a> {
+pub struct PendingFileDeletionRequestDequeAPI<'a, Runtime: StorageEnableRuntimeConfig> {
     db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+    _phantom: std::marker::PhantomData<Runtime>,
 }
 
-impl<'a> ProvidesDbContext for PendingFileDeletionRequestDequeAPI<'a> {
+impl<'a, Runtime: StorageEnableRuntimeConfig> ProvidesDbContext
+    for PendingFileDeletionRequestDequeAPI<'a, Runtime>
+{
     fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
         &self.db_context
     }
 }
 
-impl<'a> ProvidesTypedDbSingleAccess for PendingFileDeletionRequestDequeAPI<'a> {}
+impl<'a, Runtime: StorageEnableRuntimeConfig> ProvidesTypedDbSingleAccess
+    for PendingFileDeletionRequestDequeAPI<'a, Runtime>
+{
+}
 
-impl<'a> CFDequeAPI for PendingFileDeletionRequestDequeAPI<'a> {
-    type Value = FileDeletionRequest;
+impl<'a, Runtime: StorageEnableRuntimeConfig> CFDequeAPI
+    for PendingFileDeletionRequestDequeAPI<'a, Runtime>
+{
+    type Value = FileDeletionRequest<Runtime>;
     type LeftIndexCF = FileDeletionRequestLeftIndexCf;
     type RightIndexCF = FileDeletionRequestRightIndexCf;
     type DataCF = FileDeletionRequestCf;

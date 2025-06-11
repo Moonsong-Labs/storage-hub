@@ -9,6 +9,7 @@ use sc_client_api::{
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde::Deserialize;
+use shc_common::traits::StorageEnableRuntimeConfig;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
@@ -60,14 +61,15 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
 /// For such purposes, it uses the [`ParachainClient<RuntimeApi>`] to interact with the runtime, the [`RpcHandlers`] to send
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
-pub struct BlockchainService<FSH, RuntimeApi>
+pub struct BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     /// The configuration for the BlockchainService.
-    pub(crate) config: BlockchainServiceConfig,
+    pub(crate) config: BlockchainServiceConfig<Runtime>,
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
     /// The parachain client. Used to interact with the runtime.
@@ -85,20 +87,20 @@ where
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
-    pub(crate) best_block: MinimalBlockInfo,
+    pub(crate) best_block: MinimalBlockInfo<Runtime>,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
     pub(crate) wait_for_block_request_by_number:
-        BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<anyhow::Result<()>>>>,
+        BTreeMap<BlockNumber<Runtime>, Vec<tokio::sync::oneshot::Sender<anyhow::Result<()>>>>,
     /// A registry of waiters for a tick number.
     pub(crate) wait_for_tick_request_by_number:
-        BTreeMap<TickNumber, Vec<tokio::sync::oneshot::Sender<Result<(), ApiError>>>>,
+        BTreeMap<TickNumber<Runtime>, Vec<tokio::sync::oneshot::Sender<Result<(), ApiError>>>>,
     /// The Provider ID that this node is managing.
     ///
     /// Can be a BSP or an MSP.
     /// This is initialised when the node is in sync.
-    pub(crate) maybe_managed_provider: Option<ManagedProvider>,
+    pub(crate) maybe_managed_provider: Option<ManagedProvider<Runtime>>,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
     /// Notify period value to know when to trigger the NotifyPeriod event.
@@ -108,33 +110,33 @@ where
     /// Efficiently manages the capacity changes of storage providers.
     ///
     /// Only required if the node is running as a provider.
-    pub(crate) capacity_manager: Option<CapacityRequestQueue>,
+    pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct BlockchainServiceConfig {
+pub struct BlockchainServiceConfig<Runtime: StorageEnableRuntimeConfig> {
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: u64,
     /// The minimum number of blocks behind the current best block to consider the node out of sync.
     ///
     /// This triggers a catch-up of proofs and Forest root changes in the blockchain service, before
     /// continuing to process incoming events.
-    pub sync_mode_min_blocks_behind: BlockNumber,
+    pub sync_mode_min_blocks_behind: BlockNumber<Runtime>,
 
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch
     /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
-    pub check_for_pending_proofs_period: BlockNumber,
+    pub check_for_pending_proofs_period: BlockNumber<Runtime>,
 
     /// The maximum number of blocks from the past that will be processed for catching up the root
     /// changes (see [`BlockchainService::forest_root_changes_catchup`]). This constant determines
     /// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
     /// variant.
-    pub max_blocks_behind_to_catch_up_root_changes: BlockNumber,
+    pub max_blocks_behind_to_catch_up_root_changes: BlockNumber<Runtime>,
 }
 
-impl Default for BlockchainServiceConfig {
+impl<Runtime: StorageEnableRuntimeConfig> Default for BlockchainServiceConfig<Runtime> {
     fn default() -> Self {
         Self {
             extrinsic_retry_timeout: 30,
@@ -146,37 +148,40 @@ impl Default for BlockchainServiceConfig {
 }
 
 /// Event loop for the BlockchainService actor.
-pub struct BlockchainServiceEventLoop<FSH, RuntimeApi>
+pub struct BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
-    receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
-    actor: BlockchainService<FSH, RuntimeApi>,
+    receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
+    actor: BlockchainService<FSH, RuntimeApi, Runtime>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
-enum MergedEventLoopMessage<Block>
+enum MergedEventLoopMessage<Block, Runtime>
 where
+    Runtime: StorageEnableRuntimeConfig,
     Block: cumulus_primitives_core::BlockT,
 {
-    Command(BlockchainServiceCommand),
+    Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<Block>),
     FinalityNotification(FinalityNotification<Block>),
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
-impl<FSH, RuntimeApi> ActorEventLoop<BlockchainService<FSH, RuntimeApi>>
-    for BlockchainServiceEventLoop<FSH, RuntimeApi>
+impl<FSH, RuntimeApi, Runtime> ActorEventLoop<BlockchainService<FSH, RuntimeApi, Runtime>>
+    for BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     fn new(
-        actor: BlockchainService<FSH, RuntimeApi>,
-        receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
+        actor: BlockchainService<FSH, RuntimeApi, Runtime>,
+        receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     ) -> Self {
         Self { actor, receiver }
     }
@@ -225,14 +230,15 @@ where
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
-impl<FSH, RuntimeApi> Actor for BlockchainService<FSH, RuntimeApi>
+impl<FSH, RuntimeApi, Runtime> Actor for BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
-    type Message = BlockchainServiceCommand;
-    type EventLoop = BlockchainServiceEventLoop<FSH, RuntimeApi>;
+    type Message = BlockchainServiceCommand<Runtime>;
+    type EventLoop = BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>;
     type EventBusProvider = BlockchainServiceEventBusProvider;
 
     fn handle_message(
@@ -1149,22 +1155,23 @@ where
     }
 }
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     /// Create a new [`BlockchainService`].
     pub fn new(
-        config: BlockchainServiceConfig,
+        config: BlockchainServiceConfig<Runtime>,
         client: Arc<ParachainClient<RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         forest_storage_handler: FSH,
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
-        capacity_request_queue: Option<CapacityRequestQueue>,
+        capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
     ) -> Self {
         Self {
@@ -1174,7 +1181,7 @@ where
             keystore,
             rpc_handlers,
             forest_storage_handler,
-            best_block: MinimalBlockInfo::default(),
+            best_block: MinimalBlockInfo::<Runtime>::default(),
             nonce_counter: 0,
             wait_for_block_request_by_number: BTreeMap::new(),
             wait_for_tick_request_by_number: BTreeMap::new(),
@@ -1436,7 +1443,7 @@ where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let block_hash: H256 = notification.hash;
-        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
 
         // If the node is running in maintenance mode, we don't process finality notifications.
         if self.maintenance_mode {

@@ -11,6 +11,7 @@ use sp_core::H256;
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
+use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -41,23 +42,24 @@ use crate::{
 // TODO: Make this configurable in the config file
 const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     /// Handles the initial sync of a MSP, after coming out of syncing mode.
     ///
     /// Steps:
     /// TODO
-    pub(crate) fn msp_initial_sync(&self, block_hash: H256, msp_id: ProviderId) {
+    pub(crate) fn msp_initial_sync(&self, block_hash: H256, msp_id: ProviderId<Runtime>) {
         // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
         // TODO: Catch up to Forest root writes in the Bucket's Forests.
 
         info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
 
-        let storage_requests: BTreeMap<H256, StorageRequestMetadata> = match self
+        let storage_requests: BTreeMap<H256, StorageRequestMetadata<Runtime>> = match self
             .client
             .runtime_api()
             .pending_storage_requests_by_msp(block_hash, msp_id)
@@ -77,7 +79,7 @@ where
 
         // loop over each pending storage requests to start a new storage request task for the MSP
         for (file_key, sr) in storage_requests {
-            self.emit(NewStorageRequest {
+            self.emit(NewStorageRequest::<Runtime> {
                 who: sr.owner,
                 file_key: file_key.into(),
                 bucket_id: sr.bucket_id,
@@ -97,7 +99,7 @@ where
     pub(crate) async fn msp_init_block_processing<Block>(
         &self,
         _block_hash: &H256,
-        _block_number: &BlockNumber,
+        _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
@@ -127,7 +129,7 @@ where
                 // Otherwise, ignore the event. Check finalised events for the old
                 // MSP branch.
                 if managed_msp_id == &new_msp_id {
-                    self.emit(StartMovedBucketDownload {
+                    self.emit(StartMovedBucketDownload::<Runtime> {
                         bucket_id,
                         value_prop_id,
                     });
@@ -143,7 +145,7 @@ where
             }) => {
                 // As an MSP, this node is interested in the event only if this node is the MSP being requested to delete a file.
                 if managed_msp_id == &msp_id {
-                    self.emit(FileDeletionRequest {
+                    self.emit(FileDeletionRequest::<Runtime> {
                         user,
                         file_key: file_key.into(),
                         file_size: file_size.into(),

@@ -12,6 +12,7 @@ use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::KeystorePtr;
+use sp_runtime::traits::CheckedSub;
 use sp_runtime::{
     generic::{self, SignedPayload},
     traits::Zero,
@@ -26,6 +27,7 @@ use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::Actor;
+use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
@@ -51,14 +53,15 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     /// Notify tasks waiting for a block number.
-    pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber) {
+    pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber<Runtime>) {
         let mut keys_to_remove = Vec::new();
 
         for (block_number, waiters) in self
@@ -118,7 +121,7 @@ where
     ///
     /// Begins another batch process of pending capacity requests if there are any and if
     /// we are past the block at which the capacity can be increased.
-    pub(crate) async fn notify_capacity_manager(&mut self, block_number: &BlockNumber) {
+    pub(crate) async fn notify_capacity_manager(&mut self, block_number: &BlockNumber<Runtime>) {
         if self.capacity_manager.is_none() {
             return;
         };
@@ -222,12 +225,12 @@ where
     pub(crate) fn register_best_block_and_check_reorg<Block>(
         &mut self,
         block_import_notification: &BlockImportNotification<Block>,
-    ) -> NewBlockNotificationKind<Block>
+    ) -> NewBlockNotificationKind<Block, Runtime>
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let last_best_block = self.best_block;
-        let new_block_info: MinimalBlockInfo = block_import_notification.into();
+        let new_block_info: MinimalBlockInfo<Runtime> = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.
         if !block_import_notification.is_new_best {
@@ -472,7 +475,7 @@ where
     pub(crate) async fn send_extrinsic(
         &mut self,
         call: impl Into<storage_hub_runtime::RuntimeCall>,
-        options: &SendExtrinsicOptions,
+        options: &SendExtrinsicOptions<Runtime>,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
@@ -537,7 +540,7 @@ where
         client: Arc<ParachainClient<RuntimeApi>>,
         function: impl Into<storage_hub_runtime::RuntimeCall>,
         nonce: u32,
-        tip: Tip,
+        tip: Tip<Runtime>,
     ) -> UncheckedExtrinsic {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
@@ -621,7 +624,7 @@ where
         &self,
         block_hash: H256,
         extrinsic_hash: H256,
-    ) -> Result<Extrinsic> {
+    ) -> Result<Extrinsic<Runtime>> {
         // Get the block.
         let maybe_block = self.client.block(block_hash).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to get block. Error: {:?}", e);
@@ -711,8 +714,8 @@ where
     pub(crate) fn should_provider_submit_proof(
         &self,
         block_hash: &H256,
-        provider_id: &ProofsDealerProviderId,
-        current_tick: &BlockNumber,
+        provider_id: &ProofsDealerProviderId<Runtime>,
+        current_tick: &BlockNumber<Runtime>,
     ) -> bool {
         // Get the last tick for which the BSP submitted a proof.
         let last_tick_provided = match self
@@ -808,8 +811,8 @@ where
     /// Gets the next tick for which a Provider (BSP) should submit a proof.
     pub(crate) fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: &ProofsDealerProviderId,
-    ) -> Result<BlockNumber, GetProofSubmissionRecordError> {
+        provider_id: &ProofsDealerProviderId<Runtime>,
+    ) -> Result<BlockNumber<Runtime>, GetProofSubmissionRecordError> {
         // Get the current block hash.
         let current_block_hash = self.client.info().best_hash;
 
@@ -828,7 +831,7 @@ where
     }
 
     /// Checks if `block_number` is one where this Blockchain Service should emit a `NotifyPeriod` event.
-    pub(crate) fn check_for_notify(&self, block_number: &BlockNumber) {
+    pub(crate) fn check_for_notify(&self, block_number: &BlockNumber<Runtime>) {
         if let Some(np) = self.notify_period {
             if block_number % np == 0 {
                 self.emit(NotifyPeriod {});
@@ -906,8 +909,8 @@ where
         forest_key: Vec<u8>,
         mutations: &[(H256, TrieMutation)],
         revert: bool,
-        old_root: ForestRoot,
-        new_root: ForestRoot,
+        old_root: ForestRoot<Runtime>,
+        new_root: ForestRoot<Runtime>,
     ) -> Result<()> {
         debug!(target: LOG_TARGET, "Applying Forest mutations to Forest key [{:?}], reverting: {}, old root: {:?}, new root: {:?}", forest_key, revert, old_root, new_root);
 

@@ -14,7 +14,7 @@ use shc_blockchain_service::{
     BlockchainService,
 };
 use shc_common::{
-    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
+    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi, StorageEnableRuntimeConfig},
     types::ParachainClient,
 };
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
@@ -48,8 +48,9 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService>>,

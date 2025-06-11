@@ -15,7 +15,7 @@ use shc_common::traits::{
 };
 use shc_common::types::{BlockNumber, StorageData};
 use shc_forest_manager::traits::ForestStorageHandler;
-use tokio::runtime::Runtime;
+use sp_runtime::Saturating;
 
 use crate::{
     transaction::SubmittedTransaction, types::ManagedProvider, types::SendExtrinsicOptions,
@@ -101,9 +101,9 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
     /// Calculate the new capacity needed based on the total required capacity
     pub fn calculate_new_capacity(
         &self,
-        current_capacity: StorageData<T>,
-        total_required: StorageData<T>,
-    ) -> StorageData<T> {
+        current_capacity: StorageData<Runtime>,
+        total_required: StorageData<Runtime>,
+    ) -> StorageData<Runtime> {
         // Calculate how many jumps we need to cover the required capacity
         let jumps_needed = total_required.div_ceil(self.capacity_config.jump_capacity);
         let total_jump_capacity = jumps_needed * self.capacity_config.jump_capacity;
@@ -164,12 +164,12 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
 
 /// Configuration parameters determining values for capacity increases.
 #[derive(Clone, Debug)]
-pub struct CapacityConfig<T: pallet_file_system::Config> {
+pub struct CapacityConfig<Runtime: StorageEnableRuntimeConfig> {
     /// Maximum storage capacity of the provider in bytes.
     ///
     /// The node will not increase its on-chain capacity above this value.
     /// This is meant to reflect the actual physical storage capacity of the node.
-    max_capacity: StorageData<T>,
+    max_capacity: StorageData<Runtime>,
     /// Capacity increases by this amount in bytes a number of times based on the required capacity calculated
     /// by the [`calculate_new_capacity`](CapacityRequestQueue::calculate_new_capacity) method.
     ///
@@ -177,18 +177,18 @@ pub struct CapacityConfig<T: pallet_file_system::Config> {
     /// capacity by adding more stake. For example, if the jump capacity is set to 1k, and the
     /// node needs 100 units of storage more to store a file, the node will automatically increase
     /// its on-chain capacity by 1k units.
-    jump_capacity: StorageData<T>,
+    jump_capacity: StorageData<Runtime>,
 }
 
-impl<T: pallet_file_system::Config> CapacityConfig<T> {
-    pub fn new(max_capacity: StorageData<T>, jump_capacity: StorageData<T>) -> Self {
+impl<Runtime: StorageEnableRuntimeConfig> CapacityConfig<Runtime> {
+    pub fn new(max_capacity: StorageData<Runtime>, jump_capacity: StorageData<Runtime>) -> Self {
         Self {
             max_capacity,
             jump_capacity,
         }
     }
 
-    pub fn max_capacity(&self) -> StorageData<T> {
+    pub fn max_capacity(&self) -> StorageData<Runtime> {
         self.max_capacity
     }
 }
@@ -201,7 +201,7 @@ pub struct CapacityRequest<Runtime: StorageEnableRuntimeConfig> {
     callback: tokio::sync::oneshot::Sender<Result<(), anyhow::Error>>,
 }
 
-impl<Runtime> CapacityRequest<Runtime> {
+impl<Runtime: StorageEnableRuntimeConfig> CapacityRequest<Runtime> {
     pub fn new(
         data: CapacityRequestData<Runtime>,
         callback: tokio::sync::oneshot::Sender<Result<(), anyhow::Error>>,
@@ -217,7 +217,7 @@ impl<Runtime> CapacityRequest<Runtime> {
 }
 
 /// Data needed to process a capacity request.
-pub struct CapacityRequestData<Runtime: pallet_file_system::Config> {
+pub struct CapacityRequestData<Runtime: StorageEnableRuntimeConfig> {
     /// Capacity requested to be increased.
     required: StorageData<Runtime>,
 }
@@ -231,16 +231,17 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestData<Runtime> {
 impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    Runtime: pallet_file_system::Config
-        + pallet_proofs_dealer::Config
-        + pallet_storage_providers::Config,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     /// Queue a capacity request.
     ///
     /// If the capacity request cannot be queued for any reason, the error will be sent back to the caller.
-    pub(crate) async fn queue_capacity_request(&mut self, capacity_request: CapacityRequest) {
+    pub(crate) async fn queue_capacity_request(
+        &mut self,
+        capacity_request: CapacityRequest<Runtime>,
+    ) {
         match self.check_capacity_request_conditions().await {
             Ok((_, current_capacity, _)) => {
                 if let Some(capacity_manager) = self.capacity_manager.as_mut() {
@@ -368,7 +369,7 @@ where
     /// by the node operator.
     async fn check_capacity_request_conditions(
         &mut self,
-    ) -> Result<(H256, StorageData, H256), anyhow::Error> {
+    ) -> Result<(H256, StorageData<Runtime>, H256), anyhow::Error> {
         // Any errors in this block is considered a critical error which would not allow processing any capacity requests.
         // Only process capacity requests if the capacity manager is initialized
         let Some(capacity_manager) = &self.capacity_manager else {

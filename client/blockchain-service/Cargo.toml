@@ -54,6 +54,7 @@ cumulus-primitives-core = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 
 # Local
+storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
 shc-forest-manager = { workspace = true }

@@ -13,6 +13,7 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
 };
 use shc_actors_framework::actor::Actor;
+use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
@@ -38,11 +39,12 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
     ///
@@ -62,7 +64,7 @@ where
     pub(crate) async fn bsp_init_block_processing<Block>(
         &self,
         block_hash: &H256,
-        block_number: &BlockNumber,
+        block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
@@ -104,7 +106,7 @@ where
                 old_msp_id,
                 new_msp_id,
             }) => {
-                self.emit(MoveBucketRejected {
+                self.emit(MoveBucketRejected::<Runtime> {
                     bucket_id,
                     old_msp_id,
                     new_msp_id,
@@ -330,7 +332,7 @@ where
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
         if next_event_data.is_none() {
-            let max_batch_confirm = <MaxBatchConfirmStorageRequests as Get<u32>>::get();
+            let max_batch_confirm = <MaxBatchConfirmStorageRequests<Runtime> as Get<u32>>::get();
 
             // Batch multiple confirm file storing taking the runtime maximum.
             let mut confirm_storing_requests = Vec::new();
@@ -544,7 +546,7 @@ where
         }
     }
 
-    fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
+    fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
         // Get the BSP's Forest root write lock.
         let forest_root_write_lock = match &mut self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
