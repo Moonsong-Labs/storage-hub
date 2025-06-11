@@ -385,5 +385,5 @@ impl<'a, Runtime: StorageEnableRuntimeConfig> CFDequeAPI
     type Value = FileDeletionRequest<Runtime>;
     type LeftIndexCF = FileDeletionRequestLeftIndexCf;
     type RightIndexCF = FileDeletionRequestRightIndexCf;
-    type DataCF = FileDeletionRequestCf;
+    type DataCF = FileDeletionRequestCf<Runtime>;
 }

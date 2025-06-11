@@ -7,6 +7,7 @@ use shc_common::traits::{
     StorageEnableApiCollection, StorageEnableRuntimeApi, StorageEnableRuntimeConfig,
 };
 use shc_common::types::Balance;
+use shc_common::types::StorageData;
 use sp_api::ApiError;
 use sp_core::H256;
 
@@ -109,7 +110,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntimeConfig> {
         provider_id: ProviderId<Runtime>,
     },
     QueueSubmitProofRequest {
-        request: SubmitProofRequest,
+        request: SubmitProofRequest<Runtime>,
     },
     QueueConfirmBspRequest {
         request: ConfirmStoringRequest,
@@ -153,11 +154,11 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntimeConfig> {
     QueryProviderForestRoot {
         provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = StorageDataUnit<Runtime>, error_type = QueryStorageProviderCapacityError)]
+    #[command(success_type = StorageData<Runtime>, error_type = QueryStorageProviderCapacityError)]
     QueryStorageProviderCapacity {
         provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = StorageDataUnit<Runtime>, error_type = QueryAvailableStorageCapacityError)]
+    #[command(success_type = StorageData<Runtime>, error_type = QueryAvailableStorageCapacityError)]
     QueryAvailableStorageCapacity {
         provider_id: ProviderId<Runtime>,
     },
@@ -165,7 +166,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntimeConfig> {
     QueryStorageProviderId {
         maybe_node_pub_key: Option<sp_core::sr25519::Public>,
     },
-    #[command(success_type = Vec<AccountId<Runtime>>, error_type = GetUsersWithDebtOverThresholdError)]
+    #[command(success_type = Vec<Runtime::AccountId>, error_type = GetUsersWithDebtOverThresholdError)]
     QueryUsersWithDebt {
         provider_id: ProviderId<Runtime>,
         min_debt: Balance<Runtime>,
@@ -184,7 +185,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntimeConfig> {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
     },
     QueueFileDeletionRequest {
-        request: FileDeletionRequest,
+        request: FileDeletionRequest<Runtime>,
     },
     #[command(mode = "AsyncResponse")]
     IncreaseCapacity {
@@ -193,7 +194,7 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntimeConfig> {
     #[command(success_type = Vec<BucketId<Runtime>>, error_type = QueryBucketsOfUserStoredByMspError)]
     QueryBucketsOfUserStoredByMsp {
         msp_id: ProviderId<Runtime>,
-        user: AccountId<Runtime>,
+        user: Runtime::AccountId,
     },
 }
 

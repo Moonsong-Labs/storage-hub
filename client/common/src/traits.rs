@@ -21,6 +21,7 @@ pub trait StorageEnableRuntimeConfig:
     + pallet_storage_providers::Config
     + pallet_bucket_nfts::Config
     + pallet_transaction_payment::Config
+    + std::fmt::Debug
 {
 }
 

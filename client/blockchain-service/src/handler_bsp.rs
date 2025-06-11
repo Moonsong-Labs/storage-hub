@@ -162,7 +162,10 @@ where
     }
 
     /// Processes finality events that are only relevant for a BSP.
-    pub(crate) fn bsp_process_finality_events(&self, _block_hash: &H256, event: RuntimeEvent) {
+    pub(crate) fn bsp_process_finality_events(&self, _block_hash: &H256, event: RuntimeEvent)
+    where
+        <Runtime as pallet_storage_providers::Config>::ProviderId: PartialEq<H256>,
+    {
         let managed_bsp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => &bsp_handler.bsp_id,
             _ => {

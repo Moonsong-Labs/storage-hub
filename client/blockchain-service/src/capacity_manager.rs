@@ -3,18 +3,19 @@ use std::{collections::VecDeque, time::Duration};
 use anyhow::anyhow;
 use log::{debug, error};
 
-use sc_client_api::HeaderBackend;
-use sp_api::ProvideRuntimeApi;
-use sp_core::H256;
-
+use frame_support::traits::tokens::imbalance::Imbalance;
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
+use sc_client_api::HeaderBackend;
 use shc_common::traits::{
     StorageEnableApiCollection, StorageEnableRuntimeApi, StorageEnableRuntimeConfig,
 };
 use shc_common::types::{BlockNumber, StorageData};
 use shc_forest_manager::traits::ForestStorageHandler;
+use sp_api::ProvideRuntimeApi;
+use sp_core::H256;
+use sp_runtime::traits::CheckedAdd;
 use sp_runtime::Saturating;
 
 use crate::{
@@ -158,7 +159,7 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
     /// Reset the pending requests queue and total required capacity.
     pub fn reset_queue(&mut self) {
         self.pending_requests.clear();
-        self.total_required = 0;
+        self.total_required = StorageData::zeroed();
     }
 }
 
