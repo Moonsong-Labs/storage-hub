@@ -32,7 +32,6 @@ mod benchmarks {
     };
     use shp_constants::GIGAUNIT;
     use sp_runtime::{
-        format,
         traits::{Hash, One},
         BoundedBTreeSet,
     };

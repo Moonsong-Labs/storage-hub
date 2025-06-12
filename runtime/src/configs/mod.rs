@@ -3,6 +3,7 @@ pub mod xcm_config;
 
 // Substrate and Polkadot dependencies
 use core::marker::PhantomData;
+use cumulus_pallet_parachain_system::DefaultCoreSelector;
 use cumulus_pallet_parachain_system::{RelayChainStateProof, RelayNumberMonotonicallyIncreases};
 use cumulus_primitives_core::{
     relay_chain::well_known_keys, AggregateMessageOrigin, AssetId, ParaId,
@@ -161,6 +162,7 @@ impl cumulus_pallet_parachain_system::Config for Runtime {
     type ReservedXcmpWeight = ReservedXcmpWeight;
     type CheckAssociatedRelayNumber = RelayNumberMonotonicallyIncreases;
     type ConsensusHook = ConsensusHook;
+    type SelectCore = DefaultCoreSelector<Runtime>;
 }
 
 pub(crate) type ConsensusHook = cumulus_pallet_aura_ext::FixedVelocityConsensusHook<
@@ -199,6 +201,7 @@ impl pallet_balances::Config for Runtime {
     type RuntimeFreezeReason = RuntimeFreezeReason;
     type FreezeIdentifier = ();
     type MaxFreezes = ConstU32<0>;
+    type DoneSlashHandler = ();
 }
 
 impl pallet_transaction_payment::Config for Runtime {
@@ -208,6 +211,7 @@ impl pallet_transaction_payment::Config for Runtime {
     type LengthToFee = ConstantMultiplier<Balance, TransactionByteFee>;
     type FeeMultiplierUpdate = SlowAdjustingFeeUpdate<Self>;
     type OperationalFeeMultiplier = ConstU8<5>;
+    type WeightInfo = ();
 }
 
 impl pallet_sudo::Config for Runtime {
@@ -400,8 +404,9 @@ impl pallet_parameters::Config for Runtime {
 impl pallet_randomness::Config for Runtime {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
-    type RelayBlockGetter = cumulus_pallet_parachain_system::RelaychainDataProvider<Runtime>;
+    type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();
+    type BabeDataGetterBlockNumber = BlockNumber;
 }
 
 /// Only callable after `set_validation_data` is called which forms this proof the same way
@@ -413,6 +418,15 @@ fn relay_chain_state_proof() -> RelayChainStateProof {
         .expect("set in `set_validation_data`");
     RelayChainStateProof::new(ParachainInfo::get(), relay_storage_root, relay_chain_state)
         .expect("Invalid relay chain state proof, already constructed in `set_validation_data`")
+}
+
+pub struct BlockNumberGetter {}
+impl sp_runtime::traits::BlockNumberProvider for BlockNumberGetter {
+    type BlockNumber = BlockNumberFor<Runtime>;
+
+    fn current_block_number() -> Self::BlockNumber {
+        cumulus_pallet_parachain_system::RelaychainDataProvider::<Runtime>::current_block_number()
+    }
 }
 
 pub struct BabeDataGetter;

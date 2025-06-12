@@ -4,6 +4,8 @@
 pub mod inherent;
 pub use inherent::*;
 
+extern crate alloc;
+
 /// A Trait to lookup keys from AuthorIds
 pub trait KeysLookup<AuthorId, Keys> {
     #[cfg(feature = "runtime-benchmarks")]

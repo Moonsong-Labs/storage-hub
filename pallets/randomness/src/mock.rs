@@ -71,6 +71,12 @@ impl frame_system::Config for Test {
     type OnSetCode = ();
     type MaxConsumers = frame_support::traits::ConstU32<16>;
     type RuntimeTask = ();
+    type ExtensionsWeightInfo = ();
+    type SingleBlockMigrations = ();
+    type MultiBlockMigrator = ();
+    type PreInherents = ();
+    type PostInherents = ();
+    type PostTransactions = ();
 }
 
 parameter_types! {
@@ -90,6 +96,7 @@ impl pallet_balances::Config for Test {
     type FreezeIdentifier = ();
     type MaxFreezes = ();
     type RuntimeFreezeReason = ();
+    type DoneSlashHandler = ();
 }
 
 pub struct BabeDataGetter;
@@ -109,9 +116,9 @@ impl crate::GetBabeData<u64, H256> for BabeDataGetter {
 
 /// Mock implementation of the relay chain data provider, which should return the relay chain block
 /// that the previous parachain block was anchored to.
-pub struct MockRelaychainDataProvider;
-impl BlockNumberProvider for MockRelaychainDataProvider {
-    type BlockNumber = u32;
+pub struct BlockNumberGetter {}
+impl BlockNumberProvider for BlockNumberGetter {
+    type BlockNumber = u64;
     fn current_block_number() -> Self::BlockNumber {
         frame_system::Pallet::<Test>::block_number()
             .saturating_sub(1)
@@ -123,8 +130,9 @@ impl BlockNumberProvider for MockRelaychainDataProvider {
 impl Config for Test {
     type RuntimeEvent = RuntimeEvent;
     type BabeDataGetter = BabeDataGetter;
-    type RelayBlockGetter = MockRelaychainDataProvider;
+    type BabeBlockGetter = BlockNumberGetter;
     type WeightInfo = ();
+    type BabeDataGetterBlockNumber = BlockNumberFor<Test>;
 }
 
 /// Panics if an event is not found in the system log of events

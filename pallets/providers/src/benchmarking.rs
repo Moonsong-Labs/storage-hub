@@ -38,10 +38,7 @@ mod benchmarks {
     use shp_traits::{
         CommitRevealRandomnessInterface, ProofsDealerInterface, StorageHubTickGetter,
     };
-    use sp_runtime::{
-        format,
-        traits::{Bounded, Hash, One, Zero},
-    };
+    use sp_runtime::traits::{Bounded, Hash, One, Zero};
     use sp_std::vec;
 
     use super::*;

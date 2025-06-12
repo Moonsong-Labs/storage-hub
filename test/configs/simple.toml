@@ -11,7 +11,7 @@ default_args = [
 [[relaychain.nodes]]
 name = "relay-0"
 validator = true
-ws_port = 31000
+rpc_port = 31000
 add_to_bootnodes = true
 
 [[relaychain.nodes]]
@@ -27,7 +27,7 @@ id = 2000
 image = "docker.io/moonsonglabs/storage-hub:latest"
 name = "sh"
 args = ["--no-hardware-benchmarks", "-lparachain=debug"]
-ws_port = 32000
+rpc_port = 32000
 
 
 [types.Header]

@@ -2,7 +2,7 @@
 
 // std
 use futures::{Stream, StreamExt};
-use log::info;
+use log::{error, info};
 use shc_blockchain_service::capacity_manager::CapacityConfig;
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
@@ -42,7 +42,9 @@ use cumulus_primitives_core::{
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 
 // Substrate Imports
+use cumulus_primitives_core::CollectCollationInfo;
 use frame_benchmarking_cli::SUBSTRATE_REFERENCE_HARDWARE;
+use polkadot_primitives::UpgradeGoAhead;
 use sc_client_api::{Backend, HeaderBackend};
 use sc_consensus::{ImportQueue, LongestChain};
 use sc_executor::{HeapAllocStrategy, DEFAULT_HEAP_ALLOC_STRATEGY};
@@ -53,6 +55,7 @@ use sc_network::{
 use sc_service::{Configuration, PartialComponents, RpcHandlers, TFullBackend, TaskManager};
 use sc_telemetry::{Telemetry, TelemetryHandle, TelemetryWorker, TelemetryWorkerHandle};
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
+use sc_transaction_pool_api::TransactionPool;
 use shc_client::{
     builder::{Buildable, StorageHubBuilder, StorageLayerBuilder},
     handler::{RunnableTasks, StorageHubHandler},
@@ -62,6 +65,7 @@ use shc_client::{
     },
 };
 use shc_file_transfer_service::configure_file_transfer_network;
+use sp_api::ProvideRuntimeApi;
 use sp_keystore::{Keystore, KeystorePtr};
 use substrate_prometheus_endpoint::Registry;
 
@@ -88,7 +92,7 @@ pub type Service = PartialComponents<
     ParachainBackend,
     MaybeSelectChain,
     sc_consensus::DefaultImportQueue<Block>,
-    sc_transaction_pool::FullPool<Block, ParachainClient>,
+    sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>,
     (
         ParachainBlockImport,
         Option<Telemetry>,
@@ -148,12 +152,24 @@ pub fn new_partial(
         telemetry
     });
 
-    let transaction_pool = sc_transaction_pool::BasicPool::new_full(
-        config.transaction_pool.clone(),
-        config.role.is_authority().into(),
-        config.prometheus_registry(),
-        task_manager.spawn_essential_handle(),
-        client.clone(),
+    // FIXME: The `config.transaction_pool.options` field is private, so for now use its default value
+    // let transaction_pool = Arc::from(BasicPool::new_full(
+    //     Default::default(),
+    //     config.role.is_authority().into(),
+    //     config.prometheus_registry(),
+    //     task_manager.spawn_essential_handle(),
+    //     client.clone(),
+    // ));
+
+    let transaction_pool = Arc::from(
+        sc_transaction_pool::Builder::new(
+            task_manager.spawn_essential_handle(),
+            client.clone(),
+            config.role.is_authority().into(),
+        )
+        .with_options(config.transaction_pool.clone())
+        .with_prometheus(config.prometheus_registry())
+        .build(),
     );
 
     let block_import = ParachainBlockImport::new(client.clone(), backend.clone());
@@ -468,7 +484,7 @@ where
                 is_validator: config.role.is_authority(),
                 enable_http_requests: false,
                 custom_extensions: move |_| vec![],
-            })
+            })?
             .run(client.clone(), task_manager.spawn_handle())
             .boxed(),
         );
@@ -481,16 +497,14 @@ where
             cli::Sealing::Instant => {
                 Box::new(
                     // This bit cribbed from the implementation of instant seal.
-                    transaction_pool
-                        .pool()
-                        .validated_pool()
-                        .import_notification_stream()
-                        .map(|_| EngineCommand::SealNewBlock {
+                    transaction_pool.import_notification_stream().map(|_| {
+                        EngineCommand::SealNewBlock {
                             create_empty: false,
                             finalize: false,
                             parent_hash: None,
                             sender: None,
-                        }),
+                        }
+                    }),
                 )
             }
             cli::Sealing::Manual => {
@@ -672,6 +686,22 @@ where
 						.expect("Expected parachain header should exist")
 						.encode();
 
+                    let current_para_head = client_for_cidp
+                        .header(block)
+                        .expect("Header lookup should succeed")
+                        .expect("Header passed in as parent should be present in backend.");
+
+                    let should_send_go_ahead = match client_for_cidp
+                        .runtime_api()
+                        .collect_collation_info(block, &current_para_head)
+                        {
+                            Ok(info) => info.new_validation_code.is_some(),
+                            Err(e) => {
+                                error!("Failed to collect collation info: {:?}", e);
+                                false
+                            },
+                        };
+
 					let raw_para_head_data = HeadData(para_header);
 					let para_head_data = raw_para_head_data.encode();
 
@@ -723,6 +753,12 @@ where
                                 raw_downward_messages: vec![],
                                 raw_horizontal_messages: vec![],
                                 additional_key_values: Some(additional_keys),
+                                upgrade_go_ahead: should_send_go_ahead.then(|| {
+                                    log::info!(
+                                        "Detected pending validation code, sending go-ahead signal."
+                                    );
+                                    UpgradeGoAhead::GoAhead
+                                }),
                             }
                         };
 
@@ -1069,7 +1105,7 @@ where
                 is_validator: parachain_config.role.is_authority(),
                 enable_http_requests: false,
                 custom_extensions: move |_| vec![],
-            })
+            })?
             .run(client.clone(), task_manager.spawn_handle())
             .boxed(),
         );
@@ -1438,7 +1474,7 @@ fn start_consensus(
     telemetry: Option<TelemetryHandle>,
     task_manager: &TaskManager,
     relay_chain_interface: Arc<dyn RelayChainInterface>,
-    transaction_pool: Arc<sc_transaction_pool::FullPool<Block, ParachainClient>>,
+    transaction_pool: Arc<sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient>>,
     keystore: KeystorePtr,
     relay_chain_slot_duration: Duration,
     para_id: ParaId,

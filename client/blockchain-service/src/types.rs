@@ -8,7 +8,7 @@ use std::{
 };
 
 use codec::{Decode, Encode};
-use frame_support::dispatch::DispatchInfo;
+use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::H256;
@@ -212,7 +212,7 @@ pub enum ExtrinsicResult {
     /// This variant represents a successful extrinsic execution.
     Success {
         /// Dispatch info.
-        dispatch_info: DispatchInfo,
+        dispatch_info: DispatchEventInfo,
     },
     /// Failure variant.
     ///
@@ -221,7 +221,7 @@ pub enum ExtrinsicResult {
         /// Dispatch error.
         dispatch_error: DispatchError,
         /// Dispatch info.
-        dispatch_info: DispatchInfo,
+        dispatch_info: DispatchEventInfo,
     },
 }
 
