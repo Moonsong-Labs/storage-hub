@@ -159,7 +159,7 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
     /// Reset the pending requests queue and total required capacity.
     pub fn reset_queue(&mut self) {
         self.pending_requests.clear();
-        self.total_required = StorageData::zeroed();
+        self.total_required = StorageData::zero();
     }
 }
 

@@ -1272,7 +1272,7 @@ where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         let block_hash: H256 = notification.hash;
-        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+        let block_number: BlockNumber<Runtime> = (*notification.header.number()).saturated_into();
 
         // If this is the first block import notification, we might need to catch up.
         info!(target: LOG_TARGET, "🥱 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
@@ -1348,10 +1348,11 @@ where
     async fn process_block_import<Block>(
         &mut self,
         block_hash: &H256,
-        block_number: &BlockNumber,
+        block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        <Runtime as pallet_storage_providers::Config>::ProviderId: PartialEq<H256>,
     {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 

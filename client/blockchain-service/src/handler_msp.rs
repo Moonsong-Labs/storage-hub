@@ -82,9 +82,9 @@ where
             self.emit(NewStorageRequest::<Runtime> {
                 who: sr.owner,
                 file_key: file_key.into(),
-                bucket_id: sr.bucket_id,
+                bucket_id: sr.bucket_id.as_ref(),
                 location: sr.location,
-                fingerprint: Fingerprint::from(sr.fingerprint.as_byte_slice()),
+                fingerprint: Fingerprint::from(sr.fingerprint.as_bytes()),
                 size: sr.size,
                 user_peer_ids: sr.user_peer_ids,
                 expires_at: sr.expires_at,
@@ -177,7 +177,7 @@ where
                 bucket_id,
             }) => {
                 if msp_id == *managed_msp_id {
-                    self.emit(FinalisedMspStoppedStoringBucket {
+                    self.emit(FinalisedMspStoppedStoringBucket::<Runtime> {
                         msp_id,
                         owner,
                         bucket_id,
@@ -196,14 +196,16 @@ where
             ) => {
                 // Only emit the event if the MSP provided a proof of inclusion, meaning the file key was deleted from the bucket's forest.
                 if managed_msp_id == &msp_id && proof_of_inclusion {
-                    self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
-                        user,
-                        file_key: file_key.into(),
-                        file_size: file_size.into(),
-                        bucket_id,
-                        msp_id,
-                        proof_of_inclusion,
-                    });
+                    self.emit(
+                        FinalisedProofSubmittedForPendingFileDeletionRequest::<Runtime> {
+                            user,
+                            file_key: file_key.into(),
+                            file_size: file_size.into(),
+                            bucket_id,
+                            msp_id,
+                            proof_of_inclusion,
+                        },
+                    );
                 }
             }
             RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequested {
@@ -214,7 +216,7 @@ where
             }) => {
                 // As an MSP, this node is interested in the event only if this node is the new MSP.
                 if managed_msp_id == &new_msp_id {
-                    self.emit(MoveBucketRequestedForMsp {
+                    self.emit(MoveBucketRequestedForMsp::<Runtime> {
                         bucket_id,
                         value_prop_id: new_value_prop_id,
                     });
@@ -228,7 +230,10 @@ where
                 },
             ) => {
                 if msp_id == *managed_msp_id {
-                    self.emit(FinalisedMspStopStoringBucketInsolventUser { msp_id, bucket_id })
+                    self.emit(FinalisedMspStopStoringBucketInsolventUser::<Runtime> {
+                        msp_id,
+                        bucket_id,
+                    })
                 }
             }
             RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
@@ -243,7 +248,7 @@ where
                 // of a reorg.
                 if let Some(old_msp_id) = old_msp_id {
                     if managed_msp_id == &old_msp_id {
-                        self.emit(FinalisedBucketMovedAway {
+                        self.emit(FinalisedBucketMovedAway::<Runtime> {
                             bucket_id,
                             old_msp_id,
                             new_msp_id,
@@ -520,7 +525,7 @@ where
         }
     }
 
-    fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
+    fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
         // Get the MSP's Forest root write lock.
         let forest_root_write_lock = match &mut self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &mut msp_handler.forest_root_write_lock,
@@ -556,7 +561,7 @@ where
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
                     .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
-                    .write(data);
+                    .write(&data);
                 state_store_context.commit();
             }
             ForestWriteLockTaskData::ConfirmStoringRequest(_) => {

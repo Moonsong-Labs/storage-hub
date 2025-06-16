@@ -39,7 +39,7 @@ use shc_common::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
-use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
+use storage_hub_runtime::{SignedExtra, UncheckedExtrinsic};
 
 use crate::{
     events::{
@@ -420,13 +420,13 @@ where
         }
 
         // Case: There is exactly one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
-        let provider_id = *provider_ids_found.get(0).expect("There is exactly one Provider ID linked to any of the BCSV keys in this node's keystore; qed");
+        let provider_id = provider_ids_found.get(0).expect("There is exactly one Provider ID linked to any of the BCSV keys in this node's keystore; qed").clone();
 
         // Replace the provider ID only if it is not already managed.
-        match (&self.maybe_managed_provider, provider_id) {
+        match (&self.maybe_managed_provider, &provider_id) {
             // Case: The node was not managing any Provider.
             (None, _) => {
-                info!(target: LOG_TARGET, "🔑 This node is not managing any Provider. Starting to manage Provider ID {:?}", provider_id);
+                info!(target: LOG_TARGET, "🔑 This node is not managing any Provider. Starting to manage Provider ID {:?}", &provider_id);
                 self.maybe_managed_provider = Some(ManagedProvider::new(provider_id));
             }
             // Case: The node goes from managing a BSP, to managing another BSP with a different ID.
@@ -773,7 +773,7 @@ where
         };
 
         // Check if the current tick is a tick this provider should submit a proof for.
-        let current_tick_minus_last_submission = match current_tick.checked_sub(last_tick_provided)
+        let current_tick_minus_last_submission = match current_tick.checked_sub(&last_tick_provided)
         {
             Some(tick) => tick,
             None => {
@@ -1062,10 +1062,10 @@ where
         Ok(reverted_mutation)
     }
 
-    pub(crate) fn process_common_block_import_events(&mut self, event: RuntimeEvent) {
+    pub(crate) fn process_common_block_import_events(&mut self, event: Runtime::RuntimeEvent) {
         match event {
             // New storage request event coming from pallet-file-system.
-            RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
+            Runtime::RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
                 who,
                 file_key,
                 bucket_id,
@@ -1085,15 +1085,17 @@ where
                 expires_at,
             }),
             // A provider has been marked as slashable.
-            RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
-                provider,
-                next_challenge_deadline,
-            }) => self.emit(SlashableProvider {
+            Runtime::RuntimeEvent::ProofsDealer(
+                pallet_proofs_dealer::Event::SlashableProvider {
+                    provider,
+                    next_challenge_deadline,
+                },
+            ) => self.emit(SlashableProvider {
                 provider,
                 next_challenge_deadline,
             }),
             // The last chargeable info of a provider has been updated
-            RuntimeEvent::PaymentStreams(
+            Runtime::RuntimeEvent::PaymentStreams(
                 pallet_payment_streams::Event::LastChargeableInfoUpdated {
                     provider_id,
                     last_chargeable_tick,
@@ -1117,22 +1119,24 @@ where
                 }
             }
             // A user has been flagged as without funds in the runtime
-            RuntimeEvent::PaymentStreams(pallet_payment_streams::Event::UserWithoutFunds {
-                who,
-            }) => {
+            Runtime::RuntimeEvent::PaymentStreams(
+                pallet_payment_streams::Event::UserWithoutFunds { who },
+            ) => {
                 self.emit(UserWithoutFunds::<Runtime> {
                     who,
                     _phantom: std::marker::PhantomData::default(),
                 });
             }
             // A file was correctly deleted from a user without funds
-            RuntimeEvent::FileSystem(pallet_file_system::Event::SpStopStoringInsolventUser {
-                sp_id,
-                file_key,
-                owner,
-                location,
-                new_root,
-            }) => {
+            Runtime::RuntimeEvent::FileSystem(
+                pallet_file_system::Event::SpStopStoringInsolventUser {
+                    sp_id,
+                    file_key,
+                    owner,
+                    location,
+                    new_root,
+                },
+            ) => {
                 if let Some(managed_provider_id) = &self.maybe_managed_provider {
                     // We only emit the event if the Provider ID is the one that this node is managing.
                     // It's irrelevant if the Provider ID is a MSP or a BSP.
@@ -1163,15 +1167,17 @@ where
 
     pub(crate) fn process_test_user_events(&self, event: RuntimeEvent) {
         match event {
-            RuntimeEvent::FileSystem(pallet_file_system::Event::AcceptedBspVolunteer {
-                bsp_id,
-                bucket_id,
-                location,
-                fingerprint,
-                multiaddresses,
-                owner,
-                size,
-            }) if owner == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) => {
+            Runtime::RuntimeEvent::FileSystem(
+                pallet_file_system::Event::AcceptedBspVolunteer {
+                    bsp_id,
+                    bucket_id,
+                    location,
+                    fingerprint,
+                    multiaddresses,
+                    owner,
+                    size,
+                },
+            ) if owner == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) => {
                 // This event should only be of any use if a node is run by as a user.
                 if self.maybe_managed_provider.is_none() {
                     log::info!(
@@ -1186,7 +1192,7 @@ where
                     let multiaddress_vec: Vec<Multiaddr> =
                         convert_raw_multiaddresses_to_multiaddr(multiaddresses);
 
-                    self.emit(AcceptedBspVolunteer {
+                    self.emit(AcceptedBspVolunteer::<Runtime> {
                         bsp_id,
                         bucket_id,
                         location,

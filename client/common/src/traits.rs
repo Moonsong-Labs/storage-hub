@@ -6,14 +6,14 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvider
 use polkadot_primitives::AccountId;
 use polkadot_primitives::Nonce;
 
+use core::default::Default;
+use core::fmt::Debug;
+use core::marker::Send;
 use sc_service::TFullClient;
 use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::H256;
-use sp_std::default::Default;
-use sp_std::fmt::Debug;
-use sp_std::marker::Send;
 
 pub trait StorageEnableRuntimeConfig:
     frame_system::Config
@@ -43,9 +43,7 @@ impl<T> StorageEnableRuntimeConfig for T where
 {
 }
 
-pub trait StorageEnableApiCollection<
-    Runtime: StorageEnableRuntimeConfig
->:
+pub trait StorageEnableApiCollection<Runtime: StorageEnableRuntimeConfig>:
     // pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
     substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
     + BlockBuilder<Block>

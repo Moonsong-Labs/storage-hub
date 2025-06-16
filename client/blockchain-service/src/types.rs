@@ -21,8 +21,7 @@ use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::types::{
     BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
     MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput, RejectedStorageRequestReason,
-    StorageData, StorageHubEventsVec, StorageHubRuntime, StorageProofsMerkleTrieLayout,
-    StorageProviderId,
+    StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 
 use crate::{events, handler::LOG_TARGET};

@@ -152,7 +152,7 @@ where
                 new_value_prop_id: _,
             }) => {
                 // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
-                self.emit(MoveBucketRequested {
+                self.emit(MoveBucketRequested::<Runtime> {
                     bucket_id,
                     new_msp_id,
                 });

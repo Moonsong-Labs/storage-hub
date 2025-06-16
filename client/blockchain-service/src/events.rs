@@ -73,6 +73,8 @@ pub struct NewStorageRequest<Runtime: StorageEnableRuntimeConfig> {
     pub expires_at: BlockNumber<Runtime>,
 }
 
+unsafe impl<Runtime: StorageEnableRuntimeConfig> Send for NewStorageRequest<Runtime> {}
+
 /// MSP stopped storing bucket event.
 ///
 /// This event is emitted when an MSP stops storing a bucket.
@@ -100,6 +102,8 @@ pub struct AcceptedBspVolunteer<Runtime: StorageEnableRuntimeConfig> {
     pub owner: AccountId32,
     pub size: StorageData<Runtime>,
 }
+
+unsafe impl<Runtime: StorageEnableRuntimeConfig> Send for AcceptedBspVolunteer<Runtime> {}
 
 #[derive(Debug, Clone, Encode, Decode)]
 pub enum ForestWriteLockTaskData<Runtime: StorageEnableRuntimeConfig> {
@@ -186,7 +190,7 @@ pub struct ProcessConfirmStoringRequestData {
 pub struct ProcessConfirmStoringRequest<Runtime: StorageEnableRuntimeConfig> {
     pub data: ProcessConfirmStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+    pub _phantom: core::marker::PhantomData<Runtime>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -199,7 +203,7 @@ pub struct ProcessMspRespondStoringRequestData {
 pub struct ProcessMspRespondStoringRequest<Runtime: StorageEnableRuntimeConfig> {
     pub data: ProcessMspRespondStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+    pub _phantom: core::marker::PhantomData<Runtime>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -212,7 +216,7 @@ pub struct ProcessStopStoringForInsolventUserRequestData {
 pub struct ProcessStopStoringForInsolventUserRequest<Runtime: StorageEnableRuntimeConfig> {
     pub data: ProcessStopStoringForInsolventUserRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
-    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+    pub _phantom: core::marker::PhantomData<Runtime>,
 }
 
 /// Slashable Provider event.
@@ -260,7 +264,7 @@ pub struct LastChargeableInfoUpdated<Runtime: StorageEnableRuntimeConfig> {
 #[actor(actor = "blockchain_service")]
 pub struct UserWithoutFunds<Runtime: StorageEnableRuntimeConfig> {
     pub who: AccountId32,
-    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+    pub _phantom: core::marker::PhantomData<Runtime>,
 }
 
 /// Provider stopped storing for insolvent user event.
@@ -275,6 +279,8 @@ pub struct SpStopStoringInsolventUser<Runtime: StorageEnableRuntimeConfig> {
     pub location: FileLocation<Runtime>,
     pub new_root: H256,
 }
+
+unsafe impl<Runtime: StorageEnableRuntimeConfig> Send for SpStopStoringInsolventUser<Runtime> {}
 
 /// A MSP stopped storing a bucket for an insolvent user event was finalised.
 ///
@@ -352,7 +358,7 @@ pub struct BspConfirmStoppedStoring<Runtime: StorageEnableRuntimeConfig> {
     pub bsp_id: H256,
     pub file_key: FileKey,
     pub new_root: H256,
-    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+    pub _phantom: core::marker::PhantomData<Runtime>,
 }
 
 /// Delete file event in a finalised block.
@@ -365,7 +371,7 @@ pub struct FinalisedBspConfirmStoppedStoring<Runtime: StorageEnableRuntimeConfig
     pub bsp_id: H256,
     pub file_key: FileKey,
     pub new_root: H256,
-    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+    pub _phantom: core::marker::PhantomData<Runtime>,
 }
 
 /// Notify period event.
@@ -374,7 +380,7 @@ pub struct FinalisedBspConfirmStoppedStoring<Runtime: StorageEnableRuntimeConfig
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct NotifyPeriod<Runtime: StorageEnableRuntimeConfig> {
-    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+    pub _phantom: core::marker::PhantomData<Runtime>,
 }
 
 /// File deletion request event.

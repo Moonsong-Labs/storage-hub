@@ -97,6 +97,8 @@ std = [
 	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
+	"pallet-bucket-nfts/std",
+	"storage-hub-runtime/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",

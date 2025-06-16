@@ -230,7 +230,7 @@ where
     fn extrinsic_result(extrinsic: Extrinsic<Runtime>) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {
             match ev.event {
-                storage_hub_runtime::RuntimeEvent::System(
+                <Runtime as frame_system::Config>::RuntimeEvent::System(
                     frame_system::Event::ExtrinsicFailed {
                         dispatch_error,
                         dispatch_info,
@@ -241,7 +241,7 @@ where
                         dispatch_error,
                     });
                 }
-                storage_hub_runtime::RuntimeEvent::System(
+                <Runtime as frame_system::Config>::RuntimeEvent::System(
                     frame_system::Event::ExtrinsicSuccess { dispatch_info },
                 ) => {
                     return Ok(ExtrinsicResult::Success { dispatch_info });

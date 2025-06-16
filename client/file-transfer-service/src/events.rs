@@ -49,7 +49,7 @@ pub struct RemoteDownloadRequest<Runtime: StorageEnableRuntimeConfig> {
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "file_transfer_service")]
 pub struct RetryBucketMoveDownload<Runtime: StorageEnableRuntimeConfig> {
-    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+    pub _phantom: core::marker::PhantomData<Runtime>,
 };
 
 #[ActorEventBus("file_transfer_service")]

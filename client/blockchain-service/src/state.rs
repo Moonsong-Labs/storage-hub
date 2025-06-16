@@ -149,7 +149,7 @@ impl SingleScaleEncodedValueCf for PendingStopStoringForInsolventUserRequestRigh
 /// Current ongoing task which requires a forest write lock.
 pub struct OngoingProcessFileDeletionRequestCf;
 impl SingleScaleEncodedValueCf for OngoingProcessFileDeletionRequestCf {
-    type Value = ProcessFileDeletionRequestData;
+    type Value = ProcessFileDeletionRequestData<Runtime>;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_process_file_deletion_request";
 }

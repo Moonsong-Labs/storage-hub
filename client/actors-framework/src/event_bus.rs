@@ -21,7 +21,7 @@ impl<T: EventBusMessage> Default for EventBus<T> {
     }
 }
 
-impl<T: EventBusMessage + Clone> EventBus<T> {
+impl<T: EventBusMessage> EventBus<T> {
     pub fn new() -> Self {
         let (sender, _) = broadcast::channel(MAX_PENDING_EVENTS);
         Self { sender }
