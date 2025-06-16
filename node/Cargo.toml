@@ -35,12 +35,12 @@ toml = { workspace = true }
 rocksdb = { workspace = true }
 
 # Local
-pallet-proofs-dealer = { workspace = true }
-pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
 pallet-payment-streams = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
+pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 storage-hub-runtime = { workspace = true }
