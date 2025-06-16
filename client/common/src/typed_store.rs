@@ -139,8 +139,6 @@ use std::{
     ops::RangeBounds,
 };
 
-use crate::traits::StorageEnableRuntimeConfig;
-
 /// Defines how types are encoded to and decoded from bytes for storage in RocksDB.
 ///
 /// This trait abstracts the serialization and deserialization process, allowing

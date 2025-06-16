@@ -84,7 +84,7 @@ where
                 file_key: file_key.into(),
                 bucket_id: sr.bucket_id,
                 location: sr.location,
-                fingerprint: Fingerprint::from(sr.fingerprint.as_bytes()),
+                fingerprint: Fingerprint::from(sr.fingerprint.as_byte_slice()),
                 size: sr.size,
                 user_peer_ids: sr.user_peer_ids,
                 expires_at: sr.expires_at,
@@ -574,9 +574,10 @@ where
         let forest_root_write_tx = Arc::new(Mutex::new(Some(tx)));
         match data {
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
-                self.emit(ProcessMspRespondStoringRequest {
+                self.emit(ProcessMspRespondStoringRequest::<Runtime> {
                     data,
                     forest_root_write_tx,
+                    _phantom: std::marker::PhantomData::default(),
                 });
             }
             ForestWriteLockTaskData::FileDeletionRequest(data) => {
@@ -586,9 +587,10 @@ where
                 });
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                self.emit(ProcessStopStoringForInsolventUserRequest {
+                self.emit(ProcessStopStoringForInsolventUserRequest::<Runtime> {
                     data,
                     forest_root_write_tx,
+                    _phantom: std::marker::PhantomData::default(),
                 });
             }
             ForestWriteLockTaskData::ConfirmStoringRequest(_) => {

@@ -48,7 +48,9 @@ pub struct RemoteDownloadRequest<Runtime: StorageEnableRuntimeConfig> {
 /// any interrupted downloads can be resumed.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "file_transfer_service")]
-pub struct RetryBucketMoveDownload;
+pub struct RetryBucketMoveDownload<Runtime: StorageEnableRuntimeConfig> {
+    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+};
 
 #[ActorEventBus("file_transfer_service")]
 pub struct FileTransferServiceEventBusProvider;

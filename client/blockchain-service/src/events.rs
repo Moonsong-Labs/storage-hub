@@ -27,7 +27,7 @@ use crate::types::{
 /// This event is emitted when there's a new random challenge seed that affects this
 /// BSP. In other words, it only pays attention to the random seeds in the challenge
 /// period of this BSP.
-#[derive(Debug, Clone, Encode, Decode, ActorEvent)]
+#[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct NewChallengeSeed<Runtime: StorageEnableRuntimeConfig> {
     pub provider_id: ProofsDealerProviderId<Runtime>,
@@ -42,7 +42,7 @@ pub struct NewChallengeSeed<Runtime: StorageEnableRuntimeConfig> {
 /// The `seeds` vector is expected to be sorted in ascending order, where the first element
 /// is the seed that should be responded to first, and the last element is the seed that
 /// should be responded to last.
-#[derive(Debug, Clone, Encode, Decode, ActorEvent)]
+#[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
 pub struct MultipleNewChallengeSeeds<Runtime: StorageEnableRuntimeConfig> {
     pub provider_id: ProofsDealerProviderId<Runtime>,
@@ -107,7 +107,7 @@ pub enum ForestWriteLockTaskData<Runtime: StorageEnableRuntimeConfig> {
     ConfirmStoringRequest(ProcessConfirmStoringRequestData),
     MspRespondStorageRequest(ProcessMspRespondStoringRequestData),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData),
-    FileDeletionRequest(ProcessFileDeletionRequestData),
+    FileDeletionRequest(ProcessFileDeletionRequestData<Runtime>),
 }
 
 impl<Runtime: StorageEnableRuntimeConfig> From<ProcessSubmitProofRequestData<Runtime>>
@@ -142,10 +142,10 @@ impl<Runtime: StorageEnableRuntimeConfig> From<ProcessStopStoringForInsolventUse
     }
 }
 
-impl<Runtime: StorageEnableRuntimeConfig> From<ProcessFileDeletionRequestData>
+impl<Runtime: StorageEnableRuntimeConfig> From<ProcessFileDeletionRequestData<Runtime>>
     for ForestWriteLockTaskData<Runtime>
 {
-    fn from(data: ProcessFileDeletionRequestData) -> Self {
+    fn from(data: ProcessFileDeletionRequestData<Runtime>) -> Self {
         Self::FileDeletionRequest(data)
     }
 }
@@ -171,10 +171,7 @@ pub struct ProcessSubmitProofRequestData<Runtime: StorageEnableRuntimeConfig> {
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProcessSubmitProofRequest<Runtime>
-where
-    Runtime: StorageEnableRuntimeConfig,
-{
+pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntimeConfig> {
     pub data: ProcessSubmitProofRequestData<Runtime>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
@@ -186,9 +183,10 @@ pub struct ProcessConfirmStoringRequestData {
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProcessConfirmStoringRequest {
+pub struct ProcessConfirmStoringRequest<Runtime: StorageEnableRuntimeConfig> {
     pub data: ProcessConfirmStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub _phantom: sp_std::marker::PhantomData<Runtime>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -198,9 +196,10 @@ pub struct ProcessMspRespondStoringRequestData {
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProcessMspRespondStoringRequest {
+pub struct ProcessMspRespondStoringRequest<Runtime: StorageEnableRuntimeConfig> {
     pub data: ProcessMspRespondStoringRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub _phantom: sp_std::marker::PhantomData<Runtime>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -210,9 +209,10 @@ pub struct ProcessStopStoringForInsolventUserRequestData {
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProcessStopStoringForInsolventUserRequest {
+pub struct ProcessStopStoringForInsolventUserRequest<Runtime: StorageEnableRuntimeConfig> {
     pub data: ProcessStopStoringForInsolventUserRequestData,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    pub _phantom: sp_std::marker::PhantomData<Runtime>,
 }
 
 /// Slashable Provider event.
@@ -258,8 +258,9 @@ pub struct LastChargeableInfoUpdated<Runtime: StorageEnableRuntimeConfig> {
 /// being unable to pay for their payment streams for a prolonged period of time.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct UserWithoutFunds {
+pub struct UserWithoutFunds<Runtime: StorageEnableRuntimeConfig> {
     pub who: AccountId32,
+    pub _phantom: sp_std::marker::PhantomData<Runtime>,
 }
 
 /// Provider stopped storing for insolvent user event.
@@ -347,10 +348,11 @@ pub struct MoveBucketExpired<Runtime: StorageEnableRuntimeConfig> {
 /// This event is emitted when a BSP confirm stop storing a file.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct BspConfirmStoppedStoring {
+pub struct BspConfirmStoppedStoring<Runtime: StorageEnableRuntimeConfig> {
     pub bsp_id: H256,
     pub file_key: FileKey,
     pub new_root: H256,
+    pub _phantom: sp_std::marker::PhantomData<Runtime>,
 }
 
 /// Delete file event in a finalised block.
@@ -359,10 +361,11 @@ pub struct BspConfirmStoppedStoring {
 /// in which there is a `BspConfirmStoppedStoring` event for one of the providers that this node is tracking.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct FinalisedBspConfirmStoppedStoring {
+pub struct FinalisedBspConfirmStoppedStoring<Runtime: StorageEnableRuntimeConfig> {
     pub bsp_id: H256,
     pub file_key: FileKey,
     pub new_root: H256,
+    pub _phantom: sp_std::marker::PhantomData<Runtime>,
 }
 
 /// Notify period event.
@@ -370,7 +373,9 @@ pub struct FinalisedBspConfirmStoppedStoring {
 /// This event is emitted when a X amount of block has passed. It is configured at the start of the service.
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct NotifyPeriod {}
+pub struct NotifyPeriod<Runtime: StorageEnableRuntimeConfig> {
+    pub _phantom: sp_std::marker::PhantomData<Runtime>,
+}
 
 /// File deletion request event.
 #[derive(Debug, Clone, Encode, Decode, ActorEvent)]
@@ -394,14 +399,14 @@ pub struct FileDeletionRequest<Runtime: StorageEnableRuntimeConfig> {
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct ProcessFileDeletionRequestData {
-    pub file_deletion_requests: Vec<FileDeletionRequestType>,
+pub struct ProcessFileDeletionRequestData<Runtime: StorageEnableRuntimeConfig> {
+    pub file_deletion_requests: Vec<FileDeletionRequestType<Runtime>>,
 }
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProcessFileDeletionRequest {
-    pub data: ProcessFileDeletionRequestData,
+pub struct ProcessFileDeletionRequest<Runtime: StorageEnableRuntimeConfig> {
+    pub data: ProcessFileDeletionRequestData<Runtime>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 

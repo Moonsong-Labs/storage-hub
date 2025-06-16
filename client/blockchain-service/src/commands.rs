@@ -200,16 +200,18 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntimeConfig> {
 
 /// Interface for interacting with the BlockchainService actor.
 #[async_trait]
-pub trait BlockchainServiceCommandInterfaceExt<Runtime>: BlockchainServiceCommandInterface {
+pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntimeConfig>:
+    BlockchainServiceCommandInterface<Runtime>
+{
     /// Helper function to check if an extrinsic failed or succeeded in a block.
-    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
+    fn extrinsic_result(extrinsic: Extrinsic<Runtime>) -> Result<ExtrinsicResult>;
 
     /// Helper function to submit an extrinsic with a retry strategy. Returns when the extrinsic is
     /// included in a block or when the retry strategy is exhausted.
     async fn submit_extrinsic_with_retry(
         &self,
         call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
-        options: SendExtrinsicOptions,
+        options: SendExtrinsicOptions<Runtime>,
         retry_strategy: RetryStrategy,
         with_events: bool,
     ) -> Result<Option<StorageHubEventsVec<Runtime>>>;

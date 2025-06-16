@@ -1,5 +1,4 @@
 use crate::types::*;
-use frame_system::Config;
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
@@ -12,16 +11,35 @@ use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::H256;
+use sp_std::default::Default;
+use sp_std::fmt::Debug;
+use sp_std::marker::Send;
 
 pub trait StorageEnableRuntimeConfig:
     frame_system::Config
     + pallet_file_system::Config
     + pallet_storage_providers::Config
     + pallet_proofs_dealer::Config
-    + pallet_storage_providers::Config
     + pallet_bucket_nfts::Config
     + pallet_transaction_payment::Config
-    + std::fmt::Debug
+    + pallet_payment_streams::Config
+    + Default
+    + Send
+    + Debug
+{
+}
+
+impl<T> StorageEnableRuntimeConfig for T where
+    T: frame_system::Config
+        + pallet_file_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_bucket_nfts::Config
+        + pallet_transaction_payment::Config
+        + pallet_payment_streams::Config
+        + Default
+        + Send
+        + Debug
 {
 }
 

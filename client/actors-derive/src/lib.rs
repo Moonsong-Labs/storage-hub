@@ -407,7 +407,7 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
 
     // Generate the implementation of EventBusMessage
     let expanded = quote! {
-        impl ::shc_actors_framework::event_bus::EventBusMessage for #name {}
+        impl<Runtime: StorageEnableRuntimeConfig> ::shc_actors_framework::event_bus::EventBusMessage for #name<Runtime> {}
     };
 
     TokenStream::from(expanded)
@@ -466,7 +466,7 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
         let event_type = Ident::new(event, Span::call_site());
 
         quote! {
-            #field_name_ident: ::shc_actors_framework::event_bus::EventBus<#event_type>
+            #field_name_ident: ::shc_actors_framework::event_bus::EventBus<#event_type<Runtime>>
         }
     });
 
@@ -487,8 +487,8 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
         let field_name_ident = Ident::new(&field_name, Span::call_site());
 
         quote! {
-            impl ::shc_actors_framework::event_bus::ProvidesEventBus<#event_type> for #provider_name {
-                fn event_bus(&self) -> &::shc_actors_framework::event_bus::EventBus<#event_type> {
+            impl<Runtime: StorageEnableRuntimeConfig> ::shc_actors_framework::event_bus::ProvidesEventBus<#event_type<Runtime>> for #provider_name<Runtime> {
+                fn event_bus(&self) -> &::shc_actors_framework::event_bus::EventBus<#event_type<Runtime>> {
                     &self.#field_name_ident
                 }
             }
@@ -498,11 +498,11 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
     // Generate the final expanded code
     let expanded = quote! {
         #[derive(Clone, Default)]
-        pub struct #provider_name {
+        pub struct #provider_name<Runtime: StorageEnableRuntimeConfig> {
             #(#event_bus_fields),*
         }
 
-        impl #provider_name {
+        impl<Runtime: StorageEnableRuntimeConfig> #provider_name<Runtime> {
             pub fn new() -> Self {
                 Self {
                     #(#event_bus_inits),*
@@ -573,7 +573,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     // Otherwise, create a new task using the task type and context
     let result = if let Some(task) = args.task_instance {
         quote! {
-            let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
+            let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type<Runtime>, _> =
                 #task.subscribe_to(#task_spawner, #service, #critical_lit);
             #var_ident.start();
         }
@@ -583,7 +583,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
         if let Some(context) = args.context {
             quote! {
                 let task = #task_type::new(#context.clone());
-                let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
+                let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type<Runtime>, _> =
                     task.subscribe_to(#task_spawner, #service, #critical_lit);
                 #var_ident.start();
             }
@@ -1515,15 +1515,17 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let (service_type_path, impl_generics, _type_generics, where_clause) =
         process_service_type(service_type);
 
+    let (_impl_generics, ty_generics, _where_clause) = generics.split_for_impl();
+
     // Generate the interface trait and implementation
     let trait_def = quote! {
         #[async_trait::async_trait]
-        pub trait #interface_name {
+        pub trait #interface_name #ty_generics where Runtime: StorageEnableRuntimeConfig {
             #(#trait_method_signatures)*
         }
 
         #[async_trait::async_trait]
-        impl #impl_generics #interface_name for shc_actors_framework::actor::ActorHandle<#service_type_path>
+        impl #impl_generics #interface_name #ty_generics for shc_actors_framework::actor::ActorHandle<#service_type_path>
         #where_clause
         {
             #(#trait_method_implementations)*
@@ -1532,7 +1534,8 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Output the result
     let result = quote! {
-        #vis enum #enum_name #generics {
+        #vis enum #enum_name #ty_generics where Runtime: StorageEnableRuntimeConfig
+        {
             #(#updated_variants,)*
         }
 

@@ -13939,6 +13939,7 @@ dependencies = [
  "serde_json",
  "sp-core 35.0.0",
  "sp-runtime 40.1.0",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2412)",
  "tokio",
 ]
 
@@ -13989,6 +13990,7 @@ dependencies = [
  "sp-core 35.0.0",
  "sp-keystore 0.41.0",
  "sp-runtime 40.1.0",
+ "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?branch=stable2412)",
  "storage-hub-runtime",
  "substrate-frame-rpc-system",
  "thiserror 1.0.69",

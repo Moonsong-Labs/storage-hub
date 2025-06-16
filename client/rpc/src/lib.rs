@@ -297,10 +297,11 @@ where
 // file uploads, even if the file is not in its storage. So we need a way to inform the task
 // to only react to its file.
 #[async_trait]
-impl<FL, FSH, C, Block, Runtime: StorageEnableRuntimeConfig> StorageHubClientApiServer
-    for StorageHubClientRpc<FL, FSH, C, Block, Runtime>
+impl<FL, FSH, C, Block, Runtime> StorageHubClientApiServer<Runtime>
+    for StorageHubClientRpc<FL, FSH, C, Block>
 where
     Block: BlockT,
+    Runtime: StorageEnableRuntimeConfig,
     C: ProvideRuntimeApi<Block> + HeaderBackend<Block> + Send + Sync + 'static,
     C::Api: ProofsDealerRuntimeApi<
             Block,

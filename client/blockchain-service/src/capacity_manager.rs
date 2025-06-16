@@ -76,7 +76,7 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
         request: CapacityRequest<Runtime>,
         current_capacity: StorageData<Runtime>,
     ) {
-        let Some(new_total_required) = self.total_required.checked_add(request.data.required)
+        let Some(new_total_required) = self.total_required.checked_add(&request.data.required)
         else {
             request.send_result(Err(anyhow!("Capacity overflow")));
             return;

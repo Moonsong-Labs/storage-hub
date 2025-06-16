@@ -835,7 +835,9 @@ where
     pub(crate) fn check_for_notify(&self, block_number: &BlockNumber<Runtime>) {
         if let Some(np) = self.notify_period {
             if block_number % np == 0 {
-                self.emit(NotifyPeriod {});
+                self.emit(NotifyPeriod::<Runtime> {
+                    _phantom: std::marker::PhantomData::default(),
+                });
             }
         }
     }
@@ -1118,7 +1120,10 @@ where
             RuntimeEvent::PaymentStreams(pallet_payment_streams::Event::UserWithoutFunds {
                 who,
             }) => {
-                self.emit(UserWithoutFunds { who });
+                self.emit(UserWithoutFunds::<Runtime> {
+                    who,
+                    _phantom: std::marker::PhantomData::default(),
+                });
             }
             // A file was correctly deleted from a user without funds
             RuntimeEvent::FileSystem(pallet_file_system::Event::SpStopStoringInsolventUser {

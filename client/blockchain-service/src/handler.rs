@@ -239,7 +239,7 @@ where
 {
     type Message = BlockchainServiceCommand<Runtime>;
     type EventLoop = BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>;
-    type EventBusProvider = BlockchainServiceEventBusProvider;
+    type EventBusProvider = BlockchainServiceEventBusProvider<Runtime>;
 
     fn handle_message(
         &mut self,

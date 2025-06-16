@@ -137,10 +137,11 @@ where
                 new_root,
             }) => {
                 if managed_bsp_id == &bsp_id {
-                    self.emit(BspConfirmStoppedStoring {
+                    self.emit(BspConfirmStoppedStoring::<Runtime> {
                         bsp_id,
                         file_key: file_key.into(),
                         new_root,
+                        _phantom: std::marker::PhantomData::default(),
                     });
                 }
             }
@@ -198,10 +199,11 @@ where
                 new_root,
             }) => {
                 if managed_bsp_id == &bsp_id {
-                    self.emit(FinalisedBspConfirmStoppedStoring {
+                    self.emit(FinalisedBspConfirmStoppedStoring::<Runtime> {
                         bsp_id,
                         file_key: file_key.into(),
                         new_root,
+                        _phantom: std::marker::PhantomData::default(),
                     });
                 }
             }
@@ -606,15 +608,17 @@ where
                 });
             }
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
-                self.emit(ProcessConfirmStoringRequest {
+                self.emit(ProcessConfirmStoringRequest::<Runtime> {
                     data,
                     forest_root_write_tx,
+                    _phantom: std::marker::PhantomData::default(),
                 });
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
-                self.emit(ProcessStopStoringForInsolventUserRequest {
+                self.emit(ProcessStopStoringForInsolventUserRequest::<Runtime> {
                     data,
                     forest_root_write_tx,
+                    _phantom: std::marker::PhantomData::default(),
                 });
             }
             ForestWriteLockTaskData::MspRespondStorageRequest(_) => {

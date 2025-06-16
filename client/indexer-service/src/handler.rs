@@ -71,7 +71,11 @@ where
     RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool) -> Self {
-        Self { client, db_pool }
+        Self {
+            client,
+            db_pool,
+            _phantom: std::marker::PhantomData::default(),
+        }
     }
 
     async fn handle_finality_notification<Block>(
@@ -670,13 +674,15 @@ where
 }
 
 // Implement ActorEventLoop for IndexerServiceEventLoop
-impl<RuntimeApi> ActorEventLoop<IndexerService<RuntimeApi>> for IndexerServiceEventLoop<RuntimeApi>
+impl<RuntimeApi, Runtime> ActorEventLoop<IndexerService<RuntimeApi, Runtime>>
+    for IndexerServiceEventLoop<RuntimeApi, Runtime>
 where
+    Runtime: StorageEnableRuntimeConfig,
     RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection<Runtime>,
 {
     fn new(
-        actor: IndexerService<RuntimeApi>,
+        actor: IndexerService<RuntimeApi, Runtime>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
     ) -> Self {
         Self { actor, receiver }
