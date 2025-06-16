@@ -1,6 +1,7 @@
 use sc_client_api::BlockBackend;
 use sc_network::service::traits::NetworkService;
 use sc_network::ProtocolName;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -54,8 +55,9 @@ const MAX_FILE_TRANSFER_REQUESTS_QUEUE: usize = {
 /// Returns the protocol name and the channel receiver to be used for reading requests.
 pub fn configure_file_transfer_network<
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
+    RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>,
 >(
-    client: Arc<ParachainClient>,
+    client: Arc<ParachainClient<RuntimeApi>>,
     parachain_config: &Configuration,
     net_config: &mut FullNetworkConfiguration<OpaqueBlock, BlockHash, Network>,
 ) -> (ProtocolName, async_channel::Receiver<IncomingRequest>) {

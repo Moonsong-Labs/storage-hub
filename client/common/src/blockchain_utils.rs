@@ -9,7 +9,10 @@ use codec::Decode;
 use sc_client_api::{backend::StorageProvider, StorageKey};
 use sp_core::H256;
 
-use crate::types::{Multiaddresses, ParachainClient, StorageHubEventsVec};
+use crate::{
+    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
+    types::{Multiaddresses, ParachainClient, StorageHubEventsVec},
+};
 
 lazy_static! {
     // Would be cool to be able to do this...
@@ -37,10 +40,13 @@ pub enum EventsRetrievalError {
 }
 
 /// Get the events storage element for a given block.
-pub fn get_events_at_block(
-    client: &Arc<ParachainClient>,
+pub fn get_events_at_block<RuntimeApi: StorageEnableRuntimeApi>(
+    client: &Arc<ParachainClient<RuntimeApi>>,
     block_hash: &H256,
-) -> Result<StorageHubEventsVec, EventsRetrievalError> {
+) -> Result<StorageHubEventsVec, EventsRetrievalError>
+where
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+{
     // Get the events storage.
     let raw_storage_opt = client.storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?;
 

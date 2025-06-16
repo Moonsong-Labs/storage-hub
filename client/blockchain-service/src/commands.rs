@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use sp_api::ApiError;
 use sp_core::H256;
 
@@ -44,7 +45,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 
 /// Commands that can be sent to the BlockchainService actor.
 #[actor_command(
-    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
+    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>>,
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 )]
@@ -213,9 +214,12 @@ pub trait BlockchainServiceCommandInterfaceExt: BlockchainServiceCommandInterfac
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
 #[async_trait]
-impl<FSH> BlockchainServiceCommandInterfaceExt for ActorHandle<BlockchainService<FSH>>
+impl<FSH, RuntimeApi> BlockchainServiceCommandInterfaceExt
+    for ActorHandle<BlockchainService<FSH, RuntimeApi>>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {

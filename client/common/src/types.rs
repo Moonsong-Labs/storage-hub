@@ -9,12 +9,13 @@ use sc_executor::WasmExecutor;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
+use shp_opaque::Block;
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_runtime::{traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
-use storage_hub_runtime::{apis::RuntimeApi, opaque::Block, Runtime};
+use storage_hub_runtime::Runtime;
 use trie_db::TrieLayout;
 
 /// Size of each batch in bytes (2 MiB)
@@ -55,6 +56,8 @@ pub type ValuePropId = pallet_storage_providers::types::ValuePropId<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
 pub type BackupStorageProviderId =
     pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
+pub type BackupStorageProviderInfo =
+    pallet_storage_providers::types::BackupStorageProvider<Runtime>;
 pub type MainStorageProviderId = pallet_storage_providers::types::MainStorageProviderId<Runtime>;
 pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
 pub type ProofsDealerProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
@@ -79,6 +82,7 @@ pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
 pub type StorageRequestMetadata = pallet_file_system::types::StorageRequestMetadata<Runtime>;
 pub type MaxBatchConfirmStorageRequests =
     <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
+pub type ValuePropositionWithId = pallet_storage_providers::types::ValuePropositionWithId<Runtime>;
 
 /// Type alias for the events vector.
 ///
@@ -103,7 +107,7 @@ type HostFunctions = (
 );
 
 pub type ParachainExecutor = WasmExecutor<HostFunctions>;
-pub type ParachainClient = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+pub type ParachainClient<RuntimeApi> = TFullClient<Block, RuntimeApi, ParachainExecutor>;
 
 /// The type of key used for [`BlockchainService`]` operations.
 pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");

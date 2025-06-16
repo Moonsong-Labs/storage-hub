@@ -11,6 +11,7 @@ use shc_blockchain_service::{
     },
     types::{self, RetryStrategy, SendExtrinsicOptions},
 };
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 
@@ -50,22 +51,26 @@ impl Default for MspDeleteFileConfig {
 ///   submit it to the runtime to delete any existing file keys proven to be in the forest.
 /// - [`FinalisedProofSubmittedForPendingFileDeletionRequest`] event: The third part of the flow. It is triggered when
 ///   the file deletion request is finalized on-chain. The MSP will then delete the file from its file storage.
-pub struct MspDeleteFileTask<NT>
+pub struct MspDeleteFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    storage_hub_handler: StorageHubHandler<NT>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
     /// Configuration for this task
     config: MspDeleteFileConfig,
 }
 
-impl<NT> Clone for MspDeleteFileTask<NT>
+impl<NT, RuntimeApi> Clone for MspDeleteFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    fn clone(&self) -> MspDeleteFileTask<NT> {
+    fn clone(&self) -> MspDeleteFileTask<NT, RuntimeApi> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             config: self.config.clone(),
@@ -73,12 +78,14 @@ where
     }
 }
 
-impl<NT> MspDeleteFileTask<NT>
+impl<NT, RuntimeApi> MspDeleteFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
         Self {
             config: storage_hub_handler.provider_config.msp_delete_file.clone(),
             storage_hub_handler,
@@ -90,10 +97,12 @@ where
 ///
 /// This event is triggered when a file deletion request is received from the blockchain.
 /// The MSP will queue the request for processing, which will be handled by the [`ProcessFileDeletionRequest`] event handler.
-impl<NT> EventHandler<FileDeletionRequest> for MspDeleteFileTask<NT>
+impl<NT, RuntimeApi> EventHandler<FileDeletionRequest> for MspDeleteFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
         info!(
@@ -124,10 +133,12 @@ where
 /// This event is triggered when there are pending file deletion requests to process.
 /// The MSP will generate an (non-)inclusion forest proof and submit it to confirm each file can(not) be deleted.
 /// Files are processed one at a time to ensure proper forest root management.
-impl<NT> EventHandler<ProcessFileDeletionRequest> for MspDeleteFileTask<NT>
+impl<NT, RuntimeApi> EventHandler<ProcessFileDeletionRequest> for MspDeleteFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
         info!(
@@ -266,11 +277,13 @@ where
 ///
 /// This event is triggered when the file deletion request is finalized on-chain.
 /// The MSP will delete the file from its file storage.
-impl<NT> EventHandler<FinalisedProofSubmittedForPendingFileDeletionRequest>
-    for MspDeleteFileTask<NT>
+impl<NT, RuntimeApi> EventHandler<FinalisedProofSubmittedForPendingFileDeletionRequest>
+    for MspDeleteFileTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     async fn handle_event(
         &mut self,

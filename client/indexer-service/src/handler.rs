@@ -1,6 +1,7 @@
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::StorageProviderId;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
@@ -28,15 +29,19 @@ pub(crate) const LOG_TARGET: &str = "indexer-service";
 pub enum IndexerServiceCommand {}
 
 // The IndexerService actor
-pub struct IndexerService {
-    client: Arc<ParachainClient>,
+pub struct IndexerService<RuntimeApi> {
+    client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
 }
 
 // Implement the Actor trait for IndexerService
-impl Actor for IndexerService {
+impl<RuntimeApi> Actor for IndexerService<RuntimeApi>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+{
     type Message = IndexerServiceCommand;
-    type EventLoop = IndexerServiceEventLoop;
+    type EventLoop = IndexerServiceEventLoop<RuntimeApi>;
     type EventBusProvider = (); // We're not using an event bus for now
 
     fn handle_message(
@@ -56,8 +61,12 @@ impl Actor for IndexerService {
 }
 
 // Implement methods for IndexerService
-impl IndexerService {
-    pub fn new(client: Arc<ParachainClient>, db_pool: DbPool) -> Self {
+impl<RuntimeApi> IndexerService<RuntimeApi>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+{
+    pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool) -> Self {
         Self { client, db_pool }
     }
 
@@ -639,9 +648,9 @@ impl IndexerService {
 }
 
 // Define the EventLoop for IndexerService
-pub struct IndexerServiceEventLoop {
+pub struct IndexerServiceEventLoop<RuntimeApi> {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
-    actor: IndexerService,
+    actor: IndexerService<RuntimeApi>,
 }
 
 enum MergedEventLoopMessage<Block>
@@ -653,9 +662,13 @@ where
 }
 
 // Implement ActorEventLoop for IndexerServiceEventLoop
-impl ActorEventLoop<IndexerService> for IndexerServiceEventLoop {
+impl<RuntimeApi> ActorEventLoop<IndexerService<RuntimeApi>> for IndexerServiceEventLoop<RuntimeApi>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+{
     fn new(
-        actor: IndexerService,
+        actor: IndexerService<RuntimeApi>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
     ) -> Self {
         Self { actor, receiver }

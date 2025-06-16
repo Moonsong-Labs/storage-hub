@@ -1,4 +1,5 @@
 use log::{debug, error, info, trace};
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use std::sync::Arc;
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
@@ -37,9 +38,11 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH> BlockchainService<FSH>
+impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     /// Handles the initial sync of a BSP, after coming out of syncing mode.
     ///

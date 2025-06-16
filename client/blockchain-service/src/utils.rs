@@ -26,6 +26,7 @@ use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::Actor;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     types::{
@@ -50,9 +51,11 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH> BlockchainService<FSH>
+impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     /// Notify tasks waiting for a block number.
     pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber) {
@@ -531,7 +534,7 @@ where
     /// Construct an extrinsic that can be applied to the runtime.
     pub fn construct_extrinsic(
         &self,
-        client: Arc<ParachainClient>,
+        client: Arc<ParachainClient<RuntimeApi>>,
         function: impl Into<storage_hub_runtime::RuntimeCall>,
         nonce: u32,
         tip: Tip,
