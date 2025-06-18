@@ -19,7 +19,7 @@ describeMspNet(
       mspApi = maybeMspApi;
     });
 
-    it("Network launches and can be queried", async () => {
+    it.only("Network launches and can be queried", async () => {
       const userNodePeerId = await userApi.rpc.system.localPeerId();
       strictEqual(userNodePeerId.toString(), userApi.shConsts.NODE_INFOS.user.expectedPeerId);
 
@@ -27,7 +27,7 @@ describeMspNet(
       strictEqual(mspNodePeerId.toString(), userApi.shConsts.NODE_INFOS.msp1.expectedPeerId);
     });
 
-    it("User submits multiple storage requests and MSP accepts them", async () => {
+    it.only("User submits multiple storage requests and MSP accepts them", async () => {
       // Get value propositions from the MSP to use
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
@@ -125,7 +125,7 @@ describeMspNet(
       });
     });
 
-    it("User requests file deletions and MSP processes them", async () => {
+    it.only("User requests file deletions and MSP processes them", async () => {
       // Submit deletion requests for all files
       const bucketOption = userApi.createType("Option<H256>", bucketId);
       const deletionTxs = await Promise.all(

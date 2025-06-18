@@ -3,7 +3,7 @@ import { describeMspNet, shUser, waitFor, type EnrichedBspApi } from "../../../u
 
 describeMspNet(
   "Single MSP accepting multiple storage requests",
-  { keepAlive: true },
+  // { keepAlive: true },
   ({ before, createMsp1Api, it, createUserApi }) => {
     let userApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;

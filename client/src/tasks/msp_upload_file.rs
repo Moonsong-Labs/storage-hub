@@ -192,8 +192,11 @@ where
             event.data.respond_storing_requests,
         );
 
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Starting to acquire lock for ProcessMspRespondStoringRequest with {} requests", event.data.respond_storing_requests.len());
         let _permit = event.ticket.lock().await;
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Successfully acquired lock for ProcessMspRespondStoringRequest");
 
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Querying storage provider ID");
         let own_provider_id = self
             .storage_hub_handler
             .blockchain
@@ -201,7 +204,10 @@ where
             .await?;
 
         let own_msp_id = match own_provider_id {
-            Some(StorageProviderId::MainStorageProvider(id)) => id,
+            Some(StorageProviderId::MainStorageProvider(id)) => {
+                warn!(target: LOG_TARGET, "MSP_DEBUG: Found MSP ID: {:?}", id);
+                id
+            },
             Some(StorageProviderId::BackupStorageProvider(_)) => {
                 return Err(anyhow!("Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."));
             }
@@ -212,12 +218,18 @@ where
 
         let mut file_key_responses = HashMap::new();
 
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Acquiring file storage read lock");
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Successfully acquired file storage read lock");
 
         for respond in &event.data.respond_storing_requests {
-            info!(target: LOG_TARGET, "Processing respond storing request.");
+            warn!(target: LOG_TARGET, "MSP_DEBUG: Processing respond storing request for file_key: {:?}", respond.file_key);
             let bucket_id = match read_file_storage.get_metadata(&respond.file_key) {
-                Ok(Some(metadata)) => H256::from_slice(metadata.bucket_id().as_ref()),
+                Ok(Some(metadata)) => {
+                    let bucket_id = H256::from_slice(metadata.bucket_id().as_ref());
+                    warn!(target: LOG_TARGET, "MSP_DEBUG: Found metadata for file_key {:?}, bucket_id: {:?}", respond.file_key, bucket_id);
+                    bucket_id
+                },
                 Ok(None) => {
                     error!(target: LOG_TARGET, "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", respond.file_key);
                     continue;
@@ -234,23 +246,31 @@ where
 
             match &respond.response {
                 MspRespondStorageRequest::Accept => {
+                    warn!(target: LOG_TARGET, "MSP_DEBUG: Accepting storage request for file_key: {:?}", respond.file_key);
                     let chunks_to_prove = match self
                         .storage_hub_handler
                         .blockchain
                         .query_msp_confirm_chunks_to_prove_for_file(own_msp_id, respond.file_key)
                         .await
                     {
-                        Ok(chunks) => chunks,
+                        Ok(chunks) => {
+                            warn!(target: LOG_TARGET, "MSP_DEBUG: Got chunks to prove for file_key {:?}: {:?}", respond.file_key, chunks);
+                            chunks
+                        },
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to get chunks to prove: {:?}", e);
                             continue;
                         }
                     };
 
+                    warn!(target: LOG_TARGET, "MSP_DEBUG: Generating proof for file_key: {:?}", respond.file_key);
                     let proof = match read_file_storage
                         .generate_proof(&respond.file_key, &HashSet::from_iter(chunks_to_prove))
                     {
-                        Ok(p) => p,
+                        Ok(p) => {
+                            warn!(target: LOG_TARGET, "MSP_DEBUG: Successfully generated proof for file_key: {:?}", respond.file_key);
+                            p
+                        },
                         Err(e) => {
                             error!(target: LOG_TARGET, "Failed to generate proof: {:?}", e);
                             continue;
@@ -261,6 +281,7 @@ where
                         file_key: respond.file_key,
                         proof,
                     });
+                    warn!(target: LOG_TARGET, "MSP_DEBUG: Added file_key {:?} to accept list for bucket {:?}", respond.file_key, bucket_id);
                 }
                 MspRespondStorageRequest::Reject(reason) => {
                     entry.1.push(RejectedStorageRequest {
@@ -272,24 +293,34 @@ where
         }
 
         drop(read_file_storage);
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Dropped file storage read lock");
 
         let mut storage_request_msp_response = Vec::new();
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Processing {} buckets for MSP response", file_key_responses.len());
 
         for (bucket_id, (accept, reject)) in file_key_responses.iter_mut() {
+            warn!(target: LOG_TARGET, "MSP_DEBUG: Processing bucket {:?} with {} accepts and {} rejects", bucket_id, accept.len(), reject.len());
+            warn!(target: LOG_TARGET, "MSP_DEBUG: Getting forest storage for bucket {:?}", bucket_id);
             let fs = self
                 .storage_hub_handler
                 .forest_storage_handler
                 .get_or_create(&bucket_id.as_ref().to_vec())
                 .await;
+            warn!(target: LOG_TARGET, "MSP_DEBUG: Got forest storage for bucket {:?}", bucket_id);
 
             let accept = if !accept.is_empty() {
+                warn!(target: LOG_TARGET, "MSP_DEBUG: Processing {} accepts for bucket {:?}", accept.len(), bucket_id);
                 let file_keys: Vec<_> = accept
                     .iter()
                     .map(|file_key_with_proof| file_key_with_proof.file_key)
                     .collect();
 
+                warn!(target: LOG_TARGET, "MSP_DEBUG: Generating forest proof for {} file keys in bucket {:?}", file_keys.len(), bucket_id);
                 let forest_proof = match fs.read().await.generate_proof(file_keys) {
-                    Ok(proof) => proof,
+                    Ok(proof) => {
+                        warn!(target: LOG_TARGET, "MSP_DEBUG: Successfully generated forest proof for bucket {:?}", bucket_id);
+                        proof
+                    },
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to generate non-inclusion forest proof: {:?}", e);
                         continue;
@@ -309,15 +340,18 @@ where
                 accept,
                 reject: reject.clone(),
             });
+            warn!(target: LOG_TARGET, "MSP_DEBUG: Added bucket {:?} to MSP response", bucket_id);
         }
 
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Creating runtime call with {} bucket responses", storage_request_msp_response.len());
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                 storage_request_msp_response: storage_request_msp_response.clone(),
             },
         );
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Created runtime call, now sending extrinsic");
 
-        self.storage_hub_handler
+        let mut result = self.storage_hub_handler
             .blockchain
             .send_extrinsic(
                 call,
@@ -328,9 +362,11 @@ where
                         .extrinsic_retry_timeout,
                 )),
             )
-            .await?
-            .watch_for_success(&self.storage_hub_handler.blockchain)
             .await?;
+        
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Extrinsic sent, now watching for success");
+        result.watch_for_success(&self.storage_hub_handler.blockchain).await?;
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Extrinsic completed successfully");
 
         // Remove the files that were rejected from the File Storage.
         // Accepted files will be added to the Bucket's Forest Storage by the BlockchainService.
@@ -345,6 +381,7 @@ where
                 }
             }
         }
+
 
         Ok(())
     }
@@ -892,13 +929,17 @@ where
     async fn on_file_complete(&self, file_key: &H256) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "File upload complete (file_key {:x})", file_key);
 
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Starting file completion process for file_key: {:?}", file_key);
+
         // Unregister the file from the file transfer service.
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Unregistering file from file transfer service");
         self.storage_hub_handler
             .file_transfer
             .unregister_file((*file_key).into())
             .await
             .map_err(|e| anyhow!("File is not registered. This should not happen!: {:?}", e))?;
 
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Queueing MSP respond storage request for file_key: {:?}", file_key);
         // Queue a request to confirm the storing of the file.
         self.storage_hub_handler
             .blockchain
@@ -908,6 +949,7 @@ where
             ))
             .await?;
 
+        warn!(target: LOG_TARGET, "MSP_DEBUG: Successfully queued MSP respond storage request for file_key: {:?}", file_key);
         Ok(())
     }
 }

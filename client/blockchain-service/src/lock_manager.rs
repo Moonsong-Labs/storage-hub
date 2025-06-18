@@ -61,7 +61,6 @@ impl Hash for ForestRootWriteTicket {
 }
 
 /// The state of a ticket
-#[derive(Debug)]
 struct TicketState {
     /// Whether this ticket is currently active (has the lock)
     is_active: bool,
@@ -69,6 +68,16 @@ struct TicketState {
     activation_tx: Option<oneshot::Sender<()>>,
     /// A oneshot channel used to receive the activation signal
     activation_rx: Option<oneshot::Receiver<()>>,
+}
+
+impl std::fmt::Debug for TicketState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TicketState")
+            .field("is_active", &self.is_active)
+            .field("activation_tx", &self.activation_tx.is_some())
+            .field("activation_rx", &self.activation_rx.is_some())
+            .finish()
+    }
 }
 
 // Thread-safe counter for generating unique IDs
@@ -81,7 +90,7 @@ fn get_next_ticket_id() -> usize {
 
 impl ForestRootWriteTicket {
     /// Create a new ticket with the given priority
-    fn new(priority: PriorityValue, manager: Arc<ForestRootWriteLockManager>) -> Self {
+    fn new(priority: PriorityValue, manager: &ForestRootWriteLockManager) -> Self {
         let (activation_tx, activation_rx) = oneshot::channel();
 
         Self {
@@ -92,7 +101,7 @@ impl ForestRootWriteTicket {
             })),
             priority,
             id: get_next_ticket_id(),
-            manager,
+            manager: Arc::new(manager.clone()),
         }
     }
 
@@ -144,6 +153,7 @@ impl ForestRootWriteTicket {
     }
 
     /// Mark this ticket as inactive (release the lock)
+    /// This is now mostly handled by the guard drop, but kept for explicit releases
     async fn release(&self) {
         warn!(target: LOG_TARGET, "[LOCK_MANAGER] Releasing lock START");
         let mut state = self.state.write().await;
@@ -154,6 +164,17 @@ impl ForestRootWriteTicket {
                 "[LOCK_MANAGER] Ticket with priority {} released lock",
                 self.priority
             );
+
+            // Release the forgotten permit by adding it back to the semaphore
+            if self
+                .manager
+                .forgotten_permits
+                .fetch_sub(1, std::sync::atomic::Ordering::Relaxed)
+                > 0
+            {
+                self.manager.lock.add_permits(1);
+                warn!(target: LOG_TARGET, "[LOCK_MANAGER] Released forgotten permit");
+            }
 
             // Notify the manager that this ticket has been released
             self.manager.notify_lock_released().await;
@@ -169,10 +190,13 @@ pub struct ForestRootWriteGuard {
 
 impl Drop for ForestRootWriteGuard {
     fn drop(&mut self) {
-        // Use a blocking task to release the lock
+        // Simply spawn a task to release the lock without blocking
         let ticket = self.ticket.clone();
+        warn!(target: LOG_TARGET, "[LOCK_MANAGER] GUARD DROP: Spawning release task for ticket with priority {}", ticket.priority);
         tokio::spawn(async move {
+            warn!(target: LOG_TARGET, "[LOCK_MANAGER] GUARD DROP: Starting release for ticket with priority {}", ticket.priority);
             ticket.release().await;
+            warn!(target: LOG_TARGET, "[LOCK_MANAGER] GUARD DROP: Completed release for ticket with priority {}", ticket.priority);
         });
     }
 }
@@ -181,11 +205,13 @@ impl Drop for ForestRootWriteGuard {
 #[derive(Debug)]
 pub struct ForestRootWriteLockManager {
     /// Semaphore used to control access to the lock (with 1 permit)
-    lock: Semaphore,
+    lock: Arc<Semaphore>,
     /// Queue of tickets waiting for the lock, ordered by priority
     queue: Arc<RwLock<BTreeSet<ForestRootWriteTicket>>>,
     /// Whether a ticket is currently being processed
     processing: Arc<RwLock<bool>>,
+    /// Counter to track how many permits have been forgotten and need manual release
+    forgotten_permits: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl ForestRootWriteLockManager {
@@ -193,17 +219,16 @@ impl ForestRootWriteLockManager {
     pub fn new() -> Self {
         Self {
             // Start with 1 permit (lock is available)
-            lock: Semaphore::new(1),
+            lock: Arc::new(Semaphore::new(1)),
             queue: Arc::new(RwLock::new(BTreeSet::new())),
             processing: Arc::new(RwLock::new(false)),
+            forgotten_permits: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         }
     }
 
     /// Create a new ticket with the given priority
     pub async fn create_ticket(&self, priority: PriorityValue) -> ForestRootWriteTicket {
-        let manager = Arc::new(self.clone());
-
-        let ticket = ForestRootWriteTicket::new(priority, manager.clone());
+        let ticket = ForestRootWriteTicket::new(priority, self);
 
         // Add ticket to the queue
         {
@@ -269,6 +294,8 @@ impl ForestRootWriteLockManager {
         // Find the highest priority ticket
         let next_ticket = {
             let mut queue = self.queue.write().await;
+            let queue_size = queue.len();
+            warn!(target: LOG_TARGET, "[LOCK_MANAGER] Queue has {} tickets", queue_size);
 
             // Take the first ticket (highest priority due to BTreeSet ordering)
             if queue.is_empty() {
@@ -278,6 +305,7 @@ impl ForestRootWriteLockManager {
                 let ticket = queue.iter().next().cloned();
                 if let Some(ref t) = ticket {
                     queue.remove(t);
+                    warn!(target: LOG_TARGET, "[LOCK_MANAGER] Removed ticket with priority {} from queue", t.priority);
                 }
                 ticket
             }
@@ -305,6 +333,9 @@ impl ForestRootWriteLockManager {
                         return;
                     }
 
+                    // Track that we've forgotten a permit
+                    self.forgotten_permits
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     // Deliberately forget the permit so it's not released until the ticket is released
                     std::mem::forget(permit);
 
@@ -328,8 +359,13 @@ impl ForestRootWriteLockManager {
     /// Notify the manager that a lock has been released
     async fn notify_lock_released(&self) {
         warn!(target: LOG_TARGET, "[LOCK_MANAGER] Notify lock released START");
-        // Try to process the next ticket
-        self.process_next_ticket().await;
+
+        // Use async spawning to prevent recursion that can cause stack overflow
+        let manager = self.clone();
+        tokio::spawn(async move {
+            manager.process_next_ticket().await;
+        });
+
         warn!(target: LOG_TARGET, "[LOCK_MANAGER] Notify lock released END");
     }
 
@@ -342,10 +378,11 @@ impl ForestRootWriteLockManager {
 impl Clone for ForestRootWriteLockManager {
     fn clone(&self) -> Self {
         Self {
-            // Create a new semaphore with the same number of permits
-            lock: Semaphore::new(self.lock.available_permits()),
+            // Share the same semaphore - this is critical for proper lock coordination
+            lock: Arc::clone(&self.lock),
             queue: Arc::clone(&self.queue),
             processing: Arc::clone(&self.processing),
+            forgotten_permits: Arc::clone(&self.forgotten_permits),
         }
     }
 }

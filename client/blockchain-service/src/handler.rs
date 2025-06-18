@@ -10,7 +10,7 @@ use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde::Deserialize;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
-use sp_core::{Get, H256};
+use sp_core::H256;
 use sp_keystore::KeystorePtr;
 use sp_runtime::{traits::Header, SaturatedConversion};
 
@@ -32,7 +32,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BlockNumber, MaxBatchConfirmStorageRequests, ParachainClient, TickNumber},
+    types::{BlockNumber, ParachainClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -47,7 +47,6 @@ use crate::{
         ProcessStopStoringForInsolventUserRequestData, ProcessSubmitProofRequest,
         ProcessSubmitProofRequestData,
     },
-    handler_msp::MAX_BATCH_MSP_RESPOND_STORE_REQUESTS,
     lock_manager::{ForestRootWriteLockManager, PriorityValue},
     state::{
         BlockchainServiceStateStore, LastProcessedBlockNumberCf,
@@ -843,51 +842,19 @@ where
                 }
                 BlockchainServiceCommand::QueueConfirmBspRequest { request, callback } => {
                     if let Some(ManagedProvider::Bsp(_)) = &self.maybe_managed_provider {
-                        let state_store_context =
-                            self.persistent_state.open_rw_context_with_overlay();
-                        state_store_context
-                            .pending_confirm_storing_request_deque()
-                            .push_back(request);
-                        state_store_context.commit();
+                        // Create task immediately - always process requests as they come in
+                        let task = ProcessConfirmStoringRequestData {
+                            confirm_storing_requests: vec![request],
+                        };
 
-                        let max_batch_confirm = <MaxBatchConfirmStorageRequests as Get<u32>>::get();
+                        let ticket = self
+                            .forest_root_lock_manager
+                            .create_ticket(task.priority())
+                            .await;
 
-                        // If we have enough requests to fill a batch, or we have the lock available,
-                        // we start the task to process the requests.
-                        let state_store_context =
-                            self.persistent_state.open_rw_context_with_overlay();
-                        if state_store_context
-                            .pending_confirm_storing_request_deque()
-                            .size()
-                            >= max_batch_confirm as u64
-                            || self.forest_root_lock_manager.is_lock_available()
-                        {
-                            let mut confirm_storing_requests = Vec::new();
-                            while let Some(request) = state_store_context
-                                .pending_confirm_storing_request_deque()
-                                .pop_front()
-                            {
-                                confirm_storing_requests.push(request);
-                                if confirm_storing_requests.len() == max_batch_confirm as usize {
-                                    break;
-                                }
-                            }
+                        self.emit(ProcessConfirmStoringRequest { data: task, ticket });
 
-                            let task = ProcessConfirmStoringRequestData {
-                                confirm_storing_requests,
-                            };
-
-                            let ticket = self
-                                .forest_root_lock_manager
-                                .create_ticket(task.priority())
-                                .await;
-
-                            self.emit(ProcessConfirmStoringRequest { data: task, ticket });
-
-                            state_store_context.commit();
-
-                            self.assign_forest_root_write_lock().await;
-                        }
+                        self.assign_forest_root_write_lock().await;
 
                         match callback.send(Ok(())) {
                             Ok(_) => {}
@@ -906,49 +873,33 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueueMspRespondStorageRequest { request, callback } => {
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    state_store_context
-                        .pending_msp_respond_storage_request_deque()
-                        .push_back(request);
-                    state_store_context.commit();
+                    info!(target: LOG_TARGET, "QueueMspRespondStorageRequest received for file_key: {:?}", request.file_key);
 
-                    // If we have enough requests to fill a batch, or we have the lock available,
-                    // we start the task to process the requests.
-                    let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    if state_store_context
-                        .pending_msp_respond_storage_request_deque()
-                        .size()
-                        >= MAX_BATCH_MSP_RESPOND_STORE_REQUESTS as u64
-                        || self.forest_root_lock_manager.is_lock_available()
-                    {
-                        let mut respond_storing_requests = Vec::new();
-                        while let Some(request) = state_store_context
-                            .pending_msp_respond_storage_request_deque()
-                            .pop_front()
-                        {
-                            respond_storing_requests.push(request);
-                            if respond_storing_requests.len()
-                                == MAX_BATCH_MSP_RESPOND_STORE_REQUESTS as usize
-                            {
-                                break;
-                            }
-                        }
+                    warn!(target: LOG_TARGET, "HANDLER_DEBUG: QueueMspRespondStorageRequest received for file_key: {:?}", request.file_key);
 
-                        let task = ProcessMspRespondStoringRequestData {
-                            respond_storing_requests,
-                        };
+                    // Create task immediately - always process requests as they come in
+                    let task = ProcessMspRespondStoringRequestData {
+                        respond_storing_requests: vec![request],
+                    };
 
-                        let ticket = self
-                            .forest_root_lock_manager
-                            .create_ticket(task.priority())
-                            .await;
+                    warn!(target: LOG_TARGET, "HANDLER_DEBUG: Creating ticket with priority {}", task.priority());
+                    let ticket = self
+                        .forest_root_lock_manager
+                        .create_ticket(task.priority())
+                        .await;
 
-                        self.emit(ProcessMspRespondStoringRequest { data: task, ticket });
+                    info!(target: LOG_TARGET, "Created ticket with priority {} for MSP response", task.priority());
 
-                        state_store_context.commit();
+                    warn!(target: LOG_TARGET, "HANDLER_DEBUG: Emitting ProcessMspRespondStoringRequest event");
+                    self.emit(ProcessMspRespondStoringRequest { data: task, ticket });
 
-                        self.assign_forest_root_write_lock().await;
-                    }
+                    info!(target: LOG_TARGET, "Emitted ProcessMspRespondStoringRequest event");
+
+                    warn!(target: LOG_TARGET, "HANDLER_DEBUG: Calling assign_forest_root_write_lock");
+                    self.assign_forest_root_write_lock().await;
+
+                    info!(target: LOG_TARGET, "Successfully queued MSP respond storage request");
+
                     match callback.send(Ok(())) {
                         Ok(_) => {}
                         Err(e) => {
@@ -957,16 +908,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueueSubmitProofRequest { request, callback } => {
-                    // We start the task to process the request right away. The task will check
-                    // if the request is still valid and if so, it will be processed.
                     if let Some(ManagedProvider::Bsp(_)) = &mut self.maybe_managed_provider {
-                        // if let Some(replaced_request) = bsp_handler
-                        //     .pending_submit_proof_requests
-                        //     .replace(request.clone())
-                        // {
-                        //     trace!(target: LOG_TARGET, "Replacing pending submit proof request {:?} with {:?}", replaced_request, request);
-                        // }
-
                         let task = ProcessSubmitProofRequestData {
                             seed: request.seed,
                             provider_id: request.provider_id,
@@ -1004,13 +946,6 @@ where
                     callback,
                 } => {
                     if let Some(_) = &self.maybe_managed_provider {
-                        // let state_store_context =
-                        //     self.persistent_state.open_rw_context_with_overlay();
-                        // state_store_context
-                        //     .pending_stop_storing_for_insolvent_user_request_deque()
-                        //     .push_back(request);
-                        // state_store_context.commit();
-
                         let task =
                             ProcessStopStoringForInsolventUserRequestData { who: request.user };
                         let ticket = self
@@ -1182,15 +1117,6 @@ where
                     }
                 }
                 BlockchainServiceCommand::QueueFileDeletionRequest { request, callback } => {
-                    // let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-                    // state_store_context
-                    //     .pending_file_deletion_request_deque()
-                    //     .push_back(request);
-                    // state_store_context.commit();
-
-                    // TODO: Right now the runtime supports only one file deletion request at a time.
-                    // When we add support for multiple file deletion requests, we need to change this.
-
                     let task = ProcessFileDeletionRequestData {
                         file_deletion_requests: vec![request],
                     };
@@ -1569,14 +1495,16 @@ where
     /// 1. A new block is processed
     /// 2. A new task is queued
     pub(crate) async fn assign_forest_root_write_lock(&mut self) {
-        debug!("Assigning forest root write lock");
         // Skip if the latest processed block doesn't match the current best block
         if !self.is_latest_processed_block_current() {
-            debug!("Skipping assignment because latest processed block does not match current best block");
             return;
         }
 
-        debug!("Processing next ticket");
-        self.forest_root_lock_manager.process_next_ticket().await;
+        // Use async spawning to prevent stack overflow when multiple tasks are queued rapidly
+        let manager = self.forest_root_lock_manager.clone();
+        tokio::spawn(async move {
+            manager.process_next_ticket().await;
+        });
     }
+
 }
