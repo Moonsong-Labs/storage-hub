@@ -35,6 +35,7 @@ pub trait StorageEnableRuntimeConfig:
         Block = opaque::Block,
         Nonce = u32,
         RuntimeOrigin: AsSystemOriginSigner<sp_runtime::AccountId32>,
+        AccountData = pallet_balances::AccountData<<Self as pallet_balances::Config>::Balance>,
     > + pallet_file_system::Config<
         RuntimeEvent: Into<EventsStorageEnable<Self>>,
         Fingerprint = Fingerprint,
@@ -82,7 +83,15 @@ pub trait StorageEnableRuntimeConfig:
     + pallet_payment_streams::Config<
         ProvidersPallet: ReadProvidersInterface<ProviderId = H256>,
         MaxUsersToCharge: core::marker::Send,
+        // NativeBalance: frame_support::traits::fungible::Inspect<
+        //     Self::AccountId,
+        //     Balance = <Self as pallet_balances::Config>::Balance,
+        // > + frame_support::traits::fungible::Mutate<
+        //     Self::AccountId,
+        //     Balance = <Self as pallet_balances::Config>::Balance,
+        // >,
     > + pallet_randomness::Config
+    + pallet_balances::Config<Balance = u128>
     + Default
     + Send
     + Sync
@@ -90,7 +99,8 @@ pub trait StorageEnableRuntimeConfig:
 {
 }
 
-impl<T> StorageEnableRuntimeConfig for T where
+impl<T> StorageEnableRuntimeConfig for T
+where
     T: frame_system::Config<
             RuntimeCall: core::marker::Send,
             RuntimeEvent: Into<EventsStorageEnable<Self>>,
@@ -99,6 +109,7 @@ impl<T> StorageEnableRuntimeConfig for T where
             Block = opaque::Block,
             Nonce = u32,
             RuntimeOrigin: AsSystemOriginSigner<sp_runtime::AccountId32>,
+            AccountData = pallet_balances::AccountData<<Self as pallet_balances::Config>::Balance>,
         > + pallet_file_system::Config<
             RuntimeEvent: Into<EventsStorageEnable<Self>>,
             Fingerprint = Fingerprint,
@@ -146,11 +157,19 @@ impl<T> StorageEnableRuntimeConfig for T where
         + pallet_payment_streams::Config<
             ProvidersPallet: ReadProvidersInterface<ProviderId = H256>,
             MaxUsersToCharge: core::marker::Send,
+            // NativeBalance: frame_support::traits::fungible::Inspect<
+            //     Self::AccountId,
+            //     Balance = <Self as pallet_balances::Config>::Balance,
+            // > + frame_support::traits::fungible::Mutate<
+            //     Self::AccountId,
+            //     Balance = <Self as pallet_balances::Config>::Balance,
+            // >,
         > + pallet_randomness::Config
+        + pallet_balances::Config<Balance = u128>
         + Default
         + Send
         + Sync
-        + Debug
+        + Debug,
 {
 }
 

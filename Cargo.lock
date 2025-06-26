@@ -14065,6 +14065,7 @@ name = "shc-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bigdecimal",
  "bincode",
  "cumulus-client-service",
  "frame-benchmarking 39.0.0",
@@ -14072,6 +14073,7 @@ dependencies = [
  "frame-system 39.1.0",
  "lazy_static",
  "log",
+ "pallet-balances 40.1.0",
  "pallet-bucket-nfts",
  "pallet-file-system",
  "pallet-file-system-runtime-api",

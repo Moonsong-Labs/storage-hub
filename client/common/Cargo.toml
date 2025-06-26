@@ -24,6 +24,7 @@ trie-db = { workspace = true }
 lazy-static = { workspace = true }
 log = { workspace = true }
 thiserror = { workspace = true }
+bigdecimal = { workspace = true }
 
 # Substrate
 frame-system = { workspace = true }
@@ -71,6 +72,7 @@ pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 pallet-bucket-nfts = { workspace = true }
 pallet-randomness = { workspace = true }
+pallet-balances = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"

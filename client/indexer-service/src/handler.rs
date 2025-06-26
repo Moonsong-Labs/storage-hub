@@ -413,7 +413,7 @@ where
                 let ps =
                     PaymentStream::get(conn, user_account.to_string(), provider_id.to_string())
                         .await?;
-                let new_total_amount = ps.total_amount_paid + amount;
+                let new_total_amount = (ps.total_amount_paid as u64) + amount;
                 let last_tick_charged: i64 = (*last_tick_charged).into();
                 let charged_at_tick: i64 = (*charged_at_tick).into();
                 PaymentStream::update_total_amount(
