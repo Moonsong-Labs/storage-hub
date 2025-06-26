@@ -2,7 +2,10 @@ use std::{collections::HashSet, str::FromStr};
 
 use trie_db::TrieLayout;
 
-use shc_common::types::{Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT};
+use shc_common::{
+    traits::StorageEnableRuntimeConfig,
+    types::{Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT},
+};
 
 #[derive(Debug)]
 pub enum FileStorageWriteError {
@@ -150,7 +153,7 @@ pub trait FileDataTrie<T: TrieLayout> {
 }
 
 /// Storage interface to be implemented by the storage providers.
-pub trait FileStorage<T: TrieLayout>: 'static {
+pub trait FileStorage<T: TrieLayout, Runtime: StorageEnableRuntimeConfig>: 'static {
     type FileDataTrie: FileDataTrie<T> + Send + Sync;
 
     /// Creates a new [`FileDataTrie`] with no data and empty default root.
@@ -163,7 +166,7 @@ pub trait FileStorage<T: TrieLayout>: 'static {
         &self,
         key: &HasherOutT<T>,
         chunk_ids: &HashSet<ChunkId>,
-    ) -> Result<FileKeyProof, FileStorageError>;
+    ) -> Result<FileKeyProof<Runtime>, FileStorageError>;
 
     /// Remove a file from storage.
     fn delete_file(&mut self, key: &HasherOutT<T>) -> Result<(), FileStorageError>;

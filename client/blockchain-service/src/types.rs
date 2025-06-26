@@ -250,14 +250,14 @@ pub struct SendExtrinsicOptions<Runtime: StorageEnableRuntimeConfig> {
 impl<Runtime: StorageEnableRuntimeConfig> SendExtrinsicOptions<Runtime> {
     pub fn new(timeout: Duration) -> Self {
         Self {
-            tip: Tip::from(0),
+            tip: Tip::<Runtime>::from(0),
             nonce: None,
             timeout,
         }
     }
 
     pub fn with_tip(mut self, tip: u128) -> Self {
-        self.tip = Tip::from(tip);
+        self.tip = Tip::<Runtime>::from(tip);
         self
     }
 
@@ -282,7 +282,7 @@ impl<Runtime: StorageEnableRuntimeConfig> SendExtrinsicOptions<Runtime> {
 impl<Runtime: StorageEnableRuntimeConfig> Default for SendExtrinsicOptions<Runtime> {
     fn default() -> Self {
         Self {
-            tip: Tip::from(0),
+            tip: Tip::<Runtime>::from(0),
             nonce: None,
             timeout: Duration::from_secs(60),
         }
@@ -496,6 +496,20 @@ where
     NumberFor<Block>: Into<BlockNumber<Runtime>>,
 {
     fn from(hash_and_number: HashAndNumber<Block>) -> Self {
+        Self {
+            number: hash_and_number.number.into(),
+            hash: hash_and_number.hash,
+        }
+    }
+}
+
+impl<Block, Runtime: StorageEnableRuntimeConfig> From<&HashAndNumber<Block>>
+    for MinimalBlockInfo<Runtime>
+where
+    Block: cumulus_primitives_core::BlockT<Hash = H256>,
+    NumberFor<Block>: Into<BlockNumber<Runtime>>,
+{
+    fn from(hash_and_number: &HashAndNumber<Block>) -> Self {
         Self {
             number: hash_and_number.number.into(),
             hash: hash_and_number.hash,

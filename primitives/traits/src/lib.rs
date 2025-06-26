@@ -9,7 +9,7 @@ use frame_support::{
     BoundedBTreeSet, Parameter,
 };
 use scale_info::{prelude::fmt::Debug, TypeInfo};
-use sp_core::Get;
+use sp_core::{Get, H256};
 use sp_runtime::{
     traits::{
         AtLeast32BitUnsigned, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Hash, One,

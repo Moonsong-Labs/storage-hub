@@ -118,7 +118,7 @@ pub struct FileTransferService<Runtime: StorageEnableRuntimeConfig> {
     bucket_allow_list_grace_period_time: BTreeSet<BucketIdWithExpiration<Runtime>>,
     /// The event bus provider for the file transfer service.
     /// Part of the actor framework, allows for emitting events.
-    event_bus_provider: FileTransferServiceEventBusProvider,
+    event_bus_provider: FileTransferServiceEventBusProvider<Runtime>,
     /// Mapping from RequestId to a download pending response channel
     download_pending_responses:
         HashMap<DownloadRequestId, futures::channel::oneshot::Sender<OutgoingResponse>>,
@@ -136,7 +136,7 @@ pub struct FileTransferService<Runtime: StorageEnableRuntimeConfig> {
 impl<Runtime: StorageEnableRuntimeConfig> Actor for FileTransferService<Runtime> {
     type Message = FileTransferServiceCommand<Runtime>;
     type EventLoop = FileTransferServiceEventLoop<Runtime>;
-    type EventBusProvider = FileTransferServiceEventBusProvider;
+    type EventBusProvider = FileTransferServiceEventBusProvider<Runtime>;
 
     fn handle_message(
         &mut self,
@@ -605,7 +605,9 @@ impl<Runtime: StorageEnableRuntimeConfig> FileTransferService<Runtime> {
                     }
                 };
 
-                let file_key_proof = match FileKeyProof::decode(&mut r.file_key_proof.as_slice()) {
+                let file_key_proof = match FileKeyProof::<Runtime>::decode(
+                    &mut r.file_key_proof.as_slice(),
+                ) {
                     Ok(file_key_proof) => file_key_proof,
                     Err(e) => {
                         error!(
@@ -622,7 +624,8 @@ impl<Runtime: StorageEnableRuntimeConfig> FileTransferService<Runtime> {
                 };
 
                 let bucket_id = match &r.bucket_id {
-                    Some(bucket_id) => match BucketId::decode(&mut bucket_id.as_slice()) {
+                    Some(bucket_id) => match BucketId::<Runtime>::decode(&mut bucket_id.as_slice())
+                    {
                         Ok(bucket_id) => Some(bucket_id),
                         Err(e) => {
                             error!(
@@ -688,7 +691,9 @@ impl<Runtime: StorageEnableRuntimeConfig> FileTransferService<Runtime> {
                 };
 
                 let bucket_id = match r.bucket_id {
-                    Some(ref bucket_id) => BucketId::decode(&mut bucket_id.as_slice()).ok(),
+                    Some(ref bucket_id) => {
+                        BucketId::<Runtime>::decode(&mut bucket_id.as_slice()).ok()
+                    }
                     None => None,
                 };
 
@@ -832,7 +837,9 @@ impl<Runtime: StorageEnableRuntimeConfig> FileTransferService<Runtime> {
                 target: LOG_TARGET,
                 "Emitting RetryBucketMoveDownload event to check for pending bucket downloads"
             );
-            self.emit(RetryBucketMoveDownload);
+            self.emit(RetryBucketMoveDownload::<Runtime> {
+                _phantom: core::marker::PhantomData::default(),
+            });
         }
     }
 }

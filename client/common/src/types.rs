@@ -4,7 +4,7 @@ use std::{
 };
 
 use codec::{Decode, Encode};
-use frame_system::{Config, EventRecord};
+use frame_system::EventRecord;
 use sc_executor::WasmExecutor;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
@@ -17,24 +17,14 @@ use sp_runtime::{traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use sp_trie::LayoutV1;
-use storage_hub_runtime::Runtime;
 use trie_db::TrieLayout;
+
+use crate::traits::StorageEnableRuntimeConfig;
 
 /// Size of each batch in bytes (2 MiB)
 /// This is the maximum size of a batch of chunks that can be uploaded in a single call
 /// (request-response round-trip).
 pub const BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE: usize = 2 * 1024 * 1024;
-
-pub trait StorageHubRuntime {
-    type Runtime: pallet_file_system::Config;
-    type BlockNumber;
-}
-
-// impl StorageHubRuntime for storage_hub_runtime::Runtime {
-//     type Runtime = storage_hub_runtime::Runtime;
-
-//     type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
-// }
 
 /// The hash type of trie node keys
 pub type HashT<T> = <T as TrieLayout>::Hash;
@@ -43,8 +33,8 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 /// Following types are shared between the client and the runtime.
 /// They are defined as generic types in the runtime and made concrete using the runtime config
 /// here to be used by the node/client.
-pub type FileKeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
-pub type FileKeyProof = <FileKeyVerifier as CommitmentVerifier>::Proof;
+pub type FileKeyVerifier<Runtime> = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
+pub type FileKeyProof<Runtime> = <FileKeyVerifier<Runtime> as CommitmentVerifier>::Proof;
 pub type Hash = shp_file_metadata::Hash<H_LENGTH>;
 pub type Fingerprint = shp_file_metadata::Fingerprint<H_LENGTH>;
 pub type FileMetadata =
@@ -173,11 +163,11 @@ pub struct FileProof {
 }
 
 impl FileProof {
-    pub fn to_file_key_proof(
+    pub fn to_file_key_proof<Runtime: StorageEnableRuntimeConfig>(
         &self,
         file_metadata: FileMetadata,
-    ) -> Result<FileKeyProof, FileProofError> {
-        FileKeyProof::new(
+    ) -> Result<FileKeyProof<Runtime>, FileProofError> {
+        FileKeyProof::<Runtime>::new(
             file_metadata.owner().clone(),
             file_metadata.bucket_id().clone(),
             file_metadata.location().clone(),

@@ -22,7 +22,7 @@ use tokio::{fs, fs::create_dir_all, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
-use shc_common::traits::StorageEnableRuntimeConfig;
+use shc_common::traits::{StorageEnableRuntimeApi, StorageEnableRuntimeConfig};
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -45,25 +45,29 @@ pub struct LoadFileInStorageResult {
     pub file_metadata: FileMetadata,
 }
 
-pub struct StorageHubClientRpcConfig<FL, FSH> {
+pub struct StorageHubClientRpcConfig<FL, FSH, Runtime: StorageEnableRuntimeConfig> {
     pub file_storage: Arc<RwLock<FL>>,
     pub forest_storage_handler: FSH,
     pub keystore: KeystorePtr,
+    pub _runtime_marker: std::marker::PhantomData<Runtime>,
 }
 
-impl<FL, FSH: Clone> Clone for StorageHubClientRpcConfig<FL, FSH> {
+impl<FL, FSH: Clone, Runtime: StorageEnableRuntimeConfig> Clone
+    for StorageHubClientRpcConfig<FL, FSH, Runtime>
+{
     fn clone(&self) -> Self {
         Self {
             file_storage: self.file_storage.clone(),
             forest_storage_handler: self.forest_storage_handler.clone(),
             keystore: self.keystore.clone(),
+            _runtime_marker: std::marker::PhantomData::default(),
         }
     }
 }
 
-impl<FL, FSH> StorageHubClientRpcConfig<FL, FSH>
+impl<FL, FSH, Runtime: StorageEnableRuntimeConfig> StorageHubClientRpcConfig<FL, FSH, Runtime>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync,
 {
     pub fn new(
@@ -75,6 +79,7 @@ where
             file_storage,
             forest_storage_handler,
             keystore,
+            _runtime_marker: std::marker::PhantomData::default(),
         }
     }
 }
@@ -265,22 +270,24 @@ pub trait StorageHubClientApi<T: StorageEnableRuntimeConfig> {
 }
 
 /// Stores the required objects to be used in our RPC method.
-pub struct StorageHubClientRpc<FL, FSH, C, Block> {
+pub struct StorageHubClientRpc<FL, FSH, C, Block, Runtime> {
     client: Arc<C>,
     file_storage: Arc<RwLock<FL>>,
     forest_storage_handler: FSH,
     keystore: KeystorePtr,
     _block_marker: std::marker::PhantomData<Block>,
+    _runtime_marker: std::marker::PhantomData<Runtime>,
 }
 
-impl<FL, FSH, C, Block> StorageHubClientRpc<FL, FSH, C, Block>
+impl<FL, FSH, C, Block, Runtime> StorageHubClientRpc<FL, FSH, C, Block, Runtime>
 where
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    Runtime: StorageEnableRuntimeConfig,
+    FL: FileStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync,
 {
     pub fn new(
         client: Arc<C>,
-        storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH>,
+        storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH, Runtime>,
     ) -> Self {
         Self {
             client,
@@ -288,6 +295,7 @@ where
             forest_storage_handler: storage_hub_client_rpc_config.forest_storage_handler,
             keystore: storage_hub_client_rpc_config.keystore,
             _block_marker: Default::default(),
+            _runtime_marker: Default::default(),
         }
     }
 }
@@ -298,7 +306,7 @@ where
 // to only react to its file.
 #[async_trait]
 impl<FL, FSH, C, Block, Runtime> StorageHubClientApiServer<Runtime>
-    for StorageHubClientRpc<FL, FSH, C, Block>
+    for StorageHubClientRpc<FL, FSH, C, Block, Runtime>
 where
     Block: BlockT,
     Runtime: StorageEnableRuntimeConfig,
@@ -320,7 +328,7 @@ where
             BucketId<Runtime>,
             StorageRequestMetadata<Runtime>,
         >,
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FL: FileStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync,
     FSH: ForestStorageHandler + Send + Sync + 'static,
 {
     async fn load_file_in_storage(
@@ -1013,7 +1021,7 @@ where
         RandomnessOutput<Runtime>,
         CustomChallenge<Runtime>,
     >,
-    FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync + 'static,
+    FL: FileStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync + 'static,
 {
     // Getting Runtime APIs
     let api = client.runtime_api();

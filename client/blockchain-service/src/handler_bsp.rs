@@ -13,6 +13,7 @@ use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
 };
 use shc_actors_framework::actor::Actor;
+use shc_common::events::EventsStorageEnable;
 use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
@@ -20,7 +21,6 @@ use shc_common::{
     types::{BlockNumber, MaxBatchConfirmStorageRequests},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
     events::{
@@ -70,13 +70,17 @@ where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
         self.forest_root_changes_catchup(&tree_route).await;
-        if block_number % self.config.check_for_pending_proofs_period == BlockNumber::zero() {
+        if block_number % self.config.check_for_pending_proofs_period == 0 {
             self.proof_submission_catch_up(block_hash);
         }
     }
 
     /// Processes new block imported events that are only relevant for a BSP.
-    pub(crate) fn bsp_process_block_import_events(&self, block_hash: &H256, event: RuntimeEvent) {
+    pub(crate) fn bsp_process_block_import_events(
+        &self,
+        block_hash: &H256,
+        event: EventsStorageEnable<Runtime>,
+    ) {
         let managed_bsp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => &bsp_handler.bsp_id,
             _ => {
@@ -86,10 +90,12 @@ where
         };
 
         match event {
-            RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::NewChallengeSeed {
-                challenges_ticker,
-                seed: _,
-            }) => {
+            EventsStorageEnable::<Runtime>::ProofsDealer(
+                pallet_proofs_dealer::Event::NewChallengeSeed {
+                    challenges_ticker,
+                    seed: _,
+                },
+            ) => {
                 // Check if the challenges tick is one that this BSP has to submit a proof for.
                 if self.should_provider_submit_proof(
                     &block_hash,
@@ -101,23 +107,27 @@ where
                     trace!(target: LOG_TARGET, "Challenges tick is not the next one to be submitted for Provider [{:?}]", managed_bsp_id);
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRejected {
-                bucket_id,
-                old_msp_id,
-                new_msp_id,
-            }) => {
+            EventsStorageEnable::<Runtime>::FileSystem(
+                pallet_file_system::Event::MoveBucketRejected {
+                    bucket_id,
+                    old_msp_id,
+                    new_msp_id,
+                },
+            ) => {
                 self.emit(MoveBucketRejected::<Runtime> {
                     bucket_id,
                     old_msp_id,
                     new_msp_id,
                 });
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
-                bucket_id,
-                old_msp_id,
-                new_msp_id,
-                value_prop_id,
-            }) => {
+            EventsStorageEnable::<Runtime>::FileSystem(
+                pallet_file_system::Event::MoveBucketAccepted {
+                    bucket_id,
+                    old_msp_id,
+                    new_msp_id,
+                    value_prop_id,
+                },
+            ) => {
                 // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
                 self.emit(MoveBucketAccepted {
                     bucket_id,
@@ -126,16 +136,18 @@ where
                     value_prop_id,
                 });
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequestExpired {
-                bucket_id,
-            }) => {
+            EventsStorageEnable::<Runtime>::FileSystem(
+                pallet_file_system::Event::MoveBucketRequestExpired { bucket_id },
+            ) => {
                 self.emit(MoveBucketExpired { bucket_id });
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::BspConfirmStoppedStoring {
-                bsp_id,
-                file_key,
-                new_root,
-            }) => {
+            EventsStorageEnable::<Runtime>::FileSystem(
+                pallet_file_system::Event::BspConfirmStoppedStoring {
+                    bsp_id,
+                    file_key,
+                    new_root,
+                },
+            ) => {
                 if managed_bsp_id == &bsp_id {
                     self.emit(BspConfirmStoppedStoring::<Runtime> {
                         bsp_id,
@@ -145,12 +157,14 @@ where
                     });
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequested {
-                who: _,
-                bucket_id,
-                new_msp_id,
-                new_value_prop_id: _,
-            }) => {
+            EventsStorageEnable::<Runtime>::FileSystem(
+                pallet_file_system::Event::MoveBucketRequested {
+                    who: _,
+                    bucket_id,
+                    new_msp_id,
+                    new_value_prop_id: _,
+                },
+            ) => {
                 // As a BSP, this node is interested in the event to allow the new MSP to request files from it.
                 self.emit(MoveBucketRequested::<Runtime> {
                     bucket_id,
@@ -163,8 +177,11 @@ where
     }
 
     /// Processes finality events that are only relevant for a BSP.
-    pub(crate) fn bsp_process_finality_events(&self, _block_hash: &H256, event: RuntimeEvent)
-    where
+    pub(crate) fn bsp_process_finality_events(
+        &self,
+        _block_hash: &H256,
+        event: EventsStorageEnable<Runtime>,
+    ) where
         <Runtime as pallet_storage_providers::Config>::ProviderId: PartialEq<H256>,
     {
         let managed_bsp_id = match &self.maybe_managed_provider {
@@ -176,7 +193,7 @@ where
         };
 
         match event {
-            RuntimeEvent::ProofsDealer(
+            EventsStorageEnable::<Runtime>::ProofsDealer(
                 pallet_proofs_dealer::Event::MutationsAppliedForProvider {
                     provider_id,
                     mutations,
@@ -193,11 +210,13 @@ where
                     })
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::BspConfirmStoppedStoring {
-                bsp_id,
-                file_key,
-                new_root,
-            }) => {
+            EventsStorageEnable::FileSystem(
+                pallet_file_system::Event::BspConfirmStoppedStoring {
+                    bsp_id,
+                    file_key,
+                    new_root,
+                },
+            ) => {
                 if managed_bsp_id == &bsp_id {
                     self.emit(FinalisedBspConfirmStoppedStoring::<Runtime> {
                         bsp_id,
@@ -387,7 +406,7 @@ where
 
     pub(crate) async fn bsp_process_forest_root_changing_events(
         &self,
-        event: RuntimeEvent,
+        event: EventsStorageEnable<Runtime>,
         revert: bool,
     ) {
         let managed_bsp_id = match &self.maybe_managed_provider {
@@ -399,7 +418,7 @@ where
         };
 
         match event {
-            RuntimeEvent::ProofsDealer(
+            EventsStorageEnable::ProofsDealer(
                 pallet_proofs_dealer::Event::MutationsAppliedForProvider {
                     provider_id,
                     mutations,
@@ -545,7 +564,7 @@ where
         if challenge_seeds.len() > 0 {
             trace!(target: LOG_TARGET, "Emitting MultipleNewChallengeSeeds event for provider [{:?}] with challenge seeds: {:?}", bsp_id, challenge_seeds);
             self.emit(MultipleNewChallengeSeeds {
-                provider_id: *bsp_id,
+                provider_id: bsp_id.clone(),
                 seeds: challenge_seeds,
             });
         }

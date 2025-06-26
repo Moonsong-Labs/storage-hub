@@ -61,8 +61,10 @@ shc-actors-derive = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-common = { workspace = true }
 shp-constants = { workspace = true }
+shp-traits = { workspace = true, default-features = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
+shp-opaque = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }

@@ -76,7 +76,7 @@ pub enum FileTransferServiceCommand<Runtime: shc_common::traits::StorageEnableRu
         file_key: FileKey,
         /// File key proof of the file we are uploading. This contains 1 or more chunks of the file
         /// and the Merkle proof of them.
-        file_key_proof: FileKeyProof,
+        file_key_proof: FileKeyProof<Runtime>,
         /// Bucket ID is only required for Bucket operations.
         /// Since the FileTransferService is not aware of which files are in which buckets,
         /// it needs to be provided by the caller to pass the allow list check.
@@ -113,7 +113,7 @@ pub enum FileTransferServiceCommand<Runtime: shc_common::traits::StorageEnableRu
     },
     DownloadResponse {
         request_id: DownloadRequestId,
-        file_key_proof: FileKeyProof,
+        file_key_proof: FileKeyProof<Runtime>,
     },
     AddKnownAddress {
         peer_id: PeerId,

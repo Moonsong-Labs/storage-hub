@@ -13,7 +13,6 @@ use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::traits::CheckedSub;
-use sp_runtime::Saturating;
 use sp_runtime::{
     generic::{self, SignedPayload},
     traits::Zero,
@@ -28,18 +27,19 @@ use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::Actor;
+use shc_common::events::EventsStorageEnable;
 use shc_common::traits::StorageEnableRuntimeConfig;
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
+        BlockNumber, FileKey, ForestRoot, ParachainClient, ProofsDealerProviderId,
         StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
-use storage_hub_runtime::{SignedExtra, UncheckedExtrinsic};
+use shp_opaque::{SignedExtra, UncheckedExtrinsic};
 
 use crate::{
     events::{
@@ -156,7 +156,9 @@ where
                         .events
                         .iter()
                         .find_map(|event| {
-                            if let RuntimeEvent::System(system_event) = &event.event {
+                            if let EventsStorageEnable::<Runtime>::System(system_event) =
+                                event.event.clone().into()
+                            {
                                 match system_event {
                                     frame_system::Event::ExtrinsicSuccess { dispatch_info: _ } => {
                                         Some(Ok(()))
@@ -230,7 +232,7 @@ where
     where
         Block: cumulus_primitives_core::BlockT<Hash = H256>,
     {
-        let last_best_block = self.best_block;
+        let last_best_block = self.best_block.clone();
         let new_block_info: MinimalBlockInfo<Runtime> = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.
@@ -241,7 +243,7 @@ where
 
         // At this point we know that the new block is a new best block.
         trace!(target: LOG_TARGET, "New best block imported: {:?}", new_block_info);
-        self.best_block = new_block_info;
+        self.best_block = new_block_info.clone();
 
         // If `tree_route` is `None`, this means that there was NO reorg while importing the block.
         if block_import_notification.tree_route.is_none() {
@@ -251,11 +253,11 @@ where
             // - The size of the route is equal to `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes`, or
             // - The parent block is not found, or
             // - We reach the last best block processed.
-            let mut route = vec![new_block_info.into()];
-            let mut last_block_added = new_block_info;
+            let mut route = vec![new_block_info.clone().into()];
+            let mut last_block_added = new_block_info.clone();
             loop {
                 // Check if we are at the genesis block.
-                if last_block_added.number == BlockNumber::zero() {
+                if last_block_added.number == 0 {
                     trace!(target: LOG_TARGET, "Reached genesis block while building tree route for new best block");
                     break;
                 }
@@ -289,7 +291,7 @@ where
                         break;
                     }
                 };
-                let parent_block_info = MinimalBlockInfo {
+                let parent_block_info = MinimalBlockInfo::<Runtime> {
                     number: parent_block.block.header.number,
                     hash: parent_block.block.hash(),
                 };
@@ -301,7 +303,7 @@ where
                 }
 
                 // Add the parent block to the route.
-                route.push(parent_block_info.into());
+                route.push(parent_block_info.clone().into());
 
                 // Update last block added.
                 last_block_added = parent_block_info;
@@ -309,7 +311,7 @@ where
 
             // The first element in the route is the last best block processed, which will also be the
             // `pivot`, so it will be ignored when processing the `tree_route`.
-            route.push(last_best_block.into());
+            route.push(last_best_block.clone().into());
 
             // Revert the route so that it is in ascending order of blocks, from the last best block processed up to the new imported best block.
             route.reverse();
@@ -321,7 +323,7 @@ where
 
             return NewBlockNotificationKind::NewBestBlock {
                 last_best_block_processed: last_best_block,
-                new_best_block: new_block_info,
+                new_best_block: new_block_info.clone(),
                 tree_route,
             };
         }
@@ -341,7 +343,7 @@ where
             .into_iter()
             .chain(std::iter::once(&common_block))
             .chain(enacted)
-            .chain(std::iter::once(&new_block_info.into()))
+            .chain(std::iter::once(&new_block_info.clone().into()))
             .cloned()
             .collect();
 
@@ -351,7 +353,7 @@ where
         info!(target: LOG_TARGET, "🔀 New best block caused a reorg: {:?}", new_block_info);
         info!(target: LOG_TARGET, "⛓️ Tree route: {:?}", tree_route);
         NewBlockNotificationKind::Reorg {
-            old_best_block: last_best_block,
+            old_best_block: last_best_block.clone(),
             new_best_block: new_block_info,
             tree_route,
         }
@@ -433,17 +435,17 @@ where
             (
                 Some(ManagedProvider::Bsp(bsp_handler)),
                 StorageProviderId::BackupStorageProvider(bsp_id),
-            ) if bsp_handler.bsp_id != bsp_id => {
+            ) if bsp_handler.bsp_id != *bsp_id => {
                 warn!(target: LOG_TARGET, "🔄 This node is already managing a BSP. Stopping managing BSP ID {:?} in favour of BSP ID {:?}", bsp_handler.bsp_id, bsp_id);
-                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(bsp_id)));
+                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(*bsp_id)));
             }
             // Case: The node goes from managing a MSP, to managing a MSP with a different ID.
             (
                 Some(ManagedProvider::Msp(msp_handler)),
                 StorageProviderId::MainStorageProvider(msp_id),
-            ) if msp_handler.msp_id != msp_id => {
+            ) if msp_handler.msp_id != *msp_id => {
                 warn!(target: LOG_TARGET, "🔄 This node is already managing a MSP. Stopping managing MSP ID {:?} in favour of MSP ID {:?}", msp_handler.msp_id, msp_id);
-                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(msp_id)));
+                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(*msp_id)));
             }
             // Case: The node goes from managing a BSP, to managing a MSP   .
             (
@@ -451,7 +453,7 @@ where
                 StorageProviderId::MainStorageProvider(msp_id),
             ) => {
                 warn!(target: LOG_TARGET, "🔄 This node is already managing a BSP. Stopping managing BSP ID {:?} in favour of MSP ID {:?}", bsp_handler.bsp_id, msp_id);
-                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(msp_id)));
+                self.maybe_managed_provider = Some(ManagedProvider::Msp(MspHandler::new(*msp_id)));
             }
             // Case: The node goes from managing a MSP, to managing a BSP.
             (
@@ -459,7 +461,7 @@ where
                 StorageProviderId::BackupStorageProvider(bsp_id),
             ) => {
                 warn!(target: LOG_TARGET, "🔄 This node is already managing a MSP. Stopping managing MSP ID {:?} in favour of BSP ID {:?}", msp_handler.msp_id, bsp_id);
-                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(bsp_id)));
+                self.maybe_managed_provider = Some(ManagedProvider::Bsp(BspHandler::new(*bsp_id)));
             }
             // Rest of the cases are ignored.
             (Some(ManagedProvider::Bsp(_)), StorageProviderId::BackupStorageProvider(_))
@@ -475,7 +477,7 @@ where
     /// checking that the on-chain nonce is not lower.
     pub(crate) async fn send_extrinsic(
         &mut self,
-        call: impl Into<storage_hub_runtime::RuntimeCall>,
+        call: impl Into<<Runtime as frame_system::Config>::RuntimeCall>,
         options: &SendExtrinsicOptions<Runtime>,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
@@ -539,10 +541,10 @@ where
     pub fn construct_extrinsic(
         &self,
         client: Arc<ParachainClient<RuntimeApi>>,
-        function: impl Into<storage_hub_runtime::RuntimeCall>,
+        function: impl Into<<Runtime as frame_system::Config>::RuntimeCall>,
         nonce: u32,
         tip: Tip<Runtime>,
-    ) -> UncheckedExtrinsic {
+    ) -> UncheckedExtrinsic<Runtime> {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
         let current_block = client.info().best_number.saturated_into();
@@ -554,21 +556,16 @@ where
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
-        let extra: SignedExtra = (
-            frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(generic::Era::mortal(
-                period,
-                current_block,
-            )),
-            frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(nonce),
-            frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
+        let extra: SignedExtra<Runtime> = (
+            frame_system::CheckNonZeroSender::<Runtime>::new(),
+            frame_system::CheckSpecVersion::<Runtime>::new(),
+            frame_system::CheckTxVersion::<Runtime>::new(),
+            frame_system::CheckGenesis::<Runtime>::new(),
+            frame_system::CheckEra::<Runtime>::from(generic::Era::mortal(period, current_block)),
+            frame_system::CheckNonce::<Runtime>::from(nonce),
+            frame_system::CheckWeight::<Runtime>::new(),
             tip,
-            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
-                storage_hub_runtime::Runtime,
-            >::new(),
+            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<Runtime>::new(),
             frame_metadata_hash_extension::CheckMetadataHash::new(false),
         );
 
@@ -598,7 +595,7 @@ where
             .expect("They key type and public key are valid because we just extracted them from the keystore; qed");
 
         // Construct the extrinsic.
-        UncheckedExtrinsic::new_signed(
+        UncheckedExtrinsic::<Runtime>::new_signed(
             function.clone(),
             storage_hub_runtime::Address::Id(<sp_core::sr25519::Public as Into<
                 storage_hub_runtime::AccountId,
@@ -874,7 +871,7 @@ where
                         match managed_provider {
                             ManagedProvider::Bsp(_) => {
                                 self.bsp_process_forest_root_changing_events(
-                                    ev.event.clone(),
+                                    ev.event.into(),
                                     revert,
                                 )
                                 .await;
@@ -882,7 +879,7 @@ where
                             ManagedProvider::Msp(_) => {
                                 self.msp_process_forest_root_changing_events(
                                     &block.hash,
-                                    ev.event.clone(),
+                                    ev.event.into(),
                                     revert,
                                 )
                                 .await;
@@ -1062,40 +1059,45 @@ where
         Ok(reverted_mutation)
     }
 
-    pub(crate) fn process_common_block_import_events(&mut self, event: Runtime::RuntimeEvent) {
+    pub(crate) fn process_common_block_import_events(
+        &mut self,
+        event: EventsStorageEnable<Runtime>,
+    ) {
         match event {
             // New storage request event coming from pallet-file-system.
-            Runtime::RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
+            EventsStorageEnable::<Runtime>::FileSystem(
+                pallet_file_system::Event::NewStorageRequest {
+                    who,
+                    file_key,
+                    bucket_id,
+                    location,
+                    fingerprint,
+                    size,
+                    peer_ids,
+                    expires_at,
+                },
+            ) => self.emit(NewStorageRequest::<Runtime> {
                 who,
-                file_key,
+                file_key: FileKey::from(file_key),
                 bucket_id,
                 location,
                 fingerprint,
-                size,
-                peer_ids,
-                expires_at,
-            }) => self.emit(NewStorageRequest {
-                who,
-                file_key: FileKey::from(file_key.as_ref()),
-                bucket_id,
-                location,
-                fingerprint: fingerprint.as_ref().into(),
                 size,
                 user_peer_ids: peer_ids,
                 expires_at,
             }),
             // A provider has been marked as slashable.
-            Runtime::RuntimeEvent::ProofsDealer(
+            EventsStorageEnable::<Runtime>::ProofsDealer(
                 pallet_proofs_dealer::Event::SlashableProvider {
                     provider,
                     next_challenge_deadline,
                 },
-            ) => self.emit(SlashableProvider {
+            ) => self.emit(SlashableProvider::<Runtime> {
                 provider,
                 next_challenge_deadline,
             }),
             // The last chargeable info of a provider has been updated
-            Runtime::RuntimeEvent::PaymentStreams(
+            EventsStorageEnable::<Runtime>::PaymentStreams(
                 pallet_payment_streams::Event::LastChargeableInfoUpdated {
                     provider_id,
                     last_chargeable_tick,
@@ -1109,17 +1111,17 @@ where
                         ManagedProvider::Bsp(bsp_handler) => &bsp_handler.bsp_id,
                         ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
                     };
-                    if provider_id == *managed_provider_id {
-                        self.emit(LastChargeableInfoUpdated {
-                            provider_id: provider_id,
-                            last_chargeable_tick: last_chargeable_tick,
-                            last_chargeable_price_index: last_chargeable_price_index,
+                    if &provider_id == managed_provider_id {
+                        self.emit(LastChargeableInfoUpdated::<Runtime> {
+                            provider_id,
+                            last_chargeable_tick,
+                            last_chargeable_price_index,
                         })
                     }
                 }
             }
             // A user has been flagged as without funds in the runtime
-            Runtime::RuntimeEvent::PaymentStreams(
+            EventsStorageEnable::<Runtime>::PaymentStreams(
                 pallet_payment_streams::Event::UserWithoutFunds { who },
             ) => {
                 self.emit(UserWithoutFunds::<Runtime> {
@@ -1128,7 +1130,7 @@ where
                 });
             }
             // A file was correctly deleted from a user without funds
-            Runtime::RuntimeEvent::FileSystem(
+            EventsStorageEnable::<Runtime>::FileSystem(
                 pallet_file_system::Event::SpStopStoringInsolventUser {
                     sp_id,
                     file_key,
@@ -1145,7 +1147,7 @@ where
                         ManagedProvider::Msp(msp_handler) => &msp_handler.msp_id,
                     };
                     if sp_id == *managed_provider_id {
-                        self.emit(SpStopStoringInsolventUser {
+                        self.emit(SpStopStoringInsolventUser::<Runtime> {
                             sp_id,
                             file_key: file_key.into(),
                             owner,
@@ -1159,15 +1161,15 @@ where
         }
     }
 
-    pub(crate) fn process_common_finality_events(&self, event: RuntimeEvent) {
+    pub(crate) fn process_common_finality_events(&self, event: EventsStorageEnable<Runtime>) {
         match event {
             _ => {}
         }
     }
 
-    pub(crate) fn process_test_user_events(&self, event: RuntimeEvent) {
+    pub(crate) fn process_test_user_events(&self, event: EventsStorageEnable<Runtime>) {
         match event {
-            Runtime::RuntimeEvent::FileSystem(
+            EventsStorageEnable::<Runtime>::FileSystem(
                 pallet_file_system::Event::AcceptedBspVolunteer {
                     bsp_id,
                     bucket_id,
@@ -1186,11 +1188,8 @@ where
                         bsp_id
                     );
 
-                    // We try to convert the types coming from the runtime into our expected types.
-                    let fingerprint: Fingerprint = fingerprint.as_bytes().into();
-
                     let multiaddress_vec: Vec<Multiaddr> =
-                        convert_raw_multiaddresses_to_multiaddr(multiaddresses);
+                        convert_raw_multiaddresses_to_multiaddr::<Runtime>(multiaddresses);
 
                     self.emit(AcceptedBspVolunteer::<Runtime> {
                         bsp_id,

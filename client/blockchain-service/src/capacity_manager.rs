@@ -15,8 +15,6 @@ use shc_common::types::{BlockNumber, StorageData};
 use shc_forest_manager::traits::ForestStorageHandler;
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
-use sp_runtime::traits::CheckedAdd;
-use sp_runtime::Saturating;
 
 use crate::{
     transaction::SubmittedTransaction, types::ManagedProvider, types::SendExtrinsicOptions,
@@ -50,7 +48,7 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
             capacity_config,
             pending_requests: VecDeque::new(),
             requests_waiting_for_inclusion: Vec::new(),
-            total_required: StorageData::zero(),
+            total_required: 0,
             last_submitted_transaction: None,
         }
     }
@@ -76,7 +74,7 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
         request: CapacityRequest<Runtime>,
         current_capacity: StorageData<Runtime>,
     ) {
-        let Some(new_total_required) = self.total_required.checked_add(&request.data.required)
+        let Some(new_total_required) = self.total_required.checked_add(request.data.required)
         else {
             request.send_result(Err(anyhow!("Capacity overflow")));
             return;
@@ -159,7 +157,7 @@ impl<Runtime: StorageEnableRuntimeConfig> CapacityRequestQueue<Runtime> {
     /// Reset the pending requests queue and total required capacity.
     pub fn reset_queue(&mut self) {
         self.pending_requests.clear();
-        self.total_required = StorageData::zero();
+        self.total_required = 0;
     }
 }
 
@@ -303,7 +301,7 @@ where
             })
             .map_err(|e| anyhow!("Failed to query earliest block to change capacity: {:?}", e))?;
 
-        if block_number < earliest_block.saturating_sub(1) {
+        if block_number < earliest_block.saturating_sub(1u32) {
             debug!(target: LOG_TARGET, "[process_capacity_requests] Earliest block to change capacity: {:?}", earliest_block);
             // Must wait until the earliest block to change capacity.
             return Ok(());
@@ -317,7 +315,9 @@ where
 
         // Send the extrinsic to change the provider's capacity and wait for it to succeed.
         let call = storage_hub_runtime::RuntimeCall::Providers(
-            pallet_storage_providers::Call::change_capacity { new_capacity },
+            pallet_storage_providers::Call::change_capacity {
+                new_capacity: new_capacity.into(),
+            },
         );
 
         let extrinsic_retry_timeout = Duration::from_secs(self.config.extrinsic_retry_timeout);

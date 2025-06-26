@@ -27,6 +27,7 @@ serde = { workspace = true, default-features = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 thiserror = { workspace = true }
+bigdecimal = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
@@ -56,6 +57,7 @@ storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
 shc-indexer-db = { workspace = true }
+shp-traits = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }

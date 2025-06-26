@@ -147,8 +147,12 @@ impl SingleScaleEncodedValueCf for PendingStopStoringForInsolventUserRequestRigh
 }
 
 /// Current ongoing task which requires a forest write lock.
-pub struct OngoingProcessFileDeletionRequestCf;
-impl SingleScaleEncodedValueCf for OngoingProcessFileDeletionRequestCf {
+pub struct OngoingProcessFileDeletionRequestCf<Runtime> {
+    pub _phantom: core::marker::PhantomData<Runtime>,
+}
+impl<Runtime: StorageEnableRuntimeConfig> SingleScaleEncodedValueCf
+    for OngoingProcessFileDeletionRequestCf<Runtime>
+{
     type Value = ProcessFileDeletionRequestData<Runtime>;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_process_file_deletion_request";
@@ -282,9 +286,12 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         }
     }
 
-    pub fn pending_file_deletion_request_deque(&'a self) -> PendingFileDeletionRequestDequeAPI<'a> {
-        PendingFileDeletionRequestDequeAPI {
+    pub fn pending_file_deletion_request_deque<Runtime: StorageEnableRuntimeConfig>(
+        &'a self,
+    ) -> PendingFileDeletionRequestDequeAPI<'a, Runtime> {
+        PendingFileDeletionRequestDequeAPI::<Runtime> {
             db_context: &self.db_context,
+            _phantom: core::marker::PhantomData::default(),
         }
     }
 

@@ -26,6 +26,7 @@ use pallet_storage_providers_runtime_api::{
 };
 use shc_actors_derive::actor_command;
 use shc_actors_framework::actor::ActorHandle;
+use shc_common::events::EventsStorageEnable;
 use shc_common::types::{
     BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf, MainStorageProviderId,
     ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId,
@@ -55,7 +56,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntimeConfig> {
     #[command(success_type = SubmittedTransaction)]
     SendExtrinsic {
-        call: storage_hub_runtime::RuntimeCall,
+        call: <Runtime as frame_system::Config>::RuntimeCall,
         options: SendExtrinsicOptions<Runtime>,
     },
     #[command(success_type = Extrinsic<Runtime>)]
@@ -229,21 +230,19 @@ where
 {
     fn extrinsic_result(extrinsic: Extrinsic<Runtime>) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {
-            match ev.event {
-                <Runtime as frame_system::Config>::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicFailed {
-                        dispatch_error,
-                        dispatch_info,
-                    },
-                ) => {
+            match ev.event.into() {
+                EventsStorageEnable::<Runtime>::System(frame_system::Event::ExtrinsicFailed {
+                    dispatch_error,
+                    dispatch_info,
+                }) => {
                     return Ok(ExtrinsicResult::Failure {
                         dispatch_info,
                         dispatch_error,
                     });
                 }
-                <Runtime as frame_system::Config>::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicSuccess { dispatch_info },
-                ) => {
+                EventsStorageEnable::<Runtime>::System(frame_system::Event::ExtrinsicSuccess {
+                    dispatch_info,
+                }) => {
                     return Ok(ExtrinsicResult::Success { dispatch_info });
                 }
                 _ => {}

@@ -4,8 +4,12 @@ use std::{collections::HashSet, io, path::PathBuf, sync::Arc};
 use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::{debug, error};
-use shc_common::types::{
-    Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
+use shc_common::{
+    traits::StorageEnableRuntimeConfig,
+    types::{
+        Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT,
+        H_LENGTH,
+    },
 };
 use sp_state_machine::{warn, Storage};
 use sp_trie::{prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieLayout, TrieMut};
@@ -554,7 +558,8 @@ where
     }
 }
 
-impl<T, DB> FileStorage<T> for RocksDbFileStorage<T, DB>
+impl<T, DB, Runtime: StorageEnableRuntimeConfig> FileStorage<T, Runtime>
+    for RocksDbFileStorage<T, DB>
 where
     T: TrieLayout + Send + Sync + 'static,
     DB: KeyValueDB + 'static,
@@ -573,9 +578,9 @@ where
         file_key: &HasherOutT<T>,
         chunk_id: &ChunkId,
     ) -> Result<Chunk, FileStorageError> {
-        let metadata = self
-            .get_metadata(file_key)?
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+        let metadata =
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::get_metadata(self, file_key)?
+                .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let file_trie = self.get_file_trie(&metadata)?;
 
@@ -608,10 +613,10 @@ where
         chunk_id: &ChunkId,
         data: &Chunk,
     ) -> Result<FileStorageWriteOutcome, FileStorageWriteError> {
-        let metadata = self
-            .get_metadata(file_key)
-            .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
-            .ok_or(FileStorageWriteError::FileDoesNotExist)?;
+        let metadata =
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::get_metadata(self, file_key)
+                .map_err(|_| FileStorageWriteError::FailedToParseFileMetadata)?
+                .ok_or(FileStorageWriteError::FileDoesNotExist)?;
 
         let mut file_trie = self.get_file_trie(&metadata).map_err(|e| {
             error!(target: LOG_TARGET, "{:?}", e);
@@ -633,10 +638,14 @@ where
         );
 
         // Get current chunk count or initialize to 0
-        let current_count = self.stored_chunks_count(file_key).map_err(|e| {
-            error!(target: LOG_TARGET, "{:?}", e);
-            FileStorageWriteError::FailedToGetStoredChunksCount
-        })?;
+        let current_count =
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::stored_chunks_count(
+                self, file_key,
+            )
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageWriteError::FailedToGetStoredChunksCount
+            })?;
 
         // Increment chunk count.
         // This should never overflow unless there is a bug or we support file sizes as large as 16 exabytes.
@@ -676,11 +685,14 @@ where
 
     /// Checks if all chunks are stored for a given file key.
     fn is_file_complete(&self, file_key: &HasherOutT<T>) -> Result<bool, FileStorageError> {
-        let metadata = self
-            .get_metadata(file_key)?
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+        let metadata =
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::get_metadata(self, file_key)?
+                .ok_or(FileStorageError::FileDoesNotExist)?;
 
-        let stored_chunks = self.stored_chunks_count(file_key)?;
+        let stored_chunks =
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::stored_chunks_count(
+                self, file_key,
+            )?;
 
         let file_trie = self.get_file_trie(&metadata)?;
 
@@ -833,14 +845,15 @@ where
         &self,
         key: &HasherOutT<T>,
         chunk_ids: &HashSet<ChunkId>,
-    ) -> Result<FileKeyProof, FileStorageError> {
-        let metadata = self
-            .get_metadata(key)?
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+    ) -> Result<FileKeyProof<Runtime>, FileStorageError> {
+        let metadata =
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::get_metadata(self, key)?
+                .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let file_trie = self.get_file_trie(&metadata)?;
 
-        let stored_chunks = self.stored_chunks_count(key)?;
+        let stored_chunks =
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::stored_chunks_count(self, key)?;
         if metadata.chunks_count() != stored_chunks {
             return Err(FileStorageError::IncompleteFile);
         }
@@ -851,7 +864,7 @@ where
 
         file_trie
             .generate_proof(chunk_ids)?
-            .to_file_key_proof(metadata.clone())
+            .to_file_key_proof::<Runtime>(metadata.clone())
             .map_err(|e| {
                 error!(target: LOG_TARGET, "{:?}", e);
                 FileStorageError::FailedToConstructFileKeyProof
@@ -860,9 +873,9 @@ where
 
     /// Deletes a file and all its associated data.
     fn delete_file(&mut self, file_key: &HasherOutT<T>) -> Result<(), FileStorageError> {
-        let metadata = self
-            .get_metadata(file_key)?
-            .ok_or(FileStorageError::FileDoesNotExist)?;
+        let metadata =
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::get_metadata(self, file_key)?
+                .ok_or(FileStorageError::FileDoesNotExist)?;
 
         let b_fingerprint = metadata.fingerprint().as_ref();
         let h_fingerprint =
@@ -934,7 +947,7 @@ where
         }
 
         for h_file_key in file_keys_to_delete {
-            self.delete_file(&h_file_key)?;
+            <RocksDbFileStorage<T, DB> as FileStorage<T, Runtime>>::delete_file(self, &h_file_key)?;
         }
 
         Ok(())

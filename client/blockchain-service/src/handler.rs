@@ -71,7 +71,7 @@ where
     /// The configuration for the BlockchainService.
     pub(crate) config: BlockchainServiceConfig<Runtime>,
     /// The event bus provider.
-    pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
+    pub(crate) event_bus_provider: BlockchainServiceEventBusProvider<Runtime>,
     /// The parachain client. Used to interact with the runtime.
     pub(crate) client: Arc<ParachainClient<RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
@@ -342,7 +342,7 @@ where
                     }
                 },
                 BlockchainServiceCommand::GetBestBlockInfo { callback } => {
-                    let best_block_info = self.best_block;
+                    let best_block_info = self.best_block.clone();
                     match callback.send(Ok(best_block_info)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Best block info sent successfully");
@@ -360,7 +360,7 @@ where
 
                     let (tx, rx) = tokio::sync::oneshot::channel();
 
-                    if current_block_number >= block_number {
+                    if current_block_number >= block_number.into() {
                         match tx.send(Ok(())) {
                             Ok(_) => {}
                             Err(_) => {
@@ -612,7 +612,7 @@ where
                             error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
                             Err(QueryProviderMultiaddressesError::InternalError)
                         })
-                        .map(convert_raw_multiaddresses_to_multiaddr);
+                        .map(convert_raw_multiaddresses_to_multiaddr::<Runtime>);
 
                     match callback.send(multiaddresses) {
                         Ok(_) => {
@@ -1205,7 +1205,7 @@ where
             return;
         }
 
-        let last_block_processed = self.best_block;
+        let last_block_processed = self.best_block.clone();
 
         // Check if this new imported block is the new best, and if it causes a reorg.
         let new_block_notification_kind = self.register_best_block_and_check_reorg(&notification);
@@ -1225,7 +1225,7 @@ where
                 tree_route,
             } => (new_best_block, tree_route),
         };
-        let MinimalBlockInfo {
+        let MinimalBlockInfo::<Runtime> {
             number: block_number,
             hash: block_hash,
         } = block_info;
@@ -1403,19 +1403,22 @@ where
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
 
-                    self.process_common_block_import_events(ev.event.clone());
+                    self.process_common_block_import_events(ev.event.clone().into());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
                         Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_block_import_events(block_hash, ev.event.clone());
+                            self.bsp_process_block_import_events(
+                                block_hash,
+                                ev.event.clone().into(),
+                            );
                         }
                         Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_block_import_events(block_hash, ev.event.clone());
+                            self.msp_process_block_import_events(block_hash, ev.event.into());
                         }
                         None => {
                             // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
-                            self.process_test_user_events(ev.event.clone());
+                            self.process_test_user_events(ev.event.into());
                         }
                     }
                 }
@@ -1459,15 +1462,15 @@ where
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
-                    self.process_common_finality_events(ev.event.clone());
+                    self.process_common_finality_events(ev.event.clone().into());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
                         Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_finality_events(&block_hash, ev.event.clone());
+                            self.bsp_process_finality_events(&block_hash, ev.event.into());
                         }
                         Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_finality_events(&block_hash, ev.event.clone());
+                            self.msp_process_finality_events(&block_hash, ev.event.into());
                         }
                         _ => {}
                     }

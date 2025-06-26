@@ -53,7 +53,7 @@ impl File {
         bucket_id: i64,
         location: impl Into<Vec<u8>>,
         fingerprint: impl Into<Vec<u8>>,
-        size: i64,
+        size: u64,
         step: FileStorageRequestStep,
         peer_ids: Vec<crate::models::PeerId>,
     ) -> Result<Self, diesel::result::Error> {
@@ -64,7 +64,7 @@ impl File {
                 file::bucket_id.eq(bucket_id),
                 file::location.eq(location.into()),
                 file::fingerprint.eq(fingerprint.into()),
-                file::size.eq(size),
+                file::size.eq(size as i64),
                 file::step.eq(step as i32),
             ))
             .returning(File::as_select())

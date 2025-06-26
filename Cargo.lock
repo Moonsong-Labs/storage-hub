@@ -13985,6 +13985,8 @@ dependencies = [
  "shp-constants",
  "shp-file-key-verifier",
  "shp-file-metadata",
+ "shp-opaque",
+ "shp-traits",
  "sp-api 35.0.0",
  "sp-blockchain",
  "sp-core 35.0.0",
@@ -14077,6 +14079,7 @@ dependencies = [
  "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",
  "pallet-proofs-dealer-runtime-api",
+ "pallet-randomness",
  "pallet-storage-providers",
  "pallet-storage-providers-runtime-api",
  "pallet-transaction-payment 39.1.0",
@@ -14211,6 +14214,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "array-bytes",
+ "bigdecimal",
  "cumulus-primitives-core",
  "cumulus-primitives-storage-weight-reclaim",
  "diesel",
@@ -14244,6 +14248,7 @@ dependencies = [
  "shc-actors-framework",
  "shc-common",
  "shc-indexer-db",
+ "shp-traits",
  "sp-api 35.0.0",
  "sp-blockchain",
  "sp-core 35.0.0",
@@ -14365,7 +14370,11 @@ dependencies = [
 name = "shp-opaque"
 version = "0.1.0"
 dependencies = [
+ "cumulus-primitives-storage-weight-reclaim",
+ "frame-metadata-hash-extension",
  "frame-support 39.1.0",
+ "frame-system 39.1.0",
+ "pallet-transaction-payment 39.1.0",
  "parachains-common",
  "parity-scale-codec",
  "scale-info",
@@ -16496,6 +16505,7 @@ dependencies = [
  "shp-file-key-verifier",
  "shp-file-metadata",
  "shp-forest-verifier",
+ "shp-opaque",
  "shp-traits",
  "shp-treasury-funding",
  "smallvec",

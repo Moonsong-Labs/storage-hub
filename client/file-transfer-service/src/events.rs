@@ -22,7 +22,7 @@ pub struct RemoteUploadRequest<Runtime: StorageEnableRuntimeConfig> {
     /// File key of the file which is being uploaded.
     pub file_key: FileKey,
     /// Proof containing the file chunk(s) which are being uploaded.
-    pub file_key_proof: FileKeyProof,
+    pub file_key_proof: FileKeyProof<Runtime>,
     /// Optional bucket identifier for file organization only required based on the receiver's implementation.
     pub bucket_id: Option<BucketId<Runtime>>,
     /// Unique identifier for tracking the upload request and its response.
@@ -50,7 +50,7 @@ pub struct RemoteDownloadRequest<Runtime: StorageEnableRuntimeConfig> {
 #[actor(actor = "file_transfer_service")]
 pub struct RetryBucketMoveDownload<Runtime: StorageEnableRuntimeConfig> {
     pub _phantom: core::marker::PhantomData<Runtime>,
-};
+}
 
 #[ActorEventBus("file_transfer_service")]
 pub struct FileTransferServiceEventBusProvider;

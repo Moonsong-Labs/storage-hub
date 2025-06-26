@@ -9,19 +9,22 @@ use sp_runtime::AccountId32;
 use std::sync::Arc;
 use thiserror::Error;
 
+use cumulus_primitives_core::BlockT;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
+use shc_common::events::EventsStorageEnable;
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{BlockNumber, ParachainClient},
 };
 use shc_indexer_db::{models::*, DbConnection, DbPool};
+use shp_traits::ReadChallengeableProvidersInterface;
+use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_runtime::traits::Header;
 use std::marker::PhantomData;
-use storage_hub_runtime::RuntimeEvent;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
 
@@ -95,12 +98,11 @@ where
 
         let service_state = ServiceState::get(&mut db_conn).await?;
 
-        for block_number in (service_state.last_processed_block as BlockNumber<Runtime> + 1)
-            ..=finalized_block_number
+        for block_number in (service_state.last_processed_block + 1)..=finalized_block_number.into()
         {
             let block_hash = self
                 .client
-                .block_hash(block_number)?
+                .block_hash(block_number.try_into().unwrap())? // FIXME: dont use unwrap
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
             self.index_block(
                 &mut db_conn,
@@ -128,7 +130,7 @@ where
                 ServiceState::update(conn, block_number as i64).await?;
 
                 for ev in block_events {
-                    self.index_event(conn, &ev.event, block_hash).await?;
+                    self.index_event(conn, ev.event.into(), block_hash).await?;
                 }
 
                 Ok(())
@@ -142,41 +144,36 @@ where
     async fn index_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &RuntimeEvent,
+        event: EventsStorageEnable<Runtime>,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
-        match event {
-            RuntimeEvent::BucketNfts(event) => self.index_bucket_nfts_event(conn, event).await?,
-            RuntimeEvent::FileSystem(event) => self.index_file_system_event(conn, event).await?,
-            RuntimeEvent::PaymentStreams(event) => {
-                self.index_payment_streams_event(conn, event).await?
+        match event.into() {
+            EventsStorageEnable::BucketNfts(event) => {
+                self.index_bucket_nfts_event(conn, &event).await?
             }
-            RuntimeEvent::ProofsDealer(event) => {
-                self.index_proofs_dealer_event(conn, event).await?
+            EventsStorageEnable::FileSystem(event) => {
+                self.index_file_system_event(conn, &event).await?
             }
-            RuntimeEvent::Providers(event) => {
-                self.index_providers_event(conn, event, block_hash).await?
+            EventsStorageEnable::PaymentStreams(event) => {
+                self.index_payment_streams_event(conn, &event).await?
             }
-            RuntimeEvent::Randomness(event) => self.index_randomness_event(conn, event).await?,
+            EventsStorageEnable::ProofsDealer(event) => {
+                self.index_proofs_dealer_event(conn, &event).await?
+            }
+            EventsStorageEnable::Providers(event) => {
+                self.index_providers_event(conn, &event, block_hash).await?
+            }
+            EventsStorageEnable::Randomness(event) => {
+                self.index_randomness_event(conn, &event).await?
+            }
             // TODO: We have to index the events from the CrRandomness pallet when we integrate it to the runtime,
             // since they contain the information about the commit-reveal deadlines for Providers.
             // RuntimeEvent::CrRandomness(event) => self.index_cr_randomness_event(conn, event).await?,
             // Runtime events that we're not interested in.
             // We add them here instead of directly matching (_ => {})
             // to ensure the compiler will let us know to treat future events when added.
-            RuntimeEvent::System(_) => {}
-            RuntimeEvent::ParachainSystem(_) => {}
-            RuntimeEvent::Balances(_) => {}
-            RuntimeEvent::TransactionPayment(_) => {}
-            RuntimeEvent::Sudo(_) => {}
-            RuntimeEvent::CollatorSelection(_) => {}
-            RuntimeEvent::Session(_) => {}
-            RuntimeEvent::XcmpQueue(_) => {}
-            RuntimeEvent::PolkadotXcm(_) => {}
-            RuntimeEvent::CumulusXcm(_) => {}
-            RuntimeEvent::MessageQueue(_) => {}
-            RuntimeEvent::Nfts(_) => {}
-            RuntimeEvent::Parameters(_) => {}
+            EventsStorageEnable::System(_) => {}
+            EventsStorageEnable::Others => {}
         }
 
         Ok(())
@@ -199,7 +196,7 @@ where
     async fn index_file_system_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_file_system::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_file_system::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_file_system::Event::NewBucket {
@@ -299,7 +296,7 @@ where
                     bucket.id,
                     location.to_vec(),
                     fingerprint.as_ref().to_vec(),
-                    *size as i64,
+                    *size,
                     FileStorageRequestStep::Requested,
                     sql_peer_ids,
                 )
@@ -443,7 +440,7 @@ where
     async fn index_proofs_dealer_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_proofs_dealer::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. } => {}
@@ -475,7 +472,7 @@ where
     async fn index_providers_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_storage_providers::Event<Runtime>,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         match event {
@@ -649,7 +646,7 @@ where
     async fn index_randomness_event<'a, 'b: 'a>(
         &'b self,
         _conn: &mut DbConnection<'a>,
-        event: &pallet_randomness::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_randomness::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             pallet_randomness::Event::NewOneEpochAgoRandomnessAvailable { .. } => {}
