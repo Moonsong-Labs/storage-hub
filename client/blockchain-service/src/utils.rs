@@ -1146,10 +1146,8 @@ where
         }
     }
 
-    pub(crate) fn process_common_finality_events(&self, event: RuntimeEvent) {
-        match event {
-            _ => {}
-        }
+    pub(crate) fn process_common_finality_events(&self, _event: RuntimeEvent) {
+        {}
     }
 
     pub(crate) fn process_test_user_events(&self, event: RuntimeEvent) {
