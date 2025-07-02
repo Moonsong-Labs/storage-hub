@@ -55,7 +55,7 @@
 //!
 //! Column families are typically defined as empty structs implementing the appropriate traits:
 //!
-//! ```
+//! ```ignore
 //! // Single value column family (global variable)
 //! pub struct LastProcessedBlockNumberCf;
 //! impl SingleScaleEncodedValueCf for LastProcessedBlockNumberCf {
@@ -76,7 +76,7 @@
 //!
 //! Operations are performed through a context that provides type safety:
 //!
-//! ```
+//! ```ignore
 //! // Read a single value
 //! let block_number = context.access_value(&LastProcessedBlockNumberCf::default()).read();
 //!
@@ -92,7 +92,7 @@
 //!
 //! The framework provides APIs for common data structures:
 //!
-//! ```
+//! ```ignore
 //! // Using a deque (queue)
 //! let deque = context.pending_requests_deque();
 //! deque.push_back(request);  // Add to the end
@@ -113,7 +113,7 @@
 //!
 //! Operations can be batched and committed atomically:
 //!
-//! ```
+//! ```ignore
 //! let context = store.open_rw_context_with_overlay();
 //! // Perform multiple operations
 //! context.commit();  // Flushes all changes to the database

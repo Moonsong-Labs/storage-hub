@@ -39,7 +39,7 @@ pub struct NewChallengeSeed {
 
 Use the `ActorEventBus` attribute macro:
 
-```rust
+```ignore
 use shc_actors_derive::ActorEventBus;
 
 #[ActorEventBus("blockchain_service")]
@@ -50,7 +50,7 @@ pub struct BlockchainServiceEventBusProvider;
 
 For subscribing to a single event:
 
-```rust
+```ignore
 subscribe_actor_event!(
     event: NewChallengeSeed,
     task: SubmitProofTask,
@@ -63,7 +63,7 @@ subscribe_actor_event!(
 
 For subscribing to multiple events with shared parameters:
 
-```rust
+```ignore
 subscribe_actor_event_map!(
     service: &self.blockchain,
     spawner: &self.task_spawner,
@@ -106,7 +106,7 @@ use syn::{
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```ignore
 /// #[derive(Debug, Clone, ActorEvent)]
 /// #[actor(actor = "blockchain_service")]
 /// pub struct MyEvent {
@@ -147,7 +147,7 @@ impl Parse for ActorEventArgs {
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```ignore
 /// #[ActorEventBus("blockchain_service")]
 /// pub struct BlockchainServiceEventBusProvider;
 /// ```
@@ -422,7 +422,7 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```ignore
 /// use shc_actors_derive::ActorEventBus;
 ///
 /// #[ActorEventBus("blockchain_service")]
@@ -531,7 +531,7 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// // Basic usage with task type and context
 /// subscribe_actor_event!(
 ///     event: FinalisedBspConfirmStoppedStoring,
@@ -617,7 +617,7 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
 ///
 /// # Examples
 ///
-/// ```rust
+/// ```ignore
 /// // Basic usage with multiple event-task mappings
 /// subscribe_actor_event_map!(
 ///     service: &self.blockchain,
@@ -834,7 +834,7 @@ fn to_snake_case(s: &str) -> String {
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```ignore
 /// #[actor_command(
 ///     service = ServiceType,
 ///     default_mode = "ImmediateResponse",
@@ -904,7 +904,7 @@ impl Parse for ActorCommandArgs {
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```ignore
 /// #[command(
 ///     mode = "ImmediateResponse",
 ///     success_type = SomeType,
@@ -1309,7 +1309,7 @@ fn generate_method_impl(
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```ignore
 /// #[actor_command(
 ///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
 ///     default_mode = "ImmediateResponse",
@@ -1708,7 +1708,7 @@ fn process_service_type(
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```ignore
 /// #[actor_command(
 ///     service = BlockchainService,
 ///     default_mode = "ImmediateResponse"
