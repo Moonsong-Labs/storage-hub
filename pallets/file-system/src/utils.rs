@@ -72,6 +72,7 @@ macro_rules! expect_or_err {
     }};
     // Handle boolean type
     ($condition:expr, $error_msg:expr, $error_type:path, bool) => {{
+        #[allow(clippy::neg_cmp_op_on_partial_ord)]
         if !$condition {
             #[cfg(test)]
             unreachable!($error_msg);
