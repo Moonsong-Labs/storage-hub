@@ -650,10 +650,9 @@ where
         }
 
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                file_key: H256(file_key.into()),
-            });
+        let call = pallet_file_system::Call::bsp_volunteer {
+            file_key: H256(file_key.into()),
+        };
 
         // Send extrinsic and wait for it to be included in the block.
         let result = self

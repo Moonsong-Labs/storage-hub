@@ -1434,7 +1434,9 @@ where
 
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         state_store_context
-            .access_value(&LastProcessedBlockNumberCf)
+            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
+                _runtime_marker: core::marker::PhantomData::default(),
+            })
             .write(block_number);
         state_store_context.commit();
     }

@@ -24,8 +24,12 @@ use crate::{
 };
 
 /// Last processed block number.
-pub struct LastProcessedBlockNumberCf;
-impl<Runtime: StorageEnableRuntimeConfig> SingleScaleEncodedValueCf for LastProcessedBlockNumberCf {
+pub struct LastProcessedBlockNumberCf<Runtime> {
+    pub _runtime_marker: core::marker::PhantomData<Runtime>,
+}
+impl<Runtime: StorageEnableRuntimeConfig> SingleScaleEncodedValueCf
+    for LastProcessedBlockNumberCf<Runtime>
+{
     type Value = BlockNumber<Runtime>;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "last_processed_block_number";

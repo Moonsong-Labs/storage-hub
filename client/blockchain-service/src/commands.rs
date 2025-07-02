@@ -33,6 +33,7 @@ use shc_common::types::{
     TickNumber,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
+use sp_runtime::traits::Dispatchable;
 
 use crate::{
     capacity_manager::CapacityRequestData,
@@ -211,7 +212,7 @@ pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntimeConf
     /// included in a block or when the retry strategy is exhausted.
     async fn submit_extrinsic_with_retry(
         &self,
-        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        call: <Runtime as frame_system::Config>::RuntimeCall,
         options: SendExtrinsicOptions<Runtime>,
         retry_strategy: RetryStrategy,
         with_events: bool,
@@ -256,12 +257,12 @@ where
 
     async fn submit_extrinsic_with_retry(
         &self,
-        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        call: <Runtime as frame_system::Config>::RuntimeCall,
         options: SendExtrinsicOptions<Runtime>,
         retry_strategy: RetryStrategy,
         with_events: bool,
     ) -> Result<Option<StorageHubEventsVec<Runtime>>> {
-        let call = call.into();
+        // let call = call.into();
 
         // Execute the extrinsic without any tip or specific nonce the first time around.
         let mut tip = retry_strategy.compute_tip(0);

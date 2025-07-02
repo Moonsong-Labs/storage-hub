@@ -40,6 +40,7 @@ use shc_common::{
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
 use shp_opaque::{SignedExtra, UncheckedExtrinsic};
+use sp_runtime::traits::Dispatchable;
 
 use crate::{
     events::{
@@ -477,7 +478,7 @@ where
     /// checking that the on-chain nonce is not lower.
     pub(crate) async fn send_extrinsic(
         &mut self,
-        call: impl Into<<Runtime as frame_system::Config>::RuntimeCall>,
+        call: <Runtime as frame_system::Config>::RuntimeCall,
         options: &SendExtrinsicOptions<Runtime>,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
@@ -541,11 +542,10 @@ where
     pub fn construct_extrinsic(
         &self,
         client: Arc<ParachainClient<RuntimeApi>>,
-        function: impl Into<<Runtime as frame_system::Config>::RuntimeCall>,
+        function: <Runtime as frame_system::Config>::RuntimeCall,
         nonce: u32,
         tip: Tip<Runtime>,
     ) -> UncheckedExtrinsic<Runtime> {
-        let function = function.into();
         let current_block_hash = client.info().best_hash;
         let current_block = client.info().best_number.saturated_into();
         let genesis_block = client
@@ -574,8 +574,8 @@ where
             extra.clone(),
             (
                 (),
-                storage_hub_runtime::VERSION.spec_version,
-                storage_hub_runtime::VERSION.transaction_version,
+                shc_common::consts::VERSION_SPEC_VERSION,
+                shc_common::consts::VERSION_TRANSACTION_VERSION,
                 genesis_block,
                 current_block_hash,
                 (),
@@ -596,7 +596,7 @@ where
 
         // Construct the extrinsic.
         UncheckedExtrinsic::<Runtime>::new_signed(
-            function.clone(),
+            function,
             storage_hub_runtime::Address::Id(<sp_core::sr25519::Public as Into<
                 storage_hub_runtime::AccountId,
             >>::into(caller_pub_key)),

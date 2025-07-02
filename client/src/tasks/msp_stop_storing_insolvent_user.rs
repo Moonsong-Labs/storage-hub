@@ -281,11 +281,9 @@ where
     async fn stop_storing_bucket_for_insolvent_user(&self, bucket_id: &H256) -> anyhow::Result<()> {
         // Build the extrinsic to stop storing the bucket of the insolvent user
         let stop_storing_bucket_for_insolvent_user_call =
-            storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
-                    bucket_id: *bucket_id,
-                },
-            );
+            pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
+                bucket_id: *bucket_id,
+            };
 
         // Send the transaction and wait for it to be included in the block.
         if let Err(e) = self

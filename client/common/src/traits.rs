@@ -10,12 +10,15 @@ use shp_traits::ProofsDealerInterface;
 use shp_traits::ReadChallengeableProvidersInterface;
 use shp_traits::ReadProvidersInterface;
 use shp_traits::ReadStorageProvidersInterface;
+use sp_runtime::traits::Dispatchable;
 use sp_trie::CompactProof;
 use storage_hub_runtime::opaque;
 
 use core::default::Default;
 use core::fmt::Debug;
 use core::marker::{Send, Sync};
+use frame_support::dispatch::DispatchInfo;
+use frame_support::dispatch::PostDispatchInfo;
 use sc_service::TFullClient;
 use shp_opaque::Block;
 use shp_traits::ReadBucketsInterface;
@@ -28,7 +31,7 @@ use sp_runtime::AccountId32;
 
 pub trait StorageEnableRuntimeConfig:
     frame_system::Config<
-        RuntimeCall: core::marker::Send,
+        RuntimeCall: core::marker::Send + Dispatchable<Info = DispatchInfo, PostInfo = PostDispatchInfo>,
         RuntimeEvent: Into<EventsStorageEnable<Self>>,
         AccountId = AccountId32,
         Hash = H256,
@@ -102,7 +105,8 @@ pub trait StorageEnableRuntimeConfig:
 impl<T> StorageEnableRuntimeConfig for T
 where
     T: frame_system::Config<
-            RuntimeCall: core::marker::Send,
+            RuntimeCall: core::marker::Send
+                             + Dispatchable<Info = DispatchInfo, PostInfo = PostDispatchInfo>,
             RuntimeEvent: Into<EventsStorageEnable<Self>>,
             AccountId = AccountId32,
             Hash = H256,

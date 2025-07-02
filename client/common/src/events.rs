@@ -1,5 +1,5 @@
 use crate::traits::StorageEnableRuntimeConfig;
-use frame_system;
+use frame_system::{self, pallet_prelude::RuntimeCallFor, Provider};
 use pallet_bucket_nfts;
 use pallet_file_system;
 use pallet_payment_streams;
@@ -20,7 +20,6 @@ pub enum EventsStorageEnable<Runtime: StorageEnableRuntimeConfig> {
 }
 
 // storage_hub_runtime::RuntimeEvent -> EventsStorageEnable
-
 // impl Into<EventsStorageEnable<storage_hub_runtime::Runtime>> for storage_hub_runtime::RuntimeEvent {
 //     into {
 
@@ -29,4 +28,17 @@ pub enum EventsStorageEnable<Runtime: StorageEnableRuntimeConfig> {
 //     }
 // }
 
-// impl Into<RuntimeCall> for STorageEnableRuntimeCall {}
+// struct StorageEnableRuntimeCall;
+// impl<Runtime: StorageEnableRuntimeConfig> Into<<Runtime as frame_system::Config>::RuntimeCall>
+//     for StorageEnableRuntimeCall
+// {
+//     fn into(self) -> <Runtime as frame_system::Config>::RuntimeCall {}
+// }
+
+// impl<Runtime: StorageEnableRuntimeConfig> Into<<Runtime as frame_system::Config>::RuntimeCall>
+//     for pallet_storage_providers::Call<Runtime>
+// {
+//     fn into(self) -> <Runtime as frame_system::Config>::RuntimeCall {
+//         <Runtime as frame_system::Config>::RuntimeCall::from(self)
+//     }
+// }

@@ -127,11 +127,11 @@ where
         // Logs an error in case of failure and continues.
         let user_chunk_size: u32 = MaxUsersToCharge::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
-            let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                pallet_payment_streams::Call::charge_multiple_users_payment_streams {
-                    user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),
-                },
-            );
+            let call = pallet_payment_streams::Call::charge_multiple_users_payment_streams {
+                user_accounts: users_chunk.to_vec().try_into().expect(
+                    "Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec",
+                ),
+            };
 
             // TODO: watch for success (we might want to do it for BSP too)
             let charging_result = self

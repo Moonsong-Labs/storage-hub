@@ -27,6 +27,8 @@ use types::{BackupStorageProviderId, MainStorageProviderId, SignUpRequest, Stora
 
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::pallet;
+
     use super::{types::*, weights::WeightInfo};
     use codec::{FullCodec, HasCompact};
     use frame_support::{

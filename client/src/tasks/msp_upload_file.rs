@@ -332,11 +332,9 @@ where
             });
         }
 
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                storage_request_msp_response: storage_request_msp_response.clone(),
-            },
-        );
+        let call = pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
+            storage_request_msp_response: storage_request_msp_response.clone(),
+        };
 
         self.storage_hub_handler
             .blockchain
@@ -542,7 +540,7 @@ where
                     );
 
                     // Build extrinsic.
-                    let call = storage_hub_runtime::RuntimeCall::FileSystem(
+                    let call =
                         pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                             storage_request_msp_response: vec![StorageRequestMspBucketResponse {
                                 bucket_id: event.bucket_id,
@@ -552,8 +550,7 @@ where
                                     reason: RejectedStorageRequestReason::ReachedMaximumCapacity,
                                 }],
                             }],
-                        },
-                    );
+                        };
 
                     self.storage_hub_handler
                         .blockchain
@@ -862,18 +859,16 @@ where
         bucket_id: H256,
         reason: RejectedStorageRequestReason,
     ) -> anyhow::Result<()> {
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
-                storage_request_msp_response: vec![StorageRequestMspBucketResponse {
-                    bucket_id,
-                    accept: None,
-                    reject: vec![RejectedStorageRequest {
-                        file_key: *file_key,
-                        reason,
-                    }],
+        let call = pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
+            storage_request_msp_response: vec![StorageRequestMspBucketResponse {
+                bucket_id,
+                accept: None,
+                reject: vec![RejectedStorageRequest {
+                    file_key: *file_key,
+                    reason,
                 }],
-            },
-        );
+            }],
+        };
 
         self.storage_hub_handler
             .blockchain

@@ -122,11 +122,11 @@ where
         // Logs an error in case of failure and continues.
         let user_chunk_size = <MaxUsersToCharge as Get<u32>>::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
-            let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                pallet_payment_streams::Call::charge_multiple_users_payment_streams {
-                    user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),
-                },
-            );
+            let call = pallet_payment_streams::Call::charge_multiple_users_payment_streams {
+                user_accounts: users_chunk.to_vec().try_into().expect(
+                    "Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec",
+                ),
+            };
 
             let charging_result = self
                 .storage_hub_handler
@@ -318,7 +318,7 @@ where
                 .proof;
 
             // Build the extrinsic to stop storing for an insolvent user.
-            let stop_storing_for_insolvent_user_call = storage_hub_runtime::RuntimeCall::FileSystem(
+            let stop_storing_for_insolvent_user_call =
                 pallet_file_system::Call::stop_storing_for_insolvent_user {
                     file_key: *file_key,
                     bucket_id,
@@ -327,8 +327,7 @@ where
                     fingerprint,
                     size,
                     inclusion_forest_proof,
-                },
-            );
+                };
 
             // Send the confirmation transaction and wait for it to be included in the block and
             // continue only if it is successful.
@@ -349,11 +348,9 @@ where
 
             // If that was the last file of the user then charge the user for the debt they have.
             if user_files.len() == 1 {
-                let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                    pallet_payment_streams::Call::charge_payment_streams {
-                        user_account: insolvent_user,
-                    },
-                );
+                let call = pallet_payment_streams::Call::charge_payment_streams {
+                    user_account: insolvent_user,
+                };
 
                 let charging_result = self
                     .storage_hub_handler
