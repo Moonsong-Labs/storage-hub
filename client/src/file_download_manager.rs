@@ -552,7 +552,6 @@ impl FileDownloadManager {
                 let bucket = bucket.clone();
                 let file_transfer = file_transfer.clone();
                 let file_storage = Arc::clone(&file_storage);
-                let file_key = file_key;
                 let manager = manager.clone();
                 let chunk_batch: HashSet<ChunkId> = chunk_ids.iter().copied().collect();
 
@@ -718,7 +717,7 @@ impl FileDownloadManager {
         {
             let mut locks = self.bucket_locks.write().await;
             let lock_info = locks
-                .entry(bucket_id.clone())
+                .entry(bucket_id)
                 .or_insert_with(BucketLockInfo::new);
 
             // Check again in case it became downloading while we were waiting
@@ -766,7 +765,6 @@ impl FileDownloadManager {
                 .map(|file_metadata| {
                     let file_transfer = file_transfer.clone();
                     let file_storage = Arc::clone(&file_storage);
-                    let bucket_id = bucket_id.clone();
                     let manager = self.clone();
 
                     // Spawn a task for each file download
