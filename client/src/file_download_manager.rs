@@ -549,10 +549,8 @@ impl FileDownloadManager {
             .map(|chunk_ids| {
                 let semaphore = Arc::clone(&chunk_semaphore);
                 let file_metadata = file_metadata.clone();
-                let bucket = bucket.clone();
                 let file_transfer = file_transfer.clone();
                 let file_storage = Arc::clone(&file_storage);
-                let file_key = file_key;
                 let manager = manager.clone();
                 let chunk_batch: HashSet<ChunkId> = chunk_ids.iter().copied().collect();
 
@@ -717,9 +715,7 @@ impl FileDownloadManager {
         // Mark bucket as downloading
         {
             let mut locks = self.bucket_locks.write().await;
-            let lock_info = locks
-                .entry(bucket_id.clone())
-                .or_insert_with(BucketLockInfo::new);
+            let lock_info = locks.entry(bucket_id).or_insert_with(BucketLockInfo::new);
 
             // Check again in case it became downloading while we were waiting
             if lock_info.is_downloading {
@@ -766,7 +762,6 @@ impl FileDownloadManager {
                 .map(|file_metadata| {
                     let file_transfer = file_transfer.clone();
                     let file_storage = Arc::clone(&file_storage);
-                    let bucket_id = bucket_id.clone();
                     let manager = self.clone();
 
                     // Spawn a task for each file download
@@ -806,21 +801,24 @@ impl FileDownloadManager {
         // Always mark the bucket inactive at the end
         self.mark_bucket_inactive(&bucket_id).await;
 
-        // If download was successful, mark it as completed
-        if download_result.is_ok() {
-            // Update persistent state
-            let context = self.download_state_store.open_rw_context();
-            context.mark_bucket_download_completed(&bucket_id);
-            context.commit();
+        // Handle download result
+        match download_result {
+            Ok(()) => {
+                // Update persistent state
+                let context = self.download_state_store.open_rw_context();
+                context.mark_bucket_download_completed(&bucket_id);
+                context.commit();
 
-            info!(
-                target: LOG_TARGET,
-                "Completed download of bucket {:?}", bucket_id
-            );
-            Ok(())
-        } else {
-            // Propagate the error
-            Err(download_result.unwrap_err().into())
+                info!(
+                    target: LOG_TARGET,
+                    "Completed download of bucket {:?}", bucket_id
+                );
+                Ok(())
+            }
+            Err(error) => {
+                // Propagate the error
+                Err(error.into())
+            }
         }
     }
 }
