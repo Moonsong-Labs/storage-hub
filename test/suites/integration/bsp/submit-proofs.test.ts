@@ -487,7 +487,7 @@ describeBspNet(
           userApi.tx.sudo.sudo(
             userApi.tx.proofsDealer.forcePriorityChallenge(
               oneBspfileMetadata.fileKey,
-              true  // should_remove_key = true. Otherwise the testsuite breaks.
+              true // should_remove_key = true as test suite expects the file to be deleted.
             )
           )
         ]

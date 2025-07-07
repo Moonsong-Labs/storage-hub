@@ -2783,6 +2783,13 @@ declare module "@polkadot/api-base/types/submittable" {
         (provider: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
+      forcePriorityChallenge: AugmentedSubmittable<
+        (
+          key: H256 | string | Uint8Array,
+          shouldRemoveKey: bool | boolean | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, bool]
+      >;
       /**
        * Set the [`ChallengesTickerPaused`] to `true` or `false`.
        *

@@ -4654,7 +4654,17 @@ declare module "@polkadot/types/lookup" {
     readonly asSetPaused: {
       readonly paused: bool;
     } & Struct;
-    readonly type: "Challenge" | "SubmitProof" | "ForceInitialiseChallengeCycle" | "SetPaused";
+    readonly isForcePriorityChallenge: boolean;
+    readonly asForcePriorityChallenge: {
+      readonly key: H256;
+      readonly shouldRemoveKey: bool;
+    } & Struct;
+    readonly type:
+      | "Challenge"
+      | "SubmitProof"
+      | "ForceInitialiseChallengeCycle"
+      | "SetPaused"
+      | "ForcePriorityChallenge";
   }
   /** @name PalletRandomnessCall (382) */
   interface PalletRandomnessCall extends Enum {
