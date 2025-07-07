@@ -465,8 +465,8 @@ describeBspNet(
       }
     );
 
-    it("File is deleted by user", async () => {
-      // Get the root of the BSP that has the file before deletion.
+    it("Priority challenge is initiated for file", async () => {
+      // Get the root of the BSP that has the file before priority challenge.
       const bspMetadata = await userApi.query.providers.backupStorageProviders(
         ShConsts.DUMMY_BSP_ID
       );
@@ -482,27 +482,18 @@ describeBspNet(
         "The root of the BSP should match the actual merkle forest root."
       );
 
-      // User sends file deletion request.
+      // Sudo initiates priority challenge for file removal.
       await userApi.block.seal({
         calls: [
-          userApi.tx.fileSystem.deleteFile(
-            oneBspfileMetadata.bucketId,
-            oneBspfileMetadata.fileKey,
-            oneBspfileMetadata.location,
-            oneBspfileMetadata.fileSize,
-            oneBspfileMetadata.fingerprint,
-            null
+          userApi.tx.sudo.sudo(
+            userApi.tx.proofsDealer.forcePriorityChallenge(
+              oneBspfileMetadata.fileKey,
+              true  // should_remove_key = true
+            )
           )
         ],
         signer: shUser
       });
-
-      // Check for a file deletion request event.
-      await userApi.assert.eventPresent("fileSystem", "FileDeletionRequest");
-
-      // Wait for MSP to submit proof for the pending file deletion request
-      await userApi.wait.mspPendingFileDeletionRequestSubmitProof();
-      await userApi.block.seal();
     });
 
     it("Priority challenge is included in checkpoint challenge round", async () => {

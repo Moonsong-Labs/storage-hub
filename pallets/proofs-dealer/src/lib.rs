@@ -752,6 +752,24 @@ pub mod pallet {
             // This TX is free since is a sudo-only transaction used for testing.
             Ok(Pays::No.into())
         }
+
+        #[pallet::call_index(4)]
+        #[pallet::weight(Weight::from_parts(10_000, 0))]
+        pub fn force_priority_challenge(
+            origin: OriginFor<T>,
+            key: KeyFor<T>,
+            should_remove_key: bool,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the root origin.
+            ensure_root(origin)?;
+
+            // Execute priority challenge.
+            <Self as ProofsDealerInterface>::challenge_with_priority(&key, should_remove_key)?;
+
+            // Return a successful DispatchResultWithPostInfo.
+            // This TX is free since is a sudo-only transaction used for testing.
+            Ok(Pays::No.into())
+        }
     }
 
     #[pallet::hooks]
