@@ -754,7 +754,7 @@ pub mod pallet {
         }
 
         #[pallet::call_index(4)]
-        #[pallet::weight(Weight::from_parts(10_000, 0))]
+        #[pallet::weight(Weight::zero())]
         pub fn force_priority_challenge(
             origin: OriginFor<T>,
             key: KeyFor<T>,
