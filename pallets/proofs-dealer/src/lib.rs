@@ -767,7 +767,7 @@ pub mod pallet {
             <Self as ProofsDealerInterface>::challenge_with_priority(&key, should_remove_key)?;
 
             // Return a successful DispatchResultWithPostInfo.
-            // This TX is free since is a sudo-only transaction used for testing.
+            // This TX is free since is a sudo-only transaction 
             Ok(Pays::No.into())
         }
     }
