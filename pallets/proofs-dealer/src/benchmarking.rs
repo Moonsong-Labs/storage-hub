@@ -37,6 +37,7 @@ mod benchmarks {
     };
     use frame_system::{pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, RawOrigin};
     use pallet_storage_providers::types::ProviderIdFor;
+    use scale_info::prelude::format;
     use shp_traits::{
         PaymentStreamsInterface, ProofsDealerInterface, ReadChallengeableProvidersInterface,
     };
