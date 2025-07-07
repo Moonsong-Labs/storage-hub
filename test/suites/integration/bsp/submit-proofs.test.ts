@@ -3,7 +3,6 @@ import {
   ShConsts,
   bspThreeKey,
   describeBspNet,
-  shUser,
   waitFor,
   type EnrichedBspApi,
   type FileMetadata
@@ -488,11 +487,10 @@ describeBspNet(
           userApi.tx.sudo.sudo(
             userApi.tx.proofsDealer.forcePriorityChallenge(
               oneBspfileMetadata.fileKey,
-              true  // should_remove_key = true
+              true  // should_remove_key = true. Otherwise the testsuite breaks.
             )
           )
-        ],
-        signer: shUser
+        ]
       });
     });
 
