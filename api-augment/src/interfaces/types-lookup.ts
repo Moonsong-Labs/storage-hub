@@ -4882,8 +4882,8 @@ declare module "@polkadot/types/lookup" {
     readonly asSetPaused: {
       readonly paused: bool;
     } & Struct;
-    readonly isForcePriorityChallenge: boolean;
-    readonly asForcePriorityChallenge: {
+    readonly isPriorityChallenge: boolean;
+    readonly asPriorityChallenge: {
       readonly key: H256;
       readonly shouldRemoveKey: bool;
     } & Struct;
@@ -4892,7 +4892,7 @@ declare module "@polkadot/types/lookup" {
       | "SubmitProof"
       | "ForceInitialiseChallengeCycle"
       | "SetPaused"
-      | "ForcePriorityChallenge";
+      | "PriorityChallenge";
   }
 
   /** @name PalletRandomnessCall (382) */

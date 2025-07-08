@@ -3755,7 +3755,7 @@ declare const _default: {
       set_paused: {
         paused: string;
       };
-      force_priority_challenge: {
+      priority_challenge: {
         key: string;
         shouldRemoveKey: string;
       };

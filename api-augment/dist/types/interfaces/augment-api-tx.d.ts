@@ -3347,7 +3347,7 @@ declare module "@polkadot/api-base/types/submittable" {
         (provider: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
-      forcePriorityChallenge: AugmentedSubmittable<
+      priorityChallenge: AugmentedSubmittable<
         (
           key: H256 | string | Uint8Array,
           shouldRemoveKey: bool | boolean | Uint8Array

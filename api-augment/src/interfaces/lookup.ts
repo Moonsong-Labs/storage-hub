@@ -3863,7 +3863,7 @@ export default {
       set_paused: {
         paused: "bool"
       },
-      force_priority_challenge: {
+      priority_challenge: {
         key: "H256",
         shouldRemoveKey: "bool"
       }
