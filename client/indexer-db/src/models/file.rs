@@ -199,6 +199,32 @@ impl File {
             .await?;
         Ok(files)
     }
+
+    /// Get all files belonging to a specific user account and stored by a specific MSP
+    ///
+    /// # Example
+    /// ```ignore
+    /// use sp_runtime::AccountId32;
+    ///
+    /// let user: AccountId32 = /* ... */;
+    /// let msp_id: i64 = /* ... */;
+    /// let files = File::get_user_files_by_msp(&mut conn, user.as_ref(), msp_id).await?;
+    /// ```
+    pub async fn get_user_files_by_msp<'a>(
+        conn: &mut DbConnection<'a>,
+        user_account: impl AsRef<[u8]>,
+        msp_id: i64,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let account = user_account.as_ref().to_vec();
+        let files = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .filter(file::account.eq(account))
+            .filter(bucket::msp_id.eq(msp_id))
+            .select(File::as_select())
+            .load(conn)
+            .await?;
+        Ok(files)
+    }
 }
 
 impl File {
