@@ -1,6 +1,6 @@
 use frame_support::{StorageHasher, Twox128};
 use lazy_static::lazy_static;
-use log::{debug, error, warn};
+use log::error;
 use sc_network::Multiaddr;
 use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
@@ -17,7 +17,7 @@ use crate::{
     },
 };
 use cumulus_primitives_core::Block;
-use shp_traits::StorageProvidersApi;
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 
 /// Get the Provider ID linked to the [`BCSV_KEY_TYPE`] keys in the keystore.
 ///
