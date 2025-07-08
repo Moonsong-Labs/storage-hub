@@ -3,10 +3,10 @@ use futures::prelude::*;
 use log::{error, info};
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::StorageProviderId;
+use sp_keystore::KeystorePtr;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
 use thiserror::Error;
-use sp_keystore::KeystorePtr;
 
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
@@ -135,6 +135,11 @@ where
         let finalized_block_number = *notification.header.number();
 
         info!(target: LOG_TARGET, "Finality notification (#{}): {}", finalized_block_number, finalized_block_hash);
+
+        // In Lite mode, sync MSP ID on each finality notification
+        if self.indexer_mode == crate::IndexerMode::Lite {
+            self.sync_msp_id(&finalized_block_hash.into());
+        }
 
         let mut db_conn = self.db_pool.get().await?;
 
