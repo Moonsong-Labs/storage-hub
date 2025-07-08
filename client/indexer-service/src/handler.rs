@@ -258,6 +258,21 @@ where
                 value_prop_id: _,
                 root,
             } => {
+                // In Lite mode, only index buckets assigned to the current MSP
+                if self.indexer_mode == crate::IndexerMode::Lite {
+                    if let Some(current_msp_id) = &self.msp_id {
+                        if current_msp_id != msp_id {
+                            info!(
+                                target: LOG_TARGET,
+                                "Skipping NewBucket event for MSP {:?} (current MSP: {:?})",
+                                msp_id,
+                                current_msp_id
+                            );
+                            return Ok(());
+                        }
+                    }
+                }
+
                 let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
 
                 Bucket::create(
@@ -278,6 +293,21 @@ where
                 bucket_id,
                 value_prop_id: _,
             } => {
+                // In Lite mode, only index bucket updates where the new MSP is the current MSP
+                if self.indexer_mode == crate::IndexerMode::Lite {
+                    if let Some(current_msp_id) = &self.msp_id {
+                        if current_msp_id != new_msp_id {
+                            info!(
+                                target: LOG_TARGET,
+                                "Skipping MoveBucketAccepted event for new MSP {:?} (current MSP: {:?})",
+                                new_msp_id,
+                                current_msp_id
+                            );
+                            return Ok(());
+                        }
+                    }
+                }
+
                 let new_msp = Msp::get_by_onchain_msp_id(conn, new_msp_id.to_string()).await?;
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
             }
@@ -330,26 +360,46 @@ where
                 peer_ids,
                 expires_at: _,
             } => {
-                let bucket =
-                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
+                // In Lite mode, we might not have the bucket in our database if it doesn't belong to us
+                let bucket_result =
+                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await;
 
-                let mut sql_peer_ids = Vec::new();
-                for peer_id in peer_ids {
-                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                match bucket_result {
+                    Ok(bucket) => {
+                        // Bucket exists in our database, proceed with indexing
+                        let mut sql_peer_ids = Vec::new();
+                        for peer_id in peer_ids {
+                            sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                        }
+
+                        File::create(
+                            conn,
+                            <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
+                            file_key.as_ref().to_vec(),
+                            bucket.id,
+                            location.to_vec(),
+                            fingerprint.as_ref().to_vec(),
+                            *size as i64,
+                            FileStorageRequestStep::Requested,
+                            sql_peer_ids,
+                        )
+                        .await?;
+                    }
+                    Err(_) => {
+                        // Bucket not found in database
+                        if self.indexer_mode == crate::IndexerMode::Lite {
+                            // In Lite mode, this is expected for buckets not belonging to current MSP
+                            info!(
+                                target: LOG_TARGET,
+                                "Skipping NewStorageRequest event for bucket not in database (bucket_id: {:?})",
+                                bucket_id
+                            );
+                        } else {
+                            // In Full mode, this is unexpected - re-raise the error
+                            return Err(bucket_result.unwrap_err());
+                        }
+                    }
                 }
-
-                File::create(
-                    conn,
-                    <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
-                    file_key.as_ref().to_vec(),
-                    bucket.id,
-                    location.to_vec(),
-                    fingerprint.as_ref().to_vec(),
-                    *size as i64,
-                    FileStorageRequestStep::Requested,
-                    sql_peer_ids,
-                )
-                .await?;
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
