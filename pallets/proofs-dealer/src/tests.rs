@@ -137,7 +137,7 @@ fn challenge_submit_twice_succeed() {
         run_to_block(1);
 
         // Create two users and add funds to the accounts.
-        let user_1 = RuntimeOrigin::signed(1);
+        let user_1 = RuntimeOrigin::root();
         let user_2 = RuntimeOrigin::signed(2);
         let user_balance = 1_000_000_000_000_000;
         assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
@@ -349,7 +349,7 @@ fn challenge_overflow_challenges_queue_fail() {
         run_to_block(1);
 
         // Create user and add funds to the account.
-        let user = RuntimeOrigin::signed(1);
+        let user = RuntimeOrigin::root();
         let user_balance = 1_000_000_000_000_000;
         assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
             &1,

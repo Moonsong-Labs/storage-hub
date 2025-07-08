@@ -7,7 +7,7 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
     BoundedBTreeSet,
 };
-use frame_system::pallet_prelude::BlockNumberFor;
+use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot};
 use pallet_proofs_dealer::SlashableProviders;
 use pallet_randomness::GetBabeData;
 use shp_file_metadata::FileMetadata;
@@ -217,6 +217,8 @@ impl pallet_proofs_dealer::Config for Test {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
+    type PriorityChallengeDispatcher = EnsureRoot<AccountId>;
+    type ChallengeDispatcher = EnsureRoot<AccountId>;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

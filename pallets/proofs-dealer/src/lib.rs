@@ -623,7 +623,7 @@ pub mod pallet {
         pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
             let who = ensure_signed(origin.clone())?;
-            
+
             // Check that the extrinsic was executed by the custom origin.
             T::ChallengeDispatcher::ensure_origin(origin)?;
 

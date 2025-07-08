@@ -10,7 +10,7 @@ use frame_support::{
     weights::{constants::RocksDbWeight, Weight},
     BoundedBTreeSet,
 };
-use frame_system::pallet_prelude::BlockNumberFor;
+use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot};
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
     CommitRevealRandomnessInterface, CommitmentVerifier, MaybeDebug, ProofSubmittersInterface,
@@ -385,6 +385,8 @@ impl crate::Config for Test {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
+    type PriorityChallengeDispatcher = EnsureRoot<AccountId>;
+    type ChallengeDispatcher = EnsureRoot<AccountId>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
