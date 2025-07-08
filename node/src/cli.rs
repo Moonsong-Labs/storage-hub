@@ -459,6 +459,24 @@ impl ProviderConfigurations {
     }
 }
 
+/// The mode in which the indexer runs.
+#[derive(Debug, Clone, Copy, Parser, Deserialize, ValueEnum)]
+#[serde(rename_all = "lowercase")]
+pub enum IndexerMode {
+    /// Full indexing mode - indexes all blockchain data
+    #[serde(rename = "full")]
+    Full,
+    /// Lite indexing mode - indexes only essential data for storage operations
+    #[serde(rename = "lite")]
+    Lite,
+}
+
+impl Default for IndexerMode {
+    fn default() -> Self {
+        Self::Full
+    }
+}
+
 #[derive(Debug, Parser, Clone)]
 pub struct IndexerConfigurations {
     /// Whether to enable the indexer.
@@ -467,6 +485,13 @@ pub struct IndexerConfigurations {
     /// If enabled, a Postgres database must be set up (see the indexer README for details).
     #[arg(long, default_value = "false")]
     pub indexer: bool,
+
+    /// The mode in which the indexer runs.
+    ///
+    /// - `full`: Indexes all blockchain data
+    /// - `lite`: Indexes only essential data for storage operations
+    #[arg(long, value_enum, default_value = "full")]
+    pub indexer_mode: IndexerMode,
 
     /// Postgres database URL.
     ///

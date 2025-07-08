@@ -299,6 +299,7 @@ pub fn run() -> Result<()> {
                 crate::cli::IndexerConfigurations {
                     indexer: opts.indexer,
                     database_url: opts.database_url,
+                    indexer_mode: Default::default(),
                 }
             } else {
                 cli.indexer_config
