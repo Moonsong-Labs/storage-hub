@@ -14210,6 +14210,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "array-bytes",
+ "clap",
  "cumulus-primitives-core",
  "cumulus-primitives-storage-weight-reclaim",
  "diesel",

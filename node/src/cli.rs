@@ -9,6 +9,7 @@ use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
     BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
 };
+use shc_indexer_service::IndexerMode;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -456,24 +457,6 @@ impl ProviderConfigurations {
             blockchain_service,
             maintenance_mode: self.maintenance_mode,
         }
-    }
-}
-
-/// The mode in which the indexer runs.
-#[derive(Debug, Clone, Copy, Parser, Deserialize, ValueEnum)]
-#[serde(rename_all = "lowercase")]
-pub enum IndexerMode {
-    /// Full indexing mode - indexes all blockchain data
-    #[serde(rename = "full")]
-    Full,
-    /// Lite indexing mode - indexes only essential data for storage operations
-    #[serde(rename = "lite")]
-    Lite,
-}
-
-impl Default for IndexerMode {
-    fn default() -> Self {
-        Self::Full
     }
 }
 

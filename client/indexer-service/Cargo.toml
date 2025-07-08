@@ -27,6 +27,7 @@ serde = { workspace = true, default-features = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 thiserror = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 
 # Substrate
 frame-support = { workspace = true }

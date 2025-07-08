@@ -11,12 +11,21 @@ use sp_keystore::KeystorePtr;
 pub use self::handler::IndexerService;
 
 /// The mode in which the indexer runs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, clap::ValueEnum)]
+#[serde(rename_all = "lowercase")]
 pub enum IndexerMode {
     /// Full indexing mode - indexes all blockchain data
+    #[serde(rename = "full")]
     Full,
     /// Lite indexing mode - indexes only essential data for storage operations
+    #[serde(rename = "lite")]
     Lite,
+}
+
+impl Default for IndexerMode {
+    fn default() -> Self {
+        Self::Full
+    }
 }
 
 pub async fn spawn_indexer_service<
