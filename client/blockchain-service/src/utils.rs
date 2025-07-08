@@ -28,7 +28,10 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::Actor;
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
-    blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block, get_provider_id_from_keystore, GetProviderIdError},
+    blockchain_utils::{
+        convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
+        get_provider_id_from_keystore, GetProviderIdError,
+    },
     types::{
         BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
         StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
@@ -378,7 +381,11 @@ where
     /// different Provider IDs, this function will panic. In other words, this node doesn't support
     /// managing multiple Providers at once.
     pub(crate) fn sync_provider_id(&mut self, block_hash: &H256) {
-        let provider_id = match get_provider_id_from_keystore(&self.client, &self.keystore, block_hash) {
+        let provider_id = match get_provider_id_from_keystore(
+            &self.client,
+            &self.keystore,
+            block_hash,
+        ) {
             Ok(None) => {
                 warn!(target: LOG_TARGET, "🔑 There is no Provider ID linked to any of the BCSV keys in this node's keystore. This is expected, if this node starts up before the BSP has been registered.");
                 return;

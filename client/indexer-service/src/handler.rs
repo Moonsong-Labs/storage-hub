@@ -639,7 +639,21 @@ where
 
                     Bsp::update_stake(conn, bsp_id.to_string(), stake).await?;
                 }
-                StorageProviderId::MainStorageProvider(_) => {
+                StorageProviderId::MainStorageProvider(msp_id) => {
+                    // In Lite mode, only index capacity changes for the current MSP
+                    if self.indexer_mode == crate::IndexerMode::Lite {
+                        if let Some(current_msp_id) = &self.msp_id {
+                            if current_msp_id != &StorageProviderId::MainStorageProvider(*msp_id) {
+                                info!(
+                                    target: LOG_TARGET,
+                                    "Skipping CapacityChanged event for MSP {:?} (current MSP: {:?})",
+                                    msp_id,
+                                    current_msp_id
+                                );
+                                return Ok(());
+                            }
+                        }
+                    }
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
                 }
             },
@@ -652,6 +666,23 @@ where
                 capacity,
                 value_prop,
             } => {
+                // In Lite mode, only index MSP sign up for the current MSP
+                if self.indexer_mode == crate::IndexerMode::Lite {
+                    if let Some(current_msp_id) = &self.msp_id {
+                        if let StorageProviderId::MainStorageProvider(current_id) = current_msp_id {
+                            if current_id != msp_id {
+                                info!(
+                                    target: LOG_TARGET,
+                                    "Skipping MspSignUpSuccess event for MSP {:?} (current MSP: {:?})",
+                                    msp_id,
+                                    current_id
+                                );
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
                     if let Some(multiaddr) = convert_raw_multiaddress_to_multiaddr(multiaddress) {
@@ -675,10 +706,24 @@ where
                 )
                 .await?;
             }
-            pallet_storage_providers::Event::MspSignOffSuccess {
-                who,
-                msp_id: _msp_id,
-            } => {
+            pallet_storage_providers::Event::MspSignOffSuccess { who, msp_id } => {
+                // In Lite mode, only index MSP sign off for the current MSP
+                if self.indexer_mode == crate::IndexerMode::Lite {
+                    if let Some(current_msp_id) = &self.msp_id {
+                        if let StorageProviderId::MainStorageProvider(current_id) = current_msp_id {
+                            if current_id != msp_id {
+                                info!(
+                                    target: LOG_TARGET,
+                                    "Skipping MspSignOffSuccess event for MSP {:?} (current MSP: {:?})",
+                                    msp_id,
+                                    current_id
+                                );
+                                return Ok(());
+                            }
+                        }
+                    }
+                }
+
                 Msp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::BucketRootChanged {
@@ -711,8 +756,40 @@ where
             pallet_storage_providers::Event::TopUpFulfilled { .. } => {}
             pallet_storage_providers::Event::ValuePropAdded { .. } => {}
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
-            pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
-            pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
+            pallet_storage_providers::Event::MultiAddressAdded { provider_id, .. } => {
+                // In Lite mode, only index multi address changes for the current MSP
+                if self.indexer_mode == crate::IndexerMode::Lite {
+                    if let Some(current_msp_id) = &self.msp_id {
+                        if current_msp_id != provider_id {
+                            info!(
+                                target: LOG_TARGET,
+                                "Skipping MultiAddressAdded event for provider {:?} (current MSP: {:?})",
+                                provider_id,
+                                current_msp_id
+                            );
+                            return Ok(());
+                        }
+                    }
+                }
+                // TODO: Handle multi address addition
+            }
+            pallet_storage_providers::Event::MultiAddressRemoved { provider_id, .. } => {
+                // In Lite mode, only index multi address changes for the current MSP
+                if self.indexer_mode == crate::IndexerMode::Lite {
+                    if let Some(current_msp_id) = &self.msp_id {
+                        if current_msp_id != provider_id {
+                            info!(
+                                target: LOG_TARGET,
+                                "Skipping MultiAddressRemoved event for provider {:?} (current MSP: {:?})",
+                                provider_id,
+                                current_msp_id
+                            );
+                            return Ok(());
+                        }
+                    }
+                }
+                // TODO: Handle multi address removal
+            }
             pallet_storage_providers::Event::ProviderInsolvent { .. } => {}
             pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => {
                 // TODO: Should we index this? Since this buckets are all going to have moves requested
