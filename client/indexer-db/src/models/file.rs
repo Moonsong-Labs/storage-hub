@@ -180,11 +180,11 @@ impl File {
     }
 
     /// Get all files belonging to a specific user account
-    /// 
+    ///
     /// # Example
     /// ```ignore
     /// use sp_runtime::AccountId32;
-    /// 
+    ///
     /// let user: AccountId32 = /* ... */;
     /// let files = File::get_user_files(&mut conn, user.as_ref()).await?;
     /// ```
