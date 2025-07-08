@@ -5,7 +5,8 @@
       "Bash(cargo build:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Bash(cargo fmt:*)"
     ],
     "deny": []
   }

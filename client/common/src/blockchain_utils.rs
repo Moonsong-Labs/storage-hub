@@ -1,6 +1,6 @@
 use frame_support::{StorageHasher, Twox128};
 use lazy_static::lazy_static;
-use log::error;
+use log::{debug, error, warn};
 use sc_network::Multiaddr;
 use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
@@ -8,11 +8,54 @@ use thiserror::Error;
 use codec::Decode;
 use sc_client_api::{backend::StorageProvider, StorageKey};
 use sp_core::H256;
+use sp_keystore::KeystorePtr;
 
 use crate::{
     traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
-    types::{Multiaddresses, ParachainClient, StorageHubEventsVec},
+    types::{
+        Multiaddresses, ParachainClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
+    },
 };
+use cumulus_primitives_core::Block;
+use shp_traits::StorageProvidersApi;
+
+/// Get the Provider ID linked to the [`BCSV_KEY_TYPE`] keys in the keystore.
+///
+/// This function searches for all BCSV keys in the keystore and queries the runtime
+/// to get the associated Provider ID for each key.
+///
+/// # Returns
+/// - `Ok(None)` if no Provider ID is found for any BCSV key
+/// - `Ok(Some(provider_id))` if exactly one Provider ID is found
+/// - `Err(GetProviderIdError::MultipleProviderIds)` if multiple Provider IDs are found
+/// - `Err(GetProviderIdError::RuntimeApiError)` if there's an error calling the runtime API
+pub fn get_provider_id_from_keystore<RuntimeApi: StorageEnableRuntimeApi>(
+    client: &Arc<ParachainClient<RuntimeApi>>,
+    keystore: &KeystorePtr,
+    block_hash: &H256,
+) -> Result<Option<StorageProviderId>, GetProviderIdError>
+where
+    RuntimeApi::RuntimeApi: StorageProvidersApi<Block, StorageProviderId>,
+{
+    let mut provider_ids_found = Vec::new();
+
+    for key in keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
+        let maybe_provider_id = client
+            .runtime_api()
+            .get_storage_provider_id(*block_hash, &key.into())
+            .map_err(|e| GetProviderIdError::RuntimeApiError(e.to_string()))?;
+
+        if let Some(provider_id) = maybe_provider_id {
+            provider_ids_found.push(provider_id);
+        }
+    }
+
+    match provider_ids_found.len() {
+        0 => Ok(None),
+        1 => Ok(Some(provider_ids_found[0])),
+        _ => Err(GetProviderIdError::MultipleProviderIds),
+    }
+}
 
 lazy_static! {
     // Would be cool to be able to do this...
@@ -37,6 +80,14 @@ pub enum EventsRetrievalError {
     DecodeError(#[from] codec::Error),
     #[error("Events storage element not found")]
     StorageNotFound,
+}
+
+#[derive(Error, Debug)]
+pub enum GetProviderIdError {
+    #[error("Multiple provider IDs found for BCSV keys. Managing multiple providers at once is not supported.")]
+    MultipleProviderIds,
+    #[error("Runtime API error while getting Provider ID: {0}")]
+    RuntimeApiError(String),
 }
 
 /// Get the events storage element for a given block.
