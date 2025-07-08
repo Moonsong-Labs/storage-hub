@@ -411,6 +411,10 @@ where
             maybe_db_pool.clone().expect(
                 "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
             ),
+            match indexer_config.indexer_mode {
+                crate::cli::IndexerMode::Full => shc_indexer_service::IndexerMode::Full,
+                crate::cli::IndexerMode::Lite => shc_indexer_service::IndexerMode::Lite,
+            },
         )
         .await;
     }
@@ -823,6 +827,10 @@ where
             maybe_db_pool.clone().expect(
                 "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
             ),
+            match indexer_config.indexer_mode {
+                crate::cli::IndexerMode::Full => shc_indexer_service::IndexerMode::Full,
+                crate::cli::IndexerMode::Lite => shc_indexer_service::IndexerMode::Lite,
+            },
         )
         .await;
     }
@@ -1044,6 +1052,10 @@ where
             maybe_db_pool.clone().expect(
                 "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
             ),
+            match indexer_config.indexer_mode {
+                crate::cli::IndexerMode::Full => shc_indexer_service::IndexerMode::Full,
+                crate::cli::IndexerMode::Lite => shc_indexer_service::IndexerMode::Lite,
+            },
         )
         .await;
     }
@@ -1308,6 +1320,10 @@ where
             maybe_db_pool.clone().expect(
                 "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
             ),
+            match indexer_config.indexer_mode {
+                crate::cli::IndexerMode::Full => shc_indexer_service::IndexerMode::Full,
+                crate::cli::IndexerMode::Lite => shc_indexer_service::IndexerMode::Lite,
+            },
         )
         .await;
     }

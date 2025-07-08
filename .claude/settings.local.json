@@ -4,7 +4,8 @@
       "Bash(grep:*)",
       "Bash(cargo build:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cargo check:*)"
     ],
     "deny": []
   }

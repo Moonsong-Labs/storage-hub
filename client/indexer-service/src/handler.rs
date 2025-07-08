@@ -32,6 +32,7 @@ pub enum IndexerServiceCommand {}
 pub struct IndexerService<RuntimeApi> {
     client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
+    indexer_mode: crate::IndexerMode,
 }
 
 // Implement the Actor trait for IndexerService
@@ -66,8 +67,8 @@ where
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool) -> Self {
-        Self { client, db_pool }
+    pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool, indexer_mode: crate::IndexerMode) -> Self {
+        Self { client, db_pool, indexer_mode }
     }
 
     async fn handle_finality_notification<Block>(
@@ -675,7 +676,7 @@ where
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "IndexerService starting up!");
+        info!(target: LOG_TARGET, "IndexerService starting up in {:?} mode!", self.actor.indexer_mode);
 
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 
