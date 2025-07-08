@@ -8,7 +8,8 @@
       "Bash(cargo check:*)",
       "Bash(cargo fmt:*)",
       "Bash(cargo clean:*)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }

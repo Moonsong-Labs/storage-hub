@@ -178,6 +178,27 @@ impl File {
 
         Ok(peer_ids)
     }
+
+    /// Get all files belonging to a specific user account
+    /// 
+    /// # Example
+    /// ```ignore
+    /// use sp_runtime::AccountId32;
+    /// 
+    /// let user: AccountId32 = /* ... */;
+    /// let files = File::get_user_files(&mut conn, user.as_ref()).await?;
+    /// ```
+    pub async fn get_user_files<'a>(
+        conn: &mut DbConnection<'a>,
+        user_account: impl AsRef<[u8]>,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let account = user_account.as_ref().to_vec();
+        let files = file::table
+            .filter(file::account.eq(account))
+            .load(conn)
+            .await?;
+        Ok(files)
+    }
 }
 
 impl File {

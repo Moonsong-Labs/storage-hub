@@ -118,4 +118,25 @@ impl Bucket {
             .await?;
         Ok(bucket)
     }
+
+    /// Get all buckets belonging to a specific user account
+    /// 
+    /// # Example
+    /// ```ignore
+    /// use sp_runtime::AccountId32;
+    /// 
+    /// let user: AccountId32 = /* ... */;
+    /// let buckets = Bucket::get_user_buckets(&mut conn, user.to_string()).await?;
+    /// ```
+    pub async fn get_user_buckets<'a>(
+        conn: &mut DbConnection<'a>,
+        user_account: impl Into<String>,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let account = user_account.into();
+        let buckets = bucket::table
+            .filter(bucket::account.eq(account))
+            .load(conn)
+            .await?;
+        Ok(buckets)
+    }
 }
