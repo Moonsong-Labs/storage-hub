@@ -117,6 +117,15 @@ where
         Self::enqueue_challenge(key)
     }
 
+    /// Add priority challenge to PriorityChallengesQueue.
+    ///
+    /// Failures:
+    /// - `PriorityChallengesQueueOverflow`: If the priority challenges queue is full.
+    pub fn do_priority_challenge(key: &KeyFor<T>, should_remove_key: bool) -> DispatchResult {
+        // Enqueue priority challenge.
+        Self::enqueue_challenge_with_priority(key, should_remove_key)
+    }
+
     /// Submit proof.
     ///
     /// For a given `submitter`, verify the `proof` submitted. The proof is verified by checking

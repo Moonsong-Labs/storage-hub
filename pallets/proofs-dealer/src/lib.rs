@@ -238,6 +238,10 @@ pub mod pallet {
         /// Custom origin that can execute privileged operations.
         /// This will be configured as root in the runtime configuration.
         type PriorityChallengeDispatcher: EnsureOrigin<Self::RuntimeOrigin>;
+
+        // Custom origin that can execute challenge operations.
+        // This will be configured as root in the runtime configuration.
+        // type ChallengeDispatcher: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
     }
 
     #[pallet::pallet]
@@ -760,7 +764,7 @@ pub mod pallet {
 
         #[pallet::call_index(4)]
         #[pallet::weight(Weight::zero())]
-        pub fn force_priority_challenge(
+        pub fn priority_challenge(
             origin: OriginFor<T>,
             key: KeyFor<T>,
             should_remove_key: bool,
@@ -769,7 +773,7 @@ pub mod pallet {
             T::PriorityChallengeDispatcher::ensure_origin(origin)?;
 
             // Execute priority challenge.
-            <Self as ProofsDealerInterface>::challenge_with_priority(&key, should_remove_key)?;
+            Self::do_priority_challenge(&key, should_remove_key)?;
 
             // Return a successful DispatchResultWithPostInfo.
             // This TX is free since is a sudo-only transaction
