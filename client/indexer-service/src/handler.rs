@@ -11,7 +11,10 @@ use sp_keystore::KeystorePtr;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
+use shc_common::blockchain_utils::{
+    convert_raw_multiaddress_to_multiaddr, get_provider_id_from_keystore, EventsRetrievalError,
+    GetProviderIdError,
+};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{BlockNumber, ParachainClient},
@@ -82,6 +85,41 @@ where
             indexer_mode,
             msp_id: None,
             keystore,
+        }
+    }
+
+    /// Synchronize the MSP ID from the keystore.
+    ///
+    /// This method detects the MSP ID based on the BCSV keys in the keystore
+    /// and updates the `msp_id` field accordingly.
+    fn sync_msp_id(&mut self, block_hash: &H256) {
+        match get_provider_id_from_keystore(&self.client, &self.keystore, block_hash) {
+            Ok(None) => {
+                // No MSP ID found - expected for non-MSP nodes
+                self.msp_id = None;
+                info!(target: LOG_TARGET, "No MSP ID detected - running as non-MSP node");
+            }
+            Ok(Some(provider_id)) => {
+                // Check if it's an MSP ID
+                if let StorageProviderId::MainStorageProvider(_) = provider_id {
+                    self.msp_id = Some(provider_id);
+                    info!(target: LOG_TARGET, "MSP ID detected: {:?}", provider_id);
+                } else {
+                    // It's a BSP ID, not an MSP
+                    self.msp_id = None;
+                    info!(target: LOG_TARGET, "BSP ID detected: {:?} - running as non-MSP node", provider_id);
+                }
+            }
+            Err(GetProviderIdError::MultipleProviderIds) => {
+                // Configuration issue - multiple provider IDs found
+                error!(target: LOG_TARGET, "Multiple provider IDs found in keystore - this is a configuration issue");
+                self.msp_id = None;
+            }
+            Err(e) => {
+                // Runtime API error
+                error!(target: LOG_TARGET, "Failed to get provider ID from keystore: {:?}", e);
+                self.msp_id = None;
+            }
         }
     }
 
