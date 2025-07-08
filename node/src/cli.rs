@@ -473,7 +473,7 @@ pub struct IndexerConfigurations {
     ///
     /// - `full`: Indexes all blockchain data
     /// - `lite`: Indexes only essential data for storage operations
-    #[arg(long, value_enum, default_value = "full")]
+    #[arg(long, value_parser = clap::value_parser!(IndexerMode), default_value = "full")]
     pub indexer_mode: IndexerMode,
 
     /// Postgres database URL.

@@ -11,7 +11,7 @@ use sp_keystore::KeystorePtr;
 pub use self::handler::IndexerService;
 
 /// The mode in which the indexer runs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize, clap::ValueEnum)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum IndexerMode {
     /// Full indexing mode - indexes all blockchain data
@@ -25,6 +25,18 @@ pub enum IndexerMode {
 impl Default for IndexerMode {
     fn default() -> Self {
         Self::Full
+    }
+}
+
+impl std::str::FromStr for IndexerMode {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "full" => Ok(Self::Full),
+            "lite" => Ok(Self::Lite),
+            _ => Err(format!("Invalid indexer mode: '{}'. Expected 'full' or 'lite'", s)),
+        }
     }
 }
 
