@@ -239,9 +239,9 @@ pub mod pallet {
         /// This will be configured as root in the runtime configuration.
         type PriorityChallengeDispatcher: EnsureOrigin<Self::RuntimeOrigin>;
 
-        // Custom origin that can execute challenge operations.
-        // This will be configured as root in the runtime configuration.
-        // type ChallengeDispatcher: EnsureOrigin<Self::RuntimeOrigin, Success = Self::AccountId>;
+        /// Custom origin that can execute challenge operations.
+        /// This will be configured as root in the runtime configuration.
+        type ChallengeDispatcher: EnsureOrigin<Self::RuntimeOrigin>;
     }
 
     #[pallet::pallet]
@@ -614,7 +614,7 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// Introduce a new challenge.
         ///
-        /// This function allows anyone to add a new challenge to the `ChallengesQueue`.
+        /// This function allows authorized origins to add a new challenge to the `ChallengesQueue`.
         /// The challenge will be dispatched in the coming blocks.
         /// Users are charged a small fee for submitting a challenge, which
         /// goes to the Treasury.
@@ -622,7 +622,10 @@ pub mod pallet {
         #[pallet::weight(T::WeightInfo::challenge())]
         pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was signed and get the signer.
-            let who = ensure_signed(origin)?;
+            let who = ensure_signed(origin.clone())?;
+            
+            // Check that the extrinsic was executed by the custom origin.
+            T::ChallengeDispatcher::ensure_origin(origin)?;
 
             Self::do_challenge(&who, &key)?;
 
