@@ -33,6 +33,7 @@ pub struct IndexerService<RuntimeApi> {
     client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
+    msp_id: Option<StorageProviderId>,
 }
 
 // Implement the Actor trait for IndexerService
@@ -76,6 +77,7 @@ where
             client,
             db_pool,
             indexer_mode,
+            msp_id: None,
         }
     }
 
