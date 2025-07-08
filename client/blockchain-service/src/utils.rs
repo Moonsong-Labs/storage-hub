@@ -28,7 +28,7 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_framework::actor::Actor;
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
-    blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
+    blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block, get_provider_id_from_keystore, GetProviderIdError},
     types::{
         BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
         StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
@@ -378,45 +378,20 @@ where
     /// different Provider IDs, this function will panic. In other words, this node doesn't support
     /// managing multiple Providers at once.
     pub(crate) fn sync_provider_id(&mut self, block_hash: &H256) {
-        let mut provider_ids_found = Vec::new();
-        for key in self.keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
-            let maybe_provider_id = match self
-                .client
-                .runtime_api()
-                .get_storage_provider_id(*block_hash, &key.into())
-            {
-                Ok(provider_id) => provider_id,
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Runtime API error while getting Provider ID for key: {:?}. Error: {:?}", key, e);
-                    continue;
-                }
-            };
-
-            match maybe_provider_id {
-                Some(provider_id) => {
-                    provider_ids_found.push(provider_id);
-                }
-                None => {
-                    debug!(target: LOG_TARGET, "There is no Provider ID for key: {:?}. This means that the node has a BCSV key in the keystore for which there is no Provider ID.", key);
-                }
-            };
-        }
-
-        // Case: There is no Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
-        // This is expected, if this node starts up before the Provider has been registered.
-        if provider_ids_found.is_empty() {
-            warn!(target: LOG_TARGET, "🔑 There is no Provider ID linked to any of the BCSV keys in this node's keystore. This is expected, if this node starts up before the BSP has been registered.");
-            return;
-        }
-
-        // Case: There is more than one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
-        // This is unexpected, and should never happen.
-        if provider_ids_found.len() > 1 {
-            panic!("There are more than one BCSV keys linked to Provider IDs in this node's keystore. Managing multiple Providers at once is not supported.");
-        }
-
-        // Case: There is exactly one Provider ID linked to any of the [`BCSV_KEY_TYPE`] keys in this node's keystore.
-        let provider_id = *provider_ids_found.get(0).expect("There is exactly one Provider ID linked to any of the BCSV keys in this node's keystore; qed");
+        let provider_id = match get_provider_id_from_keystore(&self.client, &self.keystore, block_hash) {
+            Ok(None) => {
+                warn!(target: LOG_TARGET, "🔑 There is no Provider ID linked to any of the BCSV keys in this node's keystore. This is expected, if this node starts up before the BSP has been registered.");
+                return;
+            }
+            Ok(Some(provider_id)) => provider_id,
+            Err(GetProviderIdError::MultipleProviderIds) => {
+                panic!("There are more than one BCSV keys linked to Provider IDs in this node's keystore. Managing multiple Providers at once is not supported.");
+            }
+            Err(GetProviderIdError::RuntimeApiError(e)) => {
+                error!(target: LOG_TARGET, "Runtime API error while getting Provider ID: {}", e);
+                return;
+            }
+        };
 
         // Replace the provider ID only if it is not already managed.
         match (&self.maybe_managed_provider, provider_id) {
