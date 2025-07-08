@@ -88,6 +88,43 @@ where
         }
     }
 
+    /// Check if we should filter events based on the current indexer mode and MSP ID.
+    /// Returns true if the event should be skipped.
+    fn should_filter_msp_event(&self, event_msp_id: &StorageProviderId) -> bool {
+        if self.indexer_mode != crate::IndexerMode::Lite {
+            return false;
+        }
+
+        match &self.msp_id {
+            Some(current_msp_id) => current_msp_id != event_msp_id,
+            None => false, // If no MSP ID is set, don't filter
+        }
+    }
+
+    /// Check if we should filter events for a specific MSP ID.
+    /// This variant is used when the MSP ID is not wrapped in StorageProviderId.
+    fn should_filter_msp_id(&self, msp_id: &H256) -> bool {
+        if self.indexer_mode != crate::IndexerMode::Lite {
+            return false;
+        }
+
+        match &self.msp_id {
+            Some(StorageProviderId::MainStorageProvider(current_id)) => current_id != msp_id,
+            _ => false,
+        }
+    }
+
+    /// Log that an event is being skipped due to filtering.
+    fn log_filtered_event(&self, event_name: &str, event_msp: impl std::fmt::Debug) {
+        info!(
+            target: LOG_TARGET,
+            "Skipping {} event for MSP {:?} (current MSP: {:?})",
+            event_name,
+            event_msp,
+            self.msp_id
+        );
+    }
+
     /// Synchronize the MSP ID from the keystore.
     ///
     /// This method detects the MSP ID based on the BCSV keys in the keystore
@@ -259,18 +296,9 @@ where
                 root,
             } => {
                 // In Lite mode, only index buckets assigned to the current MSP
-                if self.indexer_mode == crate::IndexerMode::Lite {
-                    if let Some(current_msp_id) = &self.msp_id {
-                        if current_msp_id != msp_id {
-                            info!(
-                                target: LOG_TARGET,
-                                "Skipping NewBucket event for MSP {:?} (current MSP: {:?})",
-                                msp_id,
-                                current_msp_id
-                            );
-                            return Ok(());
-                        }
-                    }
+                if self.should_filter_msp_event(msp_id) {
+                    self.log_filtered_event("NewBucket", msp_id);
+                    return Ok(());
                 }
 
                 let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
@@ -294,18 +322,9 @@ where
                 value_prop_id: _,
             } => {
                 // In Lite mode, only index bucket updates where the new MSP is the current MSP
-                if self.indexer_mode == crate::IndexerMode::Lite {
-                    if let Some(current_msp_id) = &self.msp_id {
-                        if current_msp_id != new_msp_id {
-                            info!(
-                                target: LOG_TARGET,
-                                "Skipping MoveBucketAccepted event for new MSP {:?} (current MSP: {:?})",
-                                new_msp_id,
-                                current_msp_id
-                            );
-                            return Ok(());
-                        }
-                    }
+                if self.should_filter_msp_event(new_msp_id) {
+                    self.log_filtered_event("MoveBucketAccepted", new_msp_id);
+                    return Ok(());
                 }
 
                 let new_msp = Msp::get_by_onchain_msp_id(conn, new_msp_id.to_string()).await?;
@@ -360,45 +379,62 @@ where
                 peer_ids,
                 expires_at: _,
             } => {
-                // In Lite mode, we might not have the bucket in our database if it doesn't belong to us
-                let bucket_result =
-                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await;
+                // In Lite mode, we should check if the bucket belongs to our MSP
+                if self.indexer_mode == crate::IndexerMode::Lite && self.msp_id.is_some() {
+                    // Try to get the bucket to check its MSP
+                    match Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await
+                    {
+                        Ok(bucket) => {
+                            // Bucket exists, proceed with indexing
+                            let mut sql_peer_ids = Vec::new();
+                            for peer_id in peer_ids {
+                                sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                            }
 
-                match bucket_result {
-                    Ok(bucket) => {
-                        // Bucket exists in our database, proceed with indexing
-                        let mut sql_peer_ids = Vec::new();
-                        for peer_id in peer_ids {
-                            sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                            File::create(
+                                conn,
+                                <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
+                                file_key.as_ref().to_vec(),
+                                bucket.id,
+                                location.to_vec(),
+                                fingerprint.as_ref().to_vec(),
+                                *size as i64,
+                                FileStorageRequestStep::Requested,
+                                sql_peer_ids,
+                            )
+                            .await?;
                         }
-
-                        File::create(
-                            conn,
-                            <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
-                            file_key.as_ref().to_vec(),
-                            bucket.id,
-                            location.to_vec(),
-                            fingerprint.as_ref().to_vec(),
-                            *size as i64,
-                            FileStorageRequestStep::Requested,
-                            sql_peer_ids,
-                        )
-                        .await?;
-                    }
-                    Err(_) => {
-                        // Bucket not found in database
-                        if self.indexer_mode == crate::IndexerMode::Lite {
-                            // In Lite mode, this is expected for buckets not belonging to current MSP
+                        Err(_) => {
+                            // Bucket not found - it doesn't belong to our MSP
                             info!(
                                 target: LOG_TARGET,
                                 "Skipping NewStorageRequest event for bucket not in database (bucket_id: {:?})",
                                 bucket_id
                             );
-                        } else {
-                            // In Full mode, this is unexpected - re-raise the error
-                            return Err(bucket_result.unwrap_err());
                         }
                     }
+                } else {
+                    // Full mode - bucket must exist
+                    let bucket =
+                        Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
+
+                    let mut sql_peer_ids = Vec::new();
+                    for peer_id in peer_ids {
+                        sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
+                    }
+
+                    File::create(
+                        conn,
+                        <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
+                        file_key.as_ref().to_vec(),
+                        bucket.id,
+                        location.to_vec(),
+                        fingerprint.as_ref().to_vec(),
+                        *size as i64,
+                        FileStorageRequestStep::Requested,
+                        sql_peer_ids,
+                    )
+                    .await?;
                 }
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
@@ -641,18 +677,9 @@ where
                 }
                 StorageProviderId::MainStorageProvider(msp_id) => {
                     // In Lite mode, only index capacity changes for the current MSP
-                    if self.indexer_mode == crate::IndexerMode::Lite {
-                        if let Some(current_msp_id) = &self.msp_id {
-                            if current_msp_id != &StorageProviderId::MainStorageProvider(*msp_id) {
-                                info!(
-                                    target: LOG_TARGET,
-                                    "Skipping CapacityChanged event for MSP {:?} (current MSP: {:?})",
-                                    msp_id,
-                                    current_msp_id
-                                );
-                                return Ok(());
-                            }
-                        }
+                    if self.should_filter_msp_event(provider_id) {
+                        self.log_filtered_event("CapacityChanged", provider_id);
+                        return Ok(());
                     }
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
                 }
@@ -667,20 +694,9 @@ where
                 value_prop,
             } => {
                 // In Lite mode, only index MSP sign up for the current MSP
-                if self.indexer_mode == crate::IndexerMode::Lite {
-                    if let Some(current_msp_id) = &self.msp_id {
-                        if let StorageProviderId::MainStorageProvider(current_id) = current_msp_id {
-                            if current_id != msp_id {
-                                info!(
-                                    target: LOG_TARGET,
-                                    "Skipping MspSignUpSuccess event for MSP {:?} (current MSP: {:?})",
-                                    msp_id,
-                                    current_id
-                                );
-                                return Ok(());
-                            }
-                        }
-                    }
+                if self.should_filter_msp_id(msp_id) {
+                    self.log_filtered_event("MspSignUpSuccess", msp_id);
+                    return Ok(());
                 }
 
                 let mut sql_multiaddresses = Vec::new();
@@ -708,20 +724,9 @@ where
             }
             pallet_storage_providers::Event::MspSignOffSuccess { who, msp_id } => {
                 // In Lite mode, only index MSP sign off for the current MSP
-                if self.indexer_mode == crate::IndexerMode::Lite {
-                    if let Some(current_msp_id) = &self.msp_id {
-                        if let StorageProviderId::MainStorageProvider(current_id) = current_msp_id {
-                            if current_id != msp_id {
-                                info!(
-                                    target: LOG_TARGET,
-                                    "Skipping MspSignOffSuccess event for MSP {:?} (current MSP: {:?})",
-                                    msp_id,
-                                    current_id
-                                );
-                                return Ok(());
-                            }
-                        }
-                    }
+                if self.should_filter_msp_id(msp_id) {
+                    self.log_filtered_event("MspSignOffSuccess", msp_id);
+                    return Ok(());
                 }
 
                 Msp::delete(conn, who.to_string()).await?;
@@ -758,35 +763,17 @@ where
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
             pallet_storage_providers::Event::MultiAddressAdded { provider_id, .. } => {
                 // In Lite mode, only index multi address changes for the current MSP
-                if self.indexer_mode == crate::IndexerMode::Lite {
-                    if let Some(current_msp_id) = &self.msp_id {
-                        if current_msp_id != provider_id {
-                            info!(
-                                target: LOG_TARGET,
-                                "Skipping MultiAddressAdded event for provider {:?} (current MSP: {:?})",
-                                provider_id,
-                                current_msp_id
-                            );
-                            return Ok(());
-                        }
-                    }
+                if self.should_filter_msp_event(provider_id) {
+                    self.log_filtered_event("MultiAddressAdded", provider_id);
+                    return Ok(());
                 }
                 // TODO: Handle multi address addition
             }
             pallet_storage_providers::Event::MultiAddressRemoved { provider_id, .. } => {
                 // In Lite mode, only index multi address changes for the current MSP
-                if self.indexer_mode == crate::IndexerMode::Lite {
-                    if let Some(current_msp_id) = &self.msp_id {
-                        if current_msp_id != provider_id {
-                            info!(
-                                target: LOG_TARGET,
-                                "Skipping MultiAddressRemoved event for provider {:?} (current MSP: {:?})",
-                                provider_id,
-                                current_msp_id
-                            );
-                            return Ok(());
-                        }
-                    }
+                if self.should_filter_msp_event(provider_id) {
+                    self.log_filtered_event("MultiAddressRemoved", provider_id);
+                    return Ok(());
                 }
                 // TODO: Handle multi address removal
             }
