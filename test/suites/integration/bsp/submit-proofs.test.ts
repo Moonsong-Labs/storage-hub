@@ -464,6 +464,29 @@ describeBspNet(
       }
     );
 
+    it("Non-root user cannot initiate priority challenge", async () => {
+      // Attempt to call forcePriorityChallenge without sudo 
+      const { events, extSuccess } = await userApi.block.seal({
+        calls: [
+          userApi.tx.proofsDealer.forcePriorityChallenge(
+            oneBspfileMetadata.fileKey,
+            true // should_remove_key = true as test suite expects the file to be deleted.
+          )
+        ]
+      });
+
+      // The extrinsic should have failed.
+      assert.strictEqual(extSuccess, false, "Non-root user should not be able to call forcePriorityChallenge");
+
+      // Get the event of the extrinsic failure.
+      const {
+        data: { dispatchError: eventInfo }
+      } = userApi.assert.fetchEvent(userApi.events.system.ExtrinsicFailed, events);
+
+      // Ensure it failed with BadOrigin error.
+      assert.strictEqual(eventInfo.isBadOrigin, true, "Error should be BadOrigin");
+    });
+
     it("Priority challenge is initiated for file", async () => {
       // Get the root of the BSP that has the file before priority challenge.
       const bspMetadata = await userApi.query.providers.backupStorageProviders(

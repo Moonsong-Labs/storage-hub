@@ -20,6 +20,7 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
     use codec::FullCodec;
+    use frame_support::traits::EnsureOrigin;
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::{ValueQuery, *},
@@ -233,6 +234,10 @@ pub mod pallet {
         /// the execution of the `on_poll` hook bounded.
         #[pallet::constant]
         type MaxSlashableProvidersPerTick: Get<u32>;
+
+        /// Custom origin that can execute privileged operations.
+        /// This will be configured as root in the runtime configuration.
+        type PriorityChallengeDispatcher: EnsureOrigin<Self::RuntimeOrigin>;
     }
 
     #[pallet::pallet]
@@ -760,14 +765,14 @@ pub mod pallet {
             key: KeyFor<T>,
             should_remove_key: bool,
         ) -> DispatchResultWithPostInfo {
-            // Check that the extrinsic was executed by the root origin.
-            ensure_root(origin)?;
+            // Check that the extrinsic was executed by the custom origin.
+            T::PriorityChallengeDispatcher::ensure_origin(origin)?;
 
             // Execute priority challenge.
             <Self as ProofsDealerInterface>::challenge_with_priority(&key, should_remove_key)?;
 
             // Return a successful DispatchResultWithPostInfo.
-            // This TX is free since is a sudo-only transaction 
+            // This TX is free since is a sudo-only transaction
             Ok(Pays::No.into())
         }
     }
