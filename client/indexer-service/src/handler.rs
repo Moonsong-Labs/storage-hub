@@ -6,6 +6,7 @@ use shc_common::types::StorageProviderId;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
 use thiserror::Error;
+use sp_keystore::KeystorePtr;
 
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
@@ -34,6 +35,7 @@ pub struct IndexerService<RuntimeApi> {
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
     msp_id: Option<StorageProviderId>,
+    keystore: KeystorePtr,
 }
 
 // Implement the Actor trait for IndexerService
@@ -72,12 +74,14 @@ where
         client: Arc<ParachainClient<RuntimeApi>>,
         db_pool: DbPool,
         indexer_mode: crate::IndexerMode,
+        keystore: KeystorePtr,
     ) -> Self {
         Self {
             client,
             db_pool,
             indexer_mode,
             msp_id: None,
+            keystore,
         }
     }
 

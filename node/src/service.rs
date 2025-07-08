@@ -415,6 +415,7 @@ where
                 crate::cli::IndexerMode::Full => shc_indexer_service::IndexerMode::Full,
                 crate::cli::IndexerMode::Lite => shc_indexer_service::IndexerMode::Lite,
             },
+            keystore_container.keystore(),
         )
         .await;
     }
@@ -831,6 +832,7 @@ where
                 crate::cli::IndexerMode::Full => shc_indexer_service::IndexerMode::Full,
                 crate::cli::IndexerMode::Lite => shc_indexer_service::IndexerMode::Lite,
             },
+            keystore_container.keystore(),
         )
         .await;
     }
@@ -1056,6 +1058,7 @@ where
                 crate::cli::IndexerMode::Full => shc_indexer_service::IndexerMode::Full,
                 crate::cli::IndexerMode::Lite => shc_indexer_service::IndexerMode::Lite,
             },
+            keystore_container.keystore(),
         )
         .await;
     }
@@ -1324,6 +1327,7 @@ where
                 crate::cli::IndexerMode::Full => shc_indexer_service::IndexerMode::Full,
                 crate::cli::IndexerMode::Lite => shc_indexer_service::IndexerMode::Lite,
             },
+            keystore_container.keystore(),
         )
         .await;
     }

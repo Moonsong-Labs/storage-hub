@@ -6,6 +6,7 @@ use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::ParachainClient;
 use shc_indexer_db::DbPool;
+use sp_keystore::KeystorePtr;
 
 pub use self::handler::IndexerService;
 
@@ -25,12 +26,13 @@ pub async fn spawn_indexer_service<
     client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: IndexerMode,
+    keystore: KeystorePtr,
 ) -> ActorHandle<IndexerService<RuntimeApi>> {
     let task_spawner = task_spawner
         .with_name("indexer-service")
         .with_group("network");
 
-    let indexer_service = IndexerService::new(client, db_pool, indexer_mode);
+    let indexer_service = IndexerService::new(client, db_pool, indexer_mode, keystore);
 
     task_spawner.spawn_actor(indexer_service)
 }
