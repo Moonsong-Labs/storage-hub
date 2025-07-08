@@ -468,7 +468,7 @@ describeBspNet(
       // Attempt to call forcePriorityChallenge without sudo 
       const { events, extSuccess } = await userApi.block.seal({
         calls: [
-          userApi.tx.proofsDealer.forcePriorityChallenge(
+          userApi.tx.proofsDealer.priorityChallenge(
             oneBspfileMetadata.fileKey,
             true // should_remove_key = true as test suite expects the file to be deleted.
           )
@@ -508,7 +508,7 @@ describeBspNet(
       await userApi.block.seal({
         calls: [
           userApi.tx.sudo.sudo(
-            userApi.tx.proofsDealer.forcePriorityChallenge(
+            userApi.tx.proofsDealer.priorityChallenge(
               oneBspfileMetadata.fileKey,
               true // should_remove_key = true as test suite expects the file to be deleted.
             )
