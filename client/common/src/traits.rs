@@ -10,7 +10,7 @@ use sc_service::TFullClient;
 use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
-use sp_core::H256;
+use sp_core::{crypto::KeyTypeId, sr25519, H256};
 
 /// A trait bundle that ensures a runtime API includes all storage-related capabilities.
 ///
@@ -164,4 +164,48 @@ impl<T> StorageEnableRuntimeApi for T where
         + Sync
         + 'static
 {
+}
+
+/// A read-only keystore trait that provides access to public keys without signing capabilities.
+///
+/// This trait is designed for services that only need to query public keys from the keystore
+/// without the ability to generate signatures. It provides a type-safe way to restrict
+/// keystore access to read-only operations.
+///
+/// # Purpose
+///
+/// The indexer service needs to detect provider IDs by querying sr25519 public keys
+/// from the keystore, but it never needs to sign anything. This trait enforces that
+/// restriction at the type level, making the code more secure and its intentions clearer.
+///
+/// # Usage
+///
+/// ```ignore
+/// fn get_provider_id_from_keystore<K: ReadOnlyKeystore>(
+///     keystore: &K,
+///     block_hash: &H256,
+/// ) -> Result<Option<StorageProviderId>, GetProviderIdError> {
+///     let keys = keystore.sr25519_public_keys(BCSV_KEY_TYPE);
+///     // ... process keys
+/// }
+/// ```
+pub trait ReadOnlyKeystore: Send + Sync {
+    /// Returns all sr25519 public keys for the given key type.
+    ///
+    /// This is the only operation the indexer service needs from the keystore.
+    fn sr25519_public_keys(&self, key_type: KeyTypeId) -> Vec<sr25519::Public>;
+}
+
+/// Blanket implementation for any type that implements the full Keystore trait.
+///
+/// This allows existing `KeystorePtr` instances to be used wherever `ReadOnlyKeystore`
+/// is required, maintaining backward compatibility while enforcing read-only access
+/// at the type level.
+impl<T> ReadOnlyKeystore for T
+where
+    T: sp_keystore::Keystore + ?Sized,
+{
+    fn sr25519_public_keys(&self, key_type: KeyTypeId) -> Vec<sr25519::Public> {
+        sp_keystore::Keystore::sr25519_public_keys(self, key_type)
+    }
 }

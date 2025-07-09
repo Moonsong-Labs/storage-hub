@@ -10,10 +10,9 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{backend::StorageProvider, StorageKey};
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
-use sp_keystore::KeystorePtr;
 
 use crate::{
-    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
+    traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi},
     types::{
         Multiaddresses, ParachainClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
     },
@@ -109,13 +108,15 @@ pub enum GetProviderIdError {
 /// - `Ok(Some(provider_id))` if exactly one Provider ID is found
 /// - `Err(GetProviderIdError::MultipleProviderIds)` if multiple Provider IDs are found
 /// - `Err(GetProviderIdError::RuntimeApiError)` if there's an error calling the runtime API
-pub fn get_provider_id_from_keystore<RuntimeApi: StorageEnableRuntimeApi>(
+pub fn get_provider_id_from_keystore<RuntimeApi, K>(
     client: &Arc<ParachainClient<RuntimeApi>>,
-    keystore: &KeystorePtr,
+    keystore: &K,
     block_hash: &H256,
 ) -> Result<Option<StorageProviderId>, GetProviderIdError>
 where
+    RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    K: ReadOnlyKeystore + ?Sized,
 {
     let mut provider_ids_found = Vec::new();
 
