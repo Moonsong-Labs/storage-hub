@@ -1049,7 +1049,7 @@ where
                 "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
             ),
             indexer_config.indexer_mode,
-            keystore_container.keystore(),
+            keystore.clone(),
         )
         .await;
     }
@@ -1315,7 +1315,7 @@ where
                 "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
             ),
             indexer_config.indexer_mode,
-            keystore_container.keystore(),
+            keystore.clone(),
         )
         .await;
     }

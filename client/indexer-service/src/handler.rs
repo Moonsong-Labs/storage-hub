@@ -2,7 +2,7 @@ use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_common::types::StorageProviderId;
+use shc_common::types::{ProviderId, StorageProviderId};
 use sp_keystore::KeystorePtr;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
@@ -37,7 +37,7 @@ pub struct IndexerService<RuntimeApi> {
     client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
-    msp_id: Option<StorageProviderId>,
+    msp_id: Option<ProviderId>,
     keystore: KeystorePtr,
 }
 
@@ -90,7 +90,7 @@ where
 
     /// Check if we should filter events based on the current indexer mode and MSP ID.
     /// Returns true if the event should be skipped.
-    fn should_filter_msp_event(&self, event_msp_id: &StorageProviderId) -> bool {
+    fn should_filter_msp_event(&self, event_msp_id: &ProviderId) -> bool {
         if self.indexer_mode != crate::IndexerMode::Lite {
             return false;
         }
@@ -98,19 +98,6 @@ where
         match &self.msp_id {
             Some(current_msp_id) => current_msp_id != event_msp_id,
             None => false, // If no MSP ID is set, don't filter
-        }
-    }
-
-    /// Check if we should filter events for a specific MSP ID.
-    /// This variant is used when the MSP ID is not wrapped in StorageProviderId.
-    fn should_filter_msp_id(&self, msp_id: &H256) -> bool {
-        if self.indexer_mode != crate::IndexerMode::Lite {
-            return false;
-        }
-
-        match &self.msp_id {
-            Some(StorageProviderId::MainStorageProvider(current_id)) => current_id != msp_id,
-            _ => false,
         }
     }
 
@@ -138,8 +125,8 @@ where
             }
             Ok(Some(provider_id)) => {
                 // Check if it's an MSP ID
-                if let StorageProviderId::MainStorageProvider(_) = provider_id {
-                    self.msp_id = Some(provider_id);
+                if let StorageProviderId::MainStorageProvider(msp_id) = provider_id {
+                    self.msp_id = Some(msp_id);
                     info!(target: LOG_TARGET, "MSP ID detected: {:?}", provider_id);
                 } else {
                     // It's a BSP ID, not an MSP
@@ -316,13 +303,18 @@ where
                 .await?;
             }
             pallet_file_system::Event::MoveBucketAccepted {
-                old_msp_id: _,
+                old_msp_id,
                 new_msp_id,
                 bucket_id,
                 value_prop_id: _,
             } => {
-                // In Lite mode, only index bucket updates where the new MSP is the current MSP
-                if self.should_filter_msp_event(new_msp_id) {
+                // In Lite mode, only index bucket updates where the new or old MSP is the current MSP
+                if self.should_filter_msp_event(new_msp_id)
+                    && old_msp_id
+                        .as_ref()
+                        .map(|id| self.should_filter_msp_event(id))
+                        .unwrap_or(true)
+                {
                     self.log_filtered_event("MoveBucketAccepted", new_msp_id);
                     return Ok(());
                 }
@@ -677,8 +669,8 @@ where
                 }
                 StorageProviderId::MainStorageProvider(msp_id) => {
                     // In Lite mode, only index capacity changes for the current MSP
-                    if self.should_filter_msp_event(provider_id) {
-                        self.log_filtered_event("CapacityChanged", provider_id);
+                    if self.should_filter_msp_event(&msp_id) {
+                        self.log_filtered_event("CapacityChanged", msp_id);
                         return Ok(());
                     }
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
@@ -694,7 +686,7 @@ where
                 value_prop,
             } => {
                 // In Lite mode, only index MSP sign up for the current MSP
-                if self.should_filter_msp_id(msp_id) {
+                if self.should_filter_msp_event(&msp_id) {
                     self.log_filtered_event("MspSignUpSuccess", msp_id);
                     return Ok(());
                 }
@@ -724,7 +716,7 @@ where
             }
             pallet_storage_providers::Event::MspSignOffSuccess { who, msp_id } => {
                 // In Lite mode, only index MSP sign off for the current MSP
-                if self.should_filter_msp_id(msp_id) {
+                if self.should_filter_msp_event(&msp_id) {
                     self.log_filtered_event("MspSignOffSuccess", msp_id);
                     return Ok(());
                 }
@@ -763,7 +755,7 @@ where
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
             pallet_storage_providers::Event::MultiAddressAdded { provider_id, .. } => {
                 // In Lite mode, only index multi address changes for the current MSP
-                if self.should_filter_msp_event(provider_id) {
+                if self.should_filter_msp_event(&provider_id) {
                     self.log_filtered_event("MultiAddressAdded", provider_id);
                     return Ok(());
                 }
@@ -771,7 +763,7 @@ where
             }
             pallet_storage_providers::Event::MultiAddressRemoved { provider_id, .. } => {
                 // In Lite mode, only index multi address changes for the current MSP
-                if self.should_filter_msp_event(provider_id) {
+                if self.should_filter_msp_event(&provider_id) {
                     self.log_filtered_event("MultiAddressRemoved", provider_id);
                     return Ok(());
                 }

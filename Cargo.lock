@@ -14246,6 +14246,7 @@ dependencies = [
  "sp-api 35.0.0",
  "sp-blockchain",
  "sp-core 35.0.0",
+ "sp-keystore 0.41.0",
  "sp-runtime 40.1.0",
  "storage-hub-runtime",
  "substrate-frame-rpc-system",
