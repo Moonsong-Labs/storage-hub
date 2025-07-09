@@ -165,7 +165,7 @@ where
         notification: sc_client_api::FinalityNotification<Block>,
     ) -> Result<(), HandleFinalityNotificationError>
     where
-        Block: sp_runtime::traits::Block,
+        Block: sp_runtime::traits::Block<Hash = H256>,
         Block::Header: Header<Number = BlockNumber>,
     {
         let finalized_block_hash = notification.hash;
@@ -175,7 +175,7 @@ where
 
         // In Lite mode, sync MSP ID on each finality notification
         if self.indexer_mode == crate::IndexerMode::Lite {
-            self.sync_msp_id(&finalized_block_hash.into());
+            self.sync_msp_id(&finalized_block_hash);
         }
 
         let mut db_conn = self.db_pool.get().await?;
