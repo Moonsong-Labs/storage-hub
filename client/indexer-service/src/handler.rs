@@ -1,3 +1,4 @@
+use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info, trace};
@@ -340,12 +341,6 @@ where
                 value_prop_id: _,
                 root,
             } => {
-                // In Lite mode, only index buckets assigned to the current MSP
-                if self.should_filter_msp_event(msp_id) {
-                    self.log_filtered_event("NewBucket", msp_id);
-                    return Ok(());
-                }
-
                 let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
 
                 Bucket::create(
@@ -361,22 +356,11 @@ where
                 .await?;
             }
             pallet_file_system::Event::MoveBucketAccepted {
-                old_msp_id,
+                old_msp_id: _,
                 new_msp_id,
                 bucket_id,
                 value_prop_id: _,
             } => {
-                // In Lite mode, only index bucket updates where the new or old MSP is the current MSP
-                if self.should_filter_msp_event(new_msp_id)
-                    && old_msp_id
-                        .as_ref()
-                        .map(|id| self.should_filter_msp_event(id))
-                        .unwrap_or(true)
-                {
-                    self.log_filtered_event("MoveBucketAccepted", new_msp_id);
-                    return Ok(());
-                }
-
                 let new_msp = Msp::get_by_onchain_msp_id(conn, new_msp_id.to_string()).await?;
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
             }
@@ -593,10 +577,10 @@ where
                         // Check if bucket has an MSP assigned
                         if let Some(msp_id) = bucket.msp_id {
                             // Get the MSP for this bucket from DB by its database ID
-                            match msp::table
-                                .filter(msp::id.eq(msp_id))
-                                .first::<Msp>(conn)
-                                .await
+                            match diesel_async::RunQueryDsl::first::<Msp>(
+                                msp::table.filter(msp::id.eq(msp_id)),
+                                conn
+                            ).await
                             {
                                 Ok(msp) => msp.onchain_msp_id == current_msp_id.to_string(),
                                 Err(_) => false,
@@ -817,12 +801,7 @@ where
 
                     Bsp::update_stake(conn, bsp_id.to_string(), stake).await?;
                 }
-                StorageProviderId::MainStorageProvider(msp_id) => {
-                    // In Lite mode, only index capacity changes for the current MSP
-                    if self.should_filter_msp_event(&msp_id) {
-                        self.log_filtered_event("CapacityChanged", msp_id);
-                        return Ok(());
-                    }
+                StorageProviderId::MainStorageProvider(_msp_id) => {
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
                 }
             },
@@ -835,12 +814,6 @@ where
                 capacity,
                 value_prop,
             } => {
-                // In Lite mode, only index MSP sign up for the current MSP
-                if self.should_filter_msp_event(&msp_id) {
-                    self.log_filtered_event("MspSignUpSuccess", msp_id);
-                    return Ok(());
-                }
-
                 let mut sql_multiaddresses = Vec::new();
                 for multiaddress in multiaddresses {
                     if let Some(multiaddr) = convert_raw_multiaddress_to_multiaddr(multiaddress) {
@@ -864,13 +837,7 @@ where
                 )
                 .await?;
             }
-            pallet_storage_providers::Event::MspSignOffSuccess { who, msp_id } => {
-                // In Lite mode, only index MSP sign off for the current MSP
-                if self.should_filter_msp_event(&msp_id) {
-                    self.log_filtered_event("MspSignOffSuccess", msp_id);
-                    return Ok(());
-                }
-
+            pallet_storage_providers::Event::MspSignOffSuccess { who, msp_id: _ } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::BucketRootChanged {
@@ -903,20 +870,10 @@ where
             pallet_storage_providers::Event::TopUpFulfilled { .. } => {}
             pallet_storage_providers::Event::ValuePropAdded { .. } => {}
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
-            pallet_storage_providers::Event::MultiAddressAdded { provider_id, .. } => {
-                // In Lite mode, only index multi address changes for the current MSP
-                if self.should_filter_msp_event(&provider_id) {
-                    self.log_filtered_event("MultiAddressAdded", provider_id);
-                    return Ok(());
-                }
+            pallet_storage_providers::Event::MultiAddressAdded { provider_id: _, .. } => {
                 // TODO: Handle multi address addition
             }
-            pallet_storage_providers::Event::MultiAddressRemoved { provider_id, .. } => {
-                // In Lite mode, only index multi address changes for the current MSP
-                if self.should_filter_msp_event(&provider_id) {
-                    self.log_filtered_event("MultiAddressRemoved", provider_id);
-                    return Ok(());
-                }
+            pallet_storage_providers::Event::MultiAddressRemoved { provider_id: _, .. } => {
                 // TODO: Handle multi address removal
             }
             pallet_storage_providers::Event::ProviderInsolvent { .. } => {}
