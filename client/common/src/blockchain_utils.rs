@@ -6,7 +6,9 @@ use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
 
 use codec::Decode;
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{backend::StorageProvider, StorageKey};
+use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
 
