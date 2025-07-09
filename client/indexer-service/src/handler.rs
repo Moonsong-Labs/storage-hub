@@ -1,6 +1,6 @@
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
-use log::{error, info};
+use log::{error, info, trace};
 use shc_common::traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::{ProviderId, StorageProviderId};
 use sp_runtime::AccountId32;
@@ -199,7 +199,7 @@ where
                 ServiceState::update(conn, block_number as i64).await?;
 
                 for ev in block_events {
-                    self.index_event(conn, &ev.event, block_hash).await?;
+                    self.route_event(conn, &ev.event, block_hash).await?;
                 }
 
                 Ok(())
@@ -237,6 +237,65 @@ where
             // to ensure the compiler will let us know to treat future events when added.
             RuntimeEvent::System(_) => {}
             RuntimeEvent::ParachainSystem(_) => {}
+            RuntimeEvent::Balances(_) => {}
+            RuntimeEvent::TransactionPayment(_) => {}
+            RuntimeEvent::Sudo(_) => {}
+            RuntimeEvent::CollatorSelection(_) => {}
+            RuntimeEvent::Session(_) => {}
+            RuntimeEvent::XcmpQueue(_) => {}
+            RuntimeEvent::PolkadotXcm(_) => {}
+            RuntimeEvent::CumulusXcm(_) => {}
+            RuntimeEvent::MessageQueue(_) => {}
+            RuntimeEvent::Nfts(_) => {}
+            RuntimeEvent::Parameters(_) => {}
+        }
+
+        Ok(())
+    }
+
+    async fn route_event<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &RuntimeEvent,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        match self.indexer_mode {
+            crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
+            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+        }
+    }
+
+    async fn index_event_lite<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &RuntimeEvent,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            RuntimeEvent::FileSystem(event) => {
+                self.index_file_system_event(conn, event).await?
+            }
+            RuntimeEvent::Providers(event) => {
+                self.index_providers_event(conn, event, block_hash).await?
+            }
+            // Explicitly ignore other pallets in lite mode
+            RuntimeEvent::BucketNfts(_) => {
+                trace!(target: LOG_TARGET, "Ignoring BucketNfts event in lite mode");
+            }
+            RuntimeEvent::PaymentStreams(_) => {
+                trace!(target: LOG_TARGET, "Ignoring PaymentStreams event in lite mode");
+            }
+            RuntimeEvent::ProofsDealer(_) => {
+                trace!(target: LOG_TARGET, "Ignoring ProofsDealer event in lite mode");
+            }
+            RuntimeEvent::Randomness(_) => {
+                trace!(target: LOG_TARGET, "Ignoring Randomness event in lite mode");
+            }
+            // System pallets - explicitly list all to ensure compilation errors on new events
+            RuntimeEvent::System(_) => {}
+            RuntimeEvent::ParachainSystem(_) => {}
+            RuntimeEvent::Timestamp(_) => {}
+            RuntimeEvent::ParachainInfo(_) => {}
             RuntimeEvent::Balances(_) => {}
             RuntimeEvent::TransactionPayment(_) => {}
             RuntimeEvent::Sudo(_) => {}

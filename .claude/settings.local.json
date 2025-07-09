@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__zen__thinkdeep",
+      "Bash(cargo check:*)",
+      "Bash(cargo build:*)",
+      "Bash(grep:*)",
+      "Bash(cargo search:*)",
+      "Bash(find:*)",
+      "Bash(rustc:*)",
+      "Bash(true)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": []
+  }
+}
