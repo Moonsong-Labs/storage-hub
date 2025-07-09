@@ -18,7 +18,7 @@ use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{BlockNumber, ParachainClient},
 };
-use shc_indexer_db::{models::*, DbConnection, DbPool};
+use shc_indexer_db::{models::*, schema::msp, DbConnection, DbPool};
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_runtime::traits::Header;
@@ -273,7 +273,7 @@ where
     ) -> Result<(), diesel::result::Error> {
         match event {
             RuntimeEvent::FileSystem(event) => {
-                self.index_file_system_event(conn, event).await?
+                self.index_file_system_event_lite(conn, event).await?
             }
             RuntimeEvent::Providers(event) => {
                 self.index_providers_event(conn, event, block_hash).await?
@@ -294,8 +294,6 @@ where
             // System pallets - explicitly list all to ensure compilation errors on new events
             RuntimeEvent::System(_) => {}
             RuntimeEvent::ParachainSystem(_) => {}
-            RuntimeEvent::Timestamp(_) => {}
-            RuntimeEvent::ParachainInfo(_) => {}
             RuntimeEvent::Balances(_) => {}
             RuntimeEvent::TransactionPayment(_) => {}
             RuntimeEvent::Sudo(_) => {}
@@ -557,6 +555,98 @@ where
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
+    }
+
+    async fn index_file_system_event_lite<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &pallet_file_system::Event<storage_hub_runtime::Runtime>,
+    ) -> Result<(), diesel::result::Error> {
+        // Check if we have an MSP ID configured
+        let Some(current_msp_id) = &self.msp_id else {
+            trace!(target: LOG_TARGET, "No MSP ID configured, skipping FileSystem event");
+            return Ok(());
+        };
+
+        // Filter events based on MSP relevance
+        let should_index = match event {
+            pallet_file_system::Event::NewBucket { msp_id, .. } => {
+                // Only index if bucket is for current MSP
+                msp_id == current_msp_id
+            }
+            pallet_file_system::Event::MoveBucketAccepted { bucket_id, new_msp_id, .. } => {
+                // Index if bucket exists in DB (was previously with current MSP) OR new MSP is current MSP
+                if new_msp_id == current_msp_id {
+                    true
+                } else {
+                    // Check if bucket exists in DB (meaning it was previously with current MSP)
+                    match Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await {
+                        Ok(_) => true, // Bucket exists, so it was previously with current MSP
+                        Err(_) => false, // Bucket doesn't exist in DB
+                    }
+                }
+            }
+            pallet_file_system::Event::NewStorageRequest { bucket_id, .. } => {
+                // Only index if bucket belongs to current MSP
+                match Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await {
+                    Ok(bucket) => {
+                        // Check if bucket has an MSP assigned
+                        if let Some(msp_id) = bucket.msp_id {
+                            // Get the MSP for this bucket from DB by its database ID
+                            match msp::table
+                                .filter(msp::id.eq(msp_id))
+                                .first::<Msp>(conn)
+                                .await
+                            {
+                                Ok(msp) => msp.onchain_msp_id == current_msp_id.to_string(),
+                                Err(_) => false,
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    Err(_) => false,
+                }
+            }
+            // All other events are filtered out
+            pallet_file_system::Event::MoveBucketRequested { .. } => false,
+            pallet_file_system::Event::NewCollectionAndAssociation { .. } => false,
+            pallet_file_system::Event::BucketPrivacyUpdated { .. } => false,
+            pallet_file_system::Event::AcceptedBspVolunteer { .. } => false,
+            pallet_file_system::Event::MspAcceptedStorageRequest { .. } => false,
+            pallet_file_system::Event::StorageRequestRejected { .. } => false,
+            pallet_file_system::Event::StorageRequestFulfilled { .. } => false,
+            pallet_file_system::Event::StorageRequestExpired { .. } => false,
+            pallet_file_system::Event::StorageRequestRevoked { .. } => false,
+            pallet_file_system::Event::BspRequestedToStopStoring { .. } => false,
+            pallet_file_system::Event::BspConfirmStoppedStoring { .. } => false,
+            pallet_file_system::Event::BspConfirmedStoring { .. } => false,
+            pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => false,
+            pallet_file_system::Event::SpStopStoringInsolventUser { .. } => false,
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => false,
+            pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => false,
+            pallet_file_system::Event::FileDeletionRequest { .. } => false,
+            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => false,
+            pallet_file_system::Event::BspChallengeCycleInitialised { .. } => false,
+            pallet_file_system::Event::BucketDeleted { .. } => false,
+            pallet_file_system::Event::MoveBucketRequestExpired { .. } => false,
+            pallet_file_system::Event::MoveBucketRejected { .. } => false,
+            pallet_file_system::Event::MspStoppedStoringBucket { .. } => false,
+            pallet_file_system::Event::FailedToGetMspOfBucket { .. } => false,
+            pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => false,
+            pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => false,
+            pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => false,
+            pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => false,
+            pallet_file_system::Event::__Ignore(_, _) => false,
+        };
+
+        if should_index {
+            // Delegate to the original method
+            self.index_file_system_event(conn, event).await
+        } else {
+            trace!(target: LOG_TARGET, "Filtered out FileSystem event in lite mode");
+            Ok(())
+        }
     }
 
     async fn index_payment_streams_event<'a, 'b: 'a>(
