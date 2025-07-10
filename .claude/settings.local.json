@@ -14,7 +14,9 @@
       "Bash(cargo clippy:*)",
       "Bash(cargo fmt:*)",
       "Bash(ls:*)",
-      "Bash(rg:*)"
+      "Bash(rg:*)",
+      "Bash(git worktree add:*)",
+      "Bash(mkdir:*)"
     ],
     "deny": []
   }
