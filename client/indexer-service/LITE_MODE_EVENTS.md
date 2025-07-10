@@ -58,6 +58,8 @@ The indexer in lite mode only processes events relevant to the configured MSP.
 - **Slashed**: When current MSP is slashed
 - **TopUpFulfilled**: When current MSP's top-up is fulfilled
 - **BucketRootChanged**: When root changes for buckets owned by current MSP
+- **ValuePropAdded**: When current MSP adds a value proposition
+- **ValuePropUnavailable**: When current MSP's value proposition becomes unavailable
 
 ### Ignored Events:
 - All BSP events:
@@ -68,8 +70,6 @@ The indexer in lite mode only processes events relevant to the configured MSP.
   - AwaitingTopUp
 - General provider events:
   - SignUpRequestCanceled
-  - ValuePropAdded (can't determine ownership)
-  - ValuePropUnavailable (can't determine ownership)
 - Error events:
   - FailedToGetOwnerAccountOfInsolventProvider
   - FailedToSlashInsolventProvider

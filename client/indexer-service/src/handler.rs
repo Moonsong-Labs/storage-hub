@@ -1082,15 +1082,11 @@ where
                 *msp_id == *current_msp_id
             }
             // Service offering events - only index for current MSP
-            pallet_storage_providers::Event::ValuePropAdded { value_prop_id, .. } => {
-                // TODO: Need to check if value_prop_id belongs to current MSP
-                // For now, filtering out as we can't determine ownership
-                false
+            pallet_storage_providers::Event::ValuePropAdded { msp_id, .. } => {
+                *msp_id == *current_msp_id
             }
-            pallet_storage_providers::Event::ValuePropUnavailable { value_prop_id, .. } => {
-                // TODO: Need to check if value_prop_id belongs to current MSP
-                // For now, filtering out as we can't determine ownership
-                false
+            pallet_storage_providers::Event::ValuePropUnavailable { msp_id, .. } => {
+                *msp_id == *current_msp_id
             }
             // Financial events - only index for current MSP
             pallet_storage_providers::Event::Slashed { provider_id, .. } => match provider_id {
