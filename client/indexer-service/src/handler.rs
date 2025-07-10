@@ -90,30 +90,6 @@ where
         }
     }
 
-    /// Check if we should filter events based on the current indexer mode and MSP ID.
-    /// Returns true if the event should be skipped.
-    fn should_filter_msp_event(&self, event_msp_id: &ProviderId) -> bool {
-        if self.indexer_mode != crate::IndexerMode::Lite {
-            return false;
-        }
-
-        match &self.msp_id {
-            Some(current_msp_id) => current_msp_id != event_msp_id,
-            None => false, // If no MSP ID is set, don't filter
-        }
-    }
-
-    /// Log that an event is being skipped due to filtering.
-    fn log_filtered_event(&self, event_name: &str, event_msp: impl std::fmt::Debug) {
-        info!(
-            target: LOG_TARGET,
-            "Skipping {} event for MSP {:?} (current MSP: {:?})",
-            event_name,
-            event_msp,
-            self.msp_id
-        );
-    }
-
     /// Synchronize the MSP ID from the keystore.
     ///
     /// This method detects the MSP ID based on the BCSV keys in the keystore
@@ -211,6 +187,18 @@ where
         Ok(())
     }
 
+    async fn route_event<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &RuntimeEvent,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        match self.indexer_mode {
+            crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
+            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+        }
+    }
+
     async fn index_event<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
@@ -254,30 +242,25 @@ where
         Ok(())
     }
 
-    async fn route_event<'a, 'b: 'a>(
-        &'b self,
-        conn: &mut DbConnection<'a>,
-        event: &RuntimeEvent,
-        block_hash: H256,
-    ) -> Result<(), diesel::result::Error> {
-        match self.indexer_mode {
-            crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
-            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
-        }
-    }
-
     async fn index_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
+        // Check if we have an MSP ID configured
+        if self.msp_id.is_none() {
+            trace!(target: LOG_TARGET, "No MSP ID configured, skipping event indexing in lite mode");
+            return Ok(());
+        }
+
         match event {
             RuntimeEvent::FileSystem(event) => {
                 self.index_file_system_event_lite(conn, event).await?
             }
             RuntimeEvent::Providers(event) => {
-                self.index_providers_event_lite(conn, event, block_hash).await?
+                self.index_providers_event_lite(conn, event, block_hash)
+                    .await?
             }
             // Explicitly ignore other pallets in lite mode
             RuntimeEvent::BucketNfts(_) => {
@@ -546,11 +529,8 @@ where
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<storage_hub_runtime::Runtime>,
     ) -> Result<(), diesel::result::Error> {
-        // Check if we have an MSP ID configured
-        let Some(current_msp_id) = &self.msp_id else {
-            trace!(target: LOG_TARGET, "No MSP ID configured, skipping FileSystem event");
-            return Ok(());
-        };
+        // We can safely unwrap msp_id here since the caller already checked it
+        let current_msp_id = self.msp_id.as_ref().unwrap();
 
         // Filter events based on MSP relevance
         let should_index = match event {
@@ -558,14 +538,19 @@ where
                 // Only index if bucket is for current MSP
                 msp_id == current_msp_id
             }
-            pallet_file_system::Event::MoveBucketAccepted { bucket_id, new_msp_id, .. } => {
+            pallet_file_system::Event::MoveBucketAccepted {
+                bucket_id,
+                new_msp_id,
+                ..
+            } => {
                 // Index if bucket exists in DB (was previously with current MSP) OR new MSP is current MSP
                 if new_msp_id == current_msp_id {
                     true
                 } else {
                     // Check if bucket exists in DB (meaning it was previously with current MSP)
-                    match Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await {
-                        Ok(_) => true, // Bucket exists, so it was previously with current MSP
+                    match Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await
+                    {
+                        Ok(_) => true,   // Bucket exists, so it was previously with current MSP
                         Err(_) => false, // Bucket doesn't exist in DB
                     }
                 }
@@ -579,8 +564,9 @@ where
                             // Get the MSP for this bucket from DB by its database ID
                             match diesel_async::RunQueryDsl::first::<Msp>(
                                 msp::table.filter(msp::id.eq(msp_id)),
-                                conn
-                            ).await
+                                conn,
+                            )
+                            .await
                             {
                                 Ok(msp) => msp.onchain_msp_id == current_msp_id.to_string(),
                                 Err(_) => false,
@@ -628,7 +614,7 @@ where
             // Delegate to the original method
             self.index_file_system_event(conn, event).await
         } else {
-            trace!(target: LOG_TARGET, "Filtered out FileSystem event in lite mode");
+            trace!(target: LOG_TARGET, "Filtered out FileSystem event in lite mode for MSP {:?}", current_msp_id);
             Ok(())
         }
     }
@@ -911,122 +897,62 @@ where
         event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
-        // Check if we have an MSP ID, if not, trace log and return
-        let current_msp_id = match self.msp_id {
-            Some(msp_id) => msp_id,
-            None => {
-                trace!(target: LOG_TARGET, "No MSP ID configured, skipping Providers event indexing in lite mode");
-                return Ok(());
-            }
-        };
+        // We can safely unwrap msp_id here since the caller already checked it
+        let current_msp_id = self.msp_id.as_ref().unwrap();
 
         // Filter events based on MSP relevance
-        match event {
+        let should_index = match event {
             // MSP-specific events - only index if it's for our MSP
             pallet_storage_providers::Event::MspSignUpSuccess { msp_id, .. } => {
-                if *msp_id == current_msp_id {
-                    self.index_providers_event(conn, event, block_hash).await?;
-                } else {
-                    trace!(target: LOG_TARGET, "Filtered out MspSignUpSuccess event for MSP {:?} (current MSP: {:?})", msp_id, current_msp_id);
-                }
+                *msp_id == *current_msp_id
             }
             pallet_storage_providers::Event::MspSignOffSuccess { msp_id, .. } => {
-                if *msp_id == current_msp_id {
-                    self.index_providers_event(conn, event, block_hash).await?;
-                } else {
-                    trace!(target: LOG_TARGET, "Filtered out MspSignOffSuccess event for MSP {:?} (current MSP: {:?})", msp_id, current_msp_id);
-                }
+                *msp_id == *current_msp_id
             }
             pallet_storage_providers::Event::CapacityChanged { provider_id, .. } => {
                 match provider_id {
-                    StorageProviderId::MainStorageProvider(msp_id) => {
-                        if *msp_id == current_msp_id {
-                            self.index_providers_event(conn, event, block_hash).await?;
-                        } else {
-                            trace!(target: LOG_TARGET, "Filtered out CapacityChanged event for MSP {:?} (current MSP: {:?})", msp_id, current_msp_id);
-                        }
-                    }
-                    StorageProviderId::BackupStorageProvider(_) => {
-                        trace!(target: LOG_TARGET, "Filtered out CapacityChanged event for BSP in lite mode");
-                    }
+                    StorageProviderId::MainStorageProvider(msp_id) => *msp_id == *current_msp_id,
+                    StorageProviderId::BackupStorageProvider(_) => false,
                 }
             }
             pallet_storage_providers::Event::MultiAddressAdded { provider_id, .. } => {
-                if *provider_id == current_msp_id {
-                    self.index_providers_event(conn, event, block_hash).await?;
-                } else {
-                    trace!(target: LOG_TARGET, "Filtered out MultiAddressAdded event for provider {:?} (current MSP: {:?})", provider_id, current_msp_id);
-                }
+                *provider_id == *current_msp_id
             }
             pallet_storage_providers::Event::MultiAddressRemoved { provider_id, .. } => {
-                if *provider_id == current_msp_id {
-                    self.index_providers_event(conn, event, block_hash).await?;
-                } else {
-                    trace!(target: LOG_TARGET, "Filtered out MultiAddressRemoved event for provider {:?} (current MSP: {:?})", provider_id, current_msp_id);
-                }
+                *provider_id == *current_msp_id
             }
             // All other events are filtered out in lite mode
-            pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out BspRequestSignUpSuccess event in lite mode");
-            }
-            pallet_storage_providers::Event::BspSignUpSuccess { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out BspSignUpSuccess event in lite mode");
-            }
-            pallet_storage_providers::Event::BspSignOffSuccess { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out BspSignOffSuccess event in lite mode");
-            }
-            pallet_storage_providers::Event::SignUpRequestCanceled { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out SignUpRequestCanceled event in lite mode");
-            }
-            pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out MspRequestSignUpSuccess event in lite mode");
-            }
-            pallet_storage_providers::Event::BucketRootChanged { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out BucketRootChanged event in lite mode");
-            }
-            pallet_storage_providers::Event::Slashed { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out Slashed event in lite mode");
-            }
-            pallet_storage_providers::Event::AwaitingTopUp { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out AwaitingTopUp event in lite mode");
-            }
-            pallet_storage_providers::Event::TopUpFulfilled { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out TopUpFulfilled event in lite mode");
-            }
-            pallet_storage_providers::Event::ValuePropAdded { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out ValuePropAdded event in lite mode");
-            }
-            pallet_storage_providers::Event::ValuePropUnavailable { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out ValuePropUnavailable event in lite mode");
-            }
-            pallet_storage_providers::Event::ProviderInsolvent { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out ProviderInsolvent event in lite mode");
-            }
-            pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out BucketsOfInsolventMsp event in lite mode");
-            }
-            pallet_storage_providers::Event::MspDeleted { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out MspDeleted event in lite mode");
-            }
-            pallet_storage_providers::Event::BspDeleted { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out BspDeleted event in lite mode");
-            }
-            pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out FailedToGetOwnerAccountOfInsolventProvider event in lite mode");
-            }
-            pallet_storage_providers::Event::FailedToSlashInsolventProvider { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out FailedToSlashInsolventProvider event in lite mode");
-            }
-            pallet_storage_providers::Event::FailedToStopAllCyclesForInsolventBsp { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out FailedToStopAllCyclesForInsolventBsp event in lite mode");
-            }
-            pallet_storage_providers::Event::FailedToInsertProviderTopUpExpiration { .. } => {
-                trace!(target: LOG_TARGET, "Filtered out FailedToInsertProviderTopUpExpiration event in lite mode");
-            }
-            pallet_storage_providers::Event::__Ignore(_, _) => {}
-        }
+            pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => false,
+            pallet_storage_providers::Event::BspSignUpSuccess { .. } => false,
+            pallet_storage_providers::Event::BspSignOffSuccess { .. } => false,
+            pallet_storage_providers::Event::SignUpRequestCanceled { .. } => false,
+            pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => false,
+            pallet_storage_providers::Event::BucketRootChanged { .. } => false,
+            pallet_storage_providers::Event::Slashed { .. } => false,
+            pallet_storage_providers::Event::AwaitingTopUp { .. } => false,
+            pallet_storage_providers::Event::TopUpFulfilled { .. } => false,
+            pallet_storage_providers::Event::ValuePropAdded { .. } => false,
+            pallet_storage_providers::Event::ValuePropUnavailable { .. } => false,
+            pallet_storage_providers::Event::ProviderInsolvent { .. } => false,
+            pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => false,
+            pallet_storage_providers::Event::MspDeleted { .. } => false,
+            pallet_storage_providers::Event::BspDeleted { .. } => false,
+            pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
+                ..
+            } => false,
+            pallet_storage_providers::Event::FailedToSlashInsolventProvider { .. } => false,
+            pallet_storage_providers::Event::FailedToStopAllCyclesForInsolventBsp { .. } => false,
+            pallet_storage_providers::Event::FailedToInsertProviderTopUpExpiration { .. } => false,
+            pallet_storage_providers::Event::__Ignore(_, _) => false,
+        };
 
-        Ok(())
+        if should_index {
+            // Delegate to the original method
+            self.index_providers_event(conn, event, block_hash).await
+        } else {
+            trace!(target: LOG_TARGET, "Filtered out Providers event in lite mode for MSP {:?}", current_msp_id);
+            Ok(())
+        }
     }
 
     async fn index_randomness_event<'a, 'b: 'a>(
@@ -1057,7 +983,8 @@ where
 }
 
 // Implement ActorEventLoop for IndexerServiceEventLoop
-impl<RuntimeApi, K> ActorEventLoop<IndexerService<RuntimeApi, K>> for IndexerServiceEventLoop<RuntimeApi, K>
+impl<RuntimeApi, K> ActorEventLoop<IndexerService<RuntimeApi, K>>
+    for IndexerServiceEventLoop<RuntimeApi, K>
 where
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
