@@ -989,21 +989,37 @@ where
             pallet_storage_providers::Event::MultiAddressRemoved { provider_id, .. } => {
                 *provider_id == *current_msp_id
             }
-            // All other events are filtered out in lite mode
+            // MSP market intelligence events - always index
+            pallet_storage_providers::Event::MspDeleted { .. } => true,
+            pallet_storage_providers::Event::ProviderInsolvent { .. } => true,
+            pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => true,
+            // Service offering events - always index
+            pallet_storage_providers::Event::ValuePropAdded { .. } => true,
+            pallet_storage_providers::Event::ValuePropUnavailable { .. } => true,
+            // Financial events - index for self and competitors
+            pallet_storage_providers::Event::Slashed { provider_id, .. } => {
+                // Index all slashing events for market awareness
+                // Note: In production, might want to filter for MSPs only
+                true
+            }
+            pallet_storage_providers::Event::TopUpFulfilled { provider_id, .. } => {
+                // Only index top-ups for current MSP
+                match provider_id {
+                    StorageProviderId::MainStorageProvider(msp_id) => *msp_id == *current_msp_id,
+                    StorageProviderId::BackupStorageProvider(_) => false,
+                }
+            }
+            pallet_storage_providers::Event::BucketRootChanged { bucket_id, .. } => {
+                // Only index if bucket belongs to current MSP
+                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+            }
+            // BSP-specific and other events remain filtered out
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => false,
             pallet_storage_providers::Event::BspSignUpSuccess { .. } => false,
             pallet_storage_providers::Event::BspSignOffSuccess { .. } => false,
             pallet_storage_providers::Event::SignUpRequestCanceled { .. } => false,
             pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => false,
-            pallet_storage_providers::Event::BucketRootChanged { .. } => false,
-            pallet_storage_providers::Event::Slashed { .. } => false,
             pallet_storage_providers::Event::AwaitingTopUp { .. } => false,
-            pallet_storage_providers::Event::TopUpFulfilled { .. } => false,
-            pallet_storage_providers::Event::ValuePropAdded { .. } => false,
-            pallet_storage_providers::Event::ValuePropUnavailable { .. } => false,
-            pallet_storage_providers::Event::ProviderInsolvent { .. } => false,
-            pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => false,
-            pallet_storage_providers::Event::MspDeleted { .. } => false,
             pallet_storage_providers::Event::BspDeleted { .. } => false,
             pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
                 ..
