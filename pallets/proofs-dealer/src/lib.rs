@@ -629,9 +629,8 @@ pub mod pallet {
             // Check that the extrinsic was executed by the custom origin.
             T::ChallengeOrigin::ensure_origin(origin.clone())?;
 
-            let raw_origin: RawOrigin<T::AccountId> = origin
-                .into()
-                .map_err(|_| DispatchError::BadOrigin)?;
+            let raw_origin: RawOrigin<T::AccountId> =
+                origin.into().map_err(|_| DispatchError::BadOrigin)?;
 
             let who = match &raw_origin {
                 RawOrigin::Signed(account) => Some(account.clone()),
@@ -786,9 +785,8 @@ pub mod pallet {
             // Check that the extrinsic was executed by the custom origin.
             T::PriorityChallengeOrigin::ensure_origin(origin.clone())?;
 
-            let raw_origin: RawOrigin<T::AccountId> = origin
-                .into()
-                .map_err(|_| DispatchError::BadOrigin)?;
+            let raw_origin: RawOrigin<T::AccountId> =
+                origin.into().map_err(|_| DispatchError::BadOrigin)?;
 
             let who = match &raw_origin {
                 RawOrigin::Signed(account) => Some(account.clone()),

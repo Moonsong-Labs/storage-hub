@@ -9,7 +9,8 @@ use frame_support::{
     BoundedBTreeSet,
 };
 use frame_system::{
-    limits::BlockWeights, pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, EnsureRoot, EnsureSigned,
+    limits::BlockWeights, pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, EnsureRoot,
+    EnsureSigned,
 };
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
