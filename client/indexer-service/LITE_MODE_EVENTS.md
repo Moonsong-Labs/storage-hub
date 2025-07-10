@@ -46,17 +46,16 @@ The indexer in lite mode only processes events relevant to the configured MSP.
 ## Providers Pallet
 
 ### Indexed Events:
+- **MspRequestSignUpSuccess**: When current MSP's sign-up request is successful
 - **MspSignUpSuccess**: When current MSP signs up
 - **MspSignOffSuccess**: When current MSP signs off
 - **CapacityChanged**: When current MSP's capacity changes
 - **MultiAddressAdded**: When current MSP adds multiaddress
 - **MultiAddressRemoved**: When current MSP removes multiaddress
-- **MspDeleted**: When any MSP is deleted (market intelligence)
-- **ProviderInsolvent**: When any provider becomes insolvent (market intelligence)
-- **BucketsOfInsolventMsp**: When buckets of insolvent MSP are listed (opportunity tracking)
-- **ValuePropAdded**: When value propositions are added (service offering tracking)
-- **ValuePropUnavailable**: When value propositions become unavailable
-- **Slashed**: When any provider is slashed (financial health monitoring)
+- **MspDeleted**: When current MSP is deleted
+- **ProviderInsolvent**: When current MSP becomes insolvent
+- **BucketsOfInsolventMsp**: When current MSP's buckets are listed as insolvent
+- **Slashed**: When current MSP is slashed
 - **TopUpFulfilled**: When current MSP's top-up is fulfilled
 - **BucketRootChanged**: When root changes for buckets owned by current MSP
 
@@ -66,10 +65,11 @@ The indexer in lite mode only processes events relevant to the configured MSP.
   - BspSignUpSuccess
   - BspSignOffSuccess
   - BspDeleted
-  - AwaitingTopUp (BSP-specific)
+  - AwaitingTopUp
 - General provider events:
   - SignUpRequestCanceled
-  - MspRequestSignUpSuccess (just a request, not actual sign-up)
+  - ValuePropAdded (can't determine ownership)
+  - ValuePropUnavailable (can't determine ownership)
 - Error events:
   - FailedToGetOwnerAccountOfInsolventProvider
   - FailedToSlashInsolventProvider

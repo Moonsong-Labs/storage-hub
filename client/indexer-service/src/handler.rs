@@ -1066,19 +1066,37 @@ where
             pallet_storage_providers::Event::MultiAddressRemoved { provider_id, .. } => {
                 *provider_id == *current_msp_id
             }
-            // MSP market intelligence events - always index
-            pallet_storage_providers::Event::MspDeleted { .. } => true,
-            pallet_storage_providers::Event::ProviderInsolvent { .. } => true,
-            pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => true,
-            // Service offering events - always index
-            pallet_storage_providers::Event::ValuePropAdded { .. } => true,
-            pallet_storage_providers::Event::ValuePropUnavailable { .. } => true,
-            // Financial events - index for self and competitors
-            pallet_storage_providers::Event::Slashed { provider_id, .. } => {
-                // Index all slashing events for market awareness
-                // Note: In production, might want to filter for MSPs only
-                true
+            // MSP deletion - only index if it's the current MSP
+            pallet_storage_providers::Event::MspDeleted { msp_id, .. } => {
+                *msp_id == *current_msp_id
             }
+            // Provider insolvency - only index if it's the current MSP
+            pallet_storage_providers::Event::ProviderInsolvent { provider_id, .. } => {
+                match provider_id {
+                    StorageProviderId::MainStorageProvider(msp_id) => *msp_id == *current_msp_id,
+                    StorageProviderId::BackupStorageProvider(_) => false,
+                }
+            }
+            // Buckets of insolvent MSP - only index if it's the current MSP
+            pallet_storage_providers::Event::BucketsOfInsolventMsp { msp_id, .. } => {
+                *msp_id == *current_msp_id
+            }
+            // Service offering events - only index for current MSP
+            pallet_storage_providers::Event::ValuePropAdded { value_prop_id, .. } => {
+                // TODO: Need to check if value_prop_id belongs to current MSP
+                // For now, filtering out as we can't determine ownership
+                false
+            }
+            pallet_storage_providers::Event::ValuePropUnavailable { value_prop_id, .. } => {
+                // TODO: Need to check if value_prop_id belongs to current MSP
+                // For now, filtering out as we can't determine ownership
+                false
+            }
+            // Financial events - only index for current MSP
+            pallet_storage_providers::Event::Slashed { provider_id, .. } => match provider_id {
+                StorageProviderId::MainStorageProvider(msp_id) => *msp_id == *current_msp_id,
+                StorageProviderId::BackupStorageProvider(_) => false,
+            },
             pallet_storage_providers::Event::TopUpFulfilled { provider_id, .. } => {
                 // Only index top-ups for current MSP
                 match provider_id {
@@ -1095,12 +1113,15 @@ where
                 )
                 .await
             }
+            // MSP request sign up - only index if it's the current MSP
+            pallet_storage_providers::Event::MspRequestSignUpSuccess { msp_id, .. } => {
+                *msp_id == *current_msp_id
+            }
             // BSP-specific and other events remain filtered out
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => false,
             pallet_storage_providers::Event::BspSignUpSuccess { .. } => false,
             pallet_storage_providers::Event::BspSignOffSuccess { .. } => false,
             pallet_storage_providers::Event::SignUpRequestCanceled { .. } => false,
-            pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => false,
             pallet_storage_providers::Event::AwaitingTopUp { .. } => false,
             pallet_storage_providers::Event::BspDeleted { .. } => false,
             pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
