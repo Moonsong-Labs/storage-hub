@@ -20,6 +20,8 @@ The indexer in lite mode only processes events relevant to the configured MSP.
 - **FileDeletionRequest**: When deletion is requested for file in MSP's bucket
 - **ProofSubmittedForPendingFileDeletionRequest**: When proof is submitted for file deletion in MSP's bucket
 - **MoveBucketRequestExpired**: When move request expires for MSP's bucket
+- **MspAcceptedStorageRequest**: When current MSP accepts a storage request (before BSP fulfillment)
+- **StorageRequestRejected**: When current MSP rejects a request or request expires
 
 ### Ignored Events:
 - All BSP-related events:
@@ -31,9 +33,6 @@ The indexer in lite mode only processes events relevant to the configured MSP.
   - BspChallengeCycleInitialised
 - NFT and collection events:
   - NewCollectionAndAssociation
-- Storage request events not specific to MSP's buckets:
-  - MspAcceptedStorageRequest
-  - StorageRequestRejected
 - Challenge queue events:
   - PriorityChallengeForFileDeletionQueued
   - FailedToQueuePriorityChallenge
@@ -52,25 +51,25 @@ The indexer in lite mode only processes events relevant to the configured MSP.
 - **CapacityChanged**: When current MSP's capacity changes
 - **MultiAddressAdded**: When current MSP adds multiaddress
 - **MultiAddressRemoved**: When current MSP removes multiaddress
+- **MspDeleted**: When any MSP is deleted (market intelligence)
+- **ProviderInsolvent**: When any provider becomes insolvent (market intelligence)
+- **BucketsOfInsolventMsp**: When buckets of insolvent MSP are listed (opportunity tracking)
+- **ValuePropAdded**: When value propositions are added (service offering tracking)
+- **ValuePropUnavailable**: When value propositions become unavailable
+- **Slashed**: When any provider is slashed (financial health monitoring)
+- **TopUpFulfilled**: When current MSP's top-up is fulfilled
+- **BucketRootChanged**: When root changes for buckets owned by current MSP
 
 ### Ignored Events:
 - All BSP events:
   - BspRequestSignUpSuccess
   - BspSignUpSuccess
   - BspSignOffSuccess
-  - AwaitingTopUp
+  - BspDeleted
+  - AwaitingTopUp (BSP-specific)
 - General provider events:
   - SignUpRequestCanceled
-  - MspRequestSignUpSuccess
-  - MspDeleted
-  - BspDeleted
-  - BucketRootChanged
-  - Slashed
-  - TopUpFulfilled
-  - ValuePropAdded
-  - ValuePropUnavailable
-  - ProviderInsolvent
-  - BucketsOfInsolventMsp
+  - MspRequestSignUpSuccess (just a request, not actual sign-up)
 - Error events:
   - FailedToGetOwnerAccountOfInsolventProvider
   - FailedToSlashInsolventProvider
