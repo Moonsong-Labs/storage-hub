@@ -125,6 +125,75 @@ where
         }
     }
 
+    /// Check if a bucket belongs to the current MSP.
+    ///
+    /// This helper method checks if a bucket with the given ID belongs to the current MSP.
+    async fn check_bucket_belongs_to_current_msp<'a>(
+        &self,
+        conn: &mut DbConnection<'a>,
+        bucket_id: Vec<u8>,
+        current_msp_id: &ProviderId,
+    ) -> bool {
+        match Bucket::get_by_onchain_bucket_id(conn, bucket_id).await {
+            Ok(bucket) => {
+                // Check if bucket has an MSP assigned
+                if let Some(msp_id) = bucket.msp_id {
+                    // Get the MSP for this bucket from DB by its database ID
+                    match diesel_async::RunQueryDsl::first::<Msp>(
+                        msp::table.filter(msp::id.eq(msp_id)),
+                        conn,
+                    )
+                    .await
+                    {
+                        Ok(msp) => msp.onchain_msp_id == current_msp_id.to_string(),
+                        Err(_) => false,
+                    }
+                } else {
+                    false
+                }
+            }
+            Err(_) => false,
+        }
+    }
+
+    /// Check if a file belongs to a bucket managed by the current MSP.
+    ///
+    /// This helper method checks if a file with the given key belongs to a bucket
+    /// that is managed by the current MSP.
+    async fn check_file_belongs_to_current_msp<'a>(
+        &self,
+        conn: &mut DbConnection<'a>,
+        file_key: Vec<u8>,
+        current_msp_id: &ProviderId,
+    ) -> bool {
+        match File::get_by_file_key(conn, file_key).await {
+            Ok(file) => {
+                // Get the bucket for this file
+                match Bucket::get_by_id(conn, file.bucket_id).await {
+                    Ok(bucket) => {
+                        // Check if bucket has an MSP assigned
+                        if let Some(msp_id) = bucket.msp_id {
+                            // Get the MSP for this bucket from DB by its database ID
+                            match diesel_async::RunQueryDsl::first::<Msp>(
+                                msp::table.filter(msp::id.eq(msp_id)),
+                                conn,
+                            )
+                            .await
+                            {
+                                Ok(msp) => msp.onchain_msp_id == current_msp_id.to_string(),
+                                Err(_) => false,
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    Err(_) => false,
+                }
+            }
+            Err(_) => false,
+        }
+    }
+
     async fn handle_finality_notification<Block>(
         &mut self,
         notification: sc_client_api::FinalityNotification<Block>,
@@ -520,51 +589,68 @@ where
             }
             pallet_file_system::Event::NewStorageRequest { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
-                match Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await {
-                    Ok(bucket) => {
-                        // Check if bucket has an MSP assigned
-                        if let Some(msp_id) = bucket.msp_id {
-                            // Get the MSP for this bucket from DB by its database ID
-                            match diesel_async::RunQueryDsl::first::<Msp>(
-                                msp::table.filter(msp::id.eq(msp_id)),
-                                conn,
-                            )
-                            .await
-                            {
-                                Ok(msp) => msp.onchain_msp_id == current_msp_id.to_string(),
-                                Err(_) => false,
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                    Err(_) => false,
-                }
+                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
             }
-            // All other events are filtered out
-            pallet_file_system::Event::MoveBucketRequested { .. } => false,
+            pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
+                // Check if file belongs to current MSP's bucket
+                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::StorageRequestExpired { file_key } => {
+                // Check if file belongs to current MSP's bucket
+                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::StorageRequestRevoked { file_key } => {
+                // Check if file belongs to current MSP's bucket
+                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::BucketPrivacyUpdated { bucket_id, .. } => {
+                // Only index if bucket belongs to current MSP
+                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::BucketDeleted { bucket_id, .. } => {
+                // Only index if bucket belongs to current MSP
+                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::MoveBucketRequested { bucket_id, .. } => {
+                // Only index if bucket belongs to current MSP
+                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::MoveBucketRejected { bucket_id, .. } => {
+                // Only index if bucket belongs to current MSP
+                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::MspStoppedStoringBucket { msp_id, .. } => {
+                // Only index if it's the current MSP
+                msp_id == current_msp_id
+            }
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser { msp_id, .. } => {
+                // Only index if it's the current MSP
+                msp_id == current_msp_id
+            }
+            pallet_file_system::Event::FileDeletionRequest { file_key, .. } => {
+                // Check if file belongs to current MSP's bucket
+                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { file_key, .. } => {
+                // Check if file belongs to current MSP's bucket
+                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+            }
+            pallet_file_system::Event::MoveBucketRequestExpired { bucket_id, .. } => {
+                // Only index if bucket belongs to current MSP
+                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+            }
+            // BSP-specific events and others remain filtered out
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => false,
-            pallet_file_system::Event::BucketPrivacyUpdated { .. } => false,
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => false,
             pallet_file_system::Event::MspAcceptedStorageRequest { .. } => false,
             pallet_file_system::Event::StorageRequestRejected { .. } => false,
-            pallet_file_system::Event::StorageRequestFulfilled { .. } => false,
-            pallet_file_system::Event::StorageRequestExpired { .. } => false,
-            pallet_file_system::Event::StorageRequestRevoked { .. } => false,
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => false,
             pallet_file_system::Event::BspConfirmStoppedStoring { .. } => false,
             pallet_file_system::Event::BspConfirmedStoring { .. } => false,
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => false,
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => false,
-            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => false,
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => false,
-            pallet_file_system::Event::FileDeletionRequest { .. } => false,
-            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { .. } => false,
             pallet_file_system::Event::BspChallengeCycleInitialised { .. } => false,
-            pallet_file_system::Event::BucketDeleted { .. } => false,
-            pallet_file_system::Event::MoveBucketRequestExpired { .. } => false,
-            pallet_file_system::Event::MoveBucketRejected { .. } => false,
-            pallet_file_system::Event::MspStoppedStoringBucket { .. } => false,
             pallet_file_system::Event::FailedToGetMspOfBucket { .. } => false,
             pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => false,
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => false,

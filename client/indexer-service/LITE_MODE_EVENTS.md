@@ -2,16 +2,24 @@
 
 The indexer in lite mode only processes events relevant to the configured MSP.
 
-## ⚠️ IMPORTANT: Incomplete Filtering
-
-The current lite mode filtering implementation is incomplete and requires further research. Many events that are currently filtered out may actually be relevant to MSP operations. A deeper analysis of the event relationships and their impact on MSP operations is needed to determine the complete set of events that should be indexed.
-
 ## FileSystem Pallet
 
 ### Indexed Events:
 - **NewBucket**: When bucket is assigned to current MSP
 - **MoveBucketAccepted**: When bucket moves to/from current MSP  
 - **NewStorageRequest**: When request is for bucket managed by current MSP
+- **StorageRequestFulfilled**: When storage request in MSP's bucket is fulfilled
+- **StorageRequestExpired**: When storage request in MSP's bucket expires
+- **StorageRequestRevoked**: When storage request in MSP's bucket is revoked
+- **BucketPrivacyUpdated**: When privacy settings change for MSP's bucket
+- **BucketDeleted**: When MSP's bucket is deleted
+- **MoveBucketRequested**: When move is requested for MSP's bucket
+- **MoveBucketRejected**: When move is rejected for MSP's bucket
+- **MspStoppedStoringBucket**: When current MSP stops storing a bucket
+- **MspStopStoringBucketInsolventUser**: When current MSP removes insolvent user's bucket
+- **FileDeletionRequest**: When deletion is requested for file in MSP's bucket
+- **ProofSubmittedForPendingFileDeletionRequest**: When proof is submitted for file deletion in MSP's bucket
+- **MoveBucketRequestExpired**: When move request expires for MSP's bucket
 
 ### Ignored Events:
 - All BSP-related events:
@@ -21,24 +29,12 @@ The current lite mode filtering implementation is incomplete and requires furthe
   - BspRequestedToStopStoring
   - SpStopStoringInsolventUser
   - BspChallengeCycleInitialised
-- General bucket operations:
-  - BucketPrivacyUpdated
-  - BucketDeleted
-  - MoveBucketRequested
-  - MoveBucketRequestExpired
-  - MoveBucketRejected
+- NFT and collection events:
   - NewCollectionAndAssociation
-- File lifecycle events:
-  - StorageRequestFulfilled
-  - StorageRequestExpired
-  - StorageRequestRevoked
+- Storage request events not specific to MSP's buckets:
   - MspAcceptedStorageRequest
   - StorageRequestRejected
-  - FileDeletionRequest
-  - ProofSubmittedForPendingFileDeletionRequest
-- Provider stopping events:
-  - MspStopStoringBucketInsolventUser
-  - MspStoppedStoringBucket
+- Challenge queue events:
   - PriorityChallengeForFileDeletionQueued
   - FailedToQueuePriorityChallenge
 - Error events:
@@ -96,31 +92,3 @@ In lite mode, the indexer uses a separate event routing mechanism that:
 4. This ensures clean separation between Full and Lite modes without performance overhead in Full mode
 
 The MSP ID is synchronized from the keystore on each finality notification in Lite mode, ensuring the indexer always filters based on the current MSP identity.
-
-## Events Requiring Further Analysis
-
-Based on initial research, the following FileSystem events appear to be MSP-related but are currently filtered out:
-
-### Potentially Should Be Indexed:
-- **StorageRequestFulfilled**: Marks successful completion of storage request the MSP accepted
-- **StorageRequestExpired**: Storage request expired after MSP accepted but BSP replication target wasn't met
-- **StorageRequestRevoked**: User revoked request, MSP must delete the file
-- **BucketPrivacyUpdated**: Affects access control for MSP-stored files
-- **BucketDeleted**: Empty bucket deletion, MSP no longer responsible
-- **MoveBucketRequested**: Pending bucket transfer affecting MSP
-- **MoveBucketRejected**: MSP rejected bucket transfer request
-- **MspStoppedStoringBucket**: MSP stopped storing a bucket
-- **MspStopStoringBucketInsolventUser**: MSP forcefully removed insolvent user's bucket
-- **FileDeletionRequest**: Requires MSP to provide proof and delete file
-- **ProofSubmittedForPendingFileDeletionRequest**: MSP's response to deletion request
-- **MoveBucketRequestExpired**: Transfer request expired without acceptance
-
-### Analysis Needed:
-Each of these events affects MSP operations by:
-1. Changing storage capacity allocation
-2. Modifying bucket ownership or properties
-3. Requiring MSP action (deletions, proofs)
-4. Tracking lifecycle of accepted storage requests
-5. Documenting changes to MSP-managed buckets
-
-A comprehensive review of the runtime implementation is needed to confirm which events should be indexed for complete MSP operational visibility.
