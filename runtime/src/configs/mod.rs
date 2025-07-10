@@ -643,7 +643,8 @@ parameter_types! {
     pub const TargetTicksStorageOfSubmitters: u32 = 3;
     pub const ChallengeHistoryLength: BlockNumber = 100;
     pub const ChallengesQueueLength: u32 = 100;
-    pub const ChallengesFee: Balance = 1 * UNIT;
+    pub const ChallengesFee: Balance = 0;
+    pub const PriorityChallengesFee: Balance = 0;
     pub const ChallengeTicksTolerance: u32 = 50;
 }
 
@@ -677,6 +678,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type CheckpointChallengePeriod =
         runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
+    type PriorityChallengesFee = PriorityChallengesFee;
     type Treasury = TreasuryAccount;
     // TODO: Once the client logic to keep track of CR randomness deadlines and execute their submissions is implemented
     // AND after the chain has been live for enough time to have enough providers to avoid the commit-reveal randomness being

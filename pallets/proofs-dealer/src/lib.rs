@@ -173,6 +173,12 @@ pub mod pallet {
         #[pallet::constant]
         type ChallengesFee: Get<BalanceFor<Self>>;
 
+        /// The fee charged for submitting a priority challenge.
+        /// This fee goes to the Treasury, and is used to prevent spam. Registered Providers are
+        /// exempt from this fee.
+        #[pallet::constant]
+        type PriorityChallengesFee: Get<BalanceFor<Self>>;
+
         /// The target number of ticks for which to store the submitters that submitted valid proofs in them,
         /// stored in the `ValidProofSubmittersLastTicks` StorageMap. That storage will be trimmed down to this number
         /// of ticks in the `on_idle` hook of this pallet, to avoid bloating the state.
@@ -623,8 +629,11 @@ pub mod pallet {
             // Check that the extrinsic was executed by the custom origin.
             T::ChallengeOrigin::ensure_origin(origin.clone())?;
 
-            let raw_origin: RawOrigin<T::AccountId> = origin.clone().into().map_err(|_| DispatchError::BadOrigin)?;
-            
+            let raw_origin: RawOrigin<T::AccountId> = origin
+                .clone()
+                .into()
+                .map_err(|_| DispatchError::BadOrigin)?;
+
             let who = match raw_origin.clone() {
                 RawOrigin::Signed(account) => Some(account),
                 RawOrigin::Root | RawOrigin::None => None,
@@ -776,14 +785,22 @@ pub mod pallet {
             should_remove_key: bool,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the custom origin.
-            T::PriorityChallengeOrigin::ensure_origin(origin)?;
+            T::PriorityChallengeOrigin::ensure_origin(origin.clone())?;
+
+            let raw_origin: RawOrigin<T::AccountId> = origin
+                .clone()
+                .into()
+                .map_err(|_| DispatchError::BadOrigin)?;
+
+            let who = match raw_origin.clone() {
+                RawOrigin::Signed(account) => Some(account),
+                RawOrigin::Root | RawOrigin::None => None,
+            };
 
             // Execute priority challenge.
-            Self::do_priority_challenge(&key, should_remove_key)?;
+            Self::do_priority_challenge(&who, &key, should_remove_key)?;
 
-            // Return a successful DispatchResultWithPostInfo.
-            // This TX is free since is a sudo-only transaction
-            Ok(Pays::No.into())
+            Ok(().into())
         }
     }
 
@@ -884,6 +901,18 @@ pub mod pallet {
                     T::ChallengeOrigin::try_origin(root_origin).is_err(),
                     "ChallengeOrigin cannot be root when ChallengesFee ({:?}) is greater than 0, as root cannot be charged fees",
                     T::ChallengesFee::get()
+                );
+            }
+
+            // Check that if `PriorityChallengesFee` is greater than 0, then `PriorityChallengeOrigin` cannot be root.
+            // This prevents the misconfiguration where a fee is charged but the origin is root (which cannot be charged).
+            if !T::PriorityChallengesFee::get().is_zero() {
+                // Test that root origin is rejected by PriorityChallengeOrigin
+                let root_origin = frame_system::RawOrigin::Root.into();
+                assert!(
+                    T::PriorityChallengeOrigin::try_origin(root_origin).is_err(),
+                    "PriorityChallengeOrigin cannot be root when PriorityChallengesFee ({:?}) is greater than 0, as root cannot be charged fees",
+                    T::PriorityChallengesFee::get()
                 );
             }
         }

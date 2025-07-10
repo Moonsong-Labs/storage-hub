@@ -110,7 +110,7 @@ fn challenge_submit_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: frame_system::RawOrigin::Signed(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -137,7 +137,7 @@ fn challenge_submit_twice_succeed() {
         run_to_block(1);
 
         // Create two users and add funds to the accounts.
-        let user_1 = RuntimeOrigin::root();
+        let user_1 = RuntimeOrigin::signed(1);
         let user_2 = RuntimeOrigin::signed(2);
         let user_balance = 1_000_000_000_000_000;
         assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
@@ -159,7 +159,7 @@ fn challenge_submit_twice_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: frame_system::RawOrigin::Signed(1),
                 key_challenged: file_key_1,
             }
             .into(),
@@ -170,7 +170,7 @@ fn challenge_submit_twice_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 2,
+                who: frame_system::RawOrigin::Signed(2),
                 key_challenged: file_key_2,
             }
             .into(),
@@ -219,7 +219,7 @@ fn challenge_submit_existing_challenge_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: frame_system::RawOrigin::Signed(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -262,7 +262,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: frame_system::RawOrigin::Signed(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -291,7 +291,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: frame_system::RawOrigin::Signed(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -334,7 +334,7 @@ fn challenge_submit_by_regular_user_with_no_funds_fail() {
         // Mock a FileKey.
         let file_key = BlakeTwo256::hash(b"file_key");
 
-        // Dispatch challenge extrinsic.
+        // Dispatch challenge extrinsic - should fail with FeeChargeFailed since user has no funds.
         assert_noop!(
             ProofsDealer::challenge(user, file_key),
             crate::Error::<Test>::FeeChargeFailed
@@ -349,7 +349,7 @@ fn challenge_overflow_challenges_queue_fail() {
         run_to_block(1);
 
         // Create user and add funds to the account.
-        let user = RuntimeOrigin::root();
+        let user = RuntimeOrigin::signed(1);
         let user_balance = 1_000_000_000_000_000;
         assert_ok!(<Test as crate::Config>::NativeBalance::mint_into(
             &1,

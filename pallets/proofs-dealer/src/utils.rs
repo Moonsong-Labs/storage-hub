@@ -32,10 +32,10 @@ use crate::{
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
         CheckpointChallengePeriodFor, CustomChallenge, ForestVerifierFor, ForestVerifierProofFor,
         KeyFor, KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
-        MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor, MinChallengePeriodFor, Proof,
-        ProofSubmissionRecord, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
-        RandomnessOutputFor, RandomnessProviderFor, StakeToChallengePeriodFor,
-        TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
+        MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor, MinChallengePeriodFor,
+        PriorityChallengesFeeFor, Proof, ProofSubmissionRecord, ProviderIdFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
+        StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     weights::WeightInfo,
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
@@ -112,7 +112,7 @@ where
                 ChallengesFeeFor::<T>::get(),
                 Preservation::Expendable,
             )
-            .map_err(|_| Error::<T>::FeeChargeFailed)?; 
+            .map_err(|_| Error::<T>::FeeChargeFailed)?;
         };
         // Enqueue challenge.
         Self::enqueue_challenge(key)
@@ -120,9 +120,28 @@ where
 
     /// Add priority challenge to PriorityChallengesQueue.
     ///
+    /// Charges a fee for the priority challenge.
+    /// This is to prevent spamming the network with priority challenges. If the challenge is already queued,
+    /// just return. Otherwise, add the challenge to the queue.
+    ///
     /// Failures:
+    /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.
     /// - `PriorityChallengesQueueOverflow`: If the priority challenges queue is full.
-    pub fn do_priority_challenge(key: &KeyFor<T>, should_remove_key: bool) -> DispatchResult {
+    pub fn do_priority_challenge(
+        who: &Option<AccountIdFor<T>>,
+        key: &KeyFor<T>,
+        should_remove_key: bool,
+    ) -> DispatchResult {
+        // Charge a fee for the priority challenge only if origin is not root
+        if let Some(who) = who {
+            BalancePalletFor::<T>::transfer(
+                &who,
+                &TreasuryAccountFor::<T>::get(),
+                PriorityChallengesFeeFor::<T>::get(),
+                Preservation::Expendable,
+            )
+            .map_err(|_| Error::<T>::FeeChargeFailed)?;
+        };
         // Enqueue priority challenge.
         Self::enqueue_challenge_with_priority(key, should_remove_key)
     }
