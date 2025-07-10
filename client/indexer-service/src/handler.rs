@@ -697,45 +697,23 @@ where
                 )
                 .await
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest {
-                msp_id, bucket_id, ..
-            } => {
-                // Index if it's for current MSP or if bucket belongs to current MSP
-                if current_msp_id == msp_id.as_ref() {
-                    true
-                } else {
-                    self.check_bucket_belongs_to_current_msp(
-                        conn,
-                        bucket_id.as_ref().to_vec(),
-                        current_msp_id,
-                    )
-                    .await
-                }
+            pallet_file_system::Event::MspAcceptedStorageRequest { file_key, .. } => {
+                // Check if file belongs to current MSP's bucket
+                self.check_file_belongs_to_current_msp(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
-            pallet_file_system::Event::StorageRequestRejected {
-                msp_id, bucket_id, ..
-            } => {
-                // Index if it's for current MSP or if bucket belongs to current MSP
-                if let Some(rejected_msp_id) = msp_id {
-                    if current_msp_id == rejected_msp_id.as_ref() {
-                        true
-                    } else {
-                        self.check_bucket_belongs_to_current_msp(
-                            conn,
-                            bucket_id.as_ref().to_vec(),
-                            current_msp_id,
-                        )
-                        .await
-                    }
-                } else {
-                    // No MSP specified means it expired - check if bucket belongs to current MSP
-                    self.check_bucket_belongs_to_current_msp(
-                        conn,
-                        bucket_id.as_ref().to_vec(),
-                        current_msp_id,
-                    )
-                    .await
-                }
+            pallet_file_system::Event::StorageRequestRejected { file_key, .. } => {
+                // Check if file belongs to current MSP's bucket
+                self.check_file_belongs_to_current_msp(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             // BSP-specific events and others remain filtered out
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => false,
@@ -1067,15 +1045,12 @@ where
                 *provider_id == *current_msp_id
             }
             // MSP deletion - only index if it's the current MSP
-            pallet_storage_providers::Event::MspDeleted { msp_id, .. } => {
-                *msp_id == *current_msp_id
+            pallet_storage_providers::Event::MspDeleted { provider_id, .. } => {
+                *provider_id == *current_msp_id
             }
             // Provider insolvency - only index if it's the current MSP
             pallet_storage_providers::Event::ProviderInsolvent { provider_id, .. } => {
-                match provider_id {
-                    StorageProviderId::MainStorageProvider(msp_id) => *msp_id == *current_msp_id,
-                    StorageProviderId::BackupStorageProvider(_) => false,
-                }
+                *provider_id == *current_msp_id
             }
             // Buckets of insolvent MSP - only index if it's the current MSP
             pallet_storage_providers::Event::BucketsOfInsolventMsp { msp_id, .. } => {
@@ -1089,16 +1064,12 @@ where
                 *msp_id == *current_msp_id
             }
             // Financial events - only index for current MSP
-            pallet_storage_providers::Event::Slashed { provider_id, .. } => match provider_id {
-                StorageProviderId::MainStorageProvider(msp_id) => *msp_id == *current_msp_id,
-                StorageProviderId::BackupStorageProvider(_) => false,
-            },
+            pallet_storage_providers::Event::Slashed { provider_id, .. } => {
+                *provider_id == *current_msp_id
+            }
             pallet_storage_providers::Event::TopUpFulfilled { provider_id, .. } => {
                 // Only index top-ups for current MSP
-                match provider_id {
-                    StorageProviderId::MainStorageProvider(msp_id) => *msp_id == *current_msp_id,
-                    StorageProviderId::BackupStorageProvider(_) => false,
-                }
+                *provider_id == *current_msp_id
             }
             pallet_storage_providers::Event::BucketRootChanged { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
@@ -1109,9 +1080,11 @@ where
                 )
                 .await
             }
-            // MSP request sign up - only index if it's the current MSP
-            pallet_storage_providers::Event::MspRequestSignUpSuccess { msp_id, .. } => {
-                *msp_id == *current_msp_id
+            // MSP request sign up - can't determine if it's for current MSP from event data
+            pallet_storage_providers::Event::MspRequestSignUpSuccess { .. } => {
+                // TODO: The event only contains 'who' (AccountId), not MSP ID
+                // We can't filter this properly without additional context
+                false
             }
             // BSP-specific and other events remain filtered out
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => false,

@@ -46,7 +46,6 @@ The indexer in lite mode only processes events relevant to the configured MSP.
 ## Providers Pallet
 
 ### Indexed Events:
-- **MspRequestSignUpSuccess**: When current MSP's sign-up request is successful
 - **MspSignUpSuccess**: When current MSP signs up
 - **MspSignOffSuccess**: When current MSP signs off
 - **CapacityChanged**: When current MSP's capacity changes
@@ -70,6 +69,7 @@ The indexer in lite mode only processes events relevant to the configured MSP.
   - AwaitingTopUp
 - General provider events:
   - SignUpRequestCanceled
+  - MspRequestSignUpSuccess (only contains AccountId, not MSP ID)
 - Error events:
   - FailedToGetOwnerAccountOfInsolventProvider
   - FailedToSlashInsolventProvider
