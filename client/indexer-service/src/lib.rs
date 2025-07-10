@@ -34,7 +34,10 @@ impl std::str::FromStr for IndexerMode {
         match s.to_lowercase().as_str() {
             "full" => Ok(Self::Full),
             "lite" => Ok(Self::Lite),
-            _ => Err(format!("Invalid indexer mode: '{}'. Expected 'full' or 'lite'", s)),
+            _ => Err(format!(
+                "Invalid indexer mode: '{}'. Expected 'full' or 'lite'",
+                s
+            )),
         }
     }
 }

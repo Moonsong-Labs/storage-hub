@@ -11,7 +11,8 @@
       "Bash(true)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(cargo clippy:*)"
+      "Bash(cargo clippy:*)",
+      "Bash(cargo fmt:*)"
     ],
     "deny": []
   }

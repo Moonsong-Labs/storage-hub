@@ -589,35 +589,75 @@ where
             }
             pallet_file_system::Event::NewStorageRequest { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                self.check_bucket_belongs_to_current_msp(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
                 // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+                self.check_file_belongs_to_current_msp(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::StorageRequestExpired { file_key } => {
                 // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+                self.check_file_belongs_to_current_msp(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
                 // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+                self.check_file_belongs_to_current_msp(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::BucketPrivacyUpdated { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                self.check_bucket_belongs_to_current_msp(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::BucketDeleted { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                self.check_bucket_belongs_to_current_msp(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::MoveBucketRequested { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                self.check_bucket_belongs_to_current_msp(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::MoveBucketRejected { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                self.check_bucket_belongs_to_current_msp(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::MspStoppedStoringBucket { msp_id, .. } => {
                 // Only index if it's the current MSP
@@ -629,35 +669,72 @@ where
             }
             pallet_file_system::Event::FileDeletionRequest { file_key, .. } => {
                 // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+                self.check_file_belongs_to_current_msp(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
-            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest { file_key, .. } => {
+            pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
+                file_key,
+                ..
+            } => {
                 // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(conn, file_key.as_ref().to_vec(), current_msp_id).await
+                self.check_file_belongs_to_current_msp(
+                    conn,
+                    file_key.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             pallet_file_system::Event::MoveBucketRequestExpired { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                self.check_bucket_belongs_to_current_msp(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest { msp_id, bucket_id, .. } => {
+            pallet_file_system::Event::MspAcceptedStorageRequest {
+                msp_id, bucket_id, ..
+            } => {
                 // Index if it's for current MSP or if bucket belongs to current MSP
                 if current_msp_id == msp_id.as_ref() {
                     true
                 } else {
-                    self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                    self.check_bucket_belongs_to_current_msp(
+                        conn,
+                        bucket_id.as_ref().to_vec(),
+                        current_msp_id,
+                    )
+                    .await
                 }
             }
-            pallet_file_system::Event::StorageRequestRejected { msp_id, bucket_id, .. } => {
+            pallet_file_system::Event::StorageRequestRejected {
+                msp_id, bucket_id, ..
+            } => {
                 // Index if it's for current MSP or if bucket belongs to current MSP
                 if let Some(rejected_msp_id) = msp_id {
                     if current_msp_id == rejected_msp_id.as_ref() {
                         true
                     } else {
-                        self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                        self.check_bucket_belongs_to_current_msp(
+                            conn,
+                            bucket_id.as_ref().to_vec(),
+                            current_msp_id,
+                        )
+                        .await
                     }
                 } else {
                     // No MSP specified means it expired - check if bucket belongs to current MSP
-                    self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                    self.check_bucket_belongs_to_current_msp(
+                        conn,
+                        bucket_id.as_ref().to_vec(),
+                        current_msp_id,
+                    )
+                    .await
                 }
             }
             // BSP-specific events and others remain filtered out
@@ -1011,7 +1088,12 @@ where
             }
             pallet_storage_providers::Event::BucketRootChanged { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                self.check_bucket_belongs_to_current_msp(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    current_msp_id,
+                )
+                .await
             }
             // BSP-specific and other events remain filtered out
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => false,
