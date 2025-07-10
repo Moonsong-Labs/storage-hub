@@ -396,63 +396,26 @@ where
                 peer_ids,
                 expires_at: _,
             } => {
-                // In Lite mode, we should check if the bucket belongs to our MSP
-                if self.indexer_mode == crate::IndexerMode::Lite && self.msp_id.is_some() {
-                    // Try to get the bucket to check its MSP
-                    match Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await
-                    {
-                        Ok(bucket) => {
-                            // Bucket exists, proceed with indexing
-                            let mut sql_peer_ids = Vec::new();
-                            for peer_id in peer_ids {
-                                sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
-                            }
+                let bucket =
+                    Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
 
-                            File::create(
-                                conn,
-                                <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
-                                file_key.as_ref().to_vec(),
-                                bucket.id,
-                                location.to_vec(),
-                                fingerprint.as_ref().to_vec(),
-                                *size as i64,
-                                FileStorageRequestStep::Requested,
-                                sql_peer_ids,
-                            )
-                            .await?;
-                        }
-                        Err(_) => {
-                            // Bucket not found - it doesn't belong to our MSP
-                            info!(
-                                target: LOG_TARGET,
-                                "Skipping NewStorageRequest event for bucket not in database (bucket_id: {:?})",
-                                bucket_id
-                            );
-                        }
-                    }
-                } else {
-                    // Full mode - bucket must exist
-                    let bucket =
-                        Bucket::get_by_onchain_bucket_id(conn, bucket_id.as_ref().to_vec()).await?;
-
-                    let mut sql_peer_ids = Vec::new();
-                    for peer_id in peer_ids {
-                        sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
-                    }
-
-                    File::create(
-                        conn,
-                        <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
-                        file_key.as_ref().to_vec(),
-                        bucket.id,
-                        location.to_vec(),
-                        fingerprint.as_ref().to_vec(),
-                        *size as i64,
-                        FileStorageRequestStep::Requested,
-                        sql_peer_ids,
-                    )
-                    .await?;
+                let mut sql_peer_ids = Vec::new();
+                for peer_id in peer_ids {
+                    sql_peer_ids.push(PeerId::create(conn, peer_id.to_vec()).await?);
                 }
+
+                File::create(
+                    conn,
+                    <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
+                    file_key.as_ref().to_vec(),
+                    bucket.id,
+                    location.to_vec(),
+                    fingerprint.as_ref().to_vec(),
+                    *size as i64,
+                    FileStorageRequestStep::Requested,
+                    sql_peer_ids,
+                )
+                .await?;
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
