@@ -639,11 +639,30 @@ where
                 // Only index if bucket belongs to current MSP
                 self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
             }
+            pallet_file_system::Event::MspAcceptedStorageRequest { msp_id, bucket_id, .. } => {
+                // Index if it's for current MSP or if bucket belongs to current MSP
+                if current_msp_id == msp_id.as_ref() {
+                    true
+                } else {
+                    self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                }
+            }
+            pallet_file_system::Event::StorageRequestRejected { msp_id, bucket_id, .. } => {
+                // Index if it's for current MSP or if bucket belongs to current MSP
+                if let Some(rejected_msp_id) = msp_id {
+                    if current_msp_id == rejected_msp_id.as_ref() {
+                        true
+                    } else {
+                        self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                    }
+                } else {
+                    // No MSP specified means it expired - check if bucket belongs to current MSP
+                    self.check_bucket_belongs_to_current_msp(conn, bucket_id.as_ref().to_vec(), current_msp_id).await
+                }
+            }
             // BSP-specific events and others remain filtered out
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => false,
             pallet_file_system::Event::AcceptedBspVolunteer { .. } => false,
-            pallet_file_system::Event::MspAcceptedStorageRequest { .. } => false,
-            pallet_file_system::Event::StorageRequestRejected { .. } => false,
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => false,
             pallet_file_system::Event::BspConfirmStoppedStoring { .. } => false,
             pallet_file_system::Event::BspConfirmedStoring { .. } => false,
