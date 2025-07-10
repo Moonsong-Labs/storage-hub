@@ -690,8 +690,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = MaxSlashableProvidersPerTick;
-    type PriorityChallengeDispatcher = EnsureRoot<AccountId>;
-    type ChallengeDispatcher = EnsureRoot<AccountId>;
+    type PriorityChallengeOrigin = EnsureRoot<AccountId>;
+    type ChallengeOrigin = EnsureRoot<AccountId>;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

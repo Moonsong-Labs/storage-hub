@@ -28,6 +28,7 @@ pub mod pallet {
         traits::{fungible, Randomness},
     };
     use frame_system::pallet_prelude::*;
+    use frame_system::RawOrigin;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
         CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
@@ -236,12 +237,10 @@ pub mod pallet {
         type MaxSlashableProvidersPerTick: Get<u32>;
 
         /// Custom origin that can execute privileged operations.
-        /// This will be configured as root in the runtime configuration.
-        type PriorityChallengeDispatcher: EnsureOrigin<Self::RuntimeOrigin>;
+        type PriorityChallengeOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
         /// Custom origin that can execute challenge operations.
-        /// This will be configured as root in the runtime configuration.
-        type ChallengeDispatcher: EnsureOrigin<Self::RuntimeOrigin>;
+        type ChallengeOrigin: EnsureOrigin<Self::RuntimeOrigin>;
     }
 
     #[pallet::pallet]
@@ -441,7 +440,7 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// A manual challenge was submitted.
         NewChallenge {
-            who: AccountIdFor<T>,
+            who: RawOrigin<T::AccountId>,
             key_challenged: KeyFor<T>,
         },
 
@@ -621,17 +620,21 @@ pub mod pallet {
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::challenge())]
         pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {
-            // Check that the extrinsic was signed and get the signer.
-            let who = ensure_signed(origin.clone())?;
-
             // Check that the extrinsic was executed by the custom origin.
-            T::ChallengeDispatcher::ensure_origin(origin)?;
+            T::ChallengeOrigin::ensure_origin(origin.clone())?;
+
+            let raw_origin: RawOrigin<T::AccountId> = origin.clone().into().map_err(|_| DispatchError::BadOrigin)?;
+            
+            let who = match raw_origin.clone() {
+                RawOrigin::Signed(account) => Some(account),
+                RawOrigin::Root | RawOrigin::None => None,
+            };
 
             Self::do_challenge(&who, &key)?;
 
             // Emit event.
             Self::deposit_event(Event::NewChallenge {
-                who,
+                who: raw_origin,
                 key_challenged: key,
             });
 
@@ -773,7 +776,7 @@ pub mod pallet {
             should_remove_key: bool,
         ) -> DispatchResultWithPostInfo {
             // Check that the extrinsic was executed by the custom origin.
-            T::PriorityChallengeDispatcher::ensure_origin(origin)?;
+            T::PriorityChallengeOrigin::ensure_origin(origin)?;
 
             // Execute priority challenge.
             Self::do_priority_challenge(&key, should_remove_key)?;
@@ -845,6 +848,7 @@ pub mod pallet {
         /// This integrity test checks that:
         /// 1. `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have.
         /// 2. `BlockFullnessPeriod` is smaller or equal than `ChallengeTicksTolerance`.
+        /// 3. If `ChallengesFee` is greater than 0, then `ChallengeOrigin` cannot be root (since root cannot be charged fees).
         ///
         /// Any code located in this hook is placed in an auto-generated test, and generated as a part
         /// of crate::construct_runtime's expansion.
@@ -870,6 +874,18 @@ pub mod pallet {
                 T::BlockFullnessPeriod::get(),
                 T::ChallengeTicksTolerance::get()
             );
+
+            // Check that if `ChallengesFee` is greater than 0, then `ChallengeOrigin` cannot be root.
+            // This prevents the misconfiguration where a fee is charged but the origin is root (which cannot be charged).
+            if !T::ChallengesFee::get().is_zero() {
+                // Test that root origin is rejected by ChallengeOrigin
+                let root_origin = frame_system::RawOrigin::Root.into();
+                assert!(
+                    T::ChallengeOrigin::try_origin(root_origin).is_err(),
+                    "ChallengeOrigin cannot be root when ChallengesFee ({:?}) is greater than 0, as root cannot be charged fees",
+                    T::ChallengesFee::get()
+                );
+            }
         }
     }
 }

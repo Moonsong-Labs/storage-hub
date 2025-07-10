@@ -385,8 +385,8 @@ impl crate::Config for Test {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
-    type PriorityChallengeDispatcher = EnsureRoot<AccountId>;
-    type ChallengeDispatcher = EnsureRoot<AccountId>;
+    type PriorityChallengeOrigin = EnsureRoot<AccountId>;
+    type ChallengeOrigin = EnsureRoot<AccountId>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

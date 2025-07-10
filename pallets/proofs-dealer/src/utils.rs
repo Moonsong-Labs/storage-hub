@@ -103,16 +103,17 @@ where
     /// Failures:
     /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.
     /// - `ChallengesQueueOverflow`: If the challenges queue is full.
-    pub fn do_challenge(who: &AccountIdFor<T>, key: &KeyFor<T>) -> DispatchResult {
-        // Charge a fee for the challenge.
-        BalancePalletFor::<T>::transfer(
-            &who,
-            &TreasuryAccountFor::<T>::get(),
-            ChallengesFeeFor::<T>::get(),
-            Preservation::Expendable,
-        )
-        .map_err(|_| Error::<T>::FeeChargeFailed)?;
-
+    pub fn do_challenge(who: &Option<AccountIdFor<T>>, key: &KeyFor<T>) -> DispatchResult {
+        // Charge a fee for the challenge only if origing is not root
+        if let Some(who) = who {
+            BalancePalletFor::<T>::transfer(
+                &who,
+                &TreasuryAccountFor::<T>::get(),
+                ChallengesFeeFor::<T>::get(),
+                Preservation::Expendable,
+            )
+            .map_err(|_| Error::<T>::FeeChargeFailed)?; 
+        };
         // Enqueue challenge.
         Self::enqueue_challenge(key)
     }

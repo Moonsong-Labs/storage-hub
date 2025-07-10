@@ -793,8 +793,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = MaxSlashableProvidersPerTick;
-    type PriorityChallengeDispatcher = EnsureRoot<AccountId>;
-    type ChallengeDispatcher = EnsureRoot<AccountId>;
+    type PriorityChallengeOrigin = EnsureRoot<AccountId>;
+    type ChallengeOrigin = EnsureRoot<AccountId>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
