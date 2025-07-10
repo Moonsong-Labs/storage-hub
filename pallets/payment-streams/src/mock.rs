@@ -8,7 +8,7 @@ use frame_support::{
     traits::{AsEnsureOriginWithArg, Everything, Randomness},
     weights::constants::RocksDbWeight,
 };
-use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot};
+use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use pallet_nfts::PalletFeatures;
 use shp_constants::GIGAUNIT;
 use shp_traits::{
@@ -447,8 +447,8 @@ impl pallet_proofs_dealer::Config for Test {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
+    type ChallengeOrigin = EnsureSigned<AccountId>;
     type PriorityChallengeOrigin = EnsureRoot<AccountId>;
-    type ChallengeOrigin = frame_system::EnsureSigned<AccountId>;
 }
 
 parameter_types! {

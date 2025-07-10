@@ -9,7 +9,7 @@ use frame_support::{
     BoundedBTreeSet,
 };
 use frame_system::{
-    limits::BlockWeights, pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, EnsureRoot,
+    limits::BlockWeights, pallet_prelude::BlockNumberFor, BlockWeight, ConsumedWeight, EnsureRoot, EnsureSigned,
 };
 use num_bigint::BigUint;
 use pallet_nfts::PalletFeatures;
@@ -520,8 +520,8 @@ impl pallet_proofs_dealer::Config for Test {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
+    type ChallengeOrigin = EnsureSigned<AccountId>;
     type PriorityChallengeOrigin = EnsureRoot<AccountId>;
-    type ChallengeOrigin = frame_system::EnsureSigned<AccountId>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

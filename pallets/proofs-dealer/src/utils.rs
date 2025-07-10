@@ -100,6 +100,10 @@ where
     /// This is to prevent spamming the network with challenges. If the challenge is already queued,
     /// just return. Otherwise, add the challenge to the queue.
     ///
+    /// Arguments:
+    /// - `who`: Origin of the challenge request. If `Some(AccountId)`, represents a signed origin that will be charged the fee.
+    ///   If `None`, represents a Root or None origin that is exempt from fees (None only allowed if the CustomOrigin permits it).
+    ///
     /// Failures:
     /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.
     /// - `ChallengesQueueOverflow`: If the challenges queue is full.
@@ -123,6 +127,10 @@ where
     /// Charges a fee for the priority challenge.
     /// This is to prevent spamming the network with priority challenges. If the challenge is already queued,
     /// just return. Otherwise, add the challenge to the queue.
+    ///
+    /// Arguments:
+    /// - `who`: Origin of the priority challenge request. If `Some(AccountId)`, represents a signed origin that will be charged the fee.
+    ///   If `None`, represents a Root or None origin that is exempt from fees (None only allowed if the CustomOrigin permits it).
     ///
     /// Failures:
     /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.

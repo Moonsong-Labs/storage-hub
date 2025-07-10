@@ -10,7 +10,7 @@ use frame_support::{
     traits::{Everything, Randomness},
     weights::{constants::RocksDbWeight, Weight},
 };
-use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot};
+use frame_system::{pallet_prelude::BlockNumberFor, EnsureRoot, EnsureSigned};
 use shp_file_metadata::{FileMetadata, Fingerprint};
 use shp_traits::{
     CommitmentVerifier, MaybeDebug, ProofSubmittersInterface, StorageHubTickGetter, TrieMutation,
@@ -363,8 +363,8 @@ impl pallet_proofs_dealer::Config for Test {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = ConstU32<100>;
+    type ChallengeOrigin = EnsureSigned<AccountId>;
     type PriorityChallengeOrigin = EnsureRoot<AccountId>;
-    type ChallengeOrigin = frame_system::EnsureSigned<AccountId>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty

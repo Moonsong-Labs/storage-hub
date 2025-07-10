@@ -630,12 +630,11 @@ pub mod pallet {
             T::ChallengeOrigin::ensure_origin(origin.clone())?;
 
             let raw_origin: RawOrigin<T::AccountId> = origin
-                .clone()
                 .into()
                 .map_err(|_| DispatchError::BadOrigin)?;
 
-            let who = match raw_origin.clone() {
-                RawOrigin::Signed(account) => Some(account),
+            let who = match &raw_origin {
+                RawOrigin::Signed(account) => Some(account.clone()),
                 RawOrigin::Root | RawOrigin::None => None,
             };
 
@@ -788,12 +787,11 @@ pub mod pallet {
             T::PriorityChallengeOrigin::ensure_origin(origin.clone())?;
 
             let raw_origin: RawOrigin<T::AccountId> = origin
-                .clone()
                 .into()
                 .map_err(|_| DispatchError::BadOrigin)?;
 
-            let who = match raw_origin.clone() {
-                RawOrigin::Signed(account) => Some(account),
+            let who = match &raw_origin {
+                RawOrigin::Signed(account) => Some(account.clone()),
                 RawOrigin::Root | RawOrigin::None => None,
             };
 
