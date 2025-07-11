@@ -78,16 +78,14 @@ impl RemoteFileHandlerFactory {
         Self::create(&url, config)
     }
 
-    /// Get the supported protocols
+    /// List supported protocols
     pub fn supported_protocols() -> &'static [&'static str] {
         &["file", "http", "https", "ftp", "ftps"]
     }
 
-    /// Check if a protocol is supported
+    /// Check if protocol is supported
     pub fn is_protocol_supported(scheme: &str) -> bool {
         matches!(scheme, "" | "file" | "http" | "https" | "ftp" | "ftps")
     }
 }
 
-// Unit tests for this module are in remote_file/tests.rs (factory_tests module)
-// to keep all handler tests organized in one place

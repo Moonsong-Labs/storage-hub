@@ -1,4 +1,4 @@
-//! HTTP/HTTPS remote file handler implementation
+//! HTTP/HTTPS file handler
 
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
@@ -10,14 +10,14 @@ use tokio::io::AsyncRead;
 use tokio_util::io::{ReaderStream, StreamReader};
 use url::Url;
 
-/// HTTP/HTTPS file handler
+/// HTTP/HTTPS handler
 pub struct HttpFileHandler {
     client: Client,
     config: RemoteFileConfig,
 }
 
 impl HttpFileHandler {
-    /// Create a new HTTP file handler with the given configuration
+    /// Create HTTP handler with config
     pub fn new(config: RemoteFileConfig) -> Result<Self, RemoteFileError> {
         let client = Client::builder()
             .user_agent(&config.user_agent)
@@ -34,12 +34,12 @@ impl HttpFileHandler {
         Ok(Self { client, config })
     }
 
-    /// Create a new HTTP file handler with default configuration
+    /// Create HTTP handler with defaults
     pub fn default() -> Result<Self, RemoteFileError> {
         Self::new(RemoteFileConfig::default())
     }
 
-    /// Convert HTTP status code to appropriate RemoteFileError
+    /// Convert status code to error
     fn status_to_error(status: StatusCode) -> RemoteFileError {
         match status {
             StatusCode::NOT_FOUND => RemoteFileError::NotFound,
@@ -49,7 +49,7 @@ impl HttpFileHandler {
         }
     }
 
-    /// Download file from HTTP/HTTPS URL
+    /// Download file
     pub async fn download(&self, url: &Url) -> Result<Vec<u8>, RemoteFileError> {
         let response = self.client.get(url.as_str()).send().await.map_err(|e| {
             if e.is_timeout() {

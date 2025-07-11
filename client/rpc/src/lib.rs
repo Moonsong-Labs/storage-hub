@@ -127,6 +127,9 @@ pub enum RemoveFilesFromForestStorageResult {
 /// only available in maintenance mode.
 #[rpc(server, namespace = "storagehubclient")]
 pub trait StorageHubClientApi {
+    /// Load file from local path or remote URL into storage.
+    /// 
+    /// Supports local paths and remote URLs (HTTP/HTTPS, FTP/FTPS).
     #[method(name = "loadFileInStorage", with_extensions)]
     async fn load_file_in_storage(
         &self,
@@ -152,11 +155,9 @@ pub trait StorageHubClientApi {
     #[method(name = "removeFilesWithPrefixFromFileStorage", with_extensions)]
     async fn remove_files_with_prefix_from_file_storage(&self, prefix: H256) -> RpcResult<()>;
 
-    /// Save a file from storage to disk or upload it to a remote location.
+    /// Save file to disk or upload to remote location.
     /// 
-    /// Supports both local file paths and remote URLs (HTTP/HTTPS, FTP/FTPS).
-    /// For local paths, the file is saved to the filesystem.
-    /// For remote URLs, the file is uploaded to the specified endpoint.
+    /// Supports local paths and remote URLs (HTTP/HTTPS, FTP/FTPS).
     #[method(name = "saveFileToDisk", with_extensions)]
     async fn save_file_to_disk(
         &self,
@@ -341,20 +342,17 @@ where
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Create a remote file handler based on the file_path (supports URLs and local paths)
+        // Create handler for file_path (supports URLs and local paths)
         let config = RemoteFileConfig::default();
         let handler = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
-        // Parse the URL to pass to the handler
+        // Parse URL for handler
         let url = url::Url::parse(&file_path)
-            .or_else(|_| {
-                // If parsing as URL fails, treat as local file path
-                url::Url::parse(&format!("file://{}", file_path))
-            })
+            .or_else(|_| url::Url::parse(&format!("file://{}", file_path)))
             .map_err(|e| into_rpc_error(format!("Invalid file path or URL: {:?}", e)))?;
 
-        // Fetch file metadata first to get the file size
+        // Get file size
         let (file_size, _content_type) = handler
             .fetch_metadata(&url)
             .await
@@ -364,18 +362,17 @@ where
             return Err(into_rpc_error(FileStorageError::FileIsEmpty));
         }
 
-        // Get a stream reader for the file
+        // Stream the file
         let mut stream = handler
             .stream_file(&url)
             .await
             .map_err(|e| into_rpc_error(format!("Failed to stream file: {:?}", e)))?;
 
-        // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
+        // Create file data trie for chunks
         let mut file_data_trie = self.file_storage.write().await.new_file_data_trie();
-        // A chunk id is simply an integer index.
         let mut chunk_id: u64 = 0;
 
-        // Read file in chunks of [`FILE_CHUNK_SIZE`] from the stream
+        // Read file in chunks
         loop {
             let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
 
@@ -534,14 +531,12 @@ where
             }));
         }
 
-        // Create appropriate handler based on the file_path (local or remote)
+        // Create handler based on file_path (local or remote)
         let config = RemoteFileConfig::default();
         let handler = if let Ok(url) = url::Url::parse(&file_path) {
-            // Valid URL - create handler based on scheme
             RemoteFileHandlerFactory::create(&url, config)
                 .map_err(|e| into_rpc_error(format!("Failed to create file handler: {}", e)))?
         } else {
-            // Not a valid URL - treat as local file path
             Arc::new(local::LocalFileHandler::new()) as Arc<dyn RemoteFileHandler>
         };
 

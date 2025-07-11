@@ -1,7 +1,6 @@
-//! Remote file handling module
-//!
-//! This module provides functionality for fetching files from remote locations
-//! during the storage deal processing. It supports HTTP/HTTPS and FTP protocols.
+//! Remote file handling for storage deals.
+//! 
+//! Supports HTTP/HTTPS, FTP/FTPS, and local file:// protocols.
 
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -10,26 +9,17 @@ use std::fmt;
 use tokio::io::AsyncRead;
 use url::Url;
 
-/// Error types for remote file operations
+/// Remote file operation errors
 #[derive(Debug)]
 pub enum RemoteFileError {
-    /// Invalid URL format
     InvalidUrl(String),
-    /// Unsupported protocol (only http, https, ftp are supported)
     UnsupportedProtocol(String),
-    /// HTTP request failed
     HttpError(reqwest::Error),
-    /// FTP operation failed
     FtpError(suppaftp::FtpError),
-    /// IO operation failed
     IoError(std::io::Error),
-    /// File not found at the remote location
     NotFound,
-    /// Access denied to the remote resource
     AccessDenied,
-    /// Remote server timeout
     Timeout,
-    /// Other errors with custom message
     Other(String),
 }
 
@@ -80,30 +70,19 @@ impl From<std::io::Error> for RemoteFileError {
     }
 }
 
-/// Trait for handling remote file operations
+/// Remote file handler trait
 #[async_trait]
 pub trait RemoteFileHandler: Send + Sync {
-    /// Fetch file metadata from a remote URL
-    ///
-    /// Returns the file size and optionally the content type
+    /// Fetch file metadata (size, content-type)
     async fn fetch_metadata(&self, url: &Url) -> Result<(u64, Option<String>), RemoteFileError>;
 
-    /// Stream a file from a remote URL
-    ///
-    /// Returns an async reader that streams the file content
+    /// Stream file content
     async fn stream_file(
         &self,
         url: &Url,
     ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError>;
 
-    /// Download a file chunk from a remote URL
-    ///
-    /// # Arguments
-    /// * `url` - The remote file URL
-    /// * `offset` - Starting byte offset
-    /// * `length` - Number of bytes to read
-    ///
-    /// Returns the requested bytes
+    /// Download a file chunk by offset and length
     async fn download_chunk(
         &self,
         url: &Url,
@@ -111,10 +90,10 @@ pub trait RemoteFileHandler: Send + Sync {
         length: u64,
     ) -> Result<Bytes, RemoteFileError>;
 
-    /// Validate if a URL is supported
+    /// Check if URL protocol is supported
     fn is_supported(&self, url: &Url) -> bool;
 
-    /// Upload a file to the given URI
+    /// Upload file to remote location
     async fn upload_file(
         &self,
         uri: &str,
@@ -124,7 +103,7 @@ pub trait RemoteFileHandler: Send + Sync {
     ) -> Result<(), RemoteFileError>;
 }
 
-/// Configuration for remote file operations
+/// Remote file handler configuration
 #[derive(Debug, Clone)]
 pub struct RemoteFileConfig {
     /// Maximum file size allowed (in bytes)

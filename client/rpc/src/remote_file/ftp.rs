@@ -1,4 +1,4 @@
-//! FTP remote file handler implementation
+//! FTP/FTPS file handler
 
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
@@ -12,24 +12,24 @@ use tokio::io::AsyncRead;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use url::Url;
 
-/// FTP/FTPS file handler
+/// FTP/FTPS handler
 #[derive(Clone)]
 pub struct FtpFileHandler {
     config: RemoteFileConfig,
 }
 
 impl FtpFileHandler {
-    /// Create a new FTP file handler with the given configuration
+    /// Create FTP handler with config
     pub fn new(config: RemoteFileConfig) -> Self {
         Self { config }
     }
 
-    /// Create a new FTP file handler with default configuration
+    /// Create FTP handler with defaults
     pub fn default() -> Self {
         Self::new(RemoteFileConfig::default())
     }
 
-    /// Parse FTP URL and extract components
+    /// Parse FTP URL
     fn parse_url(
         url: &Url,
     ) -> Result<(String, u16, Option<String>, Option<String>, String), RemoteFileError> {
@@ -59,7 +59,7 @@ impl FtpFileHandler {
         Ok((host, port, username, password, path))
     }
 
-    /// Connect to FTP server
+    /// Connect to server
     async fn connect(&self, url: &Url) -> Result<AsyncFtpStream, RemoteFileError> {
         let (host, port, username, password, _) = Self::parse_url(url)?;
 
@@ -102,7 +102,7 @@ impl FtpFileHandler {
         Ok(stream)
     }
 
-    /// Convert FTP error to RemoteFileError
+    /// Convert FTP error
     fn ftp_error_to_remote_error(error: FtpError) -> RemoteFileError {
         match error {
             FtpError::UnexpectedResponse(ref resp) => match resp.status {
@@ -114,7 +114,7 @@ impl FtpFileHandler {
         }
     }
 
-    /// Download file from FTP URL
+    /// Download file
     pub async fn download(&self, url: &Url) -> Result<Vec<u8>, RemoteFileError> {
         let (_, _, _, _, path) = Self::parse_url(url)?;
         let mut stream = self.connect(url).await?;
@@ -157,7 +157,7 @@ impl FtpFileHandler {
         Ok(data)
     }
 
-    /// Upload data to FTP URL
+    /// Upload data
     pub async fn upload(&self, url: &Url, data: &[u8]) -> Result<(), RemoteFileError> {
         let (_, _, _, _, path) = Self::parse_url(url)?;
         let mut stream = self.connect(url).await?;
@@ -324,7 +324,6 @@ mod tests {
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
-    /// Mock FTP behavior for testing
     #[derive(Clone)]
     struct MockFtpBehavior {
         files: Arc<Mutex<std::collections::HashMap<String, Vec<u8>>>>,
@@ -349,7 +348,6 @@ mod tests {
         }
     }
 
-    /// Test-only trait for injecting FTP behavior
     #[async_trait]
     trait FtpConnection: Send + Sync {
         async fn connect(&self, host: &str, port: u16) -> Result<(), RemoteFileError>;
@@ -361,7 +359,6 @@ mod tests {
         async fn quit(&self) -> Result<(), RemoteFileError>;
     }
 
-    /// Mock implementation of FTP connection
     struct MockFtpConnection {
         behavior: MockFtpBehavior,
     }
@@ -429,7 +426,6 @@ mod tests {
         }
     }
 
-    /// Test wrapper for FtpFileHandler that uses mock connections
     #[derive(Clone)]
     struct TestFtpFileHandler {
         handler: FtpFileHandler,
@@ -728,9 +724,6 @@ mod tests {
         }
     }
 
-    // Note: The following tests would require a mock FTP server or test FTP server
-    // In a real implementation, you might use a library like ftp-test-server or
-    // set up a Docker container with an FTP server for integration tests
 
     #[tokio::test]
     async fn test_fetch_metadata_success() {

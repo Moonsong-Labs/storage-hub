@@ -1,11 +1,4 @@
-//! Comprehensive integration tests for remote file handlers
-//!
-//! This module contains tests for:
-//! - Factory pattern functionality
-//! - URL parsing and scheme detection
-//! - Error handling for various scenarios
-//! - Integration between different handlers
-//! - Mock external service interactions
+//! Integration tests for remote file handlers
 
 use super::*;
 use std::sync::Arc;
@@ -327,36 +320,7 @@ mod integration_tests {
     }
 }
 
-/// Documentation for integration tests
-/// 
-/// All integration tests in this module are self-contained and do not require
-/// external services or internet connectivity.
-/// 
-/// ## HTTP/HTTPS Tests
-/// HTTP tests use the mockito crate to create local mock servers. This allows
-/// testing of various HTTP scenarios including:
-/// - Different response codes (200, 404, 401, 500, etc.)
-/// - Redirects and redirect chains
-/// - Timeouts and slow responses
-/// - Large file handling
-/// - Authentication scenarios
-/// 
-/// ## FTP Tests
-/// FTP functionality is tested through unit tests in the ftp.rs module.
-/// Integration tests for FTP would require an FTP server, so they have been
-/// moved to unit tests with mocked connections.
-/// 
-/// ## Local File Tests
-/// Local file tests create temporary files and clean up after themselves.
-/// These tests are included in other test modules.
-/// 
-/// ## Running All Tests
-/// All tests can be run with standard cargo commands:
-/// ```bash
-/// cargo test
-/// ```
-/// 
-/// No external services or special configuration is required.
+// Note: All tests are self-contained using mocks - no external services required
 #[cfg(test)]
 mod external_service_tests {
     use super::*;

@@ -1,7 +1,6 @@
-//! Local file system handler implementation
+//! Local file system handler
 //!
-//! This module provides functionality for handling local files using the RemoteFileHandler trait.
-//! It supports both absolute paths and file:// URLs.
+//! Handles local files via file:// URLs and absolute paths.
 
 use super::{RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
@@ -11,25 +10,23 @@ use tokio::fs::{self, File};
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use url::Url;
 
-/// Handler for local file system operations
+/// Local file handler
 #[derive(Debug, Clone)]
 pub struct LocalFileHandler;
 
 impl LocalFileHandler {
-    /// Create a new LocalFileHandler instance
+    /// Create new handler
     pub fn new() -> Self {
         Self
     }
 
-    /// Convert a URL to a local file path
+    /// Convert URL to path
     fn url_to_path(url: &Url) -> Result<PathBuf, RemoteFileError> {
         match url.scheme() {
             "" => {
-                // No scheme - treat as local path
                 Ok(PathBuf::from(url.path()))
             }
             "file" => {
-                // file:// URL - convert to path
                 url.to_file_path()
                     .map_err(|_| RemoteFileError::InvalidUrl(format!("Invalid file URL: {}", url)))
             }
