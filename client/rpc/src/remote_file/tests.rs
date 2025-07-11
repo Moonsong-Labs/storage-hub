@@ -229,7 +229,7 @@ mod error_handling_tests {
         // Test From implementations
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let remote_error: RemoteFileError = io_error.into();
-        assert!(matches!(remote_error, RemoteFileError::Other(_)));
+        assert!(matches!(remote_error, RemoteFileError::IoError(_)));
     }
 }
 

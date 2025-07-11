@@ -612,7 +612,13 @@ mod tests {
         let url = Url::parse("ftp:///file.txt").unwrap(); // Missing host
         let result = FtpFileHandler::parse_url(&url);
 
-        assert!(matches!(result, Err(RemoteFileError::InvalidUrl(_))));
+        assert!(result.is_err());
+        if let Err(e) = result {
+            match e {
+                RemoteFileError::InvalidUrl(msg) => assert!(msg.contains("Missing host")),
+                _ => panic!("Expected InvalidUrl error, got {:?}", e),
+            }
+        }
     }
 
     #[tokio::test]
@@ -683,9 +689,12 @@ mod tests {
             .upload_file(uri, boxed_reader, data.len() as u64, None)
             .await;
         
-        assert!(matches!(result, Err(RemoteFileError::Other(_))));
-        if let Err(RemoteFileError::Other(msg)) = result {
-            assert!(msg.contains("exceeds maximum allowed size"));
+        assert!(result.is_err());
+        if let Err(e) = result {
+            match e {
+                RemoteFileError::Other(msg) => assert!(msg.contains("exceeds maximum allowed size")),
+                _ => panic!("Expected Other error with size limit message, got {:?}", e),
+            }
         }
     }
 

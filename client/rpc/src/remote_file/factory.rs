@@ -48,6 +48,7 @@ impl RemoteFileHandlerFactory {
     /// Create a handler from a string URL
     ///
     /// This is a convenience method that parses the URL string first.
+    /// If the string is a plain path without a scheme, it will be treated as a file:// URL.
     ///
     /// # Arguments
     /// * `url_str` - The URL string to parse and create a handler for
@@ -60,8 +61,20 @@ impl RemoteFileHandlerFactory {
         url_str: &str,
         config: RemoteFileConfig,
     ) -> Result<Arc<dyn RemoteFileHandler>, RemoteFileError> {
-        let url = Url::parse(url_str)
-            .map_err(|e| RemoteFileError::InvalidUrl(format!("{}: {}", url_str, e)))?;
+        // Try to parse as URL first
+        let url = match Url::parse(url_str) {
+            Ok(url) => url,
+            Err(_) => {
+                // If it fails, check if it's a plain path
+                if url_str.starts_with('/') || url_str.starts_with("./") || url_str.starts_with("../") {
+                    // Convert to file:// URL
+                    Url::parse(&format!("file://{}", url_str))
+                        .map_err(|e| RemoteFileError::InvalidUrl(format!("{}: {}", url_str, e)))?
+                } else {
+                    return Err(RemoteFileError::InvalidUrl(format!("Invalid URL: {}", url_str)));
+                }
+            }
+        };
         Self::create(&url, config)
     }
 
