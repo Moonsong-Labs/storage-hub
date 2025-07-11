@@ -20,7 +20,7 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
     use codec::FullCodec;
-    use frame_support::traits::EnsureOrigin;
+    use frame_support::traits::{EnsureOrigin, OriginTrait};
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::{ValueQuery, *},
@@ -629,13 +629,10 @@ pub mod pallet {
             // Check that the extrinsic was executed by the custom origin.
             T::ChallengeOrigin::ensure_origin(origin.clone())?;
 
+            let who = origin.clone().into_signer();
+
             let raw_origin: RawOrigin<T::AccountId> =
                 origin.into().map_err(|_| DispatchError::BadOrigin)?;
-
-            let who = match &raw_origin {
-                RawOrigin::Signed(account) => Some(account.clone()),
-                RawOrigin::Root | RawOrigin::None => None,
-            };
 
             Self::do_challenge(&who, &key)?;
 
@@ -785,13 +782,7 @@ pub mod pallet {
             // Check that the extrinsic was executed by the custom origin.
             T::PriorityChallengeOrigin::ensure_origin(origin.clone())?;
 
-            let raw_origin: RawOrigin<T::AccountId> =
-                origin.into().map_err(|_| DispatchError::BadOrigin)?;
-
-            let who = match &raw_origin {
-                RawOrigin::Signed(account) => Some(account.clone()),
-                RawOrigin::Root | RawOrigin::None => None,
-            };
+            let who = origin.into_signer();
 
             // Execute priority challenge.
             Self::do_priority_challenge(&who, &key, should_remove_key)?;
@@ -861,7 +852,8 @@ pub mod pallet {
         /// This integrity test checks that:
         /// 1. `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have.
         /// 2. `BlockFullnessPeriod` is smaller or equal than `ChallengeTicksTolerance`.
-        /// 3. If `ChallengesFee` is greater than 0, then `ChallengeOrigin` cannot be root (since root cannot be charged fees).
+        /// 3. If `ChallengesFee` is greater than 0, then `ChallengeOrigin` cannot be root or none (since root and none cannot be charged fees).
+        /// 4. If `PriorityChallengesFee` is greater than 0, then `PriorityChallengeOrigin` cannot be root or none (since root and none cannot be charged fees).
         ///
         /// Any code located in this hook is placed in an auto-generated test, and generated as a part
         /// of crate::construct_runtime's expansion.
@@ -888,8 +880,8 @@ pub mod pallet {
                 T::ChallengeTicksTolerance::get()
             );
 
-            // Check that if `ChallengesFee` is greater than 0, then `ChallengeOrigin` cannot be root.
-            // This prevents the misconfiguration where a fee is charged but the origin is root (which cannot be charged).
+            // Check that if `ChallengesFee` is greater than 0, then `ChallengeOrigin` cannot be root or none.
+            // This prevents the misconfiguration where a fee is charged but the origin is root or none (which cannot be charged).
             if !T::ChallengesFee::get().is_zero() {
                 // Test that root origin is rejected by ChallengeOrigin
                 let root_origin = frame_system::RawOrigin::Root.into();
@@ -898,16 +890,32 @@ pub mod pallet {
                     "ChallengeOrigin cannot be root when ChallengesFee ({:?}) is greater than 0, as root cannot be charged fees",
                     T::ChallengesFee::get()
                 );
+
+                // Test that none origin is rejected by ChallengeOrigin
+                let none_origin = frame_system::RawOrigin::None.into();
+                assert!(
+                    T::ChallengeOrigin::try_origin(none_origin).is_err(),
+                    "ChallengeOrigin cannot be none when ChallengesFee ({:?}) is greater than 0, as none cannot be charged fees",
+                    T::ChallengesFee::get()
+                );
             }
 
-            // Check that if `PriorityChallengesFee` is greater than 0, then `PriorityChallengeOrigin` cannot be root.
-            // This prevents the misconfiguration where a fee is charged but the origin is root (which cannot be charged).
+            // Check that if `PriorityChallengesFee` is greater than 0, then `PriorityChallengeOrigin` cannot be root or none.
+            // This prevents the misconfiguration where a fee is charged but the origin is root or none (which cannot be charged).
             if !T::PriorityChallengesFee::get().is_zero() {
                 // Test that root origin is rejected by PriorityChallengeOrigin
                 let root_origin = frame_system::RawOrigin::Root.into();
                 assert!(
                     T::PriorityChallengeOrigin::try_origin(root_origin).is_err(),
                     "PriorityChallengeOrigin cannot be root when PriorityChallengesFee ({:?}) is greater than 0, as root cannot be charged fees",
+                    T::PriorityChallengesFee::get()
+                );
+
+                // Test that none origin is rejected by PriorityChallengeOrigin
+                let none_origin = frame_system::RawOrigin::None.into();
+                assert!(
+                    T::PriorityChallengeOrigin::try_origin(none_origin).is_err(),
+                    "PriorityChallengeOrigin cannot be none when PriorityChallengesFee ({:?}) is greater than 0, as none cannot be charged fees",
                     T::PriorityChallengesFee::get()
                 );
             }
