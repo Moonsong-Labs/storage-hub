@@ -42,7 +42,8 @@
       "Bash(pnpm run:*)",
       "Bash(pnpm tsx:*)",
       "Bash(pnpm docker:stop:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(timeout 180 pnpm test:fullnet:indexer-lite)"
     ],
     "deny": []
   }

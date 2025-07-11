@@ -36,38 +36,30 @@ describeMspNet(
       // Wait for MSP1's indexer to start (it runs the indexer in lite mode)
       await userApi.docker.waitForLog({
         containerName: "docker-sh-msp-1",
-        searchString: "Running actor loop",
+        searchString: "IndexerService starting up in",
         timeout: 10000
       });
 
       // Give indexer additional time to sync and process initial events
-      await sleep(3000);
+      // In lite mode, the indexer needs to sync from genesis to catch MSP registrations
+      console.log("Waiting for indexer to sync initial blocks...");
+      await sleep(10000);
       
-      // Debug: Check if indexer processed any events
-      const eventCount = await sql`SELECT COUNT(*) as count FROM block_event`;
-      console.log(`Initial event count: ${eventCount[0].count}`);
+      // Debug: Check service state to see what block the indexer is at
+      const serviceState = await sql`SELECT * FROM service_state`;
+      console.log("Service state:", serviceState);
       
-      // Debug: Check for MSP-related events
-      const mspEvents = await sql`
-        SELECT section, method, COUNT(*) as count 
-        FROM block_event 
-        WHERE section = 'providers' 
-        GROUP BY section, method
-      `;
-      console.log(`MSP-related events:`, mspEvents);
+      // Debug: Check MSP table directly
+      const mspCheck = await sql`SELECT COUNT(*) as count FROM msp`;
+      console.log(`Initial MSP count: ${mspCheck[0].count}`);
       
-      // If no MSP events found, wait longer and check again
-      if (mspEvents.length === 0) {
-        console.log("No MSP events found yet, waiting longer for indexer to catch up...");
+      // If no MSPs found, wait longer for indexer to catch up
+      if (mspCheck[0].count === 0) {
+        console.log("No MSPs found yet, waiting longer for indexer to catch up...");
         await sleep(5000);
         
-        const retryEvents = await sql`
-          SELECT section, method, COUNT(*) as count 
-          FROM block_event 
-          WHERE section = 'providers' 
-          GROUP BY section, method
-        `;
-        console.log(`MSP-related events after retry:`, retryEvents);
+        const retryMspCheck = await sql`SELECT COUNT(*) as count FROM msp`;
+        console.log(`MSP count after retry: ${retryMspCheck[0].count}`);
       }
       
       // Also check the raw MSP table to see what's there
