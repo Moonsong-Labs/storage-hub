@@ -9,7 +9,7 @@ import { describeMspNet, type EnrichedBspApi, type SqlClient, sleep } from "../.
  */
 describeMspNet(
   "Indexer Lite Mode - Domain Table Verification",
-  { initialised: false, indexer: true, indexerMode: "lite" },
+  { initialised: true, indexer: true, indexerMode: "lite" },
   ({ before, it, createMsp1Api, createMsp2Api, createUserApi, createSqlClient }) => {
     let msp1Api: EnrichedBspApi;
     let msp2Api: EnrichedBspApi;
@@ -33,8 +33,8 @@ describeMspNet(
         timeout: 5000
       });
 
-      // Give indexer time to process initial events
-      await sleep(3000);
+      // Give indexer time to process initial events including MSP registration
+      await sleep(5000);
     });
 
     it("MSP table should contain only MSP1", async () => {
@@ -48,8 +48,18 @@ describeMspNet(
       console.log(`Found ${msps.length} MSP(s) in database`);
       
       // Verify only MSP1 exists
-      const msp1Id = msp1Api.accountId();
-      const msp2Id = msp2Api.accountId();
+      const msp1Id = userApi.shConsts.NODE_INFOS.msp1.AddressId;
+      const msp2Id = userApi.shConsts.NODE_INFOS.msp2.AddressId;
+      
+      console.log(`Looking for MSP1 ID: ${msp1Id}`);
+      console.log(`Looking for MSP2 ID: ${msp2Id}`);
+      
+      if (msps.length > 0) {
+        console.log(`MSPs in database:`);
+        msps.forEach(m => {
+          console.log(`  - ID: ${m.onchain_msp_id}, Capacity: ${m.capacity}`);
+        });
+      }
       
       const hasMsp1 = msps.some(m => m.onchain_msp_id === msp1Id);
       const hasMsp2 = msps.some(m => m.onchain_msp_id === msp2Id);
@@ -77,7 +87,7 @@ describeMspNet(
       
       if (buckets.length > 0) {
         // Verify all buckets belong to MSP1
-        const msp1Id = msp1Api.accountId();
+        const msp1Id = userApi.shConsts.NODE_INFOS.msp1.AddressId;
         const allBelongToMsp1 = buckets.every(b => b.msp_id === msp1Id);
         
         assert(allBelongToMsp1, "All buckets should belong to MSP1");
@@ -97,28 +107,28 @@ describeMspNet(
       // Query all files with their bucket and MSP ownership
       const files = await sql`
         SELECT 
-          f.name as file_name,
-          f.description,
+          f.location as file_location,
+          f.fingerprint,
           b.name as bucket_name,
           m.onchain_msp_id as msp_id
         FROM file f
         JOIN bucket b ON f.bucket_id = b.id
         JOIN msp m ON b.msp_id = m.id
-        ORDER BY f.name
+        ORDER BY f.location
       `;
 
       console.log(`Found ${files.length} file(s) in database`);
       
       if (files.length > 0) {
         // Verify all files belong to MSP1's buckets
-        const msp1Id = msp1Api.accountId();
+        const msp1Id = userApi.shConsts.NODE_INFOS.msp1.AddressId;
         const allBelongToMsp1 = files.every(f => f.msp_id === msp1Id);
         
         assert(allBelongToMsp1, "All files should belong to MSP1's buckets");
         
         // Log file details for visibility
         files.forEach(f => {
-          console.log(`  - File: ${f.file_name} in bucket ${f.bucket_name}`);
+          console.log(`  - File: ${f.file_location} in bucket ${f.bucket_name}`);
         });
         
         console.log("✓ File table contains only files in MSP1's buckets");

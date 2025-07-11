@@ -38,7 +38,11 @@
       "Bash(NODE_OPTIONS='--no-deprecation' node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/msp/indexer-lite-mode-filtering.test.ts)",
       "Bash(timeout 120 pnpm test:node suites/integration/msp/indexer-lite-mode.test.ts)",
       "Bash(NODE_OPTIONS='--no-deprecation' node --test-concurrency 1 --import tsx --test ./suites/integration/msp/indexer-lite-basic.test.ts)",
-      "mcp__zen__debug"
+      "mcp__zen__debug",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm tsx:*)",
+      "Bash(pnpm docker:stop:*)",
+      "Bash(node:*)"
     ],
     "deny": []
   }
