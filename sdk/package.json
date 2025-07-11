@@ -1,0 +1,56 @@
+{
+    "name": "@storagehub/sdk",
+    "version": "0.1.0",
+    "description": "StorageHub TypeScript SDK",
+    "type": "module",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist",
+        "pkg"
+    ],
+    "scripts": {
+        "build": "node ./scripts/build.js",
+        "dev": "node ./scripts/build.js --watch",
+        "lint": "eslint \"{ts/**/*.ts,ts/**/*.tsx}\"",
+        "format": "prettier --write \"{ts/**/*.ts,ts/**/*.tsx}\"",
+        "test": "vitest",
+        "typecheck": "tsc --noEmit",
+        "size": "size-limit",
+        "gen:wasm": "wasm-pack build ./wasm --target bundler --out-dir pkg --release",
+        "preinstall": "[ -d ./wasm/pkg ] || pnpm run gen:wasm"
+    },
+    "exports": {
+        ".": {
+            "import": "./dist/index.js",
+            "require": "./dist/index.cjs"
+        }
+    },
+    "dependencies": {
+        "@storagehub/wasm": "file:./wasm/pkg"
+    },
+    "devDependencies": {
+        "@size-limit/preset-small-lib": "^9.0.0",
+        "@typescript-eslint/eslint-plugin": "^7.4.0",
+        "@typescript-eslint/parser": "^7.4.0",
+        "eslint": "^8.57.1",
+        "eslint-config-prettier": "^9.0.0",
+        "esbuild": "^0.19.0",
+        "lint-staged": "^15.2.0",
+        "prettier": "^3.2.0",
+        "size-limit": "^9.0.0",
+        "typescript": "^5.4.0",
+        "vitest": "^1.2.0"
+    },
+    "size-limit": [
+        {
+            "path": "dist/index.js",
+            "limit": "10 KB"
+        }
+    ],
+    "engines": {
+        "node": ">=18"
+    },
+    "packageManager": "pnpm@8.12.1"
+}

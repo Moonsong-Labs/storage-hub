@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "outDir": "./dist",
+        "rootDir": "./ts",
+        "declaration": true,
+        "declarationDir": "./dist",
+        "exactOptionalPropertyTypes": true,
+        "noUncheckedIndexedAccess": true,
+        "forceConsistentCasingInFileNames": true
+    },
+    "include": [
+        "ts/**/*"
+    ]
+}
