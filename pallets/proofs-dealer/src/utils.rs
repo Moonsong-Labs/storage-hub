@@ -108,15 +108,18 @@ where
     /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.
     /// - `ChallengesQueueOverflow`: If the challenges queue is full.
     pub fn do_challenge(who: &Option<AccountIdFor<T>>, key: &KeyFor<T>) -> DispatchResult {
-        // Charge a fee for the challenge only if origing is not root
+        // Charge a fee for the challenge only if origin is not root and fee is > 0
         if let Some(who) = who {
-            BalancePalletFor::<T>::transfer(
-                &who,
-                &TreasuryAccountFor::<T>::get(),
-                ChallengesFeeFor::<T>::get(),
-                Preservation::Expendable,
-            )
-            .map_err(|_| Error::<T>::FeeChargeFailed)?;
+            let fee = ChallengesFeeFor::<T>::get();
+            if !fee.is_zero() {
+                BalancePalletFor::<T>::transfer(
+                    &who,
+                    &TreasuryAccountFor::<T>::get(),
+                    fee,
+                    Preservation::Expendable,
+                )
+                .map_err(|_| Error::<T>::FeeChargeFailed)?;
+            }
         };
         // Enqueue challenge.
         Self::enqueue_challenge(key)
@@ -140,15 +143,18 @@ where
         key: &KeyFor<T>,
         should_remove_key: bool,
     ) -> DispatchResult {
-        // Charge a fee for the priority challenge only if origin is not root
+        // Charge a fee for the priority challenge only if origin is not root and fee is > 0
         if let Some(who) = who {
-            BalancePalletFor::<T>::transfer(
-                &who,
-                &TreasuryAccountFor::<T>::get(),
-                PriorityChallengesFeeFor::<T>::get(),
-                Preservation::Expendable,
-            )
-            .map_err(|_| Error::<T>::FeeChargeFailed)?;
+            let fee = PriorityChallengesFeeFor::<T>::get();
+            if !fee.is_zero() {
+                BalancePalletFor::<T>::transfer(
+                    &who,
+                    &TreasuryAccountFor::<T>::get(),
+                    fee,
+                    Preservation::Expendable,
+                )
+                .map_err(|_| Error::<T>::FeeChargeFailed)?;
+            }
         };
         // Enqueue priority challenge.
         Self::enqueue_challenge_with_priority(key, should_remove_key)
