@@ -1,7 +1,10 @@
 //! Integration tests for remote file RPC methods
 //!
 //! These tests verify the integration of remote file functionality
-//! with the Storage Hub RPC interface.
+//! with the Storage Hub RPC interface. They focus on testing how
+//! remote file URLs are handled in the context of RPC requests
+//! and responses, rather than testing the handlers themselves
+//! (which are tested in remote_file/tests.rs).
 
 #[cfg(test)]
 mod tests {
@@ -94,22 +97,7 @@ mod tests {
         };
     }
 
-    #[test]
-    fn test_remote_file_config_in_rpc_context() {
-        let config = RemoteFileConfig {
-            max_file_size: 10 * 1024 * 1024, // 10MB
-            connection_timeout: 15,
-            read_timeout: 120,
-            follow_redirects: true,
-            max_redirects: 5,
-            user_agent: "StorageHub-RPC/1.0".to_string(),
-        };
-
-        // Verify config can be used with factory
-        let url = Url::parse("https://example.com/file.txt").unwrap();
-        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        assert!(handler.is_supported(&url));
-    }
+    // Test removed - duplicate of config tests in remote_file/tests.rs
 
     #[test]
     fn test_location_validation() {

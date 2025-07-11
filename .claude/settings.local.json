@@ -16,7 +16,8 @@
       "Bash(rustc:*)",
       "Bash(cargo rustc:*)",
       "Bash(ls:*)",
-      "Bash(./test_ftp_upload)"
+      "Bash(./test_ftp_upload)",
+      "Bash(git rm:*)"
     ],
     "deny": []
   }
