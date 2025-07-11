@@ -275,16 +275,16 @@ impl RemoteFileHandler for FtpFileHandler {
             ));
         }
 
-        let (_, _, _, _, path) = Self::parse_url(&url)?;
-        let mut stream = self.connect(&url).await?;
-
-        // Read data into buffer with size limit
+        // Check size limit before attempting connection
         if size as u64 > self.config.max_file_size {
             return Err(RemoteFileError::Other(format!(
                 "File size {} exceeds maximum allowed size {}",
                 size, self.config.max_file_size
             )));
         }
+
+        let (_, _, _, _, path) = Self::parse_url(&url)?;
+        let mut stream = self.connect(&url).await?;
 
         // Read the data into a buffer
         let mut buffer = Vec::with_capacity(size as usize);

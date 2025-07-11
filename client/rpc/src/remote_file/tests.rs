@@ -497,14 +497,15 @@ mod external_service_tests {
         };
         
         // Mock a slow server
-        let mut server = Server::new();
+        let mut server = Server::new_async().await;
         let _m = server.mock("GET", "/slow-response")
             .with_status(200)
             .with_chunked_body(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 Ok(())
             })
-            .create();
+            .create_async()
+            .await;
 
         let url = Url::parse(&format!("{}/slow-response", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();

@@ -23,7 +23,8 @@
       "Bash(cargo doc:*)",
       "Bash(cargo tree:*)",
       "Bash(cargo metadata:*)",
-      "Bash(./test_remote_file_fixes)"
+      "Bash(./test_remote_file_fixes)",
+      "Bash(sed:*)"
     ],
     "deny": []
   }
