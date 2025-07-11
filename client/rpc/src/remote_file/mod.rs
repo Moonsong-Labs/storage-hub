@@ -113,6 +113,15 @@ pub trait RemoteFileHandler: Send + Sync {
 
     /// Validate if a URL is supported
     fn is_supported(&self, url: &Url) -> bool;
+
+    /// Upload a file to the given URI
+    async fn upload_file(
+        &self,
+        uri: &str,
+        data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+        size: u64,
+        content_type: Option<String>,
+    ) -> Result<(), RemoteFileError>;
 }
 
 /// Configuration for remote file operations
