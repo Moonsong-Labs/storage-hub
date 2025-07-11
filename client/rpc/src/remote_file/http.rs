@@ -3,10 +3,11 @@
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
-use reqwest::{Client, StatusCode};
+use futures_util::StreamExt;
+use reqwest::{Body, Client, StatusCode};
 use std::time::Duration;
 use tokio::io::AsyncRead;
-use tokio_util::io::StreamReader;
+use tokio_util::io::{ReaderStream, StreamReader};
 use url::Url;
 
 /// HTTP/HTTPS file handler
@@ -92,12 +93,6 @@ impl HttpFileHandler {
         Ok(bytes.to_vec())
     }
 
-    /// Upload is not supported for HTTP
-    pub async fn upload(&self, _url: &Url, _data: &[u8]) -> Result<(), RemoteFileError> {
-        Err(RemoteFileError::Other(
-            "HTTP upload is not supported".to_string(),
-        ))
-    }
 }
 
 #[async_trait]
@@ -211,6 +206,57 @@ impl RemoteFileHandler for HttpFileHandler {
 
     fn is_supported(&self, url: &Url) -> bool {
         matches!(url.scheme(), "http" | "https")
+    }
+
+    async fn upload_file(
+        &self,
+        uri: &str,
+        data: Box<dyn AsyncRead + Send + Unpin>,
+        size: u64,
+        content_type: Option<String>,
+    ) -> Result<(), RemoteFileError> {
+        // Parse and validate URL
+        let url = Url::parse(uri).map_err(|e| RemoteFileError::InvalidUrl(e.to_string()))?;
+
+        if !self.is_supported(&url) {
+            return Err(RemoteFileError::UnsupportedProtocol(url.scheme().to_string()));
+        }
+
+        // Create a stream from the AsyncRead
+        let stream = ReaderStream::new(data);
+        let body = Body::wrap_stream(stream);
+
+        // Build the request
+        let mut request = self.client.put(url.as_str()).body(body);
+
+        // Set Content-Length header
+        request = request.header("Content-Length", size.to_string());
+
+        // Set Content-Type if provided
+        if let Some(ct) = content_type {
+            request = request.header("Content-Type", ct);
+        }
+
+        // Handle basic authentication if present in URL
+        if let Some(password) = url.password() {
+            request = request.basic_auth(url.username(), Some(password));
+        }
+
+        // Send the request
+        let response = request.send().await.map_err(|e| {
+            if e.is_timeout() {
+                RemoteFileError::Timeout
+            } else {
+                RemoteFileError::HttpError(e)
+            }
+        })?;
+
+        // Check response status
+        if !response.status().is_success() {
+            return Err(Self::status_to_error(response.status()));
+        }
+
+        Ok(())
     }
 }
 
@@ -343,15 +389,149 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_upload_not_supported() {
+    async fn test_upload_file_success() {
         let handler = create_test_handler();
-        let url = Url::parse("http://example.com/upload").unwrap();
-        let result = handler.upload(&url, b"data").await;
+        let _m = mock("PUT", "/upload.txt")
+            .match_header("content-length", "13")
+            .match_header("content-type", "text/plain")
+            .with_status(200)
+            .create();
+
+        let data = b"Hello, World!";
+        let reader = Box::new(std::io::Cursor::new(data));
+        let url = format!("{}/upload.txt", mockito::server_url());
+        
+        handler
+            .upload_file(&url, reader, 13, Some("text/plain".to_string()))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_without_content_type() {
+        let handler = create_test_handler();
+        let _m = mock("PUT", "/upload2.txt")
+            .match_header("content-length", "4")
+            .with_status(201)
+            .create();
+
+        let data = b"test";
+        let reader = Box::new(std::io::Cursor::new(data));
+        let url = format!("{}/upload2.txt", mockito::server_url());
+        
+        handler
+            .upload_file(&url, reader, 4, None)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_with_basic_auth() {
+        let handler = create_test_handler();
+        let _m = mock("PUT", "/secure-upload.txt")
+            .match_header("authorization", "Basic dXNlcjpwYXNz") // user:pass in base64
+            .match_header("content-length", "6")
+            .with_status(200)
+            .create();
+
+        let data = b"secure";
+        let reader = Box::new(std::io::Cursor::new(data));
+        let url = format!("http://user:pass@{}/secure-upload.txt", mockito::server_address());
+        
+        handler
+            .upload_file(&url, reader, 6, None)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_forbidden() {
+        let handler = create_test_handler();
+        let _m = mock("PUT", "/forbidden-upload.txt")
+            .with_status(403)
+            .create();
+
+        let data = b"data";
+        let reader = Box::new(std::io::Cursor::new(data));
+        let url = format!("{}/forbidden-upload.txt", mockito::server_url());
+        
+        let result = handler
+            .upload_file(&url, reader, 4, None)
+            .await;
+
+        assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_invalid_url() {
+        let handler = create_test_handler();
+        let data = b"data";
+        let reader = Box::new(std::io::Cursor::new(data));
+        
+        let result = handler
+            .upload_file("not a valid url", reader, 4, None)
+            .await;
+
+        assert!(matches!(result, Err(RemoteFileError::InvalidUrl(_))));
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_unsupported_protocol() {
+        let handler = create_test_handler();
+        let data = b"data";
+        let reader = Box::new(std::io::Cursor::new(data));
+        
+        let result = handler
+            .upload_file("ftp://example.com/file.txt", reader, 4, None)
+            .await;
+
+        assert!(matches!(result, Err(RemoteFileError::UnsupportedProtocol(_))));
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_server_error() {
+        let handler = create_test_handler();
+        let _m = mock("PUT", "/error-upload.txt")
+            .with_status(500)
+            .create();
+
+        let data = b"data";
+        let reader = Box::new(std::io::Cursor::new(data));
+        let url = format!("{}/error-upload.txt", mockito::server_url());
+        
+        let result = handler
+            .upload_file(&url, reader, 4, None)
+            .await;
 
         assert!(matches!(result, Err(RemoteFileError::Other(_))));
-        if let Err(RemoteFileError::Other(msg)) = result {
-            assert_eq!(msg, "HTTP upload is not supported");
-        }
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_timeout() {
+        let config = RemoteFileConfig {
+            connection_timeout: 1,
+            read_timeout: 1,
+            ..RemoteFileConfig::default()
+        };
+        let handler = HttpFileHandler::new(config).unwrap();
+
+        let _m = mock("PUT", "/slow-upload.txt")
+            .with_status(200)
+            .with_body_from_fn(|_| {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                Ok(b"".to_vec())
+            })
+            .create();
+
+        let data = b"data";
+        let reader = Box::new(std::io::Cursor::new(data));
+        let url = format!("{}/slow-upload.txt", mockito::server_url());
+        
+        let result = handler
+            .upload_file(&url, reader, 4, None)
+            .await;
+
+        assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
 
     #[tokio::test]
