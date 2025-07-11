@@ -1,0 +1,12 @@
+[package]
+name = "test_local_upload"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "test_local_upload"
+path = "test_local_upload.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tempfile = "3"
