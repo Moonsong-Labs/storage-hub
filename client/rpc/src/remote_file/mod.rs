@@ -86,10 +86,7 @@ pub trait RemoteFileHandler: Send + Sync {
     /// Fetch file metadata from a remote URL
     ///
     /// Returns the file size and optionally the content type
-    async fn fetch_metadata(
-        &self,
-        url: &Url,
-    ) -> Result<(u64, Option<String>), RemoteFileError>;
+    async fn fetch_metadata(&self, url: &Url) -> Result<(u64, Option<String>), RemoteFileError>;
 
     /// Stream a file from a remote URL
     ///
@@ -149,8 +146,9 @@ impl Default for RemoteFileConfig {
 }
 
 // Re-export handler implementations
-pub mod http;
-pub mod ftp;
 pub mod factory;
+pub mod ftp;
+pub mod http;
+pub mod local;
 
 pub use factory::RemoteFileHandlerFactory;

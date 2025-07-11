@@ -11,7 +11,8 @@
       "Bash(mkdir:*)",
       "Bash(cargo search:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(cargo clippy:*)"
     ],
     "deny": []
   }
