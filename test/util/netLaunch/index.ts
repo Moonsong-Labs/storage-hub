@@ -155,25 +155,36 @@ export class NetworkLauncher {
       if (this.config.indexerMode !== "lite") {
         composeYaml.services["sh-user"].command.push("--indexer");
         composeYaml.services["sh-user"].command.push(
-          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+          "--database-url=postgresql://postgres:postgres@sh-postgres:5432/storage_hub"
         );
       }
       
       if (this.type === "fullnet") {
-        // MSPs need indexer flag and database URL
-        composeYaml.services["sh-msp-1"].command.push("--indexer");
-        composeYaml.services["sh-msp-1"].command.push(
-          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
-        );
-        composeYaml.services["sh-msp-2"].command.push("--indexer");
-        composeYaml.services["sh-msp-2"].command.push(
-          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
-        );
-        
-        // Add indexer mode if specified
-        if (this.config.indexerMode) {
-          composeYaml.services["sh-msp-1"].command.push(`--indexer-mode=${this.config.indexerMode}`);
-          composeYaml.services["sh-msp-2"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+        // In lite mode, only MSP1 runs the indexer
+        // In full mode, all MSPs can run the indexer
+        if (this.config.indexerMode === "lite") {
+          // Only MSP1 gets indexer flags in lite mode
+          composeYaml.services["sh-msp-1"].command.push("--indexer");
+          composeYaml.services["sh-msp-1"].command.push(
+            "--database-url=postgresql://postgres:postgres@sh-postgres:5432/storage_hub"
+          );
+          composeYaml.services["sh-msp-1"].command.push(`--indexer-mode=lite`);
+        } else {
+          // In full mode (or when indexerMode is not specified), all MSPs get indexer flags
+          composeYaml.services["sh-msp-1"].command.push("--indexer");
+          composeYaml.services["sh-msp-1"].command.push(
+            "--database-url=postgresql://postgres:postgres@sh-postgres:5432/storage_hub"
+          );
+          composeYaml.services["sh-msp-2"].command.push("--indexer");
+          composeYaml.services["sh-msp-2"].command.push(
+            "--database-url=postgresql://postgres:postgres@sh-postgres:5432/storage_hub"
+          );
+          
+          // Add indexer mode if specified
+          if (this.config.indexerMode) {
+            composeYaml.services["sh-msp-1"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+            composeYaml.services["sh-msp-2"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+          }
         }
       }
     }
