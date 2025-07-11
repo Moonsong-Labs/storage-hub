@@ -450,6 +450,13 @@ pub mod pallet {
             key_challenged: KeyFor<T>,
         },
 
+        /// A priority challenge was submitted.
+        PriorityChallenge {
+            who: RawOrigin<T::AccountId>,
+            key_challenged: KeyFor<T>,
+            should_remove_key: bool,
+        },
+
         /// A proof was accepted.
         ProofAccepted {
             provider_id: ProviderIdFor<T>,
@@ -782,10 +789,20 @@ pub mod pallet {
             // Check that the extrinsic was executed by the custom origin.
             T::PriorityChallengeOrigin::ensure_origin(origin.clone())?;
 
-            let who = origin.into_signer();
+            let who = origin.clone().into_signer();
+
+            let raw_origin: RawOrigin<T::AccountId> =
+                origin.into().map_err(|_| DispatchError::BadOrigin)?;
 
             // Execute priority challenge.
             Self::do_priority_challenge(&who, &key, should_remove_key)?;
+
+            // Emit event.
+            Self::deposit_event(Event::PriorityChallenge {
+                who: raw_origin,
+                key_challenged: key,
+                should_remove_key,
+            });
 
             Ok(().into())
         }
