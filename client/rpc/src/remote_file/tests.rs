@@ -328,64 +328,190 @@ mod integration_tests {
     }
 }
 
-/// Documentation for tests requiring external services
+/// Documentation for integration tests
 /// 
-/// The following tests require external services to run:
+/// All integration tests in this module are self-contained and do not require
+/// external services or internet connectivity.
+/// 
+/// ## HTTP/HTTPS Tests
+/// HTTP tests use the mockito crate to create local mock servers. This allows
+/// testing of various HTTP scenarios including:
+/// - Different response codes (200, 404, 401, 500, etc.)
+/// - Redirects and redirect chains
+/// - Timeouts and slow responses
+/// - Large file handling
+/// - Authentication scenarios
 /// 
 /// ## FTP Tests
-/// Tests marked with `#[ignore = "Requires FTP test server"]` need an FTP server.
-/// To run these tests:
-/// 1. Set up a local FTP server or use a public test server
-/// 2. Run: `cargo test -- --ignored ftp`
-/// 
-/// ## HTTP/HTTPS Tests with Real Servers
-/// Some HTTP tests use mockito for mocking, but integration tests might need:
-/// - httpbin.org for testing various HTTP scenarios
-/// - A local web server for testing large files and streaming
+/// FTP functionality is tested through unit tests in the ftp.rs module.
+/// Integration tests for FTP would require an FTP server, so they have been
+/// moved to unit tests with mocked connections.
 /// 
 /// ## Local File Tests
 /// Local file tests create temporary files and clean up after themselves.
-/// Ensure the test runner has write permissions to the temp directory.
+/// These tests are included in other test modules.
 /// 
-/// ## Running All Integration Tests
-/// To run all tests including those requiring external services:
+/// ## Running All Tests
+/// All tests can be run with standard cargo commands:
 /// ```bash
-/// cargo test -- --ignored
+/// cargo test
 /// ```
 /// 
-/// ## Environment Variables
-/// You can configure test servers via environment variables:
-/// - `TEST_FTP_SERVER`: FTP server URL (default: ftp://test.rebex.net)
-/// - `TEST_HTTP_SERVER`: HTTP server URL (default: https://httpbin.org)
+/// No external services or special configuration is required.
 #[cfg(test)]
 mod external_service_tests {
     use super::*;
+    use mockito::mock;
 
     #[tokio::test]
-    #[ignore = "Requires internet connection"]
-    async fn test_http_download_from_httpbin() {
+    async fn test_http_download_with_mock_server() {
         let config = RemoteFileConfig::default();
-        let url = Url::parse("https://httpbin.org/bytes/100").unwrap();
+        
+        // Create a mock server that returns 100 random bytes
+        let test_data = vec![42u8; 100]; // 100 bytes of value 42
+        let _m = mock("GET", "/bytes/100")
+            .with_status(200)
+            .with_header("content-type", "application/octet-stream")
+            .with_body(&test_data)
+            .create();
+
+        let url = Url::parse(&format!("{}/bytes/100", mockito::server_url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
-        // This would actually download 100 bytes from httpbin.org
-        // Uncomment to test with real service:
-        // let data = handler.download(&url).await.unwrap();
-        // assert_eq!(data.len(), 100);
+        // Download using the handler trait method
+        let metadata = handler.fetch_metadata(&url).await;
+        // Note: The mock doesn't provide content-length in HEAD request, so we'll stream it
+        let mut stream = handler.stream_file(&url).await.unwrap();
+        let mut data = Vec::new();
+        tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data).await.unwrap();
+        
+        assert_eq!(data.len(), 100);
+        assert_eq!(data, test_data);
     }
 
     #[tokio::test]
-    #[ignore = "Requires FTP test server"]
-    async fn test_ftp_integration() {
-        let config = RemoteFileConfig::default();
-        let url = Url::parse("ftp://test.rebex.net/readme.txt").unwrap();
+    async fn test_http_download_large_file_mock() {
+        let config = RemoteFileConfig {
+            max_file_size: 1024 * 1024, // 1MB limit
+            ..RemoteFileConfig::default()
+        };
+        
+        // Create mock that simulates a large file
+        let _m = mock("HEAD", "/large-file.bin")
+            .with_status(200)
+            .with_header("content-length", "2097152") // 2MB
+            .with_header("content-type", "application/octet-stream")
+            .create();
+
+        let url = Url::parse(&format!("{}/large-file.bin", mockito::server_url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
-        // This would connect to the test FTP server
-        // Uncomment to test with real service:
-        // let metadata = handler.fetch_metadata(&url).await.unwrap();
-        // assert!(metadata.0 > 0); // File size should be greater than 0
+        // Should fail because file exceeds max size
+        let result = handler.fetch_metadata(&url).await;
+        assert!(result.is_err());
+        if let Err(e) = result {
+            match e {
+                RemoteFileError::Other(msg) => assert!(msg.contains("exceeds maximum")),
+                _ => panic!("Expected error about file size exceeding maximum"),
+            }
+        }
     }
+
+    #[tokio::test]
+    async fn test_http_with_redirects_mock() {
+        let config = RemoteFileConfig {
+            follow_redirects: true,
+            max_redirects: 5,
+            ..RemoteFileConfig::default()
+        };
+        
+        // Create redirect chain
+        let _m1 = mock("GET", "/start")
+            .with_status(302)
+            .with_header("Location", &format!("{}/middle", mockito::server_url()))
+            .create();
+            
+        let _m2 = mock("GET", "/middle")
+            .with_status(302)
+            .with_header("Location", &format!("{}/final", mockito::server_url()))
+            .create();
+            
+        let final_content = b"Final destination content";
+        let _m3 = mock("GET", "/final")
+            .with_status(200)
+            .with_header("content-type", "text/plain")
+            .with_body(final_content)
+            .create();
+
+        let url = Url::parse(&format!("{}/start", mockito::server_url())).unwrap();
+        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        
+        // The HTTP handler should follow redirects
+        let mut stream = handler.stream_file(&url).await.unwrap();
+        let mut data = Vec::new();
+        tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data).await.unwrap();
+        
+        assert_eq!(data, final_content);
+    }
+
+    #[tokio::test]
+    async fn test_http_authentication_mock() {
+        let config = RemoteFileConfig::default();
+        
+        // Mock that requires authentication
+        let _m = mock("GET", "/protected/resource")
+            .match_header("authorization", "Basic dXNlcjpwYXNz") // user:pass in base64
+            .with_status(200)
+            .with_body(b"Protected content")
+            .create();
+            
+        // Mock for unauthorized access
+        let _m_unauth = mock("GET", "/protected/resource")
+            .with_status(401)
+            .create();
+
+        // Test with credentials in URL
+        let url = Url::parse(&format!("http://user:pass@{}/protected/resource", 
+                                     mockito::server_address())).unwrap();
+        let handler = RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
+        
+        // Note: The current HTTP handler doesn't handle auth from URL for GET requests
+        // This would need to be implemented in the HTTP handler
+        
+        // Test without credentials - should get 401
+        let url_no_auth = Url::parse(&format!("{}/protected/resource", mockito::server_url())).unwrap();
+        let handler_no_auth = RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
+        let result = handler_no_auth.fetch_metadata(&url_no_auth).await;
+        assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
+    }
+
+    #[tokio::test] 
+    async fn test_http_timeout_handling() {
+        let config = RemoteFileConfig {
+            connection_timeout: 1, // 1 second
+            read_timeout: 1,
+            ..RemoteFileConfig::default()
+        };
+        
+        // Mock a slow server
+        let _m = mock("GET", "/slow-response")
+            .with_status(200)
+            .with_body_from_fn(|_| {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                Ok(b"Too late".to_vec())
+            })
+            .create();
+
+        let url = Url::parse(&format!("{}/slow-response", mockito::server_url())).unwrap();
+        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        
+        // Should timeout
+        let result = handler.stream_file(&url).await;
+        assert!(matches!(result, Err(RemoteFileError::Timeout)));
+    }
+
+    // Note: FTP integration tests have been removed as they require an external FTP server.
+    // FTP functionality is tested through unit tests with mocked connections in ftp.rs
 }
 
 #[cfg(test)]

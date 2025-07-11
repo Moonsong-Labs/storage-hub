@@ -17,7 +17,9 @@
       "Bash(cargo rustc:*)",
       "Bash(ls:*)",
       "Bash(./test_ftp_upload)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(chmod:*)",
+      "Bash(./test_remote_file_changes.sh:*)"
     ],
     "deny": []
   }
