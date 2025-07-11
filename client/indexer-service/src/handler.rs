@@ -221,6 +221,8 @@ where
 
         let service_state = ServiceState::get(&mut db_conn).await?;
 
+        // Collect block hashes first to avoid borrowing issues
+        let mut blocks_to_index = Vec::new();
         for block_number in
             (service_state.last_processed_block as BlockNumber + 1)..=finalized_block_number
         {
@@ -228,8 +230,21 @@ where
                 .client
                 .block_hash(block_number)?
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
+            blocks_to_index.push((block_number, block_hash));
+        }
+
+        // Now index the blocks
+        for (block_number, block_hash) in blocks_to_index {
             self.index_block(&mut db_conn, block_number as BlockNumber, block_hash)
                 .await?;
+            
+            // In lite mode, sync MSP ID after each block in case we just processed our MSP registration
+            if self.indexer_mode == crate::IndexerMode::Lite && self.msp_id.is_none() {
+                self.sync_msp_id(&block_hash);
+                if self.msp_id.is_some() {
+                    info!(target: LOG_TARGET, "MSP ID detected after processing block #{}: {:?}", block_number, self.msp_id);
+                }
+            }
         }
 
         Ok(())
@@ -1094,7 +1109,10 @@ where
             }
             // BSP-specific and other events remain filtered out
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => false,
-            // BspSignUpSuccess is handled above
+            pallet_storage_providers::Event::BspSignUpSuccess { .. } => {
+                // This is handled separately above, but we need to include it for exhaustiveness
+                false
+            }
             pallet_storage_providers::Event::BspSignOffSuccess { .. } => false,
             pallet_storage_providers::Event::SignUpRequestCanceled { .. } => false,
             pallet_storage_providers::Event::AwaitingTopUp { .. } => false,
