@@ -1,4 +1,540 @@
 //! HTTP/HTTPS remote file handler implementation
 
-// Placeholder for HTTP handler implementation
-// This will be implemented in step 4 of the implementation plan
+use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
+use async_trait::async_trait;
+use bytes::Bytes;
+use reqwest::{Client, StatusCode};
+use std::time::Duration;
+use tokio::io::AsyncRead;
+use tokio_util::io::StreamReader;
+use url::Url;
+
+/// HTTP/HTTPS file handler
+pub struct HttpFileHandler {
+    client: Client,
+    config: RemoteFileConfig,
+}
+
+impl HttpFileHandler {
+    /// Create a new HTTP file handler with the given configuration
+    pub fn new(config: RemoteFileConfig) -> Result<Self, RemoteFileError> {
+        let client = Client::builder()
+            .user_agent(&config.user_agent)
+            .connect_timeout(Duration::from_secs(config.connection_timeout))
+            .timeout(Duration::from_secs(config.read_timeout))
+            .redirect(if config.follow_redirects {
+                reqwest::redirect::Policy::limited(config.max_redirects as usize)
+            } else {
+                reqwest::redirect::Policy::none()
+            })
+            .build()
+            .map_err(|e| RemoteFileError::Other(format!("Failed to build HTTP client: {}", e)))?;
+
+        Ok(Self { client, config })
+    }
+
+    /// Create a new HTTP file handler with default configuration
+    pub fn default() -> Result<Self, RemoteFileError> {
+        Self::new(RemoteFileConfig::default())
+    }
+
+    /// Convert HTTP status code to appropriate RemoteFileError
+    fn status_to_error(status: StatusCode) -> RemoteFileError {
+        match status {
+            StatusCode::NOT_FOUND => RemoteFileError::NotFound,
+            StatusCode::FORBIDDEN | StatusCode::UNAUTHORIZED => RemoteFileError::AccessDenied,
+            StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => RemoteFileError::Timeout,
+            _ => RemoteFileError::Other(format!("HTTP error: {}", status)),
+        }
+    }
+
+    /// Download file from HTTP/HTTPS URL
+    pub async fn download(&self, url: &Url) -> Result<Vec<u8>, RemoteFileError> {
+        let response = self.client.get(url.as_str()).send().await.map_err(|e| {
+            if e.is_timeout() {
+                RemoteFileError::Timeout
+            } else {
+                RemoteFileError::HttpError(e)
+            }
+        })?;
+
+        if !response.status().is_success() {
+            return Err(Self::status_to_error(response.status()));
+        }
+
+        // Check content length if available
+        if let Some(content_length) = response.content_length() {
+            if content_length > self.config.max_file_size {
+                return Err(RemoteFileError::Other(format!(
+                    "File size {} exceeds maximum allowed size {}",
+                    content_length, self.config.max_file_size
+                )));
+            }
+        }
+
+        let bytes = response.bytes().await.map_err(|e| {
+            if e.is_timeout() {
+                RemoteFileError::Timeout
+            } else {
+                RemoteFileError::HttpError(e)
+            }
+        })?;
+
+        // Double check size after download
+        if bytes.len() as u64 > self.config.max_file_size {
+            return Err(RemoteFileError::Other(format!(
+                "Downloaded file size {} exceeds maximum allowed size {}",
+                bytes.len(),
+                self.config.max_file_size
+            )));
+        }
+
+        Ok(bytes.to_vec())
+    }
+
+    /// Upload is not supported for HTTP
+    pub async fn upload(&self, _url: &Url, _data: &[u8]) -> Result<(), RemoteFileError> {
+        Err(RemoteFileError::Other(
+            "HTTP upload is not supported".to_string(),
+        ))
+    }
+}
+
+#[async_trait]
+impl RemoteFileHandler for HttpFileHandler {
+    async fn fetch_metadata(&self, url: &Url) -> Result<(u64, Option<String>), RemoteFileError> {
+        let response = self.client.head(url.as_str()).send().await.map_err(|e| {
+            if e.is_timeout() {
+                RemoteFileError::Timeout
+            } else {
+                RemoteFileError::HttpError(e)
+            }
+        })?;
+
+        if !response.status().is_success() {
+            return Err(Self::status_to_error(response.status()));
+        }
+
+        let content_length = response
+            .content_length()
+            .ok_or_else(|| RemoteFileError::Other("Content-Length header missing".to_string()))?;
+
+        if content_length > self.config.max_file_size {
+            return Err(RemoteFileError::Other(format!(
+                "File size {} exceeds maximum allowed size {}",
+                content_length, self.config.max_file_size
+            )));
+        }
+
+        let content_type = response
+            .headers()
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        Ok((content_length, content_type))
+    }
+
+    async fn stream_file(
+        &self,
+        url: &Url,
+    ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
+        let response = self.client.get(url.as_str()).send().await.map_err(|e| {
+            if e.is_timeout() {
+                RemoteFileError::Timeout
+            } else {
+                RemoteFileError::HttpError(e)
+            }
+        })?;
+
+        if !response.status().is_success() {
+            return Err(Self::status_to_error(response.status()));
+        }
+
+        // Check content length if available
+        if let Some(content_length) = response.content_length() {
+            if content_length > self.config.max_file_size {
+                return Err(RemoteFileError::Other(format!(
+                    "File size {} exceeds maximum allowed size {}",
+                    content_length, self.config.max_file_size
+                )));
+            }
+        }
+
+        // Convert response body stream to AsyncRead
+        let stream = response.bytes_stream();
+        let reader = StreamReader::new(
+            stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+        );
+
+        Ok(Box::new(reader) as Box<dyn AsyncRead + Send + Unpin>)
+    }
+
+    async fn download_chunk(
+        &self,
+        url: &Url,
+        offset: u64,
+        length: u64,
+    ) -> Result<Bytes, RemoteFileError> {
+        // Create range header
+        let range = format!("bytes={}-{}", offset, offset + length - 1);
+
+        let response = self
+            .client
+            .get(url.as_str())
+            .header("Range", range)
+            .send()
+            .await
+            .map_err(|e| {
+                if e.is_timeout() {
+                    RemoteFileError::Timeout
+                } else {
+                    RemoteFileError::HttpError(e)
+                }
+            })?;
+
+        // Check for successful response (200 OK or 206 Partial Content)
+        if !response.status().is_success() && response.status() != StatusCode::PARTIAL_CONTENT {
+            return Err(Self::status_to_error(response.status()));
+        }
+
+        let bytes = response.bytes().await.map_err(|e| {
+            if e.is_timeout() {
+                RemoteFileError::Timeout
+            } else {
+                RemoteFileError::HttpError(e)
+            }
+        })?;
+
+        Ok(bytes)
+    }
+
+    fn is_supported(&self, url: &Url) -> bool {
+        matches!(url.scheme(), "http" | "https")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::mock;
+
+    fn create_test_handler() -> HttpFileHandler {
+        let config = RemoteFileConfig {
+            max_file_size: 1024 * 1024, // 1MB for tests
+            connection_timeout: 5,
+            read_timeout: 10,
+            follow_redirects: true,
+            max_redirects: 3,
+            user_agent: "Test-Agent".to_string(),
+        };
+        HttpFileHandler::new(config).unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_is_supported() {
+        let handler = create_test_handler();
+
+        assert!(handler.is_supported(&Url::parse("http://example.com/file.txt").unwrap()));
+        assert!(handler.is_supported(&Url::parse("https://example.com/file.txt").unwrap()));
+        assert!(!handler.is_supported(&Url::parse("ftp://example.com/file.txt").unwrap()));
+        assert!(!handler.is_supported(&Url::parse("file:///tmp/file.txt").unwrap()));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_metadata_success() {
+        let handler = create_test_handler();
+        let _m = mock("HEAD", "/test.txt")
+            .with_status(200)
+            .with_header("content-length", "1024")
+            .with_header("content-type", "text/plain")
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/test.txt")
+            .unwrap();
+        let (size, content_type) = handler.fetch_metadata(&url).await.unwrap();
+
+        assert_eq!(size, 1024);
+        assert_eq!(content_type, Some("text/plain".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_metadata_not_found() {
+        let handler = create_test_handler();
+        let _m = mock("HEAD", "/missing.txt").with_status(404).create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/missing.txt")
+            .unwrap();
+        let result = handler.fetch_metadata(&url).await;
+
+        assert!(matches!(result, Err(RemoteFileError::NotFound)));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_metadata_forbidden() {
+        let handler = create_test_handler();
+        let _m = mock("HEAD", "/forbidden.txt").with_status(403).create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/forbidden.txt")
+            .unwrap();
+        let result = handler.fetch_metadata(&url).await;
+
+        assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
+    }
+
+    #[tokio::test]
+    async fn test_fetch_metadata_file_too_large() {
+        let handler = create_test_handler();
+        let _m = mock("HEAD", "/large.txt")
+            .with_status(200)
+            .with_header("content-length", "2097152") // 2MB
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/large.txt")
+            .unwrap();
+        let result = handler.fetch_metadata(&url).await;
+
+        assert!(matches!(result, Err(RemoteFileError::Other(_))));
+    }
+
+    #[tokio::test]
+    async fn test_download_success() {
+        let handler = create_test_handler();
+        let content = b"Hello, World!";
+        let _m = mock("GET", "/test.txt")
+            .with_status(200)
+            .with_body(content)
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/test.txt")
+            .unwrap();
+        let data = handler.download(&url).await.unwrap();
+
+        assert_eq!(data, content);
+    }
+
+    #[tokio::test]
+    async fn test_download_chunk_success() {
+        let handler = create_test_handler();
+        let content = b"Hello";
+        let _m = mock("GET", "/test.txt")
+            .match_header("range", "bytes=6-10")
+            .with_status(206)
+            .with_body(content)
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/test.txt")
+            .unwrap();
+        let chunk = handler.download_chunk(&url, 6, 5).await.unwrap();
+
+        assert_eq!(chunk.as_ref(), content);
+    }
+
+    #[tokio::test]
+    async fn test_upload_not_supported() {
+        let handler = create_test_handler();
+        let url = Url::parse("http://example.com/upload").unwrap();
+        let result = handler.upload(&url, b"data").await;
+
+        assert!(matches!(result, Err(RemoteFileError::Other(_))));
+        if let Err(RemoteFileError::Other(msg)) = result {
+            assert_eq!(msg, "HTTP upload is not supported");
+        }
+    }
+
+    #[tokio::test]
+    async fn test_stream_file_success() {
+        let handler = create_test_handler();
+        let content = b"Streaming content";
+        let _m = mock("GET", "/stream.txt")
+            .with_status(200)
+            .with_body(content)
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/stream.txt")
+            .unwrap();
+        let mut reader = handler.stream_file(&url).await.unwrap();
+
+        // Read from the stream
+        let mut buffer = Vec::new();
+        tokio::io::AsyncReadExt::read_to_end(&mut reader, &mut buffer)
+            .await
+            .unwrap();
+
+        assert_eq!(buffer, content);
+    }
+
+    #[tokio::test]
+    async fn test_follow_redirects() {
+        let handler = create_test_handler();
+
+        // Create redirect chain
+        let _m1 = mock("GET", "/redirect1")
+            .with_status(302)
+            .with_header("Location", &format!("{}/redirect2", mockito::server_url()))
+            .create();
+
+        let _m2 = mock("GET", "/redirect2")
+            .with_status(302)
+            .with_header("Location", &format!("{}/final", mockito::server_url()))
+            .create();
+
+        let _m3 = mock("GET", "/final")
+            .with_status(200)
+            .with_body(b"Final content")
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/redirect1")
+            .unwrap();
+        let data = handler.download(&url).await.unwrap();
+
+        assert_eq!(data, b"Final content");
+    }
+
+    #[tokio::test]
+    async fn test_too_many_redirects() {
+        let config = RemoteFileConfig {
+            max_redirects: 2,
+            ..RemoteFileConfig::default()
+        };
+        let handler = HttpFileHandler::new(config).unwrap();
+
+        // Create redirect chain that exceeds limit
+        let _m1 = mock("GET", "/redirect1")
+            .with_status(302)
+            .with_header("Location", &format!("{}/redirect2", mockito::server_url()))
+            .create();
+
+        let _m2 = mock("GET", "/redirect2")
+            .with_status(302)
+            .with_header("Location", &format!("{}/redirect3", mockito::server_url()))
+            .create();
+
+        let _m3 = mock("GET", "/redirect3")
+            .with_status(302)
+            .with_header("Location", &format!("{}/final", mockito::server_url()))
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/redirect1")
+            .unwrap();
+        let result = handler.download(&url).await;
+
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_no_content_length_header() {
+        let handler = create_test_handler();
+        let _m = mock("HEAD", "/no-length.txt")
+            .with_status(200)
+            .with_header("content-type", "text/plain")
+            // Intentionally not setting content-length
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/no-length.txt")
+            .unwrap();
+        let result = handler.fetch_metadata(&url).await;
+
+        assert!(matches!(result, Err(RemoteFileError::Other(_))));
+    }
+
+    #[tokio::test]
+    async fn test_download_chunk_server_no_range_support() {
+        let handler = create_test_handler();
+        let full_content = b"This is the full content of the file";
+
+        // Server returns 200 OK with full content instead of 206 Partial Content
+        let _m = mock("GET", "/no-range.txt")
+            .match_header("range", "bytes=5-9")
+            .with_status(200)
+            .with_body(full_content)
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/no-range.txt")
+            .unwrap();
+        let chunk = handler.download_chunk(&url, 5, 5).await.unwrap();
+
+        // When server doesn't support ranges, it returns full content
+        assert_eq!(chunk.as_ref(), full_content);
+    }
+
+    #[tokio::test]
+    async fn test_timeout_error() {
+        let config = RemoteFileConfig {
+            connection_timeout: 1, // 1 second timeout
+            read_timeout: 1,
+            ..RemoteFileConfig::default()
+        };
+        let handler = HttpFileHandler::new(config).unwrap();
+
+        // Mock a slow server that takes longer than timeout
+        let _m = mock("GET", "/slow.txt")
+            .with_status(200)
+            .with_body_from_fn(|_| {
+                std::thread::sleep(std::time::Duration::from_secs(2));
+                Ok(b"delayed response".to_vec())
+            })
+            .create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/slow.txt")
+            .unwrap();
+        let result = handler.download(&url).await;
+
+        assert!(matches!(result, Err(RemoteFileError::Timeout)));
+    }
+
+    #[tokio::test]
+    async fn test_unauthorized_error() {
+        let handler = create_test_handler();
+        let _m = mock("GET", "/auth-required.txt").with_status(401).create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/auth-required.txt")
+            .unwrap();
+        let result = handler.download(&url).await;
+
+        assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
+    }
+
+    #[tokio::test]
+    async fn test_internal_server_error() {
+        let handler = create_test_handler();
+        let _m = mock("GET", "/error.txt").with_status(500).create();
+
+        let url = Url::parse(&mockito::server_url())
+            .unwrap()
+            .join("/error.txt")
+            .unwrap();
+        let result = handler.download(&url).await;
+
+        assert!(matches!(result, Err(RemoteFileError::Other(_))));
+        if let Err(RemoteFileError::Other(msg)) = result {
+            assert!(msg.contains("500"));
+        }
+    }
+}

@@ -49,6 +49,7 @@ std = []
 
 [dev-dependencies]
 tempfile = "3.0"
+mockito = "1.2"
 
 [lints]
 workspace = true
