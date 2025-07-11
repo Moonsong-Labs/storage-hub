@@ -1,4 +1,4 @@
-## Implementation Plan: Enhanced Indexer-Lite for Bucket Transfers and BSP Tracking
+## Implementation Plan: Indexer-Lite for Bucket Transfers and BSP Tracking
 
 ### Overview
 
@@ -68,9 +68,9 @@ Modify the indexer-lite implementation to support MSP bucket transfers by indexi
    - File: `client/indexer-service/src/handler.rs`
    - Operation: Update comments for helper methods (lines 131-195)
    - Details:
-     - Document that `check_bucket_belongs_to_current_msp` is now only used for specific events
-     - Note that lite mode now indexes all buckets/files for transfer support
-   - Success: Code documentation reflects new behavior
+     - Document that `check_bucket_belongs_to_current_msp` is only used for specific events
+     - Note that lite mode indexes all buckets/files for transfer support
+   - Success: Code documentation reflects lite mode behavior
 
 7. **Update LITE_MODE_EVENTS.md Documentation**
    - File: `client/indexer-service/LITE_MODE_EVENTS.md`
@@ -80,7 +80,7 @@ Modify the indexer-lite implementation to support MSP bucket transfers by indexi
      - Move BSP events (`AcceptedBspVolunteer`, `BspConfirmedStoring`) from "Ignored" to "Indexed"
      - Add note about expanded scope for bucket transfer support
      - Update implementation details section
-   - Success: Documentation accurately describes the enhanced lite mode behavior
+   - Success: Documentation accurately describes the lite mode behavior
 
 ### Testing Strategy
 

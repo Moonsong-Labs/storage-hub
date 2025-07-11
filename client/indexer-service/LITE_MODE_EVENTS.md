@@ -1,8 +1,8 @@
 # Lite Mode Indexed Events
 
-> **Note**: This document describes the **Enhanced Lite Mode** behavior, which extends the original lite mode to support complete bucket transfers and full network visibility.
+> **Note**: This document describes the **Lite Mode** behavior, which supports complete bucket transfers and full network visibility.
 
-The indexer in enhanced lite mode processes all buckets and files while maintaining MSP-specific event filtering for provider operations.
+The indexer in lite mode processes all buckets and files while maintaining MSP-specific event filtering for provider operations.
 
 ## FileSystem Pallet
 
@@ -86,9 +86,9 @@ The indexer in enhanced lite mode processes all buckets and files while maintain
 
 ## Implementation Details
 
-### Enhanced Lite Mode Behavior
+### Lite Mode Behavior
 
-In enhanced lite mode, the indexer provides expanded functionality:
+In lite mode, the indexer provides the following functionality:
 
 1. **Complete Data Indexing**: ALL buckets and files are indexed, not just those owned by the current MSP
    - Enables full visibility of the storage network state
@@ -107,9 +107,9 @@ In enhanced lite mode, the indexer provides expanded functionality:
 
 4. **MSP Identity Synchronization**: The MSP ID is synchronized from the keystore on each finality notification, ensuring MSP-specific operations always use the current identity.
 
-### Key Differences from Original Lite Mode
+### Key Features of Lite Mode
 
-- **Buckets**: Previously only MSP-owned buckets were indexed; now ALL buckets are indexed
-- **Files**: Previously only files in MSP-owned buckets were tracked; now ALL files are tracked
-- **BSP Events**: Key BSP events (AcceptedBspVolunteer, BspConfirmedStoring) are now indexed
-- **Transfers**: Complete bucket transfer support between any MSPs, not just to/from current MSP
+- **Buckets**: ALL buckets are indexed regardless of MSP ownership
+- **Files**: ALL files are tracked across all buckets
+- **BSP Events**: Key BSP events (AcceptedBspVolunteer, BspConfirmedStoring) are indexed
+- **Transfers**: Complete bucket transfer support between any MSPs

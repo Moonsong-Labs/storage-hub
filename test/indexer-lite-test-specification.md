@@ -1,8 +1,8 @@
-# Enhanced Indexer-Lite Test Specification
+# Indexer-Lite Test Specification
 
 ## Overview
 
-This document describes the test scenarios and invariants that must be verified for the enhanced indexer-lite mode implementation. The enhanced mode indexes ALL buckets, files, and BSP events to support cross-MSP bucket transfers.
+This document describes the test scenarios and invariants that must be verified for the indexer-lite mode implementation. The lite mode indexes ALL buckets, files, and BSP events to support cross-MSP bucket transfers.
 
 ## Core Invariants
 
@@ -109,7 +109,7 @@ This document describes the test scenarios and invariants that must be verified 
 
 ### Test Suite 4: Event Coverage Verification
 
-**Purpose**: Ensure all required events are indexed in enhanced lite mode
+**Purpose**: Ensure all required events are indexed in lite mode
 
 #### Scenario 4.1: FileSystem Events
 1. **Verify these events are indexed for ALL MSPs**:
@@ -131,7 +131,7 @@ This document describes the test scenarios and invariants that must be verified 
 
 ### Test Suite 5: Performance Validation
 
-**Purpose**: Ensure enhanced indexing doesn't cause performance degradation
+**Purpose**: Ensure lite mode indexing doesn't cause performance degradation
 
 #### Scenario 5.1: High Volume Test
 1. **Setup**:
@@ -219,7 +219,7 @@ GROUP BY event_name;
 
 ## Success Criteria
 
-The enhanced lite mode implementation is considered successful when:
+The lite mode implementation is considered successful when:
 
 1. All buckets and files are visible to all MSPs
 2. BSP associations are tracked for all files
