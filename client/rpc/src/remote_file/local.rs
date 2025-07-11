@@ -177,8 +177,14 @@ impl RemoteFileHandler for LocalFileHandler {
         io::copy(&mut data, &mut file).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 RemoteFileError::AccessDenied
-            } else if e.kind() == std::io::ErrorKind::NoSpace {
-                RemoteFileError::Other("Insufficient disk space".to_string())
+            } else if e.kind() == std::io::ErrorKind::Other {
+                // Check if the error message contains disk space related keywords
+                let error_str = e.to_string().to_lowercase();
+                if error_str.contains("space") || error_str.contains("disk full") {
+                    RemoteFileError::Other("Insufficient disk space".to_string())
+                } else {
+                    RemoteFileError::IoError(e)
+                }
             } else {
                 RemoteFileError::IoError(e)
             }

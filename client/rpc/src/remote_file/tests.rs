@@ -8,7 +8,6 @@
 //! - Mock external service interactions
 
 use super::*;
-use crate::RemoteFileError;
 use std::sync::Arc;
 use url::Url;
 
@@ -361,7 +360,7 @@ mod integration_tests {
 #[cfg(test)]
 mod external_service_tests {
     use super::*;
-    use mockito::{mock, Server};
+    use mockito::Server;
 
     #[tokio::test]
     async fn test_http_download_with_mock_server() {
@@ -501,9 +500,9 @@ mod external_service_tests {
         let mut server = Server::new();
         let _m = server.mock("GET", "/slow-response")
             .with_status(200)
-            .with_body_from_fn(|_| {
+            .with_chunked_body(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
-                Ok(b"Too late".to_vec())
+                vec![Ok(b"Too late".to_vec())]
             })
             .create();
 
@@ -574,6 +573,23 @@ mod handler_trait_tests {
 
         fn is_supported(&self, url: &Url) -> bool {
             url.scheme() == self.supported_scheme
+        }
+
+        async fn upload_file(
+            &self,
+            uri: &str,
+            _data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+            _size: u64,
+            _content_type: Option<String>,
+        ) -> Result<(), RemoteFileError> {
+            let url = Url::parse(uri)
+                .map_err(|e| RemoteFileError::InvalidUrl(format!("Invalid URL: {}", e)))?;
+            
+            if self.is_supported(&url) {
+                Ok(())
+            } else {
+                Err(RemoteFileError::UnsupportedProtocol(url.scheme().to_string()))
+            }
         }
     }
 

@@ -3,7 +3,7 @@
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures_util::StreamExt;
+use futures_util::TryStreamExt;
 use reqwest::{Body, Client, StatusCode};
 use std::time::Duration;
 use tokio::io::AsyncRead;
@@ -263,7 +263,7 @@ impl RemoteFileHandler for HttpFileHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::{mock, Server};
+    use mockito::Server;
 
     fn create_test_handler() -> HttpFileHandler {
         let config = RemoteFileConfig {
@@ -529,9 +529,9 @@ mod tests {
         let mut server = Server::new();
         let _m = server.mock("PUT", "/slow-upload.txt")
             .with_status(200)
-            .with_body_from_fn(|_| {
+            .with_chunked_body(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
-                Ok(b"".to_vec())
+                vec![Ok(b"".to_vec())]
             })
             .create();
 
@@ -690,9 +690,9 @@ mod tests {
         // Mock a slow server that takes longer than timeout
         let _m = server.mock("GET", "/slow.txt")
             .with_status(200)
-            .with_body_from_fn(|_| {
+            .with_chunked_body(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
-                Ok(b"delayed response".to_vec())
+                vec![Ok(b"delayed response".to_vec())]
             })
             .create();
 

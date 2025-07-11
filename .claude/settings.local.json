@@ -21,7 +21,8 @@
       "Bash(chmod:*)",
       "Bash(./test_remote_file_changes.sh:*)",
       "Bash(cargo doc:*)",
-      "Bash(cargo tree:*)"
+      "Bash(cargo tree:*)",
+      "Bash(cargo metadata:*)"
     ],
     "deny": []
   }

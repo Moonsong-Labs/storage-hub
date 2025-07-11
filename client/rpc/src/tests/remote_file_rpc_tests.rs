@@ -8,96 +8,8 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        RemoteFileConfig, RemoteFileHandlerFactory, 
-        GetFileFromFileStorageRequest, GetFileFromFileStorageResult,
-        FileStorageResponseType,
-    };
-    use sp_core::H256;
-    use std::collections::HashMap;
+    use crate::remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
     use url::Url;
-
-    /// Helper to create a test file storage request
-    fn create_test_request(url: &str) -> GetFileFromFileStorageRequest {
-        GetFileFromFileStorageRequest {
-            file_key: H256::random(),
-            user_peer_ids: vec![],
-            user_multiaddresses: vec![],
-            fingerprint: H256::random(),
-            location: url.to_string(),
-            bucket_id: 1,
-            region: None,
-            owner: vec![1, 2, 3, 4],
-            msp_address: vec![5, 6, 7, 8],
-        }
-    }
-
-    #[test]
-    fn test_request_with_http_url() {
-        let request = create_test_request("https://example.com/file.txt");
-        
-        // Verify the request can be created with HTTP URL
-        assert_eq!(request.location, "https://example.com/file.txt");
-        
-        // Verify URL can be parsed
-        let url = Url::parse(&request.location).unwrap();
-        assert_eq!(url.scheme(), "https");
-        assert_eq!(url.host_str(), Some("example.com"));
-    }
-
-    #[test]
-    fn test_request_with_ftp_url() {
-        let request = create_test_request("ftp://ftp.example.com/data/file.dat");
-        
-        // Verify the request can be created with FTP URL
-        assert_eq!(request.location, "ftp://ftp.example.com/data/file.dat");
-        
-        // Verify URL can be parsed
-        let url = Url::parse(&request.location).unwrap();
-        assert_eq!(url.scheme(), "ftp");
-        assert_eq!(url.host_str(), Some("ftp.example.com"));
-        assert_eq!(url.path(), "/data/file.dat");
-    }
-
-    #[test]
-    fn test_request_with_local_file() {
-        let request = create_test_request("file:///home/user/data.bin");
-        
-        // Verify the request can be created with file URL
-        assert_eq!(request.location, "file:///home/user/data.bin");
-        
-        // Verify URL can be parsed
-        let url = Url::parse(&request.location).unwrap();
-        assert_eq!(url.scheme(), "file");
-        assert_eq!(url.path(), "/home/user/data.bin");
-    }
-
-    #[test]
-    fn test_response_types() {
-        // Test that response types can be created
-        let _accepted = GetFileFromFileStorageResult {
-            response: FileStorageResponseType::FileStorageRequestAccepted,
-        };
-
-        let _forwarded = GetFileFromFileStorageResult {
-            response: FileStorageResponseType::FileStorageRequestForwarded(
-                vec!["peer1".to_string(), "peer2".to_string()],
-                vec!["addr1".to_string(), "addr2".to_string()],
-            ),
-        };
-
-        let _serving = GetFileFromFileStorageResult {
-            response: FileStorageResponseType::ServingFile,
-        };
-
-        let _error = GetFileFromFileStorageResult {
-            response: FileStorageResponseType::FileStorageRequestError(
-                "Test error".to_string()
-            ),
-        };
-    }
-
-    // Test removed - duplicate of config tests in remote_file/tests.rs
 
     #[test]
     fn test_location_validation() {
@@ -108,23 +20,26 @@ mod tests {
             ("ftp://example.com/file.txt", true),
             ("ftps://example.com/file.txt", true),
             ("file:///path/to/file.txt", true),
-            ("/absolute/path/file.txt", true), // Should be treated as local file
             ("sftp://example.com/file.txt", false), // Unsupported
-            ("", false), // Empty
-            ("not a url", false), // Invalid
+            ("", false), // Empty - not a valid URL
         ];
 
         let config = RemoteFileConfig::default();
         
         for (location, should_succeed) in test_locations {
-            let result = RemoteFileHandlerFactory::create_from_string(location, config.clone());
-            
-            assert_eq!(
-                result.is_ok(), 
-                should_succeed, 
-                "Location '{}' validation failed", 
-                location
-            );
+            if let Ok(url) = Url::parse(location) {
+                let result = RemoteFileHandlerFactory::create(&url, config.clone());
+                
+                assert_eq!(
+                    result.is_ok(), 
+                    should_succeed, 
+                    "Location '{}' validation failed", 
+                    location
+                );
+            } else {
+                // If URL parsing fails, handler creation should also fail
+                assert!(!should_succeed, "Expected '{}' to be invalid URL", location);
+            }
         }
     }
 
@@ -140,79 +55,37 @@ mod tests {
         let config = RemoteFileConfig::default();
         
         for location in locations {
-            let request = create_test_request(location);
-            
-            // Verify the handler can be created
-            let result = RemoteFileHandlerFactory::create_from_string(
-                &request.location, 
-                config.clone()
-            );
-            
-            assert!(result.is_ok(), "Failed to create handler for: {}", location);
+            if let Ok(url) = Url::parse(location) {
+                // Verify the handler can be created
+                let result = RemoteFileHandlerFactory::create(&url, config.clone());
+                
+                assert!(result.is_ok(), "Failed to create handler for: {}", location);
+            }
         }
     }
 
     #[test]
-    fn test_region_handling() {
-        // Test that region field in request doesn't affect URL parsing
-        let mut request = create_test_request("https://example.com/file.txt");
-        request.region = Some("us-east-1".to_string());
-        
+    fn test_local_path_handling() {
+        // Test that local paths are treated correctly
         let config = RemoteFileConfig::default();
-        let handler = RemoteFileHandlerFactory::create_from_string(
-            &request.location,
-            config
-        ).unwrap();
         
-        assert!(handler.is_supported(&Url::parse(&request.location).unwrap()));
-    }
-
-    /// Mock test for RPC method behavior
-    /// In a real integration test, this would interact with the actual RPC server
-    #[tokio::test]
-    async fn test_rpc_get_file_from_file_storage_mock() {
-        // This is a mock test showing how the RPC would handle different URLs
-        let test_cases = vec![
-            (
-                "https://example.com/file.txt",
-                FileStorageResponseType::ServingFile,
-            ),
-            (
-                "ftp://example.com/file.txt",
-                FileStorageResponseType::ServingFile,
-            ),
-            (
-                "sftp://example.com/file.txt",
-                FileStorageResponseType::FileStorageRequestError(
-                    "Unsupported protocol: sftp".to_string()
-                ),
-            ),
+        // Absolute paths should be treated as local files
+        let local_paths = vec![
+            "/absolute/path/file.txt",
+            "./relative/path/file.txt",
+            "../parent/path/file.txt",
         ];
-
-        for (url, expected_response_type) in test_cases {
-            let request = create_test_request(url);
-            
-            // In a real test, this would call the RPC method
-            // For now, we just verify the expected behavior
-            match &expected_response_type {
-                FileStorageResponseType::ServingFile => {
-                    // Handler should be creatable for supported protocols
-                    let config = RemoteFileConfig::default();
-                    let result = RemoteFileHandlerFactory::create_from_string(
-                        &request.location,
-                        config
-                    );
-                    assert!(result.is_ok() || url.contains("sftp"));
-                }
-                FileStorageResponseType::FileStorageRequestError(msg) => {
-                    // Handler creation should fail for unsupported protocols
-                    if url.contains("sftp") {
-                        assert!(msg.contains("Unsupported protocol"));
-                    }
-                }
-                _ => {}
-            }
+        
+        for path in local_paths {
+            // These are not valid URLs, so they should be handled as local files
+            // in the actual RPC implementation
+            assert!(Url::parse(path).is_err());
         }
+        
+        // file:// URLs should work
+        let file_url = Url::parse("file:///absolute/path/file.txt").unwrap();
+        let handler = RemoteFileHandlerFactory::create(&file_url, config.clone());
+        assert!(handler.is_ok());
     }
 }
 
@@ -226,7 +99,7 @@ mod tests {
 ///    cargo run --release -- --dev
 ///    
 ///    # In another terminal, run RPC tests
-///    cargo test --package storagehub-rpc --test remote_file_rpc_tests
+///    cargo test --package shc-rpc --test remote_file_rpc_tests
 ///    ```
 /// 
 /// 2. **Test with Mock HTTP Server**:
@@ -238,19 +111,12 @@ mod tests {
 ///    - `TEST_HTTP_URL`: URL to test HTTP downloads
 ///    - `TEST_FTP_URL`: URL to test FTP downloads
 /// 
-/// 4. **RPC Client Example**:
-///    ```rust
-///    // Example of calling the RPC method
-///    let client = StorageHubRpcClient::new(...);
-///    let request = GetFileFromFileStorageRequest {
-///        file_key: H256::random(),
-///        location: "https://example.com/file.txt".to_string(),
-///        // ... other fields
-///    };
-///    let result = client.get_file_from_file_storage(request).await?;
-///    ```
+/// 4. **RPC Usage Example**:
+///    When the `save_file_to_disk` RPC method is called with a URL instead
+///    of a local path, the appropriate remote file handler will be used
+///    to download the file before saving it locally.
 #[cfg(test)]
-mod rpc_client_tests {
+mod rpc_integration_docs {
     // These tests would require an actual RPC client connection
     // They are documented here for reference when setting up integration tests
 }

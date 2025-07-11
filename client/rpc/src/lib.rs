@@ -1,8 +1,6 @@
 use std::{
     collections::HashSet,
     fmt::Debug,
-    fs::File,
-    io::{Read, Write},
     path::PathBuf,
     str::FromStr,
     sync::Arc,
@@ -24,8 +22,7 @@ use log::{debug, error, info};
 use sc_rpc_api::check_if_safe;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
-use tokio::{fs, fs::create_dir_all, io::AsyncReadExt, sync::RwLock};
-use tokio_util::io::StreamReader;
+use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
@@ -548,19 +545,21 @@ where
             Arc::new(local::LocalFileHandler::new()) as Arc<dyn RemoteFileHandler>
         };
 
-        // Create an async stream from the file chunks
-        let file_key_clone = file_key.clone();
-        let chunks_stream = futures::stream::iter(0..total_chunks)
-            .then(move |chunk_idx| {
-                let file_storage = read_file_storage.clone();
-                let file_key = file_key_clone.clone();
-                async move {
-                    let chunk_id = ChunkId::new(chunk_idx);
-                    file_storage
-                        .get_chunk(&file_key, &chunk_id)
-                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-                }
-            });
+        // Collect all chunks first to avoid cloning the read guard
+        let mut chunks = Vec::new();
+        for chunk_idx in 0..total_chunks {
+            let chunk_id = ChunkId::new(chunk_idx);
+            let chunk = read_file_storage
+                .get_chunk(&file_key, &chunk_id)
+                .map_err(into_rpc_error)?;
+            chunks.push(chunk);
+        }
+        
+        // Drop the read lock before creating the stream
+        drop(read_file_storage);
+        
+        // Create an async stream from the collected chunks
+        let chunks_stream = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
 
         // Convert the stream to AsyncRead
         let reader = tokio_util::io::StreamReader::new(
@@ -569,7 +568,7 @@ where
         let boxed_reader: Box<dyn tokio::io::AsyncRead + Send + Unpin> = Box::new(reader);
 
         // Upload the file using the handler
-        let file_size = file_metadata.size;
+        let file_size = file_metadata.file_size();
         handler
             .upload_file(&file_path, boxed_reader, file_size, None)
             .await

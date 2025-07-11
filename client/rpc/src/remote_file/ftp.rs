@@ -7,7 +7,9 @@ use std::io::Cursor;
 use std::time::Duration;
 use suppaftp::types::FileType;
 use suppaftp::{AsyncFtpStream, FtpError};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use suppaftp::types::Response;
+use tokio::io::AsyncRead;
+use tokio_util::compat::TokioAsyncReadCompatExt;
 use url::Url;
 
 /// FTP/FTPS file handler
@@ -76,7 +78,7 @@ impl FtpFileHandler {
         };
 
         stream.login(&user, &pass).await.map_err(|e| match e {
-            FtpError::UnexpectedResponse(ref resp) if resp.status == 530 => {
+            FtpError::UnexpectedResponse(ref resp) if resp.status == 530.into() => {
                 RemoteFileError::AccessDenied
             }
             _ => RemoteFileError::FtpError(e),
@@ -98,8 +100,8 @@ impl FtpFileHandler {
     fn ftp_error_to_remote_error(error: FtpError) -> RemoteFileError {
         match error {
             FtpError::UnexpectedResponse(ref resp) => match resp.status {
-                550 => RemoteFileError::NotFound,
-                530 => RemoteFileError::AccessDenied,
+                s if s == 550.into() => RemoteFileError::NotFound,
+                s if s == 530.into() => RemoteFileError::AccessDenied,
                 _ => RemoteFileError::FtpError(error),
             },
             _ => RemoteFileError::FtpError(error),
@@ -115,25 +117,33 @@ impl FtpFileHandler {
         let size = stream
             .size(&path)
             .await
-            .map_err(Self::ftp_error_to_remote_error)?
-            .ok_or_else(|| RemoteFileError::Other("Unable to determine file size".to_string()))?;
+            .map_err(Self::ftp_error_to_remote_error)?;
 
-        if size > self.config.max_file_size {
+        if size as u64 > self.config.max_file_size {
             return Err(RemoteFileError::Other(format!(
                 "File size {} exceeds maximum allowed size {}",
                 size, self.config.max_file_size
             )));
         }
 
-        // Retrieve file
+        // Retrieve file using callback
         let data = tokio::time::timeout(
             Duration::from_secs(self.config.read_timeout),
-            stream.retr_as_buffer(&path),
+            stream.retr(&path, |mut reader| {
+                Box::pin(async move {
+                    use futures_util::io::AsyncReadExt;
+                    let mut buffer = Vec::new();
+                    reader.read_to_end(&mut buffer).await
+                        .map_err(|e| FtpError::UnexpectedResponse(
+                            Response::new(0.into(), format!("IO error: {}", e).into_bytes())
+                        ))?;
+                    Ok((buffer, reader))
+                })
+            }),
         )
         .await
         .map_err(|_| RemoteFileError::Timeout)?
-        .map_err(Self::ftp_error_to_remote_error)?
-        .into_inner();
+        .map_err(Self::ftp_error_to_remote_error)?;
 
         // Disconnect
         let _ = stream.quit().await;
@@ -148,10 +158,11 @@ impl FtpFileHandler {
 
         // Create a cursor from the data
         let cursor = Cursor::new(data);
+        let mut compat_cursor = cursor.compat();
 
         // Upload the file
         stream
-            .put(&path, &mut cursor.clone())
+            .put_file(&path, &mut compat_cursor)
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
@@ -172,10 +183,9 @@ impl RemoteFileHandler for FtpFileHandler {
         let size = stream
             .size(&path)
             .await
-            .map_err(Self::ftp_error_to_remote_error)?
-            .ok_or_else(|| RemoteFileError::Other("Unable to determine file size".to_string()))?;
+            .map_err(Self::ftp_error_to_remote_error)?;
 
-        if size > self.config.max_file_size {
+        if size as u64 > self.config.max_file_size {
             return Err(RemoteFileError::Other(format!(
                 "File size {} exceeds maximum allowed size {}",
                 size, self.config.max_file_size
@@ -186,7 +196,7 @@ impl RemoteFileHandler for FtpFileHandler {
         let _ = stream.quit().await;
 
         // FTP doesn't provide content type information
-        Ok((size, None))
+        Ok((size as u64, None))
     }
 
     async fn stream_file(
@@ -210,46 +220,37 @@ impl RemoteFileHandler for FtpFileHandler {
         let (_, _, _, _, path) = Self::parse_url(url)?;
         let mut stream = self.connect(url).await?;
 
-        // FTP REST command to set resume position
-        stream
-            .resume_transfer(offset)
-            .await
-            .map_err(|e| RemoteFileError::Other(format!("FTP REST command failed: {}", e)))?;
-
-        // Retrieve file from offset
-        let mut reader = stream
-            .retr_as_stream(&path)
+        // For partial downloads, we'll download the entire file and extract the chunk
+        // This is not optimal but suppaftp doesn't provide a good way to do partial reads
+        let file_data = stream
+            .retr(&path, |mut reader| {
+                Box::pin(async move {
+                    use futures_util::io::AsyncReadExt;
+                    let mut buffer = Vec::new();
+                    reader.read_to_end(&mut buffer).await
+                        .map_err(|e| FtpError::UnexpectedResponse(
+                            Response::new(0.into(), format!("IO error: {}", e).into_bytes())
+                        ))?;
+                    Ok((buffer, reader))
+                })
+            })
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
-        // Read only the requested length
-        let mut buffer = vec![0u8; length as usize];
-        let mut total_read = 0;
-
-        while total_read < length as usize {
-            let to_read = std::cmp::min(buffer.len() - total_read, 8192);
-            let n = reader
-                .read(&mut buffer[total_read..total_read + to_read])
-                .await
-                .map_err(|e| RemoteFileError::IoError(e))?;
-
-            if n == 0 {
-                break;
-            }
-
-            total_read += n;
+        // Extract the requested chunk
+        let start = offset as usize;
+        let end = std::cmp::min(start + length as usize, file_data.len());
+        
+        if start >= file_data.len() {
+            return Ok(Bytes::new());
         }
-
-        buffer.truncate(total_read);
-
-        // Finalize the transfer
-        drop(reader);
-        let _ = stream.finalize_retr_stream().await;
+        
+        let chunk = file_data[start..end].to_vec();
 
         // Disconnect
         let _ = stream.quit().await;
 
-        Ok(Bytes::from(buffer))
+        Ok(Bytes::from(chunk))
     }
 
     fn is_supported(&self, url: &Url) -> bool {
@@ -278,7 +279,7 @@ impl RemoteFileHandler for FtpFileHandler {
         let mut stream = self.connect(&url).await?;
 
         // Read data into buffer with size limit
-        if size > self.config.max_file_size {
+        if size as u64 > self.config.max_file_size {
             return Err(RemoteFileError::Other(format!(
                 "File size {} exceeds maximum allowed size {}",
                 size, self.config.max_file_size
@@ -293,11 +294,12 @@ impl RemoteFileHandler for FtpFileHandler {
 
         // Create a cursor from the buffer
         let cursor = Cursor::new(buffer);
+        let mut compat_cursor = cursor.compat();
 
         // Upload the file with timeout
         tokio::time::timeout(
             Duration::from_secs(self.config.read_timeout),
-            stream.put(&path, &mut cursor.clone()),
+            stream.put_file(&path, &mut compat_cursor),
         )
         .await
         .map_err(|_| RemoteFileError::Timeout)?
