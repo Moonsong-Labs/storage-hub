@@ -211,7 +211,7 @@ mod error_handling_tests {
         let errors = vec![
             RemoteFileError::InvalidUrl("bad url".to_string()),
             RemoteFileError::UnsupportedProtocol("custom".to_string()),
-            RemoteFileError::ConnectionFailed("Connection refused".to_string()),
+            RemoteFileError::Other("Connection refused".to_string()),
             RemoteFileError::Timeout,
             RemoteFileError::NotFound,
             RemoteFileError::AccessDenied,
@@ -379,7 +379,7 @@ mod external_service_tests {
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
         // Download using the handler trait method
-        let metadata = handler.fetch_metadata(&url).await;
+        let _metadata = handler.fetch_metadata(&url).await;
         // Note: The mock doesn't provide content-length in HEAD request, so we'll stream it
         let mut stream = handler.stream_file(&url).await.unwrap();
         let mut data = Vec::new();
@@ -476,7 +476,7 @@ mod external_service_tests {
         // Test with credentials in URL
         let url = Url::parse(&format!("http://user:pass@{}/protected/resource", 
                                      server.host_with_port())).unwrap();
-        let handler = RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
+        let _handler = RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
         
         // Note: The current HTTP handler doesn't handle auth from URL for GET requests
         // This would need to be implemented in the HTTP handler
@@ -502,7 +502,7 @@ mod external_service_tests {
             .with_status(200)
             .with_chunked_body(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
-                vec![Ok(b"Too late".to_vec())]
+                Ok(())
             })
             .create();
 

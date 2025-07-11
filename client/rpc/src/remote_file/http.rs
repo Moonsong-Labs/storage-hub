@@ -531,7 +531,7 @@ mod tests {
             .with_status(200)
             .with_chunked_body(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
-                vec![Ok(b"".to_vec())]
+                Ok(())
             })
             .create();
 
@@ -692,7 +692,7 @@ mod tests {
             .with_status(200)
             .with_chunked_body(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
-                vec![Ok(b"delayed response".to_vec())]
+                Ok(())
             })
             .create();
 

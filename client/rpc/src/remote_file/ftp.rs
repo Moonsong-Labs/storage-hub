@@ -802,8 +802,8 @@ mod tests {
         let mut behavior = MockFtpBehavior::default();
         behavior.connection_delay_ms = 2000; // 2 second delay to trigger timeout
         
-        let test_handler = TestFtpFileHandler::new(config, behavior);
-        let url = Url::parse("ftp://192.0.2.1/file.txt").unwrap();
+        let _test_handler = TestFtpFileHandler::new(config, behavior);
+        let _url = Url::parse("ftp://192.0.2.1/file.txt").unwrap();
         
         // Since our mock respects the connection delay, we need to implement timeout
         // in the test wrapper. For now, we'll test timeout behavior differently
@@ -928,7 +928,7 @@ mod tests {
                 let url = Url::parse(url_str).unwrap();
                 let handler = test_handler.clone();
                 async move {
-                    handler.test_upload(&url, data).await
+                    handler.test_upload(&url, *data).await
                 }
             })
             .collect();

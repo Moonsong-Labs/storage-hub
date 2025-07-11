@@ -215,7 +215,7 @@ mod tests {
 
         // Test with absolute path
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
-        let (size, content_type) = handler.fetch_metadata(&url).await.unwrap();
+        let (size, _content_type) = handler.fetch_metadata(&url).await.unwrap();
         assert_eq!(size, test_content.len() as u64);
     }
 

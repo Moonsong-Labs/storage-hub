@@ -22,7 +22,8 @@
       "Bash(./test_remote_file_changes.sh:*)",
       "Bash(cargo doc:*)",
       "Bash(cargo tree:*)",
-      "Bash(cargo metadata:*)"
+      "Bash(cargo metadata:*)",
+      "Bash(./test_remote_file_fixes)"
     ],
     "deny": []
   }
