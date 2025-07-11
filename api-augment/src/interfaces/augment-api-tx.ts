@@ -2762,7 +2762,7 @@ declare module "@polkadot/api-base/types/submittable" {
       /**
        * Introduce a new challenge.
        *
-       * This function allows anyone to add a new challenge to the `ChallengesQueue`.
+       * This function allows authorized origins to add a new challenge to the `ChallengesQueue`.
        * The challenge will be dispatched in the coming blocks.
        * Users are charged a small fee for submitting a challenge, which
        * goes to the Treasury.

@@ -17,6 +17,7 @@ import type { ITuple } from "@polkadot/types-codec/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
 import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
+  FrameSupportDispatchRawOrigin,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
   FrameSystemDispatchEventInfo,
@@ -2193,9 +2194,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewChallenge: AugmentedEvent<
         ApiType,
-        [who: AccountId32, keyChallenged: H256],
+        [who: FrameSupportDispatchRawOrigin, keyChallenged: H256],
         {
-          who: AccountId32;
+          who: FrameSupportDispatchRawOrigin;
           keyChallenged: H256;
         }
       >;

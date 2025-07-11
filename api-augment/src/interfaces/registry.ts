@@ -33,6 +33,7 @@ import type {
   FrameSupportDispatchPerDispatchClassU32,
   FrameSupportDispatchPerDispatchClassWeight,
   FrameSupportDispatchPerDispatchClassWeightsPerClass,
+  FrameSupportDispatchRawOrigin,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
   FrameSupportTokensMiscIdAmount,
@@ -339,6 +340,7 @@ declare module "@polkadot/types/types/registry" {
     FrameSupportDispatchPerDispatchClassU32: FrameSupportDispatchPerDispatchClassU32;
     FrameSupportDispatchPerDispatchClassWeight: FrameSupportDispatchPerDispatchClassWeight;
     FrameSupportDispatchPerDispatchClassWeightsPerClass: FrameSupportDispatchPerDispatchClassWeightsPerClass;
+    FrameSupportDispatchRawOrigin: FrameSupportDispatchRawOrigin;
     FrameSupportMessagesProcessMessageError: FrameSupportMessagesProcessMessageError;
     FrameSupportTokensMiscBalanceStatus: FrameSupportTokensMiscBalanceStatus;
     FrameSupportTokensMiscIdAmount: FrameSupportTokensMiscIdAmount;
