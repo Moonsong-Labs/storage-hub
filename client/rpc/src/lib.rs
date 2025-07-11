@@ -10,6 +10,9 @@ use std::{
 
 pub mod remote_file;
 
+#[cfg(test)]
+mod tests;
+
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
