@@ -153,11 +153,10 @@ export class NetworkLauncher {
       composeYaml.services["sh-user"].command.push("--indexer");
       
       // Add indexer mode if specified
-      // TODO: Re-enable once Docker image is updated with indexer-mode support
-      // if (this.config.indexerMode) {
-      //   composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
-      // }
-      
+      if (this.config.indexerMode) {
+        composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+      }
+
       composeYaml.services["sh-user"].command.push(
         "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
       );
@@ -173,11 +172,10 @@ export class NetworkLauncher {
         );
         
         // Add indexer mode if specified
-        // TODO: Re-enable once Docker image is updated with indexer-mode support
-        // if (this.config.indexerMode) {
-        //   composeYaml.services["sh-msp-1"].command.push(`--indexer-mode=${this.config.indexerMode}`);
-        //   composeYaml.services["sh-msp-2"].command.push(`--indexer-mode=${this.config.indexerMode}`);
-        // }
+        if (this.config.indexerMode) {
+          composeYaml.services["sh-msp-1"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+          composeYaml.services["sh-msp-2"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+        }
       }
     }
 

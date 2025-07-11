@@ -30,7 +30,8 @@
       "Bash(pnpm docker:build:*)",
       "Bash(pnpm crossbuild:mac:*)",
       "Bash(NODE_OPTIONS='--no-deprecation' node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/msp/indexer-lite-mode-env.test.ts)",
-      "Bash(docker exec:*)"
+      "Bash(docker exec:*)",
+      "Bash(git rm:*)"
     ],
     "deny": []
   }
