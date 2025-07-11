@@ -14555,6 +14555,7 @@ dependencies = [
  "array-bytes",
  "async-trait",
  "bytes",
+ "futures",
  "futures-util",
  "jsonrpsee 0.24.9",
  "log",

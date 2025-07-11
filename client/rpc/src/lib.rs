@@ -13,6 +13,7 @@ pub mod remote_file;
 #[cfg(test)]
 mod tests;
 
+use futures::StreamExt;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
@@ -24,10 +25,11 @@ use sc_rpc_api::check_if_safe;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
 use tokio::{fs, fs::create_dir_all, io::AsyncReadExt, sync::RwLock};
+use tokio_util::io::StreamReader;
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
-use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
+use remote_file::{local, RemoteFileConfig, RemoteFileHandler, RemoteFileHandlerFactory};
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -153,6 +155,11 @@ pub trait StorageHubClientApi {
     #[method(name = "removeFilesWithPrefixFromFileStorage", with_extensions)]
     async fn remove_files_with_prefix_from_file_storage(&self, prefix: H256) -> RpcResult<()>;
 
+    /// Save a file from storage to disk or upload it to a remote location.
+    /// 
+    /// Supports both local file paths and remote URLs (HTTP/HTTPS, FTP/FTPS).
+    /// For local paths, the file is saved to the filesystem.
+    /// For remote URLs, the file is uploaded to the specified endpoint.
     #[method(name = "saveFileToDisk", with_extensions)]
     async fn save_file_to_disk(
         &self,
@@ -477,6 +484,24 @@ where
         Ok(())
     }
 
+    /// Saves a file from storage to disk or uploads it to a remote location.
+    /// 
+    /// This method supports both local file paths and remote URLs:
+    /// - Local paths: Files are saved directly to the filesystem
+    /// - HTTP/HTTPS URLs: Files are uploaded via HTTP PUT/POST
+    /// - FTP/FTPS URLs: Files are uploaded via FTP
+    /// - file:// URLs: Treated as local file paths
+    /// 
+    /// # Arguments
+    /// * `ext` - RPC extensions for safety checks
+    /// * `file_key` - The key identifying the file in storage
+    /// * `file_path` - The destination path (local or remote URL)
+    /// 
+    /// # Returns
+    /// * `SaveFileToDisk::Success` - File was successfully saved/uploaded
+    /// * `SaveFileToDisk::FileNotFound` - File key not found in storage
+    /// * `SaveFileToDisk::IncompleteFile` - File is incomplete (missing chunks)
+    /// * Error - If the operation fails
     async fn save_file_to_disk(
         &self,
         ext: &Extensions,
@@ -485,23 +510,6 @@ where
     ) -> RpcResult<SaveFileToDisk> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
-
-        // Check if the file_path is a remote URL or local path
-        // Try to parse as URL first
-        let is_remote = if let Ok(url) = url::Url::parse(&file_path) {
-            // Check if it's a remote protocol (not file:// or empty scheme)
-            !matches!(url.scheme(), "" | "file")
-        } else {
-            // Failed to parse as URL, treat as local path
-            false
-        };
-
-        // Return error if trying to save to a remote location
-        if is_remote {
-            return Err(into_rpc_error(
-                "Saving files to remote locations (HTTP/FTP) is not supported. Only local file paths are allowed."
-            ));
-        }
 
         // Acquire FileStorage read lock.
         let read_file_storage = self.file_storage.read().await;
@@ -529,24 +537,43 @@ where
             }));
         }
 
-        let file_path = PathBuf::from(file_path.clone());
+        // Create appropriate handler based on the file_path (local or remote)
+        let config = RemoteFileConfig::default();
+        let handler = if let Ok(url) = url::Url::parse(&file_path) {
+            // Valid URL - create handler based on scheme
+            RemoteFileHandlerFactory::create(&url, config)
+                .map_err(|e| into_rpc_error(format!("Failed to create file handler: {}", e)))?
+        } else {
+            // Not a valid URL - treat as local file path
+            Arc::new(local::LocalFileHandler::new()) as Arc<dyn RemoteFileHandler>
+        };
 
-        // Create parent directories if they don't exist.
-        create_dir_all(&file_path.parent().unwrap())
+        // Create an async stream from the file chunks
+        let file_key_clone = file_key.clone();
+        let chunks_stream = futures::stream::iter(0..total_chunks)
+            .then(move |chunk_idx| {
+                let file_storage = read_file_storage.clone();
+                let file_key = file_key_clone.clone();
+                async move {
+                    let chunk_id = ChunkId::new(chunk_idx);
+                    file_storage
+                        .get_chunk(&file_key, &chunk_id)
+                        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+                }
+            });
+
+        // Convert the stream to AsyncRead
+        let reader = tokio_util::io::StreamReader::new(
+            chunks_stream.map(|result| result.map(bytes::Bytes::from))
+        );
+        let boxed_reader: Box<dyn tokio::io::AsyncRead + Send + Unpin> = Box::new(reader);
+
+        // Upload the file using the handler
+        let file_size = file_metadata.size;
+        handler
+            .upload_file(&file_path, boxed_reader, file_size, None)
             .await
-            .map_err(into_rpc_error)?;
-
-        // Open file in the local file system.
-        let mut file = File::create(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
-
-        // Write file data to disk.
-        for chunk_id in 0..total_chunks {
-            let chunk_id = ChunkId::new(chunk_id);
-            let chunk = read_file_storage
-                .get_chunk(&file_key, &chunk_id)
-                .map_err(into_rpc_error)?;
-            file.write_all(&chunk).map_err(into_rpc_error)?;
-        }
+            .map_err(|e| into_rpc_error(format!("Failed to save file: {}", e)))?;
 
         Ok(SaveFileToDisk::Success(file_metadata))
     }
