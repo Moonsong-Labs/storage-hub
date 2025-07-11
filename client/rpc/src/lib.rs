@@ -20,7 +20,7 @@ use log::{debug, error, info};
 use sc_rpc_api::check_if_safe;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
-use tokio::{fs, fs::create_dir_all, sync::RwLock};
+use tokio::{fs, fs::create_dir_all, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
@@ -31,6 +31,7 @@ use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{traits::Block as BlockT, AccountId32, Deserialize, KeyTypeId, Serialize};
 use sp_runtime_interface::pass_by::PassByInner;
+use remote_file::{RemoteFileHandlerFactory, RemoteFileConfig};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
@@ -333,24 +334,45 @@ where
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Open file in the local file system.
-        let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
+        // Create a remote file handler based on the file_path (supports URLs and local paths)
+        let config = RemoteFileConfig::default();
+        let handler = RemoteFileHandlerFactory::create_from_string(&file_path, config)
+            .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
+
+        // Parse the URL to pass to the handler
+        let url = url::Url::parse(&file_path)
+            .or_else(|_| {
+                // If parsing as URL fails, treat as local file path
+                url::Url::parse(&format!("file://{}", file_path))
+            })
+            .map_err(|e| into_rpc_error(format!("Invalid file path or URL: {:?}", e)))?;
+
+        // Fetch file metadata first to get the file size
+        let (file_size, _content_type) = handler
+            .fetch_metadata(&url)
+            .await
+            .map_err(|e| into_rpc_error(format!("Failed to fetch file metadata: {:?}", e)))?;
+
+        if file_size == 0 {
+            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
+        }
+
+        // Get a stream reader for the file
+        let mut stream = handler
+            .stream_file(&url)
+            .await
+            .map_err(|e| into_rpc_error(format!("Failed to stream file: {:?}", e)))?;
 
         // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
         let mut file_data_trie = self.file_storage.write().await.new_file_data_trie();
         // A chunk id is simply an integer index.
         let mut chunk_id: u64 = 0;
 
-        // Read file in chunks of [`FILE_CHUNK_SIZE`] into buffer then push buffer into a vector.
-        // Loops until EOF or until some error that is NOT `ErrorKind::Interrupted` is found.
-        // If `ErrorKind::Interrupted` is found, the operation is simply retried, as per
-        // https://doc.rust-lang.org/std/io/trait.Read.html#errors-1
+        // Read file in chunks of [`FILE_CHUNK_SIZE`] from the stream
         loop {
-            let mut chunk = Vec::with_capacity(FILE_CHUNK_SIZE as usize);
-            let read_result = <File as Read>::by_ref(&mut file)
-                .take(FILE_CHUNK_SIZE)
-                .read_to_end(&mut chunk);
-            match read_result {
+            let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
+            
+            match stream.read(&mut chunk).await {
                 // Reached EOF, break loop.
                 Ok(0) => {
                     debug!(target: LOG_TARGET, "Finished reading file");
@@ -359,6 +381,9 @@ where
                 // Haven't reached EOF yet, continue loop.
                 Ok(bytes_read) => {
                     debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
+                    
+                    // Resize chunk to actual bytes read
+                    chunk.truncate(bytes_read);
 
                     // Build the actual [`FileDataTrie`] by inserting each chunk into it.
                     file_data_trie
@@ -368,25 +393,20 @@ where
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
-                    return Err(into_rpc_error(e));
+                    return Err(into_rpc_error(format!("Error reading file stream: {:?}", e)));
                 }
             }
         }
 
         // Generate the necessary metadata so we can insert file into the File Storage.
         let root = file_data_trie.get_root();
-        let fs_metadata = file.metadata().map_err(into_rpc_error)?;
-
-        if fs_metadata.len() == 0 {
-            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
-        }
 
         // Build StorageHub's [`FileMetadata`]
         let file_metadata = FileMetadata::new(
             <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
             bucket_id.as_ref().to_vec(),
             location.clone().into(),
-            fs_metadata.len(),
+            file_size,
             root.as_ref().into(),
         )
         .map_err(into_rpc_error)?;

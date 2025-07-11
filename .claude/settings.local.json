@@ -13,7 +13,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(cargo clippy:*)",
-      "Bash(rustc:*)"
+      "Bash(rustc:*)",
+      "Bash(cargo rustc:*)"
     ],
     "deny": []
   }
