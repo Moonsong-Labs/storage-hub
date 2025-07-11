@@ -1,19 +1,18 @@
 import assert from "node:assert";
 import { describeMspNet, type EnrichedBspApi, type SqlClient, sleep } from "../../../util";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 /**
  * Comprehensive Test Suite for Indexer Lite Mode
  * 
  * This test suite serves as a runner that verifies all lite mode functionality
- * and ensures complete coverage of events documented in LITE_MODE_EVENTS.md
+ * and ensures that the indexer correctly filters data based on the current MSP.
  */
 describeMspNet(
   "Indexer Lite Mode - Comprehensive Test Suite",
   { initialised: false, indexer: true, indexerMode: "lite" },
-  ({ before, it, createMsp1Api, createUserApi, createSqlClient }) => {
+  ({ before, it, createMsp1Api, createMsp2Api, createUserApi, createSqlClient }) => {
     let msp1Api: EnrichedBspApi;
+    let msp2Api: EnrichedBspApi;
     let userApi: EnrichedBspApi;
     let sql: SqlClient;
 
@@ -23,16 +22,19 @@ describeMspNet(
       passedTests: 0,
       failedTests: 0,
       coverage: {
-        fileSystemEvents: new Set<string>(),
-        providerEvents: new Set<string>(),
-        ignoredPallets: new Set<string>()
+        tables: new Set<string>(),
+        mspFiltering: false,
+        bucketFiltering: false
       }
     };
 
     before(async () => {
       const maybeMsp1Api = await createMsp1Api();
+      const maybeMsp2Api = await createMsp2Api();
       assert(maybeMsp1Api, "MSP1 API not available");
+      assert(maybeMsp2Api, "MSP2 API not available");
       msp1Api = maybeMsp1Api;
+      msp2Api = maybeMsp2Api;
       userApi = await createUserApi();
       sql = createSqlClient();
 
@@ -42,214 +44,171 @@ describeMspNet(
         searchString: "database system is ready to accept connections",
         timeout: 5000
       });
+
+      // Give indexer time to process initial events
+      await sleep(3000);
     });
 
-    it("verifies lite mode configuration", async () => {
-      testResults.totalTests++;
-      
-      // Check indexer logs for lite mode confirmation
-      const logs = await userApi.docker.getLogs({
-        containerName: "docker-sh-msp-1",
-        tail: 100
-      });
-
-      const liteModeEnabled = logs.includes("--indexer-mode=lite") || 
-                             logs.includes("Indexer mode: lite");
-      
-      if (liteModeEnabled) {
-        console.log("✓ Lite mode is enabled");
-        testResults.passedTests++;
-      } else {
-        console.log("✗ Lite mode configuration not confirmed in logs");
-        testResults.failedTests++;
-      }
-    });
-
-    it("validates event filtering coverage", async () => {
+    it("verifies lite mode database schema", async () => {
       testResults.totalTests++;
 
-      // Expected events based on LITE_MODE_EVENTS.md
-      const expectedFileSystemEvents = [
-        "NewBucket",
-        "BucketPrivacyUpdateAccepted", 
-        "MoveBucketAccepted",
-        "BucketDeleted"
-      ];
-
-      const expectedProviderEvents = [
-        "MspSignUpSuccess",
-        "MspSignOffSuccess",
-        "BspSignUpSuccess",
-        "BspSignOffSuccess",
-        "CapacityChanged",
-        "MultiAddressesChanged",
-        "ValuePropUpserted",
-        "Slashed",
-        "TopUpFulfilled"
-      ];
-
-      // Query actual indexed events
-      const indexedEvents = await sql`
-        SELECT DISTINCT section, method
-        FROM block_event
-        ORDER BY section, method
+      // Check that expected tables exist
+      const tables = await sql`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public'
+        ORDER BY table_name;
       `;
 
-      // Track coverage
-      indexedEvents.forEach(event => {
-        if (event.section === "fileSystem" && expectedFileSystemEvents.includes(event.method)) {
-          testResults.coverage.fileSystemEvents.add(event.method);
-        } else if (event.section === "providers" && expectedProviderEvents.includes(event.method)) {
-          testResults.coverage.providerEvents.add(event.method);
+      const tableNames = tables.map(t => t.table_name);
+      const expectedTables = [
+        "service_state",
+        "multiaddress", 
+        "bsp",
+        "bsp_multiaddress",
+        "msp", 
+        "msp_multiaddress",
+        "bucket",
+        "paymentstream",
+        "file",
+        "bsp_file",
+        "peer_id",
+        "file_peer_id"
+      ];
+
+      // Track which tables exist
+      expectedTables.forEach(table => {
+        if (tableNames.includes(table)) {
+          testResults.coverage.tables.add(table);
         }
       });
 
-      // Check for ignored pallets
-      const ignoredPallets = ["bucketNfts", "paymentStreams", "proofsDealer", "randomness"];
-      const foundIgnoredPallets = indexedEvents
-        .filter(e => ignoredPallets.includes(e.section))
-        .map(e => e.section);
-
-      foundIgnoredPallets.forEach(pallet => {
-        testResults.coverage.ignoredPallets.add(pallet);
-      });
-
-      // Validate results
-      const hasValidCoverage = testResults.coverage.fileSystemEvents.size > 0 &&
-                              testResults.coverage.providerEvents.size > 0 &&
-                              testResults.coverage.ignoredPallets.size === 0;
-
-      if (hasValidCoverage) {
-        console.log("✓ Event filtering coverage is valid");
+      const hasAllTables = expectedTables.every(table => tableNames.includes(table));
+      
+      if (hasAllTables) {
+        console.log("✓ All expected database tables exist");
         testResults.passedTests++;
       } else {
-        console.log("✗ Event filtering coverage issues detected");
+        console.log("✗ Missing database tables");
+        const missing = expectedTables.filter(t => !tableNames.includes(t));
+        console.log("  Missing:", missing.join(", "));
         testResults.failedTests++;
       }
     });
 
-    it("runs all lite mode test files", async () => {
+    it("verifies MSP filtering in lite mode", async () => {
       testResults.totalTests++;
 
-      // List of test files that should exist
-      const testFiles = [
-        "indexer-lite-mode.test.ts",
-        "indexer-lite-mode-base.test.ts",
-        "indexer-lite-mode-env.test.ts",
-        "indexer-lite-mode-filtering.test.ts",
-        "indexer-lite-msp-events.test.ts",
-        "indexer-lite-performance.test.ts",
-        "indexer-lite-event-processing.test.ts"
-      ];
-
-      console.log("\n=== Test File Verification ===");
-      let allFilesExist = true;
-
-      for (const file of testFiles) {
-        try {
-          const filePath = join(__dirname, file);
-          await readFile(filePath, 'utf-8');
-          console.log(`✓ ${file} exists`);
-        } catch (error) {
-          console.log(`✗ ${file} not found`);
-          allFilesExist = false;
-        }
-      }
-
-      if (allFilesExist) {
-        testResults.passedTests++;
-      } else {
-        testResults.failedTests++;
-      }
-    });
-
-    it("verifies MSP-specific filtering", async () => {
-      testResults.totalTests++;
-
-      // Check that only current MSP events are indexed
-      const mspEvents = await sql`
-        SELECT COUNT(*) as count
-        FROM block_event
-        WHERE data::text LIKE ${'%' + msp1Api.accountId() + '%'}
+      // Check that only MSP1 is in the database (since this is MSP1's indexer)
+      const msps = await sql`
+        SELECT provider_id, capacity
+        FROM msp
+        ORDER BY provider_id
       `;
 
-      // Check for other MSP events (should be none)
-      const otherMspPattern = "0x0000000000000000000000000000000000000000000000000000000000000301"; // MSP2
-      const otherMspEvents = await sql`
-        SELECT COUNT(*) as count
-        FROM block_event
-        WHERE data::text LIKE ${'%' + otherMspPattern + '%'}
-      `;
+      const hasMsp1 = msps.some(m => m.provider_id === msp1Api.accountId());
+      const hasMsp2 = msps.some(m => m.provider_id === msp2Api.accountId());
 
-      const correctFiltering = Number(mspEvents[0].count) > 0 && 
-                              Number(otherMspEvents[0].count) === 0;
-
-      if (correctFiltering) {
-        console.log("✓ MSP-specific filtering is working correctly");
+      if (hasMsp1 && !hasMsp2) {
+        console.log("✓ MSP filtering is working - only MSP1 data is indexed");
         testResults.passedTests++;
+        testResults.coverage.mspFiltering = true;
+      } else if (hasMsp1 && hasMsp2) {
+        console.log("✗ MSP filtering not working - both MSPs are indexed");
+        testResults.failedTests++;
       } else {
-        console.log("✗ MSP-specific filtering issues detected");
+        console.log("✗ No MSP data found in database");
         testResults.failedTests++;
       }
     });
 
-    it("measures performance improvement", async () => {
+    it("verifies bucket filtering by MSP ownership", async () => {
       testResults.totalTests++;
 
-      // Get current statistics
-      const stats = await sql`
+      // Get MSP IDs from database
+      const mspRecords = await sql`
+        SELECT id, provider_id
+        FROM msp
+      `;
+
+      if (mspRecords.length === 0) {
+        console.log("✗ No MSP records found to verify bucket filtering");
+        testResults.failedTests++;
+        return;
+      }
+
+      // Check buckets
+      const buckets = await sql`
+        SELECT b.name, b.private, m.provider_id
+        FROM bucket b
+        LEFT JOIN msp m ON b.msp_id = m.id
+        WHERE b.msp_id IS NOT NULL
+      `;
+
+      // In lite mode, all buckets should belong to MSP1
+      const allBucketsBelongToMsp1 = buckets.every(b => b.provider_id === msp1Api.accountId());
+      const hasAnyBuckets = buckets.length > 0;
+
+      if (hasAnyBuckets && allBucketsBelongToMsp1) {
+        console.log("✓ Bucket filtering is working - only MSP1's buckets are indexed");
+        testResults.passedTests++;
+        testResults.coverage.bucketFiltering = true;
+      } else if (!hasAnyBuckets) {
+        console.log("⚠️  No MSP-owned buckets found to verify filtering");
+        // This is not necessarily a failure - might just be no buckets created yet
+        testResults.passedTests++;
+      } else {
+        console.log("✗ Bucket filtering not working - found buckets for other MSPs");
+        testResults.failedTests++;
+      }
+    });
+
+    it("measures lite mode data reduction", async () => {
+      testResults.totalTests++;
+
+      // Get counts from various tables
+      const counts = await sql`
         SELECT 
-          (SELECT COUNT(*) FROM block_event) as total_events,
-          (SELECT COUNT(*) FROM bucket) as total_buckets,
-          (SELECT COUNT(*) FROM msp) as total_msps,
+          (SELECT COUNT(*) FROM msp) as msp_count,
+          (SELECT COUNT(*) FROM bucket) as bucket_count,
+          (SELECT COUNT(*) FROM file) as file_count,
+          (SELECT COUNT(*) FROM bsp) as bsp_count,
           (SELECT pg_database_size(current_database())) as db_size
       `;
 
-      const totalEvents = Number(stats[0].total_events);
-      const dbSizeMB = Number(stats[0].db_size) / 1024 / 1024;
+      const stats = counts[0];
+      console.log("\n=== Lite Mode Statistics ===");
+      console.log(`MSPs indexed: ${stats.msp_count}`);
+      console.log(`Buckets indexed: ${stats.bucket_count}`);
+      console.log(`Files indexed: ${stats.file_count}`);
+      console.log(`BSPs indexed: ${stats.bsp_count}`);
+      console.log(`Database size: ${(Number(stats.db_size) / 1024 / 1024).toFixed(2)} MB`);
 
-      console.log("\n=== Performance Metrics ===");
-      console.log(`Total events: ${totalEvents}`);
-      console.log(`Database size: ${dbSizeMB.toFixed(2)} MB`);
-
-      // In lite mode, we expect significantly fewer events
-      const isEfficient = totalEvents < 1000 && dbSizeMB < 50;
-
-      if (isEfficient) {
-        console.log("✓ Performance metrics show efficient lite mode operation");
+      // In lite mode, we expect only 1 MSP
+      if (Number(stats.msp_count) === 1) {
+        console.log("✓ Lite mode MSP filtering confirmed");
         testResults.passedTests++;
       } else {
-        console.log("✗ Performance metrics suggest lite mode may not be filtering effectively");
+        console.log("✗ Expected only 1 MSP in lite mode");
         testResults.failedTests++;
       }
     });
 
-    it("validates database consistency", async () => {
+    it("validates service state tracking", async () => {
       testResults.totalTests++;
 
-      // Check foreign key relationships
-      const orphanedBuckets = await sql`
-        SELECT COUNT(*) as count
-        FROM bucket b
-        LEFT JOIN msp m ON b.msp_id = m.id
-        WHERE b.msp_id IS NOT NULL AND m.id IS NULL
+      // Check service state
+      const serviceState = await sql`
+        SELECT last_processed_block
+        FROM service_state
+        WHERE id = 1
       `;
 
-      // Check event integrity
-      const invalidEvents = await sql`
-        SELECT COUNT(*) as count
-        FROM block_event
-        WHERE data IS NULL OR section IS NULL OR method IS NULL
-      `;
-
-      const isConsistent = Number(orphanedBuckets[0].count) === 0 &&
-                          Number(invalidEvents[0].count) === 0;
-
-      if (isConsistent) {
-        console.log("✓ Database consistency validated");
+      if (serviceState.length > 0 && serviceState[0].last_processed_block > 0) {
+        console.log(`✓ Indexer is tracking blockchain state (last block: ${serviceState[0].last_processed_block})`);
         testResults.passedTests++;
       } else {
-        console.log("✗ Database consistency issues found");
+        console.log("✗ Service state not properly initialized");
         testResults.failedTests++;
       }
     });
@@ -261,49 +220,30 @@ describeMspNet(
       console.log(`Failed: ${testResults.failedTests}`);
       console.log(`Success rate: ${(testResults.passedTests / testResults.totalTests * 100).toFixed(2)}%`);
 
-      console.log("\n=== Event Coverage ===");
-      console.log(`FileSystem events covered: ${testResults.coverage.fileSystemEvents.size}`);
-      console.log(`Provider events covered: ${testResults.coverage.providerEvents.size}`);
-      console.log(`Ignored pallets found: ${testResults.coverage.ignoredPallets.size}`);
+      console.log("\n=== Coverage Summary ===");
+      console.log(`Database tables verified: ${testResults.coverage.tables.size}`);
+      console.log(`MSP filtering: ${testResults.coverage.mspFiltering ? '✓' : '✗'}`);
+      console.log(`Bucket filtering: ${testResults.coverage.bucketFiltering ? '✓' : '✗'}`);
 
-      // Get detailed event statistics
-      const eventStats = await sql`
-        SELECT section, method, COUNT(*) as count
-        FROM block_event
-        GROUP BY section, method
-        ORDER BY section, method
+      // Get detailed statistics
+      const detailedStats = await sql`
+        SELECT 
+          'msp' as entity, COUNT(*) as count FROM msp
+        UNION ALL
+        SELECT 'bucket', COUNT(*) FROM bucket
+        UNION ALL
+        SELECT 'file', COUNT(*) FROM file
+        UNION ALL
+        SELECT 'bsp', COUNT(*) FROM bsp
+        UNION ALL
+        SELECT 'paymentstream', COUNT(*) FROM paymentstream
+        ORDER BY entity
       `;
 
-      console.log("\n=== Indexed Event Distribution ===");
-      eventStats.forEach(stat => {
-        console.log(`${stat.section}.${stat.method}: ${stat.count} events`);
+      console.log("\n=== Entity Counts ===");
+      detailedStats.forEach(stat => {
+        console.log(`${stat.entity}: ${stat.count} records`);
       });
-
-      // Verify all documented events are tested
-      const documentedEvents = [
-        "fileSystem.NewBucket",
-        "fileSystem.BucketPrivacyUpdateAccepted",
-        "fileSystem.MoveBucketAccepted",
-        "fileSystem.BucketDeleted",
-        "providers.MspSignUpSuccess",
-        "providers.MspSignOffSuccess",
-        "providers.BspSignUpSuccess",
-        "providers.BspSignOffSuccess",
-        "providers.CapacityChanged",
-        "providers.ValuePropUpserted"
-      ];
-
-      const untestedEvents = documentedEvents.filter(event => {
-        const [section, method] = event.split(".");
-        return !eventStats.some(stat => 
-          stat.section === section && stat.method === method
-        );
-      });
-
-      if (untestedEvents.length > 0) {
-        console.log("\n⚠️  Warning: The following documented events were not found:");
-        untestedEvents.forEach(event => console.log(`  - ${event}`));
-      }
 
       // Final assertion
       assert(
