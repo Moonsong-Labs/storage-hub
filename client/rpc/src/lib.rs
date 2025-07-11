@@ -8,6 +8,8 @@ use std::{
     sync::Arc,
 };
 
+pub mod remote_file;
+
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
