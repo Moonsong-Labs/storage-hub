@@ -37,7 +37,7 @@ describeMspNet(
       await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             msp1BucketName,
             true
           )
@@ -49,7 +49,7 @@ describeMspNet(
       await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp2Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp2.AddressId,
             msp2BucketName,
             true
           )
@@ -94,7 +94,7 @@ describeMspNet(
 
     it("indexes provider events for current MSP only", async () => {
       // Get current MSP1 capacity
-      const msp1InfoBefore = await msp1Api.query.providers.mainStorageProviders(msp1Api.accountId());
+      const msp1InfoBefore = await msp1Api.query.providers.mainStorageProviders(userApi.shConsts.NODE_INFOS.msp1.AddressId);
       assert(msp1InfoBefore.isSome, "MSP1 should be registered");
 
       // Change MSP1 capacity
@@ -127,7 +127,7 @@ describeMspNet(
       const eventData = JSON.parse(latestEvent.data);
       
       assert(
-        eventData.providerId === msp1Api.accountId(),
+        eventData.providerId === userApi.shConsts.NODE_INFOS.msp1.AddressId,
         "Indexed event should be for MSP1"
       );
     });
@@ -139,7 +139,7 @@ describeMspNet(
       const newBucketEvent = await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             msp1BucketName,
             true
           )
@@ -162,7 +162,7 @@ describeMspNet(
             fileLocation,
             fileFingerprint,
             fileSize,
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             [userApi.alice.publicKey],
             null
           )

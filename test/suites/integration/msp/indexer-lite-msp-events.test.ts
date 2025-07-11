@@ -82,12 +82,12 @@ describeMspNet(
       // Filter events by MSP
       const msp1ValuePropEvents = valuePropEvents.filter(event => {
         const eventData = JSON.parse(event.data);
-        return eventData.providerId === msp1Api.accountId();
+        return eventData.providerId === userApi.shConsts.NODE_INFOS.msp1.AddressId;
       });
 
       const msp2ValuePropEvents = valuePropEvents.filter(event => {
         const eventData = JSON.parse(event.data);
-        return eventData.providerId === msp2Api.accountId();
+        return eventData.providerId === userApi.shConsts.NODE_INFOS.msp2.AddressId;
       });
 
       // In lite mode with MSP1's indexer, only MSP1's ValueProp should be indexed
@@ -113,7 +113,7 @@ describeMspNet(
       await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             msp1BucketName,
             true
           )
@@ -126,7 +126,7 @@ describeMspNet(
       await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp2Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp2.AddressId,
             msp2BucketName,
             true
           )
@@ -186,7 +186,7 @@ describeMspNet(
         calls: [
           userApi.tx.fileSystem.updateBucketPrivacy(bucketId, {
             MSPBucket: {
-              mspId: msp1Api.accountId()
+              mspId: userApi.shConsts.NODE_INFOS.msp1.AddressId
             }
           })
         ],
@@ -213,14 +213,14 @@ describeMspNet(
 
       const latestMoveEvent = JSON.parse(moveBucketEvents[0].data);
       assert(
-        latestMoveEvent.newMspId === msp1Api.accountId(),
+        latestMoveEvent.newMspId === userApi.shConsts.NODE_INFOS.msp1.AddressId,
         "Move event should show bucket moved to MSP1"
       );
     });
 
     it("indexes provider lifecycle events for current MSP", async () => {
       // Test MSP capacity change (should be indexed for MSP1)
-      const currentInfo = await msp1Api.query.providers.mainStorageProviders(msp1Api.accountId());
+      const currentInfo = await msp1Api.query.providers.mainStorageProviders(userApi.shConsts.NODE_INFOS.msp1.AddressId);
       assert(currentInfo.isSome, "MSP1 should be registered");
       
       const currentCapacity = currentInfo.unwrap().capacity.toBigInt();
@@ -251,12 +251,12 @@ describeMspNet(
 
       const msp1CapacityEvents = capacityEvents.filter(event => {
         const eventData = JSON.parse(event.data);
-        return eventData.providerId === msp1Api.accountId();
+        return eventData.providerId === userApi.shConsts.NODE_INFOS.msp1.AddressId;
       });
 
       const msp2CapacityEvents = capacityEvents.filter(event => {
         const eventData = JSON.parse(event.data);
-        return eventData.providerId === msp2Api.accountId();
+        return eventData.providerId === userApi.shConsts.NODE_INFOS.msp2.AddressId;
       });
 
       // Only MSP1's capacity change should be indexed
@@ -284,7 +284,7 @@ describeMspNet(
       const bucketEvent = await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             msp1StorageBucket,
             true
           )
@@ -303,7 +303,7 @@ describeMspNet(
             "msp1-file.txt",
             "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             1024,
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             [userApi.alice.publicKey],
             null
           )
@@ -339,7 +339,7 @@ describeMspNet(
       const msps = await sql`
         SELECT onchain_msp_id, value_prop
         FROM msp
-        WHERE onchain_msp_id IN (${msp1Api.accountId()}, ${msp2Api.accountId()})
+        WHERE onchain_msp_id IN (${userApi.shConsts.NODE_INFOS.msp1.AddressId}, ${userApi.shConsts.NODE_INFOS.msp2.AddressId})
       `;
 
       // Should only have MSP1 in the database
@@ -348,7 +348,7 @@ describeMspNet(
         `Should only have MSP1 in database, found ${msps.length} MSPs`
       );
       assert(
-        msps[0].onchain_msp_id === msp1Api.accountId(),
+        msps[0].onchain_msp_id === userApi.shConsts.NODE_INFOS.msp1.AddressId,
         "Only MSP1 should be in the database"
       );
 
@@ -367,7 +367,7 @@ describeMspNet(
       const msp2RelatedEvents = await sql`
         SELECT COUNT(*) as count
         FROM block_event
-        WHERE data::text LIKE '%${msp2Api.accountId()}%'
+        WHERE data::text LIKE '%${userApi.shConsts.NODE_INFOS.msp2.AddressId}%'
       `;
 
       assert(

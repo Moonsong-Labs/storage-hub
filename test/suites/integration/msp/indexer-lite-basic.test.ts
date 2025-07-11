@@ -60,7 +60,7 @@ describeMspNet(
       await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             bucketName,
             true
           )

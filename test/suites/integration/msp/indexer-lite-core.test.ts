@@ -67,15 +67,15 @@ describeMspNet(
       );
       
       assert(
-        allMsps[0].onchain_msp_id === msp1Api.accountId(),
-        `Expected MSP1 (${msp1Api.accountId()}) but found ${allMsps[0].onchain_msp_id}`
+        allMsps[0].onchain_msp_id === userApi.shConsts.NODE_INFOS.msp1.AddressId,
+        `Expected MSP1 (${userApi.shConsts.NODE_INFOS.msp1.AddressId}) but found ${allMsps[0].onchain_msp_id}`
       );
 
       // Verify MSP2 is NOT in the database
       const msp2Check = await sql`
         SELECT COUNT(*) as count
         FROM msp
-        WHERE onchain_msp_id = ${msp2Api.accountId()}
+        WHERE onchain_msp_id = ${userApi.shConsts.NODE_INFOS.msp2.AddressId}
       `;
 
       strictEqual(
@@ -95,7 +95,7 @@ describeMspNet(
       const msp1BucketEvent = await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             msp1BucketName,
             true // public
           )
@@ -112,7 +112,7 @@ describeMspNet(
       const msp2BucketEvent = await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp2Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp2.AddressId,
             msp2BucketName,
             true // public
           )
@@ -154,7 +154,7 @@ describeMspNet(
       );
       strictEqual(
         indexedBucket.msp_id,
-        msp1Api.accountId(),
+        userApi.shConsts.NODE_INFOS.msp1.AddressId,
         "Bucket should belong to MSP1"
       );
 
@@ -163,7 +163,7 @@ describeMspNet(
         SELECT COUNT(*) as count
         FROM bucket
         WHERE name = ${msp2BucketName}
-        OR msp_id = ${msp2Api.accountId()}
+        OR msp_id = ${userApi.shConsts.NODE_INFOS.msp2.AddressId}
       `;
 
       strictEqual(
@@ -199,7 +199,7 @@ describeMspNet(
       const msp1BucketEvent = await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             msp1FileBucketName,
             true
           )
@@ -215,7 +215,7 @@ describeMspNet(
       const msp2BucketEvent = await userApi.block.seal({
         calls: [
           userApi.tx.fileSystem.createBucket(
-            msp2Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp2.AddressId,
             msp2FileBucketName,
             true
           )
@@ -241,7 +241,7 @@ describeMspNet(
             msp1FileName,
             fingerprint,
             fileSize,
-            msp1Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp1.AddressId,
             [userApi.alice.publicKey],
             null
           )
@@ -257,7 +257,7 @@ describeMspNet(
             msp2FileName,
             fingerprint,
             fileSize,
-            msp2Api.accountId(),
+            userApi.shConsts.NODE_INFOS.msp2.AddressId,
             [userApi.alice.publicKey],
             null
           )
@@ -270,14 +270,14 @@ describeMspNet(
 
       // Query files in the database
       const allFiles = await sql`
-        SELECT file_name, bucket_id, fingerprint, file_size
+        SELECT location, bucket_id, fingerprint, file_size
         FROM file
-        WHERE file_name IN (${msp1FileName}, ${msp2FileName})
+        WHERE location IN (${msp1FileName}, ${msp2FileName})
       `;
 
       console.log(`\nFiles found in database: ${allFiles.length}`);
       allFiles.forEach(file => {
-        console.log(`  - File: ${file.file_name}`);
+        console.log(`  - File: ${file.location}`);
         console.log(`    Bucket: ${file.bucket_id}, Size: ${file.file_size}`);
       });
 
@@ -289,7 +289,7 @@ describeMspNet(
 
       const indexedFile = allFiles[0];
       strictEqual(
-        indexedFile.file_name,
+        indexedFile.location,
         msp1FileName,
         "Only MSP1's file should be indexed"
       );
@@ -303,7 +303,7 @@ describeMspNet(
       const msp2FileCheck = await sql`
         SELECT COUNT(*) as count
         FROM file
-        WHERE file_name = ${msp2FileName}
+        WHERE location = ${msp2FileName}
         OR bucket_id = ${msp2BucketId.toString()}
       `;
 
@@ -384,7 +384,7 @@ describeMspNet(
       const mspWithValueProp = mspsWithValueProps[0];
       strictEqual(
         mspWithValueProp.onchain_msp_id,
-        msp1Api.accountId(),
+        userApi.shConsts.NODE_INFOS.msp1.AddressId,
         "Only MSP1 should have value props"
       );
 
@@ -461,7 +461,7 @@ describeMspNet(
 
       strictEqual(
         msps[0].onchain_msp_id,
-        msp1Api.accountId(),
+        userApi.shConsts.NODE_INFOS.msp1.AddressId,
         "The only MSP should be MSP1"
       );
 
@@ -474,7 +474,7 @@ describeMspNet(
 
         strictEqual(
           bucketOwners[0].msp_id,
-          msp1Api.accountId(),
+          userApi.shConsts.NODE_INFOS.msp1.AddressId,
           "All buckets should belong to MSP1"
         );
       }
@@ -482,9 +482,9 @@ describeMspNet(
       // Verify no MSP2 data exists anywhere
       const msp2DataCheck = await sql`
         SELECT 
-          (SELECT COUNT(*) FROM msp WHERE onchain_msp_id = ${msp2Api.accountId()}) as msp_count,
-          (SELECT COUNT(*) FROM bucket WHERE msp_id = ${msp2Api.accountId()}) as bucket_count,
-          (SELECT COUNT(*) FROM file f JOIN bucket b ON f.bucket_id = b.bucket_id WHERE b.msp_id = ${msp2Api.accountId()}) as file_count
+          (SELECT COUNT(*) FROM msp WHERE onchain_msp_id = ${userApi.shConsts.NODE_INFOS.msp2.AddressId}) as msp_count,
+          (SELECT COUNT(*) FROM bucket WHERE msp_id = ${userApi.shConsts.NODE_INFOS.msp2.AddressId}) as bucket_count,
+          (SELECT COUNT(*) FROM file f JOIN bucket b ON f.bucket_id = b.bucket_id WHERE b.msp_id = ${userApi.shConsts.NODE_INFOS.msp2.AddressId}) as file_count
       `;
 
       console.log("\nMSP2 data check:");
