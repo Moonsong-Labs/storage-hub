@@ -2251,6 +2251,18 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * A priority challenge was submitted.
+       **/
+      PriorityChallenge: AugmentedEvent<
+        ApiType,
+        [who: FrameSupportDispatchRawOrigin, keyChallenged: H256, shouldRemoveKey: bool],
+        {
+          who: FrameSupportDispatchRawOrigin;
+          keyChallenged: H256;
+          shouldRemoveKey: bool;
+        }
+      >;
+      /**
        * A proof was accepted.
        **/
       ProofAccepted: AugmentedEvent<

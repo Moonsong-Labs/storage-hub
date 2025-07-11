@@ -1724,6 +1724,11 @@ export default {
         who: "FrameSupportDispatchRawOrigin",
         keyChallenged: "H256"
       },
+      PriorityChallenge: {
+        who: "FrameSupportDispatchRawOrigin",
+        keyChallenged: "H256",
+        shouldRemoveKey: "bool"
+      },
       ProofAccepted: {
         providerId: "H256",
         proof: "PalletProofsDealerProof",

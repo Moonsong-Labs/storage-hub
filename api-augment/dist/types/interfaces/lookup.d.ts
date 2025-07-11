@@ -1689,6 +1689,11 @@ declare const _default: {
         who: string;
         keyChallenged: string;
       };
+      PriorityChallenge: {
+        who: string;
+        keyChallenged: string;
+        shouldRemoveKey: string;
+      };
       ProofAccepted: {
         providerId: string;
         proof: string;

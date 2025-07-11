@@ -2188,6 +2188,12 @@ declare module "@polkadot/types/lookup" {
       readonly who: FrameSupportDispatchRawOrigin;
       readonly keyChallenged: H256;
     } & Struct;
+    readonly isPriorityChallenge: boolean;
+    readonly asPriorityChallenge: {
+      readonly who: FrameSupportDispatchRawOrigin;
+      readonly keyChallenged: H256;
+      readonly shouldRemoveKey: bool;
+    } & Struct;
     readonly isProofAccepted: boolean;
     readonly asProofAccepted: {
       readonly providerId: H256;
@@ -2240,6 +2246,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly type:
       | "NewChallenge"
+      | "PriorityChallenge"
       | "ProofAccepted"
       | "NewChallengeSeed"
       | "NewCheckpointChallenge"

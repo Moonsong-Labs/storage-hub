@@ -515,6 +515,30 @@ describeBspNet(
           )
         ]
       });
+
+      // Check that the PriorityChallenge event was emitted.
+      const priorityChallengeEvent = await userApi.assert.eventPresent(
+        "proofsDealer",
+        "PriorityChallenge"
+      );
+      const priorityChallengeEventDataBlob =
+        userApi.events.proofsDealer.PriorityChallenge.is(priorityChallengeEvent.event) &&
+        priorityChallengeEvent.event.data;
+      assert(priorityChallengeEventDataBlob, "Event doesn't match Type");
+      strictEqual(
+        priorityChallengeEventDataBlob.keyChallenged.toString(),
+        oneBspfileMetadata.fileKey,
+        "The priority challenge event should contain the correct file key"
+      );
+      strictEqual(
+        priorityChallengeEventDataBlob.shouldRemoveKey.toString(),
+        "true",
+        "The priority challenge event should have shouldRemoveKey set to true"
+      );
+      assert(
+        priorityChallengeEventDataBlob.who.isRoot,
+        "The priority challenge should be initiated by Root origin"
+      );
     });
 
     it("Priority challenge is included in checkpoint challenge round", async () => {
