@@ -317,17 +317,17 @@ where
         event: &RuntimeEvent,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
-        // Check if we have an MSP ID configured
-        if self.msp_id.is_none() {
-            trace!(target: LOG_TARGET, "No MSP ID configured, skipping event indexing in lite mode");
-            return Ok(());
-        }
-
         match event {
             RuntimeEvent::FileSystem(event) => {
+                // Only process FileSystem events if we have an MSP ID
+                if self.msp_id.is_none() {
+                    trace!(target: LOG_TARGET, "No MSP ID configured, skipping FileSystem event in lite mode");
+                    return Ok(());
+                }
                 self.index_file_system_event_lite(conn, event).await?
             }
             RuntimeEvent::Providers(event) => {
+                // Always process Provider events - they might contain our MSP registration
                 self.index_providers_event_lite(conn, event, block_hash)
                     .await?
             }
@@ -1020,7 +1020,25 @@ where
         event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
-        // We can safely unwrap msp_id here since the caller already checked it
+        // Special handling for MspSignUpSuccess when we don't have an MSP ID yet
+        if let pallet_storage_providers::Event::MspSignUpSuccess { who, msp_id, .. } = event {
+            // Check if this might be our MSP registration
+            if self.msp_id.is_none() {
+                // Process this event to potentially discover our MSP ID
+                info!(target: LOG_TARGET, "Processing MspSignUpSuccess event while MSP ID is not set - checking if it's our registration");
+                self.index_providers_event(conn, event, block_hash).await?;
+
+                // Note: MSP ID will be re-synced on the next finality notification
+                return Ok(());
+            }
+        }
+
+        // For all other events, we need an MSP ID
+        if self.msp_id.is_none() {
+            trace!(target: LOG_TARGET, "No MSP ID configured, skipping Providers event in lite mode");
+            return Ok(());
+        }
+
         let current_msp_id = self.msp_id.as_ref().unwrap();
 
         // Filter events based on MSP relevance

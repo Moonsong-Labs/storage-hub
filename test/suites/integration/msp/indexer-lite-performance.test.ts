@@ -223,7 +223,7 @@ describeMspNet(
         },
         {
           name: "msp_info",
-          query: sql`SELECT * FROM msp WHERE provider_id = ${msp1Api.accountId()}`
+          query: sql`SELECT * FROM msp WHERE onchain_msp_id = ${msp1Api.accountId()}`
         },
         {
           name: "recent_events",

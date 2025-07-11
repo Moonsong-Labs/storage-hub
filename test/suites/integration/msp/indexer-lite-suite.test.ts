@@ -101,13 +101,13 @@ describeMspNet(
 
       // Check that only MSP1 is in the database (since this is MSP1's indexer)
       const msps = await sql`
-        SELECT provider_id, capacity
+        SELECT onchain_msp_id, capacity
         FROM msp
-        ORDER BY provider_id
+        ORDER BY onchain_msp_id
       `;
 
-      const hasMsp1 = msps.some(m => m.provider_id === msp1Api.accountId());
-      const hasMsp2 = msps.some(m => m.provider_id === msp2Api.accountId());
+      const hasMsp1 = msps.some(m => m.onchain_msp_id === msp1Api.accountId());
+      const hasMsp2 = msps.some(m => m.onchain_msp_id === msp2Api.accountId());
 
       if (hasMsp1 && !hasMsp2) {
         console.log("✓ MSP filtering is working - only MSP1 data is indexed");
@@ -127,7 +127,7 @@ describeMspNet(
 
       // Get MSP IDs from database
       const mspRecords = await sql`
-        SELECT id, provider_id
+        SELECT id, onchain_msp_id
         FROM msp
       `;
 
@@ -139,14 +139,14 @@ describeMspNet(
 
       // Check buckets
       const buckets = await sql`
-        SELECT b.name, b.private, m.provider_id
+        SELECT b.name, b.private, m.onchain_msp_id
         FROM bucket b
         LEFT JOIN msp m ON b.msp_id = m.id
         WHERE b.msp_id IS NOT NULL
       `;
 
       // In lite mode, all buckets should belong to MSP1
-      const allBucketsBelongToMsp1 = buckets.every(b => b.provider_id === msp1Api.accountId());
+      const allBucketsBelongToMsp1 = buckets.every(b => b.onchain_msp_id === msp1Api.accountId());
       const hasAnyBuckets = buckets.length > 0;
 
       if (hasAnyBuckets && allBucketsBelongToMsp1) {

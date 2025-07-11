@@ -215,7 +215,7 @@ describeMspNet(
     it("maintains database consistency in lite mode", async () => {
       // Check that referenced data is consistent
       const buckets = await sql`
-        SELECT b.*, msp.provider_id
+        SELECT b.*, msp.onchain_msp_id
         FROM bucket b
         LEFT JOIN msp ON b.msp_id = msp.id
         WHERE b.msp_id IS NOT NULL;
@@ -224,7 +224,7 @@ describeMspNet(
       // All buckets with MSP should have valid MSP references
       for (const bucket of buckets) {
         assert(
-          bucket.provider_id !== null,
+          bucket.onchain_msp_id !== null,
           `Bucket ${bucket.name} has invalid MSP reference`
         );
       }

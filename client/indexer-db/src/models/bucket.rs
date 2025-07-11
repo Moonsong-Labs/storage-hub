@@ -112,10 +112,7 @@ impl Bucket {
         conn: &mut DbConnection<'a>,
         id: i64,
     ) -> Result<Self, diesel::result::Error> {
-        let bucket = bucket::table
-            .filter(bucket::id.eq(id))
-            .first(conn)
-            .await?;
+        let bucket = bucket::table.filter(bucket::id.eq(id)).first(conn).await?;
         Ok(bucket)
     }
 

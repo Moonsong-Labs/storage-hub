@@ -337,9 +337,9 @@ describeMspNet(
     it("verifies database state consistency", async () => {
       // Check MSP table
       const msps = await sql`
-        SELECT provider_id, value_prop
+        SELECT onchain_msp_id, value_prop
         FROM msp
-        WHERE provider_id IN (${msp1Api.accountId()}, ${msp2Api.accountId()})
+        WHERE onchain_msp_id IN (${msp1Api.accountId()}, ${msp2Api.accountId()})
       `;
 
       // Should only have MSP1 in the database
@@ -348,7 +348,7 @@ describeMspNet(
         `Should only have MSP1 in database, found ${msps.length} MSPs`
       );
       assert(
-        msps[0].provider_id === msp1Api.accountId(),
+        msps[0].onchain_msp_id === msp1Api.accountId(),
         "Only MSP1 should be in the database"
       );
 

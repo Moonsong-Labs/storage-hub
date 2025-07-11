@@ -31,7 +31,14 @@
       "Bash(pnpm crossbuild:mac:*)",
       "Bash(NODE_OPTIONS='--no-deprecation' node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/msp/indexer-lite-mode-env.test.ts)",
       "Bash(docker exec:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(cat:*)",
+      "Bash(diesel migration generate:*)",
+      "Bash(rm:*)",
+      "Bash(NODE_OPTIONS='--no-deprecation' node --no-deprecation --test-concurrency 1 --import tsx --test ./suites/integration/msp/indexer-lite-mode-filtering.test.ts)",
+      "Bash(timeout 120 pnpm test:node suites/integration/msp/indexer-lite-mode.test.ts)",
+      "Bash(NODE_OPTIONS='--no-deprecation' node --test-concurrency 1 --import tsx --test ./suites/integration/msp/indexer-lite-basic.test.ts)",
+      "mcp__zen__debug"
     ],
     "deny": []
   }

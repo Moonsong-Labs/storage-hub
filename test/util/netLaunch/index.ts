@@ -150,18 +150,17 @@ export class NetworkLauncher {
     }
 
     if (this.config.indexer) {
-      composeYaml.services["sh-user"].command.push("--indexer");
-      
-      // Add indexer mode if specified
-      if (this.config.indexerMode) {
-        composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.indexerMode}`);
+      // In lite mode, only MSPs should run indexers (they have the keystore)
+      // In full mode, any node can run the indexer
+      if (this.config.indexerMode !== "lite") {
+        composeYaml.services["sh-user"].command.push("--indexer");
+        composeYaml.services["sh-user"].command.push(
+          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+        );
       }
-
-      composeYaml.services["sh-user"].command.push(
-        "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
-      );
+      
       if (this.type === "fullnet") {
-        // MSPs also need indexer flag and database URL
+        // MSPs need indexer flag and database URL
         composeYaml.services["sh-msp-1"].command.push("--indexer");
         composeYaml.services["sh-msp-1"].command.push(
           "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"

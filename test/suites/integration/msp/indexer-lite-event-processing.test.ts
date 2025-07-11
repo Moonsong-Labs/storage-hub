@@ -125,7 +125,7 @@ describeMspNet(
       const mspRecord = await sql`
         SELECT value_prop
         FROM msp
-        WHERE provider_id = ${msp1Api.accountId()}
+        WHERE onchain_msp_id = ${msp1Api.accountId()}
       `;
 
       assert(mspRecord.length > 0, "MSP should exist in database");
@@ -175,7 +175,7 @@ describeMspNet(
       const mspRecord = await sql`
         SELECT capacity
         FROM msp
-        WHERE provider_id = ${msp1Api.accountId()}
+        WHERE onchain_msp_id = ${msp1Api.accountId()}
       `;
 
       assert(mspRecord.length > 0, "MSP should exist in database");
@@ -222,7 +222,7 @@ describeMspNet(
       const bspRecord = await sql`
         SELECT *
         FROM bsp
-        WHERE provider_id = ${bspApi.accountId()}
+        WHERE onchain_bsp_id = ${bspApi.accountId()}
       `;
 
       assert(bspRecord.length > 0, "BSP should exist in database");
@@ -275,11 +275,11 @@ describeMspNet(
       `;
 
       assert(bucketRecord.length > 0, "Bucket should exist in database");
-      // The msp_id in bucket table should reference the msp table's id, not the provider_id
+      // The msp_id in bucket table should reference the msp table's id, not the onchain_msp_id
       const mspRecord = await sql`
         SELECT id
         FROM msp
-        WHERE provider_id = ${msp1Api.accountId()}
+        WHERE onchain_msp_id = ${msp1Api.accountId()}
       `;
       assert(mspRecord.length > 0, "MSP should exist");
       assert(bucketRecord[0].msp_id === mspRecord[0].id, "Bucket should be assigned to MSP1");
@@ -376,14 +376,14 @@ describeMspNet(
     it("verifies database relationships are maintained", async () => {
       // Check bucket -> MSP relationships
       const bucketMspJoin = await sql`
-        SELECT b.bucket_id, b.name, m.provider_id
+        SELECT b.bucket_id, b.name, m.onchain_msp_id
         FROM bucket b
         LEFT JOIN msp m ON b.msp_id = m.id
         WHERE b.msp_id IS NOT NULL
       `;
 
       for (const row of bucketMspJoin) {
-        assert(row.provider_id !== null, `Bucket ${row.name} has invalid MSP reference`);
+        assert(row.onchain_msp_id !== null, `Bucket ${row.name} has invalid MSP reference`);
       }
 
       // Check event -> block relationships
