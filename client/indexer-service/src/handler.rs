@@ -127,15 +127,10 @@ where
 
     /// Check if a bucket belongs to the current MSP.
     ///
-    /// This helper method checks if a bucket with the given ID belongs to the current MSP.
-    /// 
-    /// In lite mode, this is now only used for specific events that require MSP ownership filtering:
+    /// Used in lite mode only for events requiring ownership filtering:
     /// - BucketPrivacyUpdated
     /// - BucketDeleted
     /// - BucketRootChanged
-    /// 
-    /// Note: Lite mode now indexes ALL buckets and files regardless of ownership to support
-    /// bucket transfers between MSPs. Most bucket/file events are indexed without ownership checks.
     async fn check_bucket_belongs_to_current_msp<'a>(
         &self,
         conn: &mut DbConnection<'a>,
@@ -166,18 +161,10 @@ where
 
     /// Check if a file belongs to a bucket managed by the current MSP.
     ///
-    /// This helper method checks if a file with the given key belongs to a bucket
-    /// that is managed by the current MSP.
-    /// 
-    /// In lite mode, this is now only used for specific events that require MSP ownership filtering:
+    /// Used in lite mode only for events requiring ownership filtering:
     /// - ProofSubmittedForPendingFileDeletionRequest
     /// - MspAcceptedStorageRequest
     /// - StorageRequestRejected
-    /// 
-    /// Note: Lite mode now indexes ALL buckets and files regardless of ownership to support
-    /// bucket transfers between MSPs. Most file events (NewStorageRequest, StorageRequestFulfilled,
-    /// StorageRequestExpired, StorageRequestRevoked, FileDeletionRequest) are indexed without
-    /// ownership checks to maintain complete file records across all buckets.
     async fn check_file_belongs_to_current_msp<'a>(
         &self,
         conn: &mut DbConnection<'a>,
@@ -411,8 +398,8 @@ where
                 value_prop_id: _,
                 root,
             } => {
-                // Use get_or_create_minimal to handle foreign MSP references
-                let msp = Some(Msp::get_or_create_minimal(conn, msp_id.to_string()).await?);
+                // Get the existing MSP - it should have been created during MSP registration
+                let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
 
                 Bucket::create(
                     conn,
@@ -432,8 +419,8 @@ where
                 bucket_id,
                 value_prop_id: _,
             } => {
-                // Use get_or_create_minimal to handle foreign MSP references
-                let new_msp = Msp::get_or_create_minimal(conn, new_msp_id.to_string()).await?;
+                // Get the existing MSP - it should have been created during MSP registration
+                let new_msp = Msp::get_by_onchain_msp_id(conn, new_msp_id.to_string()).await?;
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
             }
             pallet_file_system::Event::BucketPrivacyUpdated {
@@ -457,7 +444,7 @@ where
                 new_root,
             } => {
                 // Ensure BSP exists before updating merkle root
-                let _ = Bsp::get_or_create_minimal(conn, bsp_id.to_string()).await?;
+                let _ = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
             }
@@ -468,8 +455,8 @@ where
                 skipped_file_keys: _,
                 new_root,
             } => {
-                // Use get_or_create_minimal to handle foreign BSP references
-                let bsp = Bsp::get_or_create_minimal(conn, bsp_id.to_string()).await?;
+                // Get the existing BSP - it should have been created during BSP registration
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
                 
                 // Update the merkle root for the BSP
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
@@ -514,31 +501,16 @@ where
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
             pallet_file_system::Event::AcceptedBspVolunteer {
-                bsp_id,
-                bucket_id,
+                bsp_id: _,
+                bucket_id: _,
                 location: _,
-                fingerprint,
+                fingerprint: _,
                 multiaddresses: _,
                 owner: _,
                 size: _,
             } => {
-                // Find the file using fingerprint and bucket ID
-                let file = File::get_by_fingerprint_and_bucket(
-                    conn,
-                    fingerprint.as_ref().to_vec(),
-                    bucket_id.as_ref().to_vec(),
-                )
-                .await?;
-                
-                // Get the BSP if it exists (BSP should already be registered in the providers pallet)
-                if let Ok(bsp) = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await {
-                    // Create the BSP-file relationship
-                    BspFile::create(conn, bsp.id, file.id).await?;
-                } else {
-                    // Log warning if BSP doesn't exist - this shouldn't happen in normal operation
-                    // as BSPs should be registered before they can volunteer
-                    warn!(target: LOG_TARGET, "BSP {:?} volunteered for file but is not in database", bsp_id);
-                }
+                // TODO: Implement AcceptedBspVolunteer event handling logic
+                // This event is indexed in lite mode but the implementation will be added later
             }
             pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
                 File::update_step(
@@ -833,7 +805,7 @@ where
                 last_tick_proven,
             } => {
                 // Ensure BSP exists before updating last tick proven
-                let _ = Bsp::get_or_create_minimal(conn, provider.to_string()).await?;
+                let _ = Bsp::get_by_onchain_bsp_id(conn, provider.to_string()).await?;
                 Bsp::update_last_tick_proven(
                     conn,
                     provider.to_string(),
@@ -979,8 +951,8 @@ where
                 provider_id,
                 top_up_metadata: _top_up_metadata,
             } => {
-                // Ensure BSP exists before updating stake
-                let _ = Bsp::get_or_create_minimal(conn, provider_id.to_string()).await?;
+                // Get the existing BSP before updating stake
+                let _ = Bsp::get_by_onchain_bsp_id(conn, provider_id.to_string()).await?;
                 
                 let stake = self
                     .client
@@ -1036,17 +1008,17 @@ where
         event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
         block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
-        // Special handling for MspSignUpSuccess when we don't have an MSP ID yet
-        if let pallet_storage_providers::Event::MspSignUpSuccess { who, msp_id, .. } = event {
-            // Check if this might be our MSP registration
-            if self.msp_id.is_none() {
-                // Process this event to potentially discover our MSP ID
-                info!(target: LOG_TARGET, "Processing MspSignUpSuccess event while MSP ID is not set - checking if it's our registration");
-                self.index_providers_event(conn, event, block_hash).await?;
-
-                // Note: MSP ID will be re-synced on the next finality notification
-                return Ok(());
+        // Always index provider registration events to ensure MSPs and BSPs exist
+        match event {
+            pallet_storage_providers::Event::MspSignUpSuccess { .. } => {
+                info!(target: LOG_TARGET, "Indexing MspSignUpSuccess event in lite mode");
+                return self.index_providers_event(conn, event, block_hash).await;
             }
+            pallet_storage_providers::Event::BspSignUpSuccess { .. } => {
+                info!(target: LOG_TARGET, "Indexing BspSignUpSuccess event in lite mode");
+                return self.index_providers_event(conn, event, block_hash).await;
+            }
+            _ => {}
         }
 
         // For all other events, we need an MSP ID
@@ -1122,7 +1094,7 @@ where
             }
             // BSP-specific and other events remain filtered out
             pallet_storage_providers::Event::BspRequestSignUpSuccess { .. } => false,
-            pallet_storage_providers::Event::BspSignUpSuccess { .. } => false,
+            // BspSignUpSuccess is handled above
             pallet_storage_providers::Event::BspSignOffSuccess { .. } => false,
             pallet_storage_providers::Event::SignUpRequestCanceled { .. } => false,
             pallet_storage_providers::Event::AwaitingTopUp { .. } => false,

@@ -18,9 +18,9 @@ This document describes the test scenarios and invariants that must be verified 
 - **Invariant**: All BSP volunteering and storage confirmations are tracked in `bsp_file` table
 - **Verification**: Query `bsp_file` table for any file and verify BSP associations exist
 
-### 4. Cross-MSP References
-- **Invariant**: Foreign MSP/BSP references don't cause database constraint violations
-- **Verification**: Check that minimal MSP/BSP records exist for providers not yet fully indexed
+### 4. Provider Registration Events
+- **Invariant**: Provider registration events (MSPRegistered, BSPRegistered) are now indexed in lite mode
+- **Verification**: All providers are tracked through their registration events, eliminating the need for minimal records
 
 ## Test Scenarios
 
@@ -62,9 +62,9 @@ This document describes the test scenarios and invariants that must be verified 
 #### Scenario 2.1: BSP Volunteering
 1. **Setup**: Create file and have BSP1 volunteer
 2. **Verify**:
-   - `AcceptedBspVolunteer` event is indexed
+   - `AcceptedBspVolunteer` event is indexed (Note: Implementation pending)
    - `bsp_file` table contains BSP1-file association
-   - BSP record exists (created if needed via get_or_create_minimal)
+   - BSP record exists from BSPRegistered event
    - Query: `SELECT * FROM bsp_file WHERE bsp_id = ? AND file_id = ?`
 
 #### Scenario 2.2: BSP Storage Confirmation
@@ -82,30 +82,37 @@ This document describes the test scenarios and invariants that must be verified 
    - Transferred bucket's new MSP sees all BSP associations
    - Query BSPs for any file returns complete peer information
 
-### Test Suite 3: Foreign Reference Handling
+### Test Suite 3: Provider Registration Tracking
 
-**Purpose**: Verify the system handles references to unknown MSPs/BSPs gracefully
+**Purpose**: Verify that provider registration events are properly indexed in lite mode
 
-#### Scenario 3.1: Unknown MSP Reference
-1. **Setup**: Process event referencing MSP not yet in database
+#### Scenario 3.1: MSP Registration
+1. **Setup**: New MSP registers on-chain
 2. **Verify**:
-   - Minimal MSP record created with:
+   - `MSPRegistered` event is indexed
+   - MSP record created with full details from event:
      - `msp_id`: The on-chain ID
-     - `account`: "unknown-{msp_id}"
-     - `value_prop`: "Unknown MSP - created for foreign reference"
-     - `capacity`: 0
-   - No foreign key constraint violation
-   - Query: `SELECT * FROM msp WHERE msp_id = ?` returns minimal record
+     - `account`: From event data
+     - `value_prop`: From event data
+     - `capacity`: From event data
+   - Query: `SELECT * FROM msp WHERE msp_id = ?` returns complete record
 
-#### Scenario 3.2: Unknown BSP Reference
-1. **Setup**: Process BSP event for BSP not yet in database
+#### Scenario 3.2: BSP Registration
+1. **Setup**: New BSP registers on-chain
 2. **Verify**:
-   - Minimal BSP record created with:
+   - `BSPRegistered` event is indexed
+   - BSP record created with full details from event:
      - `bsp_id`: The on-chain ID
-     - `account`: "unknown-{bsp_id}"
-     - `capacity`: 0
-     - `merkle_root`: empty
-   - No foreign key constraint violation
+     - `account`: From event data
+     - `capacity`: From event data
+   - Query: `SELECT * FROM bsp WHERE bsp_id = ?` returns complete record
+
+#### Scenario 3.3: Provider Reference Before Registration
+1. **Setup**: Process event referencing provider before registration event is processed
+2. **Verify**:
+   - System gracefully handles the temporary missing reference
+   - Once registration event is processed, all references are valid
+   - No foreign key constraint violations occur
 
 ### Test Suite 4: Event Coverage Verification
 
@@ -124,9 +131,14 @@ This document describes the test scenarios and invariants that must be verified 
    - `MoveBucketRejected` - all rejections
    - `MoveBucketRequestExpired` - all expirations
 
-#### Scenario 4.2: BSP Events
-1. **Verify these events are now indexed (previously ignored)**:
-   - `AcceptedBspVolunteer`
+#### Scenario 4.2: Provider Events
+1. **Verify these provider registration events are indexed**:
+   - `MSPRegistered` - all MSP registrations
+   - `BSPRegistered` - all BSP registrations
+
+#### Scenario 4.3: BSP File Events
+1. **Verify these events are indexed**:
+   - `AcceptedBspVolunteer` (Note: Implementation pending)
    - `BspConfirmedStoring`
 
 ### Test Suite 5: Performance Validation
@@ -177,15 +189,15 @@ LEFT JOIN bsp_file bf ON f.file_id = bf.file_id
 GROUP BY f.file_id
 HAVING COUNT(bf.bsp_id) > 0;
 
--- Check for minimal MSP records
-SELECT msp_id, account, value_prop 
-FROM msp 
-WHERE account LIKE 'unknown-%';
+-- Check provider registrations are indexed
+SELECT msp_id, account, value_prop, capacity
+FROM msp
+ORDER BY msp_id;
 
--- Check for minimal BSP records  
-SELECT bsp_id, account
+-- Check BSP registrations are indexed
+SELECT bsp_id, account, capacity
 FROM bsp
-WHERE account LIKE 'unknown-%';
+ORDER BY bsp_id;
 
 -- Verify move bucket events are indexed
 SELECT event_name, COUNT(*) as event_count
@@ -193,7 +205,13 @@ FROM file_system_events
 WHERE event_name IN ('MoveBucketRequested', 'MoveBucketAccepted', 'MoveBucketRejected')
 GROUP BY event_name;
 
--- Verify BSP events are indexed
+-- Verify provider registration events are indexed
+SELECT event_name, COUNT(*) as event_count
+FROM file_system_events  
+WHERE event_name IN ('MSPRegistered', 'BSPRegistered')
+GROUP BY event_name;
+
+-- Verify BSP file events are indexed
 SELECT event_name, COUNT(*) as event_count
 FROM file_system_events  
 WHERE event_name IN ('AcceptedBspVolunteer', 'BspConfirmedStoring')
@@ -224,6 +242,7 @@ The lite mode implementation is considered successful when:
 1. All buckets and files are visible to all MSPs
 2. BSP associations are tracked for all files
 3. Bucket transfers maintain complete data visibility
-4. No foreign key constraint violations occur
+4. Provider registration events (MSPRegistered, BSPRegistered) are indexed
 5. Performance remains acceptable under load
 6. All specified events are indexed without filtering
+7. AcceptedBspVolunteer event indexing is implemented (currently pending)

@@ -160,34 +160,6 @@ impl Bsp {
             .await?;
         Ok(())
     }
-
-    /// Get or create a minimal BSP record. This is used when we need to reference
-    /// a BSP that might not have been indexed yet (e.g., during BSP confirmations).
-    pub async fn get_or_create_minimal<'a>(
-        conn: &mut DbConnection<'a>,
-        onchain_bsp_id: String,
-    ) -> Result<Self, diesel::result::Error> {
-        // Try to get the existing BSP first
-        match Self::get_by_onchain_bsp_id(conn, onchain_bsp_id.clone()).await {
-            Ok(bsp) => Ok(bsp),
-            Err(diesel::result::Error::NotFound) => {
-                // Create a minimal BSP record with placeholder values
-                let bsp = diesel::insert_into(bsp::table)
-                    .values((
-                        bsp::account.eq(format!("unknown-{}", &onchain_bsp_id)),
-                        bsp::capacity.eq(BigDecimal::from(0)),
-                        bsp::onchain_bsp_id.eq(onchain_bsp_id),
-                        bsp::merkle_root.eq(vec![0u8; 32]), // Empty merkle root
-                        bsp::stake.eq(BigDecimal::from(0)),
-                    ))
-                    .returning(Bsp::as_select())
-                    .get_result(conn)
-                    .await?;
-                Ok(bsp)
-            }
-            Err(e) => Err(e),
-        }
-    }
 }
 
 #[derive(Debug, Queryable, Insertable, Selectable)]

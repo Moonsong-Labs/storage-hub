@@ -226,27 +226,6 @@ impl File {
         Ok(files)
     }
 
-    /// Get a file by its fingerprint and bucket ID
-    ///
-    /// This is used when processing AcceptedBspVolunteer events, where we don't have
-    /// the file_key but do have the fingerprint and bucket information.
-    pub async fn get_by_fingerprint_and_bucket<'a>(
-        conn: &mut DbConnection<'a>,
-        fingerprint: impl AsRef<[u8]>,
-        onchain_bucket_id: impl AsRef<[u8]>,
-    ) -> Result<Self, diesel::result::Error> {
-        let fingerprint = fingerprint.as_ref().to_vec();
-        let onchain_bucket_id = onchain_bucket_id.as_ref().to_vec();
-        
-        let file = file::table
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .filter(file::fingerprint.eq(fingerprint))
-            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
-            .select(File::as_select())
-            .first(conn)
-            .await?;
-        Ok(file)
-    }
 }
 
 impl File {

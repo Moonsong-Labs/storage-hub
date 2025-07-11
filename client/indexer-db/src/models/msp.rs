@@ -92,31 +92,4 @@ impl Msp {
             .await?;
         Ok(msp)
     }
-
-    /// Get or create a minimal MSP record. This is used when we need to reference
-    /// an MSP that might not have been indexed yet (e.g., during bucket transfers).
-    pub async fn get_or_create_minimal<'a>(
-        conn: &mut DbConnection<'a>,
-        onchain_msp_id: String,
-    ) -> Result<Self, diesel::result::Error> {
-        // Try to get the existing MSP first
-        match Self::get_by_onchain_msp_id(conn, onchain_msp_id.clone()).await {
-            Ok(msp) => Ok(msp),
-            Err(diesel::result::Error::NotFound) => {
-                // Create a minimal MSP record with placeholder values
-                let msp = diesel::insert_into(msp::table)
-                    .values((
-                        msp::account.eq(format!("unknown-{}", &onchain_msp_id)),
-                        msp::capacity.eq(BigDecimal::from(0)),
-                        msp::value_prop.eq("Unknown MSP - created for foreign reference"),
-                        msp::onchain_msp_id.eq(onchain_msp_id),
-                    ))
-                    .returning(Msp::as_select())
-                    .get_result(conn)
-                    .await?;
-                Ok(msp)
-            }
-            Err(e) => Err(e),
-        }
-    }
 }
