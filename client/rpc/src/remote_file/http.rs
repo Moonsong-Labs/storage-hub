@@ -263,7 +263,7 @@ impl RemoteFileHandler for HttpFileHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockito::mock;
+    use mockito::{mock, Server};
 
     fn create_test_handler() -> HttpFileHandler {
         let config = RemoteFileConfig {
@@ -290,13 +290,14 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata_success() {
         let handler = create_test_handler();
-        let _m = mock("HEAD", "/test.txt")
+        let mut server = Server::new();
+        let _m = server.mock("HEAD", "/test.txt")
             .with_status(200)
             .with_header("content-length", "1024")
             .with_header("content-type", "text/plain")
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/test.txt")
             .unwrap();
@@ -309,9 +310,10 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata_not_found() {
         let handler = create_test_handler();
-        let _m = mock("HEAD", "/missing.txt").with_status(404).create();
+        let mut server = Server::new();
+        let _m = server.mock("HEAD", "/missing.txt").with_status(404).create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/missing.txt")
             .unwrap();
@@ -323,9 +325,10 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata_forbidden() {
         let handler = create_test_handler();
-        let _m = mock("HEAD", "/forbidden.txt").with_status(403).create();
+        let mut server = Server::new();
+        let _m = server.mock("HEAD", "/forbidden.txt").with_status(403).create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/forbidden.txt")
             .unwrap();
@@ -337,12 +340,13 @@ mod tests {
     #[tokio::test]
     async fn test_fetch_metadata_file_too_large() {
         let handler = create_test_handler();
-        let _m = mock("HEAD", "/large.txt")
+        let mut server = Server::new();
+        let _m = server.mock("HEAD", "/large.txt")
             .with_status(200)
             .with_header("content-length", "2097152") // 2MB
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/large.txt")
             .unwrap();
@@ -354,13 +358,14 @@ mod tests {
     #[tokio::test]
     async fn test_download_success() {
         let handler = create_test_handler();
+        let mut server = Server::new();
         let content = b"Hello, World!";
-        let _m = mock("GET", "/test.txt")
+        let _m = server.mock("GET", "/test.txt")
             .with_status(200)
             .with_body(content)
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/test.txt")
             .unwrap();
@@ -372,14 +377,15 @@ mod tests {
     #[tokio::test]
     async fn test_download_chunk_success() {
         let handler = create_test_handler();
+        let mut server = Server::new();
         let content = b"Hello";
-        let _m = mock("GET", "/test.txt")
+        let _m = server.mock("GET", "/test.txt")
             .match_header("range", "bytes=6-10")
             .with_status(206)
             .with_body(content)
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/test.txt")
             .unwrap();
@@ -391,7 +397,8 @@ mod tests {
     #[tokio::test]
     async fn test_upload_file_success() {
         let handler = create_test_handler();
-        let _m = mock("PUT", "/upload.txt")
+        let mut server = Server::new();
+        let _m = server.mock("PUT", "/upload.txt")
             .match_header("content-length", "13")
             .match_header("content-type", "text/plain")
             .with_status(200)
@@ -399,7 +406,7 @@ mod tests {
 
         let data = b"Hello, World!";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/upload.txt", mockito::server_url());
+        let url = format!("{}/upload.txt", server.url());
         
         handler
             .upload_file(&url, reader, 13, Some("text/plain".to_string()))
@@ -410,14 +417,15 @@ mod tests {
     #[tokio::test]
     async fn test_upload_file_without_content_type() {
         let handler = create_test_handler();
-        let _m = mock("PUT", "/upload2.txt")
+        let mut server = Server::new();
+        let _m = server.mock("PUT", "/upload2.txt")
             .match_header("content-length", "4")
             .with_status(201)
             .create();
 
         let data = b"test";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/upload2.txt", mockito::server_url());
+        let url = format!("{}/upload2.txt", server.url());
         
         handler
             .upload_file(&url, reader, 4, None)
@@ -428,7 +436,8 @@ mod tests {
     #[tokio::test]
     async fn test_upload_file_with_basic_auth() {
         let handler = create_test_handler();
-        let _m = mock("PUT", "/secure-upload.txt")
+        let mut server = Server::new();
+        let _m = server.mock("PUT", "/secure-upload.txt")
             .match_header("authorization", "Basic dXNlcjpwYXNz") // user:pass in base64
             .match_header("content-length", "6")
             .with_status(200)
@@ -436,7 +445,7 @@ mod tests {
 
         let data = b"secure";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("http://user:pass@{}/secure-upload.txt", mockito::server_address());
+        let url = format!("http://user:pass@{}/secure-upload.txt", server.host_with_port());
         
         handler
             .upload_file(&url, reader, 6, None)
@@ -447,13 +456,14 @@ mod tests {
     #[tokio::test]
     async fn test_upload_file_forbidden() {
         let handler = create_test_handler();
-        let _m = mock("PUT", "/forbidden-upload.txt")
+        let mut server = Server::new();
+        let _m = server.mock("PUT", "/forbidden-upload.txt")
             .with_status(403)
             .create();
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/forbidden-upload.txt", mockito::server_url());
+        let url = format!("{}/forbidden-upload.txt", server.url());
         
         let result = handler
             .upload_file(&url, reader, 4, None)
@@ -491,13 +501,14 @@ mod tests {
     #[tokio::test]
     async fn test_upload_file_server_error() {
         let handler = create_test_handler();
-        let _m = mock("PUT", "/error-upload.txt")
+        let mut server = Server::new();
+        let _m = server.mock("PUT", "/error-upload.txt")
             .with_status(500)
             .create();
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/error-upload.txt", mockito::server_url());
+        let url = format!("{}/error-upload.txt", server.url());
         
         let result = handler
             .upload_file(&url, reader, 4, None)
@@ -515,7 +526,8 @@ mod tests {
         };
         let handler = HttpFileHandler::new(config).unwrap();
 
-        let _m = mock("PUT", "/slow-upload.txt")
+        let mut server = Server::new();
+        let _m = server.mock("PUT", "/slow-upload.txt")
             .with_status(200)
             .with_body_from_fn(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -525,7 +537,7 @@ mod tests {
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/slow-upload.txt", mockito::server_url());
+        let url = format!("{}/slow-upload.txt", server.url());
         
         let result = handler
             .upload_file(&url, reader, 4, None)
@@ -537,13 +549,14 @@ mod tests {
     #[tokio::test]
     async fn test_stream_file_success() {
         let handler = create_test_handler();
+        let mut server = Server::new();
         let content = b"Streaming content";
-        let _m = mock("GET", "/stream.txt")
+        let _m = server.mock("GET", "/stream.txt")
             .with_status(200)
             .with_body(content)
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/stream.txt")
             .unwrap();
@@ -561,24 +574,25 @@ mod tests {
     #[tokio::test]
     async fn test_follow_redirects() {
         let handler = create_test_handler();
+        let mut server = Server::new();
 
         // Create redirect chain
-        let _m1 = mock("GET", "/redirect1")
+        let _m1 = server.mock("GET", "/redirect1")
             .with_status(302)
-            .with_header("Location", &format!("{}/redirect2", mockito::server_url()))
+            .with_header("Location", &format!("{}/redirect2", server.url()))
             .create();
 
-        let _m2 = mock("GET", "/redirect2")
+        let _m2 = server.mock("GET", "/redirect2")
             .with_status(302)
-            .with_header("Location", &format!("{}/final", mockito::server_url()))
+            .with_header("Location", &format!("{}/final", server.url()))
             .create();
 
-        let _m3 = mock("GET", "/final")
+        let _m3 = server.mock("GET", "/final")
             .with_status(200)
             .with_body(b"Final content")
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/redirect1")
             .unwrap();
@@ -595,23 +609,24 @@ mod tests {
         };
         let handler = HttpFileHandler::new(config).unwrap();
 
+        let mut server = Server::new();
         // Create redirect chain that exceeds limit
-        let _m1 = mock("GET", "/redirect1")
+        let _m1 = server.mock("GET", "/redirect1")
             .with_status(302)
-            .with_header("Location", &format!("{}/redirect2", mockito::server_url()))
+            .with_header("Location", &format!("{}/redirect2", server.url()))
             .create();
 
-        let _m2 = mock("GET", "/redirect2")
+        let _m2 = server.mock("GET", "/redirect2")
             .with_status(302)
-            .with_header("Location", &format!("{}/redirect3", mockito::server_url()))
+            .with_header("Location", &format!("{}/redirect3", server.url()))
             .create();
 
-        let _m3 = mock("GET", "/redirect3")
+        let _m3 = server.mock("GET", "/redirect3")
             .with_status(302)
-            .with_header("Location", &format!("{}/final", mockito::server_url()))
+            .with_header("Location", &format!("{}/final", server.url()))
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/redirect1")
             .unwrap();
@@ -623,13 +638,14 @@ mod tests {
     #[tokio::test]
     async fn test_no_content_length_header() {
         let handler = create_test_handler();
-        let _m = mock("HEAD", "/no-length.txt")
+        let mut server = Server::new();
+        let _m = server.mock("HEAD", "/no-length.txt")
             .with_status(200)
             .with_header("content-type", "text/plain")
             // Intentionally not setting content-length
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/no-length.txt")
             .unwrap();
@@ -643,14 +659,15 @@ mod tests {
         let handler = create_test_handler();
         let full_content = b"This is the full content of the file";
 
+        let mut server = Server::new();
         // Server returns 200 OK with full content instead of 206 Partial Content
-        let _m = mock("GET", "/no-range.txt")
+        let _m = server.mock("GET", "/no-range.txt")
             .match_header("range", "bytes=5-9")
             .with_status(200)
             .with_body(full_content)
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/no-range.txt")
             .unwrap();
@@ -669,8 +686,9 @@ mod tests {
         };
         let handler = HttpFileHandler::new(config).unwrap();
 
+        let mut server = Server::new();
         // Mock a slow server that takes longer than timeout
-        let _m = mock("GET", "/slow.txt")
+        let _m = server.mock("GET", "/slow.txt")
             .with_status(200)
             .with_body_from_fn(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -678,7 +696,7 @@ mod tests {
             })
             .create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/slow.txt")
             .unwrap();
@@ -690,9 +708,10 @@ mod tests {
     #[tokio::test]
     async fn test_unauthorized_error() {
         let handler = create_test_handler();
-        let _m = mock("GET", "/auth-required.txt").with_status(401).create();
+        let mut server = Server::new();
+        let _m = server.mock("GET", "/auth-required.txt").with_status(401).create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/auth-required.txt")
             .unwrap();
@@ -704,9 +723,10 @@ mod tests {
     #[tokio::test]
     async fn test_internal_server_error() {
         let handler = create_test_handler();
-        let _m = mock("GET", "/error.txt").with_status(500).create();
+        let mut server = Server::new();
+        let _m = server.mock("GET", "/error.txt").with_status(500).create();
 
-        let url = Url::parse(&mockito::server_url())
+        let url = Url::parse(&server.url())
             .unwrap()
             .join("/error.txt")
             .unwrap();

@@ -83,7 +83,7 @@ impl FtpFileHandler {
         })?;
 
         // Set passive mode for better firewall compatibility
-        stream.set_passive_mode(true);
+        stream.set_mode(suppaftp::Mode::Passive);
 
         // Set binary transfer mode
         stream

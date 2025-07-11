@@ -361,21 +361,22 @@ mod integration_tests {
 #[cfg(test)]
 mod external_service_tests {
     use super::*;
-    use mockito::mock;
+    use mockito::{mock, Server};
 
     #[tokio::test]
     async fn test_http_download_with_mock_server() {
         let config = RemoteFileConfig::default();
         
         // Create a mock server that returns 100 random bytes
+        let mut server = Server::new();
         let test_data = vec![42u8; 100]; // 100 bytes of value 42
-        let _m = mock("GET", "/bytes/100")
+        let _m = server.mock("GET", "/bytes/100")
             .with_status(200)
             .with_header("content-type", "application/octet-stream")
             .with_body(&test_data)
             .create();
 
-        let url = Url::parse(&format!("{}/bytes/100", mockito::server_url())).unwrap();
+        let url = Url::parse(&format!("{}/bytes/100", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
         // Download using the handler trait method
@@ -397,13 +398,14 @@ mod external_service_tests {
         };
         
         // Create mock that simulates a large file
-        let _m = mock("HEAD", "/large-file.bin")
+        let mut server = Server::new();
+        let _m = server.mock("HEAD", "/large-file.bin")
             .with_status(200)
             .with_header("content-length", "2097152") // 2MB
             .with_header("content-type", "application/octet-stream")
             .create();
 
-        let url = Url::parse(&format!("{}/large-file.bin", mockito::server_url())).unwrap();
+        let url = Url::parse(&format!("{}/large-file.bin", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
         // Should fail because file exceeds max size
@@ -426,24 +428,25 @@ mod external_service_tests {
         };
         
         // Create redirect chain
-        let _m1 = mock("GET", "/start")
+        let mut server = Server::new();
+        let _m1 = server.mock("GET", "/start")
             .with_status(302)
-            .with_header("Location", &format!("{}/middle", mockito::server_url()))
+            .with_header("Location", &format!("{}/middle", server.url()))
             .create();
             
-        let _m2 = mock("GET", "/middle")
+        let _m2 = server.mock("GET", "/middle")
             .with_status(302)
-            .with_header("Location", &format!("{}/final", mockito::server_url()))
+            .with_header("Location", &format!("{}/final", server.url()))
             .create();
             
         let final_content = b"Final destination content";
-        let _m3 = mock("GET", "/final")
+        let _m3 = server.mock("GET", "/final")
             .with_status(200)
             .with_header("content-type", "text/plain")
             .with_body(final_content)
             .create();
 
-        let url = Url::parse(&format!("{}/start", mockito::server_url())).unwrap();
+        let url = Url::parse(&format!("{}/start", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
         // The HTTP handler should follow redirects
@@ -459,27 +462,28 @@ mod external_service_tests {
         let config = RemoteFileConfig::default();
         
         // Mock that requires authentication
-        let _m = mock("GET", "/protected/resource")
+        let mut server = Server::new();
+        let _m = server.mock("GET", "/protected/resource")
             .match_header("authorization", "Basic dXNlcjpwYXNz") // user:pass in base64
             .with_status(200)
             .with_body(b"Protected content")
             .create();
             
         // Mock for unauthorized access
-        let _m_unauth = mock("GET", "/protected/resource")
+        let _m_unauth = server.mock("GET", "/protected/resource")
             .with_status(401)
             .create();
 
         // Test with credentials in URL
         let url = Url::parse(&format!("http://user:pass@{}/protected/resource", 
-                                     mockito::server_address())).unwrap();
+                                     server.host_with_port())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
         
         // Note: The current HTTP handler doesn't handle auth from URL for GET requests
         // This would need to be implemented in the HTTP handler
         
         // Test without credentials - should get 401
-        let url_no_auth = Url::parse(&format!("{}/protected/resource", mockito::server_url())).unwrap();
+        let url_no_auth = Url::parse(&format!("{}/protected/resource", server.url())).unwrap();
         let handler_no_auth = RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
         let result = handler_no_auth.fetch_metadata(&url_no_auth).await;
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
@@ -494,7 +498,8 @@ mod external_service_tests {
         };
         
         // Mock a slow server
-        let _m = mock("GET", "/slow-response")
+        let mut server = Server::new();
+        let _m = server.mock("GET", "/slow-response")
             .with_status(200)
             .with_body_from_fn(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -502,7 +507,7 @@ mod external_service_tests {
             })
             .create();
 
-        let url = Url::parse(&format!("{}/slow-response", mockito::server_url())).unwrap();
+        let url = Url::parse(&format!("{}/slow-response", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
         // Should timeout
