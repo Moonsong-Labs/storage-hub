@@ -24,6 +24,7 @@ use tokio::{fs, fs::create_dir_all, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
+use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -31,7 +32,6 @@ use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{traits::Block as BlockT, AccountId32, Deserialize, KeyTypeId, Serialize};
 use sp_runtime_interface::pass_by::PassByInner;
-use remote_file::{RemoteFileHandlerFactory, RemoteFileConfig};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
@@ -371,7 +371,7 @@ where
         // Read file in chunks of [`FILE_CHUNK_SIZE`] from the stream
         loop {
             let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
-            
+
             match stream.read(&mut chunk).await {
                 // Reached EOF, break loop.
                 Ok(0) => {
@@ -381,7 +381,7 @@ where
                 // Haven't reached EOF yet, continue loop.
                 Ok(bytes_read) => {
                     debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
-                    
+
                     // Resize chunk to actual bytes read
                     chunk.truncate(bytes_read);
 
@@ -393,7 +393,10 @@ where
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
-                    return Err(into_rpc_error(format!("Error reading file stream: {:?}", e)));
+                    return Err(into_rpc_error(format!(
+                        "Error reading file stream: {:?}",
+                        e
+                    )));
                 }
             }
         }
@@ -479,6 +482,23 @@ where
     ) -> RpcResult<SaveFileToDisk> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
+
+        // Check if the file_path is a remote URL or local path
+        // Try to parse as URL first
+        let is_remote = if let Ok(url) = url::Url::parse(&file_path) {
+            // Check if it's a remote protocol (not file:// or empty scheme)
+            !matches!(url.scheme(), "" | "file")
+        } else {
+            // Failed to parse as URL, treat as local path
+            false
+        };
+
+        // Return error if trying to save to a remote location
+        if is_remote {
+            return Err(into_rpc_error(
+                "Saving files to remote locations (HTTP/FTP) is not supported. Only local file paths are allowed."
+            ));
+        }
 
         // Acquire FileStorage read lock.
         let read_file_storage = self.file_storage.read().await;

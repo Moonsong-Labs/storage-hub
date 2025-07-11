@@ -27,15 +27,19 @@ impl RemoteFileHandlerFactory {
         match url.scheme() {
             // Local file handler for file:// URLs or paths without scheme
             "" | "file" => Ok(Arc::new(LocalFileHandler::new()) as Arc<dyn RemoteFileHandler>),
-            
+
             // HTTP/HTTPS handler
             "http" | "https" => HttpFileHandler::new(config)
                 .map(|h| Arc::new(h) as Arc<dyn RemoteFileHandler>)
-                .map_err(|e| RemoteFileError::Other(format!("Failed to create HTTP handler: {}", e))),
-            
+                .map_err(|e| {
+                    RemoteFileError::Other(format!("Failed to create HTTP handler: {}", e))
+                }),
+
             // FTP/FTPS handler
-            "ftp" | "ftps" => Ok(Arc::new(FtpFileHandler::new(config)) as Arc<dyn RemoteFileHandler>),
-            
+            "ftp" | "ftps" => {
+                Ok(Arc::new(FtpFileHandler::new(config)) as Arc<dyn RemoteFileHandler>)
+            }
+
             // Unsupported protocol
             scheme => Err(RemoteFileError::UnsupportedProtocol(scheme.to_string())),
         }
@@ -121,26 +125,25 @@ mod tests {
         let config = RemoteFileConfig::default();
         let url = Url::parse("sftp://example.com/file.txt").unwrap();
         let result = RemoteFileHandlerFactory::create(&url, config);
-        assert!(matches!(result, Err(RemoteFileError::UnsupportedProtocol(_))));
+        assert!(matches!(
+            result,
+            Err(RemoteFileError::UnsupportedProtocol(_))
+        ));
     }
 
     #[test]
     fn test_create_from_string_valid() {
         let config = RemoteFileConfig::default();
-        let handler = RemoteFileHandlerFactory::create_from_string(
-            "https://example.com/file.txt",
-            config
-        ).unwrap();
+        let handler =
+            RemoteFileHandlerFactory::create_from_string("https://example.com/file.txt", config)
+                .unwrap();
         assert!(handler.is_supported(&Url::parse("https://example.com/file.txt").unwrap()));
     }
 
     #[test]
     fn test_create_from_string_invalid_url() {
         let config = RemoteFileConfig::default();
-        let result = RemoteFileHandlerFactory::create_from_string(
-            "not a valid url",
-            config
-        );
+        let result = RemoteFileHandlerFactory::create_from_string("not a valid url", config);
         assert!(matches!(result, Err(RemoteFileError::InvalidUrl(_))));
     }
 
@@ -183,12 +186,13 @@ mod tests {
             max_redirects: 5,
             user_agent: "CustomAgent/2.0".to_string(),
         };
-        
+
         // Test that handlers are created with the provided config
         let http_url = Url::parse("http://example.com/file.txt").unwrap();
-        let http_handler = RemoteFileHandlerFactory::create(&http_url, custom_config.clone()).unwrap();
+        let http_handler =
+            RemoteFileHandlerFactory::create(&http_url, custom_config.clone()).unwrap();
         assert!(http_handler.is_supported(&http_url));
-        
+
         let ftp_url = Url::parse("ftp://example.com/file.txt").unwrap();
         let ftp_handler = RemoteFileHandlerFactory::create(&ftp_url, custom_config).unwrap();
         assert!(ftp_handler.is_supported(&ftp_url));
