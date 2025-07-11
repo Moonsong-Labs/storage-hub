@@ -35,8 +35,14 @@ impl FtpFileHandler {
     ) -> Result<(String, u16, Option<String>, Option<String>, String), RemoteFileError> {
         let host = url
             .host_str()
-            .ok_or_else(|| RemoteFileError::InvalidUrl("Missing host".to_string()))?
-            .to_string();
+            .ok_or_else(|| RemoteFileError::InvalidUrl("Missing host".to_string()))?;
+        
+        // Check for empty host
+        if host.is_empty() {
+            return Err(RemoteFileError::InvalidUrl("Missing host".to_string()));
+        }
+        
+        let host = host.to_string();
 
         let port = url.port().unwrap_or(21);
 

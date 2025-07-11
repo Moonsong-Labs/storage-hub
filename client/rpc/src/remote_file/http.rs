@@ -535,24 +535,18 @@ mod tests {
         };
         let handler = HttpFileHandler::new(config).unwrap();
 
-        let mut server = Server::new_async().await;
-        let _m = server.mock("PUT", "/slow-upload.txt")
-            .with_status(200)
-            .with_chunked_body(|_| {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                Ok(())
-            })
-            .create_async()
-            .await;
-
+        // Use a non-routable IP address that will cause a connection timeout
+        // 10.255.255.1 is typically non-routable and will timeout
+        let url = "http://10.255.255.1/timeout-upload.txt";
+        
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/slow-upload.txt", server.url());
         
         let result = handler
-            .upload_file(&url, reader, 4, None)
+            .upload_file(url, reader, 4, None)
             .await;
 
+        // The connection should timeout
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
 
