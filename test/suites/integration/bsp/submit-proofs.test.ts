@@ -465,7 +465,7 @@ describeBspNet(
     );
 
     it("Non-root user cannot initiate priority challenge", async () => {
-      // Attempt to call forcePriorityChallenge without sudo 
+      // Attempt to call forcePriorityChallenge without sudo
       const { events, extSuccess } = await userApi.block.seal({
         calls: [
           userApi.tx.proofsDealer.priorityChallenge(
@@ -476,7 +476,11 @@ describeBspNet(
       });
 
       // The extrinsic should have failed.
-      assert.strictEqual(extSuccess, false, "Non-root user should not be able to call forcePriorityChallenge");
+      assert.strictEqual(
+        extSuccess,
+        false,
+        "Non-root user should not be able to call forcePriorityChallenge"
+      );
 
       // Get the event of the extrinsic failure.
       const {
