@@ -270,9 +270,12 @@ mod tests {
         let file_url = Url::parse("file:///path/to/file.txt").unwrap();
         assert!(handler.is_supported(&file_url));
 
-        // Empty scheme (absolute path) should be supported
-        let path_url = Url::parse("/path/to/file.txt").unwrap();
-        assert!(handler.is_supported(&path_url));
+        // For local paths, we need to test the parse_uri_to_path method instead
+        // since is_supported expects a Url object and absolute paths without scheme
+        // can't be directly parsed as URLs
+        let path_result = LocalFileHandler::parse_uri_to_path("/path/to/file.txt");
+        assert!(path_result.is_ok());
+        assert_eq!(path_result.unwrap(), PathBuf::from("/path/to/file.txt"));
 
         // HTTP should not be supported
         let http_url = Url::parse("http://example.com/file.txt").unwrap();
