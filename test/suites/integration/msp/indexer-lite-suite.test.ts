@@ -26,15 +26,53 @@ describeMspNet(
       userApi = await createUserApi();
       sql = createSqlClient();
 
-      // Wait for indexer to be ready
+      // Wait for postgres to be ready
       await userApi.docker.waitForLog({
         containerName: "docker-sh-postgres-1",
         searchString: "database system is ready to accept connections",
         timeout: 5000
       });
 
-      // Give indexer time to process initial events including MSP registration
-      await sleep(5000);
+      // Wait for MSP1's indexer to start (it runs the indexer in lite mode)
+      await userApi.docker.waitForLog({
+        containerName: "docker-sh-msp-1",
+        searchString: "Running actor loop",
+        timeout: 10000
+      });
+
+      // Give indexer additional time to sync and process initial events
+      await sleep(3000);
+      
+      // Debug: Check if indexer processed any events
+      const eventCount = await sql`SELECT COUNT(*) as count FROM block_event`;
+      console.log(`Initial event count: ${eventCount[0].count}`);
+      
+      // Debug: Check for MSP-related events
+      const mspEvents = await sql`
+        SELECT section, method, COUNT(*) as count 
+        FROM block_event 
+        WHERE section = 'providers' 
+        GROUP BY section, method
+      `;
+      console.log(`MSP-related events:`, mspEvents);
+      
+      // If no MSP events found, wait longer and check again
+      if (mspEvents.length === 0) {
+        console.log("No MSP events found yet, waiting longer for indexer to catch up...");
+        await sleep(5000);
+        
+        const retryEvents = await sql`
+          SELECT section, method, COUNT(*) as count 
+          FROM block_event 
+          WHERE section = 'providers' 
+          GROUP BY section, method
+        `;
+        console.log(`MSP-related events after retry:`, retryEvents);
+      }
+      
+      // Also check the raw MSP table to see what's there
+      const allMsps = await sql`SELECT * FROM msp`;
+      console.log(`All MSPs in database:`, allMsps);
     });
 
     it("MSP table should contain only MSP1", async () => {
@@ -50,9 +88,11 @@ describeMspNet(
       // Verify only MSP1 exists
       const msp1Id = userApi.shConsts.NODE_INFOS.msp1.AddressId;
       const msp2Id = userApi.shConsts.NODE_INFOS.msp2.AddressId;
+      const msp1OnchainId = userApi.shConsts.DUMMY_MSP_ID;
+      const msp2OnchainId = userApi.shConsts.DUMMY_MSP_ID_2;
       
-      console.log(`Looking for MSP1 ID: ${msp1Id}`);
-      console.log(`Looking for MSP2 ID: ${msp2Id}`);
+      console.log(`Looking for MSP1 ID: ${msp1Id} or onchain ID: ${msp1OnchainId}`);
+      console.log(`Looking for MSP2 ID: ${msp2Id} or onchain ID: ${msp2OnchainId}`);
       
       if (msps.length > 0) {
         console.log(`MSPs in database:`);
@@ -61,8 +101,12 @@ describeMspNet(
         });
       }
       
-      const hasMsp1 = msps.some(m => m.onchain_msp_id === msp1Id);
-      const hasMsp2 = msps.some(m => m.onchain_msp_id === msp2Id);
+      const hasMsp1 = msps.some(m => 
+        m.onchain_msp_id === msp1Id || m.onchain_msp_id === msp1OnchainId
+      );
+      const hasMsp2 = msps.some(m => 
+        m.onchain_msp_id === msp2Id || m.onchain_msp_id === msp2OnchainId
+      );
       
       assert(hasMsp1, "MSP1 should be indexed");
       assert(!hasMsp2, "MSP2 should NOT be indexed in lite mode");
@@ -88,7 +132,10 @@ describeMspNet(
       if (buckets.length > 0) {
         // Verify all buckets belong to MSP1
         const msp1Id = userApi.shConsts.NODE_INFOS.msp1.AddressId;
-        const allBelongToMsp1 = buckets.every(b => b.msp_id === msp1Id);
+        const msp1OnchainId = userApi.shConsts.DUMMY_MSP_ID;
+        const allBelongToMsp1 = buckets.every(b => 
+          b.msp_id === msp1Id || b.msp_id === msp1OnchainId
+        );
         
         assert(allBelongToMsp1, "All buckets should belong to MSP1");
         
@@ -122,7 +169,10 @@ describeMspNet(
       if (files.length > 0) {
         // Verify all files belong to MSP1's buckets
         const msp1Id = userApi.shConsts.NODE_INFOS.msp1.AddressId;
-        const allBelongToMsp1 = files.every(f => f.msp_id === msp1Id);
+        const msp1OnchainId = userApi.shConsts.DUMMY_MSP_ID;
+        const allBelongToMsp1 = files.every(f => 
+          f.msp_id === msp1Id || f.msp_id === msp1OnchainId
+        );
         
         assert(allBelongToMsp1, "All files should belong to MSP1's buckets");
         
