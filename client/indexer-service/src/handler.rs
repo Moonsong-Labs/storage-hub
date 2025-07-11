@@ -128,6 +128,14 @@ where
     /// Check if a bucket belongs to the current MSP.
     ///
     /// This helper method checks if a bucket with the given ID belongs to the current MSP.
+    /// 
+    /// In lite mode, this is now only used for specific events that require MSP ownership filtering:
+    /// - BucketPrivacyUpdated
+    /// - BucketDeleted
+    /// - BucketRootChanged
+    /// 
+    /// Note: Lite mode now indexes ALL buckets and files regardless of ownership to support
+    /// bucket transfers between MSPs. Most bucket/file events are indexed without ownership checks.
     async fn check_bucket_belongs_to_current_msp<'a>(
         &self,
         conn: &mut DbConnection<'a>,
@@ -160,6 +168,16 @@ where
     ///
     /// This helper method checks if a file with the given key belongs to a bucket
     /// that is managed by the current MSP.
+    /// 
+    /// In lite mode, this is now only used for specific events that require MSP ownership filtering:
+    /// - ProofSubmittedForPendingFileDeletionRequest
+    /// - MspAcceptedStorageRequest
+    /// - StorageRequestRejected
+    /// 
+    /// Note: Lite mode now indexes ALL buckets and files regardless of ownership to support
+    /// bucket transfers between MSPs. Most file events (NewStorageRequest, StorageRequestFulfilled,
+    /// StorageRequestExpired, StorageRequestRevoked, FileDeletionRequest) are indexed without
+    /// ownership checks to maintain complete file records across all buckets.
     async fn check_file_belongs_to_current_msp<'a>(
         &self,
         conn: &mut DbConnection<'a>,
