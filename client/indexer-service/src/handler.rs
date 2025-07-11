@@ -231,7 +231,7 @@ where
     }
 
     async fn index_block<'a, 'b: 'a>(
-        &'b self,
+        &'b mut self,
         conn: &mut DbConnection<'a>,
         block_number: BlockNumber,
         block_hash: H256,
@@ -257,7 +257,7 @@ where
     }
 
     async fn route_event<'a, 'b: 'a>(
-        &'b self,
+        &'b mut self,
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
         block_hash: H256,
@@ -312,7 +312,7 @@ where
     }
 
     async fn index_event_lite<'a, 'b: 'a>(
-        &'b self,
+        &'b mut self,
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
         block_hash: H256,
@@ -1015,7 +1015,7 @@ where
     }
 
     async fn index_providers_event_lite<'a, 'b: 'a>(
-        &'b self,
+        &'b mut self,
         conn: &mut DbConnection<'a>,
         event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
         block_hash: H256,
@@ -1028,7 +1028,12 @@ where
                 info!(target: LOG_TARGET, "Processing MspSignUpSuccess event while MSP ID is not set - checking if it's our registration");
                 self.index_providers_event(conn, event, block_hash).await?;
 
-                // Note: MSP ID will be re-synced on the next finality notification
+                // Immediately sync MSP ID after processing the event
+                self.sync_msp_id(&block_hash);
+                if self.msp_id.is_some() {
+                    info!(target: LOG_TARGET, "MSP ID detected after processing MspSignUpSuccess event");
+                }
+                
                 return Ok(());
             }
         }
