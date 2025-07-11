@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
-use log::{error, info, trace};
+use log::{error, info, trace, warn};
 use shc_common::traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::{ProviderId, StorageProviderId};
 use sp_runtime::AccountId32;
@@ -393,7 +393,8 @@ where
                 value_prop_id: _,
                 root,
             } => {
-                let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
+                // Use get_or_create_minimal to handle foreign MSP references
+                let msp = Some(Msp::get_or_create_minimal(conn, msp_id.to_string()).await?);
 
                 Bucket::create(
                     conn,
@@ -413,7 +414,8 @@ where
                 bucket_id,
                 value_prop_id: _,
             } => {
-                let new_msp = Msp::get_by_onchain_msp_id(conn, new_msp_id.to_string()).await?;
+                // Use get_or_create_minimal to handle foreign MSP references
+                let new_msp = Msp::get_or_create_minimal(conn, new_msp_id.to_string()).await?;
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
             }
             pallet_file_system::Event::BucketPrivacyUpdated {
@@ -436,6 +438,8 @@ where
                 file_key: _,
                 new_root,
             } => {
+                // Ensure BSP exists before updating merkle root
+                let _ = Bsp::get_or_create_minimal(conn, bsp_id.to_string()).await?;
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
             }
@@ -446,10 +450,13 @@ where
                 skipped_file_keys: _,
                 new_root,
             } => {
+                // Use get_or_create_minimal to handle foreign BSP references
+                let bsp = Bsp::get_or_create_minimal(conn, bsp_id.to_string()).await?;
+                
+                // Update the merkle root for the BSP
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
 
-                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
                 for file_key in confirmed_file_keys {
                     let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                     BspFile::create(conn, bsp.id, file.id).await?;
@@ -488,7 +495,33 @@ where
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
-            pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
+            pallet_file_system::Event::AcceptedBspVolunteer {
+                bsp_id,
+                bucket_id,
+                location: _,
+                fingerprint,
+                multiaddresses: _,
+                owner: _,
+                size: _,
+            } => {
+                // Find the file using fingerprint and bucket ID
+                let file = File::get_by_fingerprint_and_bucket(
+                    conn,
+                    fingerprint.as_ref().to_vec(),
+                    bucket_id.as_ref().to_vec(),
+                )
+                .await?;
+                
+                // Get the BSP if it exists (BSP should already be registered in the providers pallet)
+                if let Ok(bsp) = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await {
+                    // Create the BSP-file relationship
+                    BspFile::create(conn, bsp.id, file.id).await?;
+                } else {
+                    // Log warning if BSP doesn't exist - this shouldn't happen in normal operation
+                    // as BSPs should be registered before they can volunteer
+                    warn!(target: LOG_TARGET, "BSP {:?} volunteered for file but is not in database", bsp_id);
+                }
+            }
             pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
                 File::update_step(
                     conn,
@@ -567,8 +600,8 @@ where
         // Filter events based on MSP relevance
         let should_index = match event {
             pallet_file_system::Event::NewBucket { msp_id, .. } => {
-                // Only index if bucket is for current MSP
-                msp_id == current_msp_id
+                // Index ALL buckets regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::MoveBucketAccepted {
                 bucket_id,
@@ -588,40 +621,20 @@ where
                 }
             }
             pallet_file_system::Event::NewStorageRequest { bucket_id, .. } => {
-                // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(
-                    conn,
-                    bucket_id.as_ref().to_vec(),
-                    current_msp_id,
-                )
-                .await
+                // Index ALL storage requests regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
-                // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    current_msp_id,
-                )
-                .await
+                // Index ALL fulfilled storage requests regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::StorageRequestExpired { file_key } => {
-                // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    current_msp_id,
-                )
-                .await
+                // Index ALL expired storage requests regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
-                // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    current_msp_id,
-                )
-                .await
+                // Index ALL revoked storage requests regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::BucketPrivacyUpdated { bucket_id, .. } => {
                 // Only index if bucket belongs to current MSP
@@ -642,22 +655,12 @@ where
                 .await
             }
             pallet_file_system::Event::MoveBucketRequested { bucket_id, .. } => {
-                // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(
-                    conn,
-                    bucket_id.as_ref().to_vec(),
-                    current_msp_id,
-                )
-                .await
+                // Index ALL move bucket requests regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::MoveBucketRejected { bucket_id, .. } => {
-                // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(
-                    conn,
-                    bucket_id.as_ref().to_vec(),
-                    current_msp_id,
-                )
-                .await
+                // Index ALL move bucket rejections regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::MspStoppedStoringBucket { msp_id, .. } => {
                 // Only index if it's the current MSP
@@ -668,13 +671,8 @@ where
                 msp_id == current_msp_id
             }
             pallet_file_system::Event::FileDeletionRequest { file_key, .. } => {
-                // Check if file belongs to current MSP's bucket
-                self.check_file_belongs_to_current_msp(
-                    conn,
-                    file_key.as_ref().to_vec(),
-                    current_msp_id,
-                )
-                .await
+                // Index ALL file deletion requests regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
                 file_key,
@@ -689,13 +687,8 @@ where
                 .await
             }
             pallet_file_system::Event::MoveBucketRequestExpired { bucket_id, .. } => {
-                // Only index if bucket belongs to current MSP
-                self.check_bucket_belongs_to_current_msp(
-                    conn,
-                    bucket_id.as_ref().to_vec(),
-                    current_msp_id,
-                )
-                .await
+                // Index ALL move bucket request expirations regardless of MSP ownership
+                true
             }
             pallet_file_system::Event::MspAcceptedStorageRequest { file_key, .. } => {
                 // Check if file belongs to current MSP's bucket
@@ -717,10 +710,10 @@ where
             }
             // BSP-specific events and others remain filtered out
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => false,
-            pallet_file_system::Event::AcceptedBspVolunteer { .. } => false,
+            pallet_file_system::Event::AcceptedBspVolunteer { .. } => true, // Enable BSP volunteering indexing
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => false,
             pallet_file_system::Event::BspConfirmStoppedStoring { .. } => false,
-            pallet_file_system::Event::BspConfirmedStoring { .. } => false,
+            pallet_file_system::Event::BspConfirmedStoring { .. } => true, // Enable BSP confirmation indexing
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => false,
             pallet_file_system::Event::SpStopStoringInsolventUser { .. } => false,
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => false,
@@ -821,6 +814,8 @@ where
                 proof: _proof,
                 last_tick_proven,
             } => {
+                // Ensure BSP exists before updating last tick proven
+                let _ = Bsp::get_or_create_minimal(conn, provider.to_string()).await?;
                 Bsp::update_last_tick_proven(
                     conn,
                     provider.to_string(),
@@ -966,6 +961,9 @@ where
                 provider_id,
                 top_up_metadata: _top_up_metadata,
             } => {
+                // Ensure BSP exists before updating stake
+                let _ = Bsp::get_or_create_minimal(conn, provider_id.to_string()).await?;
+                
                 let stake = self
                     .client
                     .runtime_api()
