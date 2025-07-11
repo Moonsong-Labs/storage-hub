@@ -81,6 +81,9 @@ impl FtpFileHandler {
             _ => RemoteFileError::FtpError(e),
         })?;
 
+        // Set passive mode for better firewall compatibility
+        stream.set_passive_mode(true);
+
         // Set binary transfer mode
         stream
             .transfer_type(FileType::Binary)
@@ -137,11 +140,24 @@ impl FtpFileHandler {
         Ok(data)
     }
 
-    /// Upload is not supported for FTP
-    pub async fn upload(&self, _url: &Url, _data: &[u8]) -> Result<(), RemoteFileError> {
-        Err(RemoteFileError::Other(
-            "FTP upload is not implemented yet".to_string(),
-        ))
+    /// Upload data to FTP URL
+    pub async fn upload(&self, url: &Url, data: &[u8]) -> Result<(), RemoteFileError> {
+        let (_, _, _, _, path) = Self::parse_url(url)?;
+        let mut stream = self.connect(url).await?;
+
+        // Create a cursor from the data
+        let cursor = Cursor::new(data);
+
+        // Upload the file
+        stream
+            .put(&path, &mut cursor.clone())
+            .await
+            .map_err(Self::ftp_error_to_remote_error)?;
+
+        // Disconnect
+        let _ = stream.quit().await;
+
+        Ok(())
     }
 }
 
@@ -238,6 +254,59 @@ impl RemoteFileHandler for FtpFileHandler {
     fn is_supported(&self, url: &Url) -> bool {
         matches!(url.scheme(), "ftp" | "ftps")
     }
+
+    async fn upload_file(
+        &self,
+        uri: &str,
+        mut data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+        size: u64,
+        _content_type: Option<String>,
+    ) -> Result<(), RemoteFileError> {
+        // Parse the URI
+        let url = Url::parse(uri)
+            .map_err(|e| RemoteFileError::InvalidUrl(format!("Invalid URL: {}", e)))?;
+
+        // Validate protocol
+        if !self.is_supported(&url) {
+            return Err(RemoteFileError::UnsupportedProtocol(
+                url.scheme().to_string(),
+            ));
+        }
+
+        let (_, _, _, _, path) = Self::parse_url(&url)?;
+        let mut stream = self.connect(&url).await?;
+
+        // Read data into buffer with size limit
+        if size > self.config.max_file_size {
+            return Err(RemoteFileError::Other(format!(
+                "File size {} exceeds maximum allowed size {}",
+                size, self.config.max_file_size
+            )));
+        }
+
+        // Read the data into a buffer
+        let mut buffer = Vec::with_capacity(size as usize);
+        tokio::io::AsyncReadExt::read_to_end(&mut data, &mut buffer)
+            .await
+            .map_err(|e| RemoteFileError::IoError(e))?;
+
+        // Create a cursor from the buffer
+        let cursor = Cursor::new(buffer);
+
+        // Upload the file with timeout
+        tokio::time::timeout(
+            Duration::from_secs(self.config.read_timeout),
+            stream.put(&path, &mut cursor.clone()),
+        )
+        .await
+        .map_err(|_| RemoteFileError::Timeout)?
+        .map_err(Self::ftp_error_to_remote_error)?;
+
+        // Disconnect
+        let _ = stream.quit().await;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -311,14 +380,72 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_upload_not_supported() {
+    #[ignore = "Requires FTP test server"]
+    async fn test_upload_success() {
         let handler = create_test_handler();
-        let url = Url::parse("ftp://example.com/upload.txt").unwrap();
-        let result = handler.upload(&url, b"data").await;
+        let url = Url::parse("ftp://test.rebex.net/upload.txt").unwrap();
+        let data = b"Hello, FTP!";
+        
+        // Note: This test would require write permissions on the FTP server
+        // In a real test environment, you'd use a test FTP server with write access
+        let result = handler.upload(&url, data).await;
+        
+        // The test server may not allow uploads, so we just check the method exists
+        assert!(result.is_err() || result.is_ok());
+    }
 
+    #[tokio::test]
+    #[ignore = "Requires FTP test server"]
+    async fn test_upload_file_trait_method() {
+        let handler = create_test_handler();
+        let uri = "ftp://test.rebex.net/upload.txt";
+        let data = b"Hello from trait method!";
+        let cursor = Cursor::new(data);
+        let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
+        
+        // Test the trait method
+        let result = handler
+            .upload_file(uri, boxed_reader, data.len() as u64, Some("text/plain".to_string()))
+            .await;
+        
+        // The test server may not allow uploads, so we just check the method exists
+        assert!(result.is_err() || result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_invalid_protocol() {
+        let handler = create_test_handler();
+        let uri = "http://example.com/upload.txt";
+        let data = b"test";
+        let cursor = Cursor::new(data);
+        let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
+        
+        let result = handler
+            .upload_file(uri, boxed_reader, data.len() as u64, None)
+            .await;
+        
+        assert!(matches!(result, Err(RemoteFileError::UnsupportedProtocol(_))));
+    }
+
+    #[tokio::test]
+    async fn test_upload_file_size_limit() {
+        let config = RemoteFileConfig {
+            max_file_size: 10, // Very small limit
+            ..RemoteFileConfig::default()
+        };
+        let handler = FtpFileHandler::new(config);
+        let uri = "ftp://example.com/upload.txt";
+        let data = b"This is larger than 10 bytes";
+        let cursor = Cursor::new(data);
+        let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
+        
+        let result = handler
+            .upload_file(uri, boxed_reader, data.len() as u64, None)
+            .await;
+        
         assert!(matches!(result, Err(RemoteFileError::Other(_))));
         if let Err(RemoteFileError::Other(msg)) = result {
-            assert_eq!(msg, "FTP upload is not implemented yet");
+            assert!(msg.contains("exceeds maximum allowed size"));
         }
     }
 

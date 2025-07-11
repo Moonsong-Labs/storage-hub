@@ -15,7 +15,8 @@
       "Bash(cargo clippy:*)",
       "Bash(rustc:*)",
       "Bash(cargo rustc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(./test_ftp_upload)"
     ],
     "deny": []
   }
