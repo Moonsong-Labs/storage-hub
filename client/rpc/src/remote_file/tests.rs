@@ -1,4 +1,3 @@
-//! Integration tests for remote file handlers
 
 use super::*;
 use std::sync::Arc;
@@ -8,7 +7,6 @@ use url::Url;
 mod factory_tests {
     use super::*;
 
-    /// Test helper to create default config
     fn default_config() -> RemoteFileConfig {
         RemoteFileConfig::default()
     }
@@ -17,7 +15,6 @@ mod factory_tests {
     fn test_factory_creates_correct_handler_for_each_scheme() {
         let config = default_config();
         
-        // Test each supported scheme
         let test_cases = vec![
             ("http://example.com/file.txt", "http"),
             ("https://example.com/file.txt", "https"),
@@ -30,11 +27,9 @@ mod factory_tests {
             let url = Url::parse(url_str).unwrap();
             let handler = RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
             
-            // Verify handler supports the URL
             assert!(handler.is_supported(&url), 
                 "Handler should support {} URLs", expected_scheme);
             
-            // Verify handler doesn't support other schemes
             let other_url = Url::parse("sftp://example.com/file.txt").unwrap();
             assert!(!handler.is_supported(&other_url),
                 "Handler for {} should not support sftp URLs", expected_scheme);
@@ -45,11 +40,9 @@ mod factory_tests {
     fn test_factory_handles_path_without_scheme() {
         let config = default_config();
         
-        // Test absolute path without scheme
         let path = "/absolute/path/to/file.txt";
         let handler = RemoteFileHandlerFactory::create_from_string(path, config.clone()).unwrap();
         
-        // Should create a local file handler
         assert!(handler.is_supported(&Url::parse("file:///absolute/path/to/file.txt").unwrap()));
     }
 
@@ -98,20 +91,17 @@ mod factory_tests {
     fn test_supported_protocols_list() {
         let protocols = RemoteFileHandlerFactory::supported_protocols();
         
-        // Verify all expected protocols are listed
         assert!(protocols.contains(&"file"));
         assert!(protocols.contains(&"http"));
         assert!(protocols.contains(&"https"));
         assert!(protocols.contains(&"ftp"));
         assert!(protocols.contains(&"ftps"));
         
-        // Verify count
         assert_eq!(protocols.len(), 5);
     }
 
     #[test]
     fn test_is_protocol_supported_comprehensive() {
-        // Test all supported protocols
         assert!(RemoteFileHandlerFactory::is_protocol_supported(""));
         assert!(RemoteFileHandlerFactory::is_protocol_supported("file"));
         assert!(RemoteFileHandlerFactory::is_protocol_supported("http"));
@@ -119,13 +109,11 @@ mod factory_tests {
         assert!(RemoteFileHandlerFactory::is_protocol_supported("ftp"));
         assert!(RemoteFileHandlerFactory::is_protocol_supported("ftps"));
         
-        // Test unsupported protocols
         assert!(!RemoteFileHandlerFactory::is_protocol_supported("sftp"));
         assert!(!RemoteFileHandlerFactory::is_protocol_supported("ssh"));
         assert!(!RemoteFileHandlerFactory::is_protocol_supported("smb"));
         assert!(!RemoteFileHandlerFactory::is_protocol_supported("custom"));
         
-        // Test case sensitivity
         assert!(!RemoteFileHandlerFactory::is_protocol_supported("HTTP"));
         assert!(!RemoteFileHandlerFactory::is_protocol_supported("File"));
     }
@@ -139,7 +127,6 @@ mod url_parsing_tests {
     fn test_url_with_authentication() {
         let config = RemoteFileConfig::default();
         
-        // Test FTP with credentials
         let url_str = "ftp://user:pass@example.com/file.txt";
         let handler = RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
         let url = Url::parse(url_str).unwrap();
@@ -200,7 +187,6 @@ mod error_handling_tests {
 
     #[test]
     fn test_error_display() {
-        // Test each error variant's display implementation
         let errors = vec![
             RemoteFileError::InvalidUrl("bad url".to_string()),
             RemoteFileError::UnsupportedProtocol("custom".to_string()),
@@ -219,7 +205,6 @@ mod error_handling_tests {
 
     #[test]
     fn test_error_conversions() {
-        // Test From implementations
         let io_error = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
         let remote_error: RemoteFileError = io_error.into();
         assert!(matches!(remote_error, RemoteFileError::IoError(_)));
@@ -234,7 +219,7 @@ mod config_tests {
     fn test_config_defaults() {
         let config = RemoteFileConfig::default();
         
-        assert_eq!(config.max_file_size, 5 * 1024 * 1024 * 1024); // 5GB
+        assert_eq!(config.max_file_size, 5 * 1024 * 1024 * 1024);
         assert_eq!(config.connection_timeout, 30);
         assert_eq!(config.read_timeout, 300);
         assert_eq!(config.max_redirects, 10);
@@ -245,7 +230,7 @@ mod config_tests {
     #[test]
     fn test_config_custom_values() {
         let config = RemoteFileConfig {
-            max_file_size: 10 * 1024 * 1024 * 1024, // 10GB
+            max_file_size: 10 * 1024 * 1024 * 1024,
             connection_timeout: 10,
             read_timeout: 30,
             max_redirects: 5,
@@ -273,14 +258,10 @@ mod integration_tests {
         let url_str = "https://httpbin.org/bytes/100";
         let url = Url::parse(url_str).unwrap();
         
-        // Create handler
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
-        // Verify it supports the URL
         assert!(handler.is_supported(&url));
         
-        // Note: Actual download would require a mock server or external service
-        // This test just verifies the handler can be created and used
     }
 
     #[tokio::test]
@@ -301,10 +282,8 @@ mod integration_tests {
             })
             .collect();
 
-        // Verify all handlers were created successfully
         assert_eq!(handlers.len(), 4);
         
-        // Verify each handler supports its URL
         for (i, url_str) in urls.iter().enumerate() {
             let url = Url::parse(url_str).unwrap();
             assert!(handlers[i].is_supported(&url));
@@ -313,14 +292,12 @@ mod integration_tests {
 
     #[test]
     fn test_handler_thread_safety() {
-        // Verify handlers implement Send + Sync
         fn assert_send_sync<T: Send + Sync>() {}
         
         assert_send_sync::<Arc<dyn RemoteFileHandler>>();
     }
 }
 
-// Note: All tests are self-contained using mocks - no external services required
 #[cfg(test)]
 mod external_service_tests {
     use super::*;
@@ -330,11 +307,8 @@ mod external_service_tests {
     async fn test_http_download_with_mock_server() {
         let config = RemoteFileConfig::default();
         
-        // Create a mock server that returns 100 bytes
         let mut server = Server::new_async().await;
-        let test_data = vec![42u8; 100]; // 100 bytes of value 42
-        
-        // Mock the GET request for streaming
+        let test_data = vec![42u8; 100];
         let _m = server.mock("GET", "/bytes/100")
             .with_status(200)
             .with_header("content-type", "application/octet-stream")
@@ -345,8 +319,6 @@ mod external_service_tests {
 
         let url = Url::parse(&format!("{}/bytes/100", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        
-        // Download using the stream method
         let mut stream = handler.stream_file(&url).await.unwrap();
         let mut data = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data).await.unwrap();
@@ -358,15 +330,13 @@ mod external_service_tests {
     #[tokio::test]
     async fn test_http_download_large_file_mock() {
         let config = RemoteFileConfig {
-            max_file_size: 1024 * 1024, // 1MB limit
+            max_file_size: 1024 * 1024,
             ..RemoteFileConfig::default()
         };
-        
-        // Create mock that simulates a large file
         let mut server = Server::new_async().await;
         let _m = server.mock("HEAD", "/large-file.bin")
             .with_status(200)
-            .with_header("content-length", "2097152") // 2MB
+            .with_header("content-length", "2097152")
             .with_header("content-type", "application/octet-stream")
             .create_async()
             .await;
@@ -374,11 +344,8 @@ mod external_service_tests {
         let url = Url::parse(&format!("{}/large-file.bin", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
-        // Note: mockito returns 0 for content_length() regardless of header value
-        // This means we can't properly test size limit checking with mockito
-        // We'll just verify the call completes
         let result = handler.fetch_metadata(&url).await;
-        assert!(result.is_ok()); // Changed expectation due to mockito limitation
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
@@ -388,12 +355,8 @@ mod external_service_tests {
             max_redirects: 5,
             ..RemoteFileConfig::default()
         };
-        
-        // Create redirect chain
         let mut server = Server::new_async().await;
         
-        // Note: reqwest follows redirects automatically by default
-        // We'll create a simple redirect that goes directly to the final content
         let final_content = b"Final destination content";
         
         let _m1 = server.mock("GET", "/start")
@@ -413,7 +376,6 @@ mod external_service_tests {
         let url = Url::parse(&format!("{}/start", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         
-        // The HTTP handler should follow redirects
         let mut stream = handler.stream_file(&url).await.unwrap();
         let mut data = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data).await.unwrap();
@@ -425,7 +387,6 @@ mod external_service_tests {
     async fn test_http_authentication_mock() {
         let config = RemoteFileConfig::default();
         
-        // Mock server that returns 401 for HEAD requests (used by fetch_metadata)
         let mut server = Server::new_async().await;
         let _m_head = server.mock("HEAD", "/protected/resource")
             .with_status(401)
@@ -433,7 +394,6 @@ mod external_service_tests {
             .create_async()
             .await;
 
-        // Test without credentials - should get 401
         let url_no_auth = Url::parse(&format!("{}/protected/resource", server.url())).unwrap();
         let handler_no_auth = RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
         let result = handler_no_auth.fetch_metadata(&url_no_auth).await;
@@ -443,23 +403,17 @@ mod external_service_tests {
     #[tokio::test] 
     async fn test_http_timeout_handling() {
         let config = RemoteFileConfig {
-            connection_timeout: 1, // 1 second
+            connection_timeout: 1,
             read_timeout: 1,
             ..RemoteFileConfig::default()
         };
         
-        // Use a non-routable IP address that will cause a connection timeout
-        // 10.255.255.1 is typically non-routable and will timeout
         let url = Url::parse("http://10.255.255.1/timeout-test").unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        
-        // Should timeout during connection
         let result = handler.stream_file(&url).await;
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
 
-    // Note: FTP integration tests have been removed as they require an external FTP server.
-    // FTP functionality is tested through unit tests with mocked connections in ftp.rs
 }
 
 #[cfg(test)]
@@ -470,7 +424,6 @@ mod handler_trait_tests {
     use std::io::Cursor;
     use tokio::io::AsyncRead;
 
-    /// Mock handler for testing trait functionality
     struct MockHandler {
         supported_scheme: String,
         file_content: Vec<u8>,
@@ -582,11 +535,8 @@ mod handler_trait_tests {
 
         let url = Url::parse("mock://example.com/file.txt").unwrap();
         
-        // Test reading a chunk from the middle
         let chunk = handler.download_chunk(&url, 5, 5).await.unwrap();
         assert_eq!(chunk.as_ref(), b"56789");
-        
-        // Test reading beyond file size
         let chunk = handler.download_chunk(&url, 10, 10).await.unwrap();
         assert_eq!(chunk.as_ref(), b"abcdef");
     }

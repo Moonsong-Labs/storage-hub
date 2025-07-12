@@ -1,4 +1,3 @@
-//! FTP/FTPS file handler
 
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
@@ -12,24 +11,20 @@ use tokio::io::AsyncRead;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use url::Url;
 
-/// FTP/FTPS handler
 #[derive(Clone)]
 pub struct FtpFileHandler {
     config: RemoteFileConfig,
 }
 
 impl FtpFileHandler {
-    /// Create FTP handler with config
     pub fn new(config: RemoteFileConfig) -> Self {
         Self { config }
     }
 
-    /// Create FTP handler with defaults
     pub fn default() -> Self {
         Self::new(RemoteFileConfig::default())
     }
 
-    /// Parse FTP URL
     fn parse_url(
         url: &Url,
     ) -> Result<(String, u16, Option<String>, Option<String>, String), RemoteFileError> {
@@ -37,7 +32,6 @@ impl FtpFileHandler {
             .host_str()
             .ok_or_else(|| RemoteFileError::InvalidUrl("Missing host".to_string()))?;
         
-        // Check for empty host
         if host.is_empty() {
             return Err(RemoteFileError::InvalidUrl("Missing host".to_string()));
         }
@@ -59,14 +53,11 @@ impl FtpFileHandler {
         Ok((host, port, username, password, path))
     }
 
-    /// Connect to server
     async fn connect(&self, url: &Url) -> Result<AsyncFtpStream, RemoteFileError> {
         let (host, port, username, password, _) = Self::parse_url(url)?;
 
-        // Create connection string
         let addr = format!("{}:{}", host, port);
 
-        // Connect with timeout
         let connect_future = AsyncFtpStream::connect(&addr);
         let mut stream = tokio::time::timeout(
             Duration::from_secs(self.config.connection_timeout),
@@ -76,7 +67,6 @@ impl FtpFileHandler {
         .map_err(|_| RemoteFileError::Timeout)?
         .map_err(|e| RemoteFileError::FtpError(e))?;
 
-        // Login
         let (user, pass) = match (username, password) {
             (Some(u), Some(p)) => (u, p),
             (Some(u), None) => (u, String::new()),
@@ -90,10 +80,8 @@ impl FtpFileHandler {
             _ => RemoteFileError::FtpError(e),
         })?;
 
-        // Set passive mode for better firewall compatibility
         stream.set_mode(suppaftp::Mode::Passive);
 
-        // Set binary transfer mode
         stream
             .transfer_type(FileType::Binary)
             .await
@@ -102,7 +90,6 @@ impl FtpFileHandler {
         Ok(stream)
     }
 
-    /// Convert FTP error
     fn ftp_error_to_remote_error(error: FtpError) -> RemoteFileError {
         match error {
             FtpError::UnexpectedResponse(ref resp) => match resp.status {
@@ -114,12 +101,10 @@ impl FtpFileHandler {
         }
     }
 
-    /// Download file
     pub async fn download(&self, url: &Url) -> Result<Vec<u8>, RemoteFileError> {
         let (_, _, _, _, path) = Self::parse_url(url)?;
         let mut stream = self.connect(url).await?;
 
-        // Get file size first
         let size = stream
             .size(&path)
             .await
@@ -132,7 +117,6 @@ impl FtpFileHandler {
             )));
         }
 
-        // Retrieve file using callback
         let data = tokio::time::timeout(
             Duration::from_secs(self.config.read_timeout),
             stream.retr(&path, |mut reader| {
@@ -151,28 +135,23 @@ impl FtpFileHandler {
         .map_err(|_| RemoteFileError::Timeout)?
         .map_err(Self::ftp_error_to_remote_error)?;
 
-        // Disconnect
         let _ = stream.quit().await;
 
         Ok(data)
     }
 
-    /// Upload data
     pub async fn upload(&self, url: &Url, data: &[u8]) -> Result<(), RemoteFileError> {
         let (_, _, _, _, path) = Self::parse_url(url)?;
         let mut stream = self.connect(url).await?;
 
-        // Create a cursor from the data
         let cursor = Cursor::new(data);
         let mut compat_cursor = cursor.compat();
 
-        // Upload the file
         stream
             .put_file(&path, &mut compat_cursor)
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
-        // Disconnect
         let _ = stream.quit().await;
 
         Ok(())
@@ -185,7 +164,6 @@ impl RemoteFileHandler for FtpFileHandler {
         let (_, _, _, _, path) = Self::parse_url(url)?;
         let mut stream = self.connect(url).await?;
 
-        // Get file size
         let size = stream
             .size(&path)
             .await
@@ -198,10 +176,8 @@ impl RemoteFileHandler for FtpFileHandler {
             )));
         }
 
-        // Disconnect
         let _ = stream.quit().await;
 
-        // FTP doesn't provide content type information
         Ok((size as u64, None))
     }
 
@@ -209,8 +185,6 @@ impl RemoteFileHandler for FtpFileHandler {
         &self,
         url: &Url,
     ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
-        // For FTP, we need to download the entire file first
-        // since suppaftp doesn't provide streaming interface
         let data = self.download(url).await?;
         let cursor = Cursor::new(data);
 
@@ -226,8 +200,6 @@ impl RemoteFileHandler for FtpFileHandler {
         let (_, _, _, _, path) = Self::parse_url(url)?;
         let mut stream = self.connect(url).await?;
 
-        // For partial downloads, we'll download the entire file and extract the chunk
-        // This is not optimal but suppaftp doesn't provide a good way to do partial reads
         let file_data = stream
             .retr(&path, |mut reader| {
                 Box::pin(async move {
@@ -243,7 +215,6 @@ impl RemoteFileHandler for FtpFileHandler {
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
-        // Extract the requested chunk
         let start = offset as usize;
         let end = std::cmp::min(start + length as usize, file_data.len());
         
@@ -253,7 +224,6 @@ impl RemoteFileHandler for FtpFileHandler {
         
         let chunk = file_data[start..end].to_vec();
 
-        // Disconnect
         let _ = stream.quit().await;
 
         Ok(Bytes::from(chunk))
@@ -270,18 +240,15 @@ impl RemoteFileHandler for FtpFileHandler {
         size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        // Parse the URI
         let url = Url::parse(uri)
             .map_err(|e| RemoteFileError::InvalidUrl(format!("Invalid URL: {}", e)))?;
 
-        // Validate protocol
         if !self.is_supported(&url) {
             return Err(RemoteFileError::UnsupportedProtocol(
                 url.scheme().to_string(),
             ));
         }
 
-        // Check size limit before attempting connection
         if size as u64 > self.config.max_file_size {
             return Err(RemoteFileError::Other(format!(
                 "File size {} exceeds maximum allowed size {}",
@@ -292,17 +259,14 @@ impl RemoteFileHandler for FtpFileHandler {
         let (_, _, _, _, path) = Self::parse_url(&url)?;
         let mut stream = self.connect(&url).await?;
 
-        // Read the data into a buffer
         let mut buffer = Vec::with_capacity(size as usize);
         tokio::io::AsyncReadExt::read_to_end(&mut data, &mut buffer)
             .await
             .map_err(|e| RemoteFileError::IoError(e))?;
 
-        // Create a cursor from the buffer
         let cursor = Cursor::new(buffer);
         let mut compat_cursor = cursor.compat();
 
-        // Upload the file with timeout
         tokio::time::timeout(
             Duration::from_secs(self.config.read_timeout),
             stream.put_file(&path, &mut compat_cursor),
@@ -311,7 +275,6 @@ impl RemoteFileHandler for FtpFileHandler {
         .map_err(|_| RemoteFileError::Timeout)?
         .map_err(Self::ftp_error_to_remote_error)?;
 
-        // Disconnect
         let _ = stream.quit().await;
 
         Ok(())
@@ -335,9 +298,8 @@ mod tests {
     impl Default for MockFtpBehavior {
         fn default() -> Self {
             let mut files = std::collections::HashMap::new();
-            // Pre-populate with test files
             files.insert("/readme.txt".to_string(), b"This is a test file".to_vec());
-            files.insert("/large.bin".to_string(), vec![0u8; 1024]); // 1KB file
+            files.insert("/large.bin".to_string(), vec![0u8; 1024]);
             
             Self {
                 files: Arc::new(Mutex::new(files)),
@@ -443,7 +405,6 @@ mod tests {
         async fn test_download(&self, url: &Url) -> Result<Vec<u8>, RemoteFileError> {
             let (_, _, _, _, path) = FtpFileHandler::parse_url(url)?;
             
-            // Simulate connection
             let (host, port, username, password, _) = FtpFileHandler::parse_url(url)?;
             self.mock_conn.connect(&host, port).await?;
             
@@ -455,7 +416,6 @@ mod tests {
             
             self.mock_conn.login(&user, &pass).await?;
             
-            // Check size
             let size = self.mock_conn.size(&path).await?.ok_or_else(|| {
                 RemoteFileError::Other("Unable to determine file size".to_string())
             })?;
@@ -467,7 +427,6 @@ mod tests {
                 )));
             }
             
-            // Download
             let data = self.mock_conn.retr(&path).await?;
             self.mock_conn.quit().await?;
             
@@ -477,7 +436,6 @@ mod tests {
         async fn test_fetch_metadata(&self, url: &Url) -> Result<(u64, Option<String>), RemoteFileError> {
             let (_, _, _, _, path) = FtpFileHandler::parse_url(url)?;
             
-            // Simulate connection
             let (host, port, username, password, _) = FtpFileHandler::parse_url(url)?;
             self.mock_conn.connect(&host, port).await?;
             
@@ -489,7 +447,6 @@ mod tests {
             
             self.mock_conn.login(&user, &pass).await?;
             
-            // Get size
             let size = self.mock_conn.size(&path).await?.ok_or_else(|| {
                 RemoteFileError::Other("Unable to determine file size".to_string())
             })?;
@@ -509,7 +466,6 @@ mod tests {
         async fn test_download_chunk(&self, url: &Url, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
             let (_, _, _, _, path) = FtpFileHandler::parse_url(url)?;
             
-            // Simulate connection
             let (host, port, username, password, _) = FtpFileHandler::parse_url(url)?;
             self.mock_conn.connect(&host, port).await?;
             
@@ -521,7 +477,6 @@ mod tests {
             
             self.mock_conn.login(&user, &pass).await?;
             
-            // Download partial
             let data = self.mock_conn.retr_partial(&path, offset, length).await?;
             self.mock_conn.quit().await?;
             
@@ -531,7 +486,6 @@ mod tests {
         async fn test_upload(&self, url: &Url, data: &[u8]) -> Result<(), RemoteFileError> {
             let (_, _, _, _, path) = FtpFileHandler::parse_url(url)?;
             
-            // Simulate connection
             let (host, port, username, password, _) = FtpFileHandler::parse_url(url)?;
             self.mock_conn.connect(&host, port).await?;
             
@@ -543,7 +497,6 @@ mod tests {
             
             self.mock_conn.login(&user, &pass).await?;
             
-            // Upload
             self.mock_conn.stor(&path, data).await?;
             self.mock_conn.quit().await?;
             
@@ -553,12 +506,12 @@ mod tests {
 
     fn create_test_handler() -> FtpFileHandler {
         let config = RemoteFileConfig {
-            max_file_size: 1024 * 1024, // 1MB for tests
+            max_file_size: 1024 * 1024,
             connection_timeout: 5,
             read_timeout: 10,
-            follow_redirects: false,              // Not applicable for FTP
-            max_redirects: 0,                     // Not applicable for FTP
-            user_agent: "Test-Agent".to_string(), // Not used in FTP
+            follow_redirects: false,
+            max_redirects: 0,
+            user_agent: "Test-Agent".to_string(),
         };
         FtpFileHandler::new(config)
     }
@@ -702,7 +655,7 @@ mod tests {
     #[tokio::test]
     async fn test_upload_file_size_limit() {
         let config = RemoteFileConfig {
-            max_file_size: 10, // Very small limit
+            max_file_size: 10,
             ..RemoteFileConfig::default()
         };
         let handler = FtpFileHandler::new(config);
@@ -750,18 +703,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_file_success() {
-        // Testing the actual handler's stream_file method, which internally downloads
-        // For a full mock test, we'd need to inject the mock into the actual handler
         let config = RemoteFileConfig::default();
         let behavior = MockFtpBehavior::default();
         let test_handler = TestFtpFileHandler::new(config, behavior);
         let url = Url::parse("ftp://test.example.com/readme.txt").unwrap();
         
-        // First download to get expected data
         let expected_data = test_handler.test_download(&url).await.unwrap();
         
-        // Now test streaming - the actual handler would download and wrap in cursor
-        // We'll simulate the same behavior
         let cursor = Cursor::new(expected_data.clone());
         let mut reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
 
@@ -778,7 +726,6 @@ mod tests {
         let config = RemoteFileConfig::default();
         let behavior = MockFtpBehavior::default();
         
-        // Add a larger test file
         let large_content = vec![b'A'; 200];
         {
             let mut files = behavior.files.lock().await;
@@ -788,16 +735,13 @@ mod tests {
         let test_handler = TestFtpFileHandler::new(config, behavior);
         let url = Url::parse("ftp://test.example.com/large.txt").unwrap();
 
-        // Download first 100 bytes
         let chunk = test_handler.test_download_chunk(&url, 0, 100).await.unwrap();
         assert_eq!(chunk.len(), 100);
         assert_eq!(chunk[0], b'A');
 
-        // Download bytes 50-150
         let chunk2 = test_handler.test_download_chunk(&url, 50, 100).await.unwrap();
         assert_eq!(chunk2.len(), 100);
 
-        // Verify overlap
         assert_eq!(&chunk[50..], &chunk2[..50]);
     }
 
@@ -828,36 +772,32 @@ mod tests {
     #[tokio::test]
     async fn test_connection_timeout() {
         let config = RemoteFileConfig {
-            connection_timeout: 1, // 1 second timeout
+            connection_timeout: 1,
             ..RemoteFileConfig::default()
         };
         let mut behavior = MockFtpBehavior::default();
-        behavior.connection_delay_ms = 2000; // 2 second delay to trigger timeout
+        behavior.connection_delay_ms = 2000;
         
         let _test_handler = TestFtpFileHandler::new(config, behavior);
         let _url = Url::parse("ftp://192.0.2.1/file.txt").unwrap();
         
-        // Since our mock respects the connection delay, we need to implement timeout
-        // in the test wrapper. For now, we'll test timeout behavior differently
         let config_short_timeout = RemoteFileConfig {
-            connection_timeout: 0, // Very short timeout
+            connection_timeout: 0,
             ..RemoteFileConfig::default()
         };
         
-        // Test that timeout configuration is respected by checking config
         assert_eq!(config_short_timeout.connection_timeout, 0);
     }
 
     #[tokio::test]
     async fn test_file_too_large() {
         let config = RemoteFileConfig {
-            max_file_size: 10, // Very small limit
+            max_file_size: 10,
             ..RemoteFileConfig::default()
         };
         let behavior = MockFtpBehavior::default();
         let test_handler = TestFtpFileHandler::new(config, behavior);
 
-        // The default readme.txt is 19 bytes, which exceeds our 10 byte limit
         let url = Url::parse("ftp://test.example.com/readme.txt").unwrap();
         let result = test_handler.test_fetch_metadata(&url).await;
 
@@ -872,7 +812,6 @@ mod tests {
         let config = RemoteFileConfig::default();
         let behavior = MockFtpBehavior::default();
         
-        // Add an empty file
         {
             let mut files = behavior.files.lock().await;
             files.insert("/empty.txt".to_string(), vec![]);
@@ -896,19 +835,15 @@ mod tests {
         
         let url = Url::parse("ftp://test.example.com/test.txt").unwrap();
         
-        // Upload first version
         let data1 = b"First version";
         test_handler.test_upload(&url, data1).await.unwrap();
         
-        // Verify first version
         let downloaded1 = test_handler.test_download(&url).await.unwrap();
         assert_eq!(downloaded1, data1);
         
-        // Upload second version
         let data2 = b"Second version - longer";
         test_handler.test_upload(&url, data2).await.unwrap();
         
-        // Verify second version overwrote the first
         let downloaded2 = test_handler.test_download(&url).await.unwrap();
         assert_eq!(downloaded2, data2);
     }
@@ -918,7 +853,6 @@ mod tests {
         let config = RemoteFileConfig::default();
         let behavior = MockFtpBehavior::default();
         
-        // Add a test file with known content
         let content = b"0123456789";
         {
             let mut files = behavior.files.lock().await;
@@ -928,16 +862,13 @@ mod tests {
         let test_handler = TestFtpFileHandler::new(config, behavior);
         let url = Url::parse("ftp://test.example.com/numbers.txt").unwrap();
         
-        // Test downloading past end of file
         let chunk = test_handler.test_download_chunk(&url, 8, 10).await.unwrap();
-        assert_eq!(chunk.len(), 2); // Only 2 bytes available from offset 8
+        assert_eq!(chunk.len(), 2);
         assert_eq!(&chunk[..], b"89");
         
-        // Test downloading from past end of file
         let chunk = test_handler.test_download_chunk(&url, 20, 10).await.unwrap();
         assert_eq!(chunk.len(), 0);
         
-        // Test zero-length download
         let chunk = test_handler.test_download_chunk(&url, 0, 0).await.unwrap();
         assert_eq!(chunk.len(), 0);
     }
@@ -948,7 +879,6 @@ mod tests {
         let behavior = MockFtpBehavior::default();
         let test_handler = TestFtpFileHandler::new(config, behavior);
         
-        // Upload multiple files concurrently
         let urls_and_data = vec![
             ("ftp://test.example.com/file1.txt", b"Content 1"),
             ("ftp://test.example.com/file2.txt", b"Content 2"),
@@ -965,12 +895,10 @@ mod tests {
             })
             .collect();
         
-        // Wait for all uploads to complete
         for result in futures::future::join_all(upload_futures).await {
             assert!(result.is_ok());
         }
         
-        // Verify all files were uploaded correctly
         for (url_str, expected_data) in urls_and_data {
             let url = Url::parse(url_str).unwrap();
             let downloaded = test_handler.test_download(&url).await.unwrap();

@@ -1,6 +1,4 @@
 //! Local file system handler
-//!
-//! Handles local files via file:// URLs and absolute paths.
 
 use super::{RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
@@ -10,17 +8,14 @@ use tokio::fs::{self, File};
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use url::Url;
 
-/// Local file handler
 #[derive(Debug, Clone)]
 pub struct LocalFileHandler;
 
 impl LocalFileHandler {
-    /// Create new handler
     pub fn new() -> Self {
         Self
     }
 
-    /// Convert URL to path
     fn url_to_path(url: &Url) -> Result<PathBuf, RemoteFileError> {
         match url.scheme() {
             "" => {
@@ -34,7 +29,6 @@ impl LocalFileHandler {
         }
     }
 
-    /// Check if a path exists and is a file
     async fn validate_file(path: &Path) -> Result<(), RemoteFileError> {
         let metadata = tokio::fs::metadata(path).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -56,14 +50,10 @@ impl LocalFileHandler {
         Ok(())
     }
 
-    /// Parse a URI string to a local file path
-    /// Handles both file:// URLs and plain paths
     fn parse_uri_to_path(uri: &str) -> Result<PathBuf, RemoteFileError> {
-        // Try to parse as URL first
         if let Ok(url) = Url::parse(uri) {
             Self::url_to_path(&url)
         } else {
-            // Not a valid URL, treat as plain path
             Ok(PathBuf::from(uri))
         }
     }
@@ -84,7 +74,6 @@ impl RemoteFileHandler for LocalFileHandler {
         let metadata = tokio::fs::metadata(&path).await?;
         let size = metadata.len();
 
-        // Try to determine content type from file extension
         let content_type = path
             .extension()
             .and_then(|ext| ext.to_str())
@@ -119,10 +108,8 @@ impl RemoteFileHandler for LocalFileHandler {
 
         let mut file = File::open(&path).await?;
 
-        // Seek to the requested offset
         file.seek(std::io::SeekFrom::Start(offset)).await?;
 
-        // Read the requested chunk
         let mut buffer = vec![0u8; length as usize];
         let bytes_read = file.read_exact(&mut buffer).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::UnexpectedEof {
@@ -147,10 +134,8 @@ impl RemoteFileHandler for LocalFileHandler {
         _size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        // Parse the URI to get the file path
         let path = Self::parse_uri_to_path(uri)?;
 
-        // Create parent directories if they don't exist
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await.map_err(|e| {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -161,7 +146,6 @@ impl RemoteFileHandler for LocalFileHandler {
             })?;
         }
 
-        // Create the file
         let mut file = File::create(&path).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 RemoteFileError::AccessDenied
@@ -170,12 +154,10 @@ impl RemoteFileHandler for LocalFileHandler {
             }
         })?;
 
-        // Stream data from AsyncRead to the file
         io::copy(&mut data, &mut file).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 RemoteFileError::AccessDenied
             } else if e.kind() == std::io::ErrorKind::Other {
-                // Check if the error message contains disk space related keywords
                 let error_str = e.to_string().to_lowercase();
                 if error_str.contains("space") || error_str.contains("disk full") {
                     RemoteFileError::Other("Insufficient disk space".to_string())
@@ -187,7 +169,6 @@ impl RemoteFileHandler for LocalFileHandler {
             }
         })?;
 
-        // Ensure all data is written to disk
         file.flush().await?;
 
         Ok(())
@@ -202,7 +183,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_local_file_metadata() {
-        // Create a temporary file
         let mut temp_file = NamedTempFile::new().unwrap();
         let test_content = b"Hello, StorageHub!";
         temp_file.write_all(test_content).unwrap();
@@ -210,7 +190,6 @@ mod tests {
 
         let handler = LocalFileHandler::new();
 
-        // Test with absolute path
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
         let (size, _content_type) = handler.fetch_metadata(&url).await.unwrap();
         assert_eq!(size, test_content.len() as u64);
@@ -218,7 +197,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_local_file_stream() {
-        // Create a temporary file
         let mut temp_file = NamedTempFile::new().unwrap();
         let test_content = b"Hello, StorageHub!";
         temp_file.write_all(test_content).unwrap();
@@ -236,7 +214,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_local_file_chunk_download() {
-        // Create a temporary file
         let mut temp_file = NamedTempFile::new().unwrap();
         let test_content = b"Hello, StorageHub! This is a test file.";
         temp_file.write_all(test_content).unwrap();
@@ -245,7 +222,6 @@ mod tests {
         let handler = LocalFileHandler::new();
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
 
-        // Download a chunk from offset 7 with length 10
         let chunk = handler.download_chunk(&url, 7, 10).await.unwrap();
         assert_eq!(&chunk[..], &test_content[7..17]);
     }
@@ -263,18 +239,13 @@ mod tests {
     async fn test_url_schemes() {
         let handler = LocalFileHandler::new();
 
-        // file:// scheme should be supported
         let file_url = Url::parse("file:///path/to/file.txt").unwrap();
         assert!(handler.is_supported(&file_url));
 
-        // For local paths, we need to test the parse_uri_to_path method instead
-        // since is_supported expects a Url object and absolute paths without scheme
-        // can't be directly parsed as URLs
         let path_result = LocalFileHandler::parse_uri_to_path("/path/to/file.txt");
         assert!(path_result.is_ok());
         assert_eq!(path_result.unwrap(), PathBuf::from("/path/to/file.txt"));
 
-        // HTTP should not be supported
         let http_url = Url::parse("http://example.com/file.txt").unwrap();
         assert!(!handler.is_supported(&http_url));
     }
@@ -294,7 +265,6 @@ mod tests {
             .await
             .unwrap();
         
-        // Verify the file was created with correct content
         let content = tokio::fs::read(&file_path).await.unwrap();
         assert_eq!(content, test_content);
     }
@@ -318,7 +288,6 @@ mod tests {
             .await
             .unwrap();
         
-        // Verify the file was created with correct content
         let content = tokio::fs::read(&file_path).await.unwrap();
         assert_eq!(content, test_content);
     }
@@ -342,7 +311,6 @@ mod tests {
             .await
             .unwrap();
         
-        // Verify the file and directories were created
         assert!(file_path.exists());
         let content = tokio::fs::read(&file_path).await.unwrap();
         assert_eq!(content, test_content);
@@ -368,7 +336,6 @@ mod tests {
             .await
             .unwrap();
         
-        // Verify the file was overwritten
         let content = tokio::fs::read(temp_file.path()).await.unwrap();
         assert_eq!(content, test_content);
     }
@@ -379,7 +346,6 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("large_file.bin");
         
-        // Create a large content (1MB)
         let large_content = vec![0xAB; 1024 * 1024];
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(large_content.clone()));
         
@@ -393,11 +359,9 @@ mod tests {
             .await
             .unwrap();
         
-        // Verify the file was created with correct size
         let metadata = tokio::fs::metadata(&file_path).await.unwrap();
         assert_eq!(metadata.len(), large_content.len() as u64);
         
-        // Verify content (sample check)
         let content = tokio::fs::read(&file_path).await.unwrap();
         assert_eq!(content.len(), large_content.len());
         assert_eq!(content[0], 0xAB);
@@ -412,7 +376,6 @@ mod tests {
         let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
         
-        // Make directory read-only
         tokio::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o555))
             .await
             .unwrap();
@@ -430,7 +393,6 @@ mod tests {
             )
             .await;
         
-        // Reset permissions before cleanup
         tokio::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o755))
             .await
             .unwrap();

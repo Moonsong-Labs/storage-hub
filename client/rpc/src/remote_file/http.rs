@@ -1,4 +1,3 @@
-//! HTTP/HTTPS file handler
 
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
@@ -10,14 +9,12 @@ use tokio::io::AsyncRead;
 use tokio_util::io::{ReaderStream, StreamReader};
 use url::Url;
 
-/// HTTP/HTTPS handler
 pub struct HttpFileHandler {
     client: Client,
     config: RemoteFileConfig,
 }
 
 impl HttpFileHandler {
-    /// Create HTTP handler with config
     pub fn new(config: RemoteFileConfig) -> Result<Self, RemoteFileError> {
         let client = Client::builder()
             .user_agent(&config.user_agent)
@@ -34,12 +31,10 @@ impl HttpFileHandler {
         Ok(Self { client, config })
     }
 
-    /// Create HTTP handler with defaults
     pub fn default() -> Result<Self, RemoteFileError> {
         Self::new(RemoteFileConfig::default())
     }
 
-    /// Convert status code to error
     fn status_to_error(status: StatusCode) -> RemoteFileError {
         match status {
             StatusCode::NOT_FOUND => RemoteFileError::NotFound,
@@ -49,7 +44,6 @@ impl HttpFileHandler {
         }
     }
 
-    /// Download file
     pub async fn download(&self, url: &Url) -> Result<Vec<u8>, RemoteFileError> {
         let response = self.client.get(url.as_str()).send().await.map_err(|e| {
             if e.is_timeout() {
@@ -63,7 +57,6 @@ impl HttpFileHandler {
             return Err(Self::status_to_error(response.status()));
         }
 
-        // Check content length if available
         if let Some(content_length) = response.content_length() {
             if content_length > self.config.max_file_size {
                 return Err(RemoteFileError::Other(format!(
@@ -81,7 +74,6 @@ impl HttpFileHandler {
             }
         })?;
 
-        // Double check size after download
         if bytes.len() as u64 > self.config.max_file_size {
             return Err(RemoteFileError::Other(format!(
                 "Downloaded file size {} exceeds maximum allowed size {}",
@@ -146,7 +138,6 @@ impl RemoteFileHandler for HttpFileHandler {
             return Err(Self::status_to_error(response.status()));
         }
 
-        // Check content length if available
         if let Some(content_length) = response.content_length() {
             if content_length > self.config.max_file_size {
                 return Err(RemoteFileError::Other(format!(
@@ -156,7 +147,6 @@ impl RemoteFileHandler for HttpFileHandler {
             }
         }
 
-        // Convert response body stream to AsyncRead
         let stream = response.bytes_stream();
         let reader = StreamReader::new(
             stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
@@ -171,7 +161,6 @@ impl RemoteFileHandler for HttpFileHandler {
         offset: u64,
         length: u64,
     ) -> Result<Bytes, RemoteFileError> {
-        // Create range header
         let range = format!("bytes={}-{}", offset, offset + length - 1);
 
         let response = self
@@ -188,7 +177,6 @@ impl RemoteFileHandler for HttpFileHandler {
                 }
             })?;
 
-        // Check for successful response (200 OK or 206 Partial Content)
         if !response.status().is_success() && response.status() != StatusCode::PARTIAL_CONTENT {
             return Err(Self::status_to_error(response.status()));
         }
@@ -215,34 +203,27 @@ impl RemoteFileHandler for HttpFileHandler {
         size: u64,
         content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        // Parse and validate URL
         let url = Url::parse(uri).map_err(|e| RemoteFileError::InvalidUrl(e.to_string()))?;
 
         if !self.is_supported(&url) {
             return Err(RemoteFileError::UnsupportedProtocol(url.scheme().to_string()));
         }
 
-        // Create a stream from the AsyncRead
         let stream = ReaderStream::new(data);
         let body = Body::wrap_stream(stream);
 
-        // Build the request
         let mut request = self.client.put(url.as_str()).body(body);
 
-        // Set Content-Length header
         request = request.header("Content-Length", size.to_string());
 
-        // Set Content-Type if provided
         if let Some(ct) = content_type {
             request = request.header("Content-Type", ct);
         }
 
-        // Handle basic authentication if present in URL
         if let Some(password) = url.password() {
             request = request.basic_auth(url.username(), Some(password));
         }
 
-        // Send the request
         let response = request.send().await.map_err(|e| {
             if e.is_timeout() {
                 RemoteFileError::Timeout
@@ -251,7 +232,6 @@ impl RemoteFileHandler for HttpFileHandler {
             }
         })?;
 
-        // Check response status
         if !response.status().is_success() {
             return Err(Self::status_to_error(response.status()));
         }
@@ -267,7 +247,7 @@ mod tests {
 
     fn create_test_handler() -> HttpFileHandler {
         let config = RemoteFileConfig {
-            max_file_size: 1024 * 1024, // 1MB for tests
+            max_file_size: 1024 * 1024,
             connection_timeout: 5,
             read_timeout: 10,
             follow_redirects: true,
@@ -299,10 +279,6 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
-        
-        // Note: mockito seems to have an issue with content-length header
-        // where it returns 0 instead of the actual value
-        // For now, we'll just check that the call succeeds
         let result = handler.fetch_metadata(&url).await;
         assert!(result.is_ok());
         
@@ -341,15 +317,13 @@ mod tests {
         let mut server = Server::new_async().await;
         let _m = server.mock("HEAD", "/large.txt")
             .with_status(200)
-            .with_header("content-length", "2097152") // 2MB
+            .with_header("content-length", "2097152")
             .create_async()
             .await;
 
         let url = Url::parse(&format!("{}/large.txt", server.url())).unwrap();
         let result = handler.fetch_metadata(&url).await;
 
-        // Note: mockito returns 0 for content_length(), so the size check won't trigger
-        // We'll just verify the call completes
         assert!(result.is_ok());
     }
 
@@ -434,7 +408,7 @@ mod tests {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server.mock("PUT", "/secure-upload.txt")
-            .match_header("authorization", "Basic dXNlcjpwYXNz") // user:pass in base64
+            .match_header("authorization", "Basic dXNlcjpwYXNz")
             .match_header("content-length", "6")
             .with_status(200)
             .create_async()
@@ -525,8 +499,6 @@ mod tests {
         };
         let handler = HttpFileHandler::new(config).unwrap();
 
-        // Use a non-routable IP address that will cause a connection timeout
-        // 10.255.255.1 is typically non-routable and will timeout
         let url = "http://10.255.255.1/timeout-upload.txt";
         
         let data = b"data";
@@ -536,7 +508,6 @@ mod tests {
             .upload_file(url, reader, 4, None)
             .await;
 
-        // The connection should timeout
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
 
@@ -554,7 +525,6 @@ mod tests {
         let url = Url::parse(&format!("{}/stream.txt", server.url())).unwrap();
         let mut reader = handler.stream_file(&url).await.unwrap();
 
-        // Read from the stream
         let mut buffer = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut reader, &mut buffer)
             .await
@@ -568,7 +538,6 @@ mod tests {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
 
-        // Create redirect chain
         let _m1 = server.mock("GET", "/redirect1")
             .with_status(302)
             .with_header("Location", &format!("{}/redirect2", server.url()))
@@ -602,7 +571,6 @@ mod tests {
         let handler = HttpFileHandler::new(config).unwrap();
 
         let mut server = Server::new_async().await;
-        // Create redirect chain that exceeds limit
         let _m1 = server.mock("GET", "/redirect1")
             .with_status(302)
             .with_header("Location", &format!("{}/redirect2", server.url()))
@@ -634,16 +602,12 @@ mod tests {
         let _m = server.mock("HEAD", "/no-length.txt")
             .with_status(200)
             .with_header("content-type", "text/plain")
-            // Intentionally not setting content-length
             .create_async()
             .await;
 
         let url = Url::parse(&format!("{}/no-length.txt", server.url())).unwrap();
         let result = handler.fetch_metadata(&url).await;
 
-        // Note: mockito always returns Some(0) for content_length() even when header is missing
-        // This makes it impossible to distinguish between missing header and 0-length file
-        // For now, we'll check that it returns a valid result
         assert!(result.is_ok());
     }
 
@@ -653,7 +617,6 @@ mod tests {
         let full_content = b"This is the full content of the file";
 
         let mut server = Server::new_async().await;
-        // Server returns 200 OK with full content instead of 206 Partial Content
         let _m = server.mock("GET", "/no-range.txt")
             .match_header("range", "bytes=5-9")
             .with_status(200)
@@ -664,21 +627,19 @@ mod tests {
         let url = Url::parse(&format!("{}/no-range.txt", server.url())).unwrap();
         let chunk = handler.download_chunk(&url, 5, 5).await.unwrap();
 
-        // When server doesn't support ranges, it returns full content
         assert_eq!(chunk.as_ref(), full_content);
     }
 
     #[tokio::test]
     async fn test_timeout_error() {
         let config = RemoteFileConfig {
-            connection_timeout: 1, // 1 second timeout
+            connection_timeout: 1,
             read_timeout: 1,
             ..RemoteFileConfig::default()
         };
         let handler = HttpFileHandler::new(config).unwrap();
 
         let mut server = Server::new_async().await;
-        // Mock a slow server that takes longer than timeout
         let _m = server.mock("GET", "/slow.txt")
             .with_status(200)
             .with_chunked_body(|_| {
