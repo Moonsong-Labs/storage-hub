@@ -564,35 +564,11 @@ mod tests {
 
     #[test]
     fn test_parse_url_invalid() {
-        // The URL "ftp:///file.txt" actually parses as host="file.txt", path="/"
-        // So let's test with a URL that actually has no host
-        // We need to construct a URL that will pass URL parsing but fail our validation
-        
-        // Create a URL with empty username which is technically valid but might confuse our parser
-        let url = Url::parse("ftp://@example.com/file.txt").unwrap();
-        // This URL has an empty username but is otherwise valid
-        
-        // Actually, let's test by modifying a valid URL to have no host
-        let mut url = Url::parse("ftp://example.com/file.txt").unwrap();
-        // Force the URL to have an invalid state by using cannot_be_a_base
-        
-        // Since we can't easily create a URL with no host through the parser,
-        // let's test our empty host check by creating a test URL
-        // The original "ftp:///file.txt" is actually valid (host="file.txt", path="/")
-        
-        // Test with a URL that will have an empty host after our checks
-        let test_url = Url::parse("ftp://./file.txt").unwrap(); // Host is "."
+        let test_url = Url::parse("ftp://./file.txt").unwrap();
         let result = FtpFileHandler::parse_url(&test_url);
-        
-        // This should succeed since "." is a valid (though unusual) hostname
         assert!(result.is_ok());
-        
-        // Instead, let's verify that our implementation properly handles edge cases
-        // by checking that ftp:///file.txt is parsed as we expect
         let edge_case_url = Url::parse("ftp:///file.txt").unwrap();
         let result2 = FtpFileHandler::parse_url(&edge_case_url);
-        
-        // This should succeed because "file.txt" becomes the host
         assert!(result2.is_ok());
         if let Ok((host, _port, _user, _pass, path)) = result2 {
             assert_eq!(host, "file.txt");
@@ -618,22 +594,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_trait_method() {
-        // This test validates the actual trait method implementation
-        // Since we can't easily mock the internal FTP connection in the real handler,
-        // we'll just test that the method properly validates inputs
         let handler = create_test_handler();
         let uri = "ftp://test.example.com/upload.txt";
         let data = b"Hello from trait method!";
         let cursor = Cursor::new(data);
         let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
-        
-        // We can't test the full upload without a real FTP server,
-        // but we can test URL validation
         let result = handler
             .upload_file(uri, boxed_reader, data.len() as u64, Some("text/plain".to_string()))
             .await;
-        
-        // The connection will fail since there's no real server, but that's expected
         assert!(result.is_err());
     }
 
@@ -686,8 +654,8 @@ mod tests {
         let url = Url::parse("ftp://test.example.com/readme.txt").unwrap();
         let (size, content_type) = test_handler.test_fetch_metadata(&url).await.unwrap();
 
-        assert_eq!(size, 19); // "This is a test file" is 19 bytes
-        assert_eq!(content_type, None); // FTP doesn't provide content type
+        assert_eq!(size, 19);
+        assert_eq!(content_type, None);
     }
 
     #[tokio::test]
@@ -738,10 +706,8 @@ mod tests {
         let chunk = test_handler.test_download_chunk(&url, 0, 100).await.unwrap();
         assert_eq!(chunk.len(), 100);
         assert_eq!(chunk[0], b'A');
-
         let chunk2 = test_handler.test_download_chunk(&url, 50, 100).await.unwrap();
         assert_eq!(chunk2.len(), 100);
-
         assert_eq!(&chunk[50..], &chunk2[..50]);
     }
 
@@ -785,7 +751,6 @@ mod tests {
             connection_timeout: 0,
             ..RemoteFileConfig::default()
         };
-        
         assert_eq!(config_short_timeout.connection_timeout, 0);
     }
 
@@ -865,10 +830,8 @@ mod tests {
         let chunk = test_handler.test_download_chunk(&url, 8, 10).await.unwrap();
         assert_eq!(chunk.len(), 2);
         assert_eq!(&chunk[..], b"89");
-        
         let chunk = test_handler.test_download_chunk(&url, 20, 10).await.unwrap();
         assert_eq!(chunk.len(), 0);
-        
         let chunk = test_handler.test_download_chunk(&url, 0, 0).await.unwrap();
         assert_eq!(chunk.len(), 0);
     }

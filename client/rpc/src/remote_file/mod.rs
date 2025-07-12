@@ -1,5 +1,3 @@
-//! Remote file handling for storage deals.
-
 use async_trait::async_trait;
 use bytes::Bytes;
 use std::error::Error as StdError;
@@ -107,7 +105,7 @@ pub struct RemoteFileConfig {
 impl Default for RemoteFileConfig {
     fn default() -> Self {
         Self {
-            max_file_size: 5 * 1024 * 1024 * 1024,
+            max_file_size: 5 * 1024 * 1024 * 1024, // 5GB
             connection_timeout: 30,
             read_timeout: 300,
             follow_redirects: true,

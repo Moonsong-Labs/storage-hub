@@ -9,7 +9,6 @@ use url::Url;
 pub struct RemoteFileHandlerFactory;
 
 impl RemoteFileHandlerFactory {
-    /// Create a handler based on URL protocol.
     pub fn create(
         url: &Url,
         config: RemoteFileConfig,
@@ -31,7 +30,6 @@ impl RemoteFileHandlerFactory {
         }
     }
 
-    /// Create a handler from string URL. Plain paths are treated as file:// URLs.
     pub fn create_from_string(
         url_str: &str,
         config: RemoteFileConfig,

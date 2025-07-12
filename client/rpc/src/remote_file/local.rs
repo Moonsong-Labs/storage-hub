@@ -1,5 +1,3 @@
-//! Local file system handler
-
 use super::{RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
