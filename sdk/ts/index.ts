@@ -1,4 +1,4 @@
-export { add } from './wasm';
+export { add } from './wasm.js';
 
 export class StorageHubSDK {
   constructor() {
