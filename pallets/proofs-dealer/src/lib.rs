@@ -634,7 +634,7 @@ pub mod pallet {
             // Check that the extrinsic was executed by the custom origin.
             T::ChallengeOrigin::ensure_origin(origin.clone())?;
 
-            let who = origin.clone().into_signer();
+            let who = origin.into_signer();
 
             Self::do_challenge(&who, &key)?;
 
@@ -784,7 +784,7 @@ pub mod pallet {
             // Check that the extrinsic was executed by the custom origin.
             T::PriorityChallengeOrigin::ensure_origin(origin.clone())?;
 
-            let who = origin.clone().into_signer();
+            let who = origin.into_signer();
 
             // Execute priority challenge.
             Self::do_priority_challenge(&who, &key, should_remove_key)?;
