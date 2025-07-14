@@ -523,10 +523,10 @@ describeBspNet(
       // Check that the PriorityChallenge event was emitted.
       const priorityChallengeEvent = await userApi.assert.eventPresent(
         "proofsDealer",
-        "PriorityChallenge"
+        "NewPriorityChallenge"
       );
       const priorityChallengeEventDataBlob =
-        userApi.events.proofsDealer.PriorityChallenge.is(priorityChallengeEvent.event) &&
+        userApi.events.proofsDealer.NewPriorityChallenge.is(priorityChallengeEvent.event) &&
         priorityChallengeEvent.event.data;
       assert(priorityChallengeEventDataBlob, "Event doesn't match Type");
       strictEqual(
@@ -540,7 +540,7 @@ describeBspNet(
         "The priority challenge event should have shouldRemoveKey set to true"
       );
       assert(
-        priorityChallengeEventDataBlob.who.isRoot,
+        priorityChallengeEventDataBlob.who.isNone,
         "The priority challenge should be initiated by Root origin"
       );
     });
