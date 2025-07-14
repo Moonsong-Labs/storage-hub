@@ -51,9 +51,5 @@ impl RemoteFileHandlerFactory {
     pub fn supported_protocols() -> &'static [&'static str] {
         &["file", "http", "https", "ftp", "ftps"]
     }
-
-    pub fn is_protocol_supported(scheme: &str) -> bool {
-        matches!(scheme, "" | "file" | "http" | "https" | "ftp" | "ftps")
-    }
 }
 

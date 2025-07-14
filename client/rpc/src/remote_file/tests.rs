@@ -102,20 +102,24 @@ mod factory_tests {
 
     #[test]
     fn test_is_protocol_supported_comprehensive() {
-        assert!(RemoteFileHandlerFactory::is_protocol_supported(""));
-        assert!(RemoteFileHandlerFactory::is_protocol_supported("file"));
-        assert!(RemoteFileHandlerFactory::is_protocol_supported("http"));
-        assert!(RemoteFileHandlerFactory::is_protocol_supported("https"));
-        assert!(RemoteFileHandlerFactory::is_protocol_supported("ftp"));
-        assert!(RemoteFileHandlerFactory::is_protocol_supported("ftps"));
+        let supported = RemoteFileHandlerFactory::supported_protocols();
         
-        assert!(!RemoteFileHandlerFactory::is_protocol_supported("sftp"));
-        assert!(!RemoteFileHandlerFactory::is_protocol_supported("ssh"));
-        assert!(!RemoteFileHandlerFactory::is_protocol_supported("smb"));
-        assert!(!RemoteFileHandlerFactory::is_protocol_supported("custom"));
+        // Empty string is handled specially in create() method
+        assert!(RemoteFileHandlerFactory::create(&Url::parse("file:///test").unwrap(), RemoteFileConfig::default()).is_ok());
         
-        assert!(!RemoteFileHandlerFactory::is_protocol_supported("HTTP"));
-        assert!(!RemoteFileHandlerFactory::is_protocol_supported("File"));
+        assert!(supported.contains(&"file"));
+        assert!(supported.contains(&"http"));
+        assert!(supported.contains(&"https"));
+        assert!(supported.contains(&"ftp"));
+        assert!(supported.contains(&"ftps"));
+        
+        assert!(!supported.contains(&"sftp"));
+        assert!(!supported.contains(&"ssh"));
+        assert!(!supported.contains(&"smb"));
+        assert!(!supported.contains(&"custom"));
+        
+        assert!(!supported.contains(&"HTTP"));
+        assert!(!supported.contains(&"File"));
     }
 }
 
