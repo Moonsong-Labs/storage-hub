@@ -89,34 +89,3 @@ mod tests {
     }
 }
 
-/// Documentation for RPC integration testing
-/// 
-/// To test the RPC methods with actual remote files:
-/// 
-/// 1. **Local Testing Setup**:
-///    ```bash
-///    # Start a local StorageHub node
-///    cargo run --release -- --dev
-///    
-///    # In another terminal, run RPC tests
-///    cargo test --package shc-rpc --test remote_file_rpc_tests
-///    ```
-/// 
-/// 2. **Test with Mock HTTP Server**:
-///    The HTTP handler tests use `mockito` for mocking HTTP responses.
-///    See `client/rpc/src/remote_file/http.rs` for examples.
-/// 
-/// 3. **Test with Real Services**:
-///    Set environment variables for external services:
-///    - `TEST_HTTP_URL`: URL to test HTTP downloads
-///    - `TEST_FTP_URL`: URL to test FTP downloads
-/// 
-/// 4. **RPC Usage Example**:
-///    When the `save_file_to_disk` RPC method is called with a URL instead
-///    of a local path, the appropriate remote file handler will be used
-///    to download the file before saving it locally.
-#[cfg(test)]
-mod rpc_integration_docs {
-    // These tests would require an actual RPC client connection
-    // They are documented here for reference when setting up integration tests
-}
