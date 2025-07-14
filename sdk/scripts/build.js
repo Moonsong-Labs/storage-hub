@@ -11,7 +11,8 @@ await build({
     sourcemap: true,
     minify: true,
     target: ['es2022'],
-    platform: 'neutral',
+    platform: 'node',
+    external: ['node:*'],
     format: 'esm',
 });
 
