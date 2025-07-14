@@ -1,7 +1,7 @@
 use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
-use log::{error, info, trace, warn};
+use log::{error, info, trace};
 use shc_common::traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::{ProviderId, StorageProviderId};
 use sp_runtime::AccountId32;
@@ -13,7 +13,6 @@ use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::{
     convert_raw_multiaddress_to_multiaddr, get_provider_id_from_keystore, EventsRetrievalError,
-    GetProviderIdError,
 };
 use shc_common::{
     blockchain_utils::get_events_at_block,
@@ -37,7 +36,6 @@ pub struct IndexerService<RuntimeApi, K = Arc<dyn ReadOnlyKeystore>> {
     client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
-    msp_id: Option<ProviderId>,
     keystore: K,
 }
 
@@ -85,43 +83,23 @@ where
             client,
             db_pool,
             indexer_mode,
-            msp_id: None,
             keystore,
         }
     }
 
-    /// Synchronize the MSP ID from the keystore.
+    /// Detect the MSP ID from the keystore for the given block hash.
     ///
-    /// This method detects the MSP ID based on the BCSV keys in the keystore
-    /// and updates the `msp_id` field accordingly.
-    fn sync_msp_id(&mut self, block_hash: &H256) {
+    /// Returns Option<ProviderId> if an MSP ID is found; None otherwise.
+    fn detect_msp_id(&self, block_hash: &H256) -> Option<ProviderId> {
         match get_provider_id_from_keystore(&self.client, &self.keystore, block_hash) {
-            Ok(None) => {
-                // No MSP ID found - expected for non-MSP nodes
-                self.msp_id = None;
-                info!(target: LOG_TARGET, "No MSP ID detected - running as non-MSP node");
-            }
             Ok(Some(provider_id)) => {
-                // Check if it's an MSP ID
                 if let StorageProviderId::MainStorageProvider(msp_id) = provider_id {
-                    self.msp_id = Some(msp_id);
-                    info!(target: LOG_TARGET, "MSP ID detected: {:?}", provider_id);
+                    Some(msp_id)
                 } else {
-                    // It's a BSP ID, not an MSP
-                    self.msp_id = None;
-                    info!(target: LOG_TARGET, "BSP ID detected: {:?} - running as non-MSP node", provider_id);
+                    None
                 }
             }
-            Err(GetProviderIdError::MultipleProviderIds) => {
-                // Configuration issue - multiple provider IDs found
-                error!(target: LOG_TARGET, "Multiple provider IDs found in keystore - this is a configuration issue");
-                self.msp_id = None;
-            }
-            Err(e) => {
-                // Runtime API error
-                error!(target: LOG_TARGET, "Failed to get provider ID from keystore: {:?}", e);
-                self.msp_id = None;
-            }
+            _ => None,
         }
     }
 
@@ -212,11 +190,6 @@ where
 
         info!(target: LOG_TARGET, "Finality notification (#{}): {}", finalized_block_number, finalized_block_hash);
 
-        // In Lite mode, sync MSP ID on each finality notification
-        if self.indexer_mode == crate::IndexerMode::Lite {
-            self.sync_msp_id(&finalized_block_hash);
-        }
-
         let mut db_conn = self.db_pool.get().await?;
 
         let service_state = ServiceState::get(&mut db_conn).await?;
@@ -230,31 +203,34 @@ where
                 .client
                 .block_hash(block_number)?
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
-            blocks_to_index.push((block_number, block_hash));
+
+            let msp_id = (self.indexer_mode == crate::IndexerMode::Lite)
+                .then(|| self.detect_msp_id(&block_hash))
+                .flatten();
+
+            blocks_to_index.push((block_number, block_hash, msp_id));
         }
 
-        // Now index the blocks
-        for (block_number, block_hash) in blocks_to_index {
-            self.index_block(&mut db_conn, block_number as BlockNumber, block_hash)
-                .await?;
-            
-            // In lite mode, sync MSP ID after each block in case we just processed our MSP registration
-            if self.indexer_mode == crate::IndexerMode::Lite && self.msp_id.is_none() {
-                self.sync_msp_id(&block_hash);
-                if self.msp_id.is_some() {
-                    info!(target: LOG_TARGET, "MSP ID detected after processing block #{}: {:?}", block_number, self.msp_id);
-                }
-            }
+        // now index the blocks
+        for (block_number, block_hash, msp_id) in blocks_to_index {
+            self.index_block(
+                &mut db_conn,
+                block_number as BlockNumber,
+                block_hash,
+                msp_id,
+            )
+            .await?
         }
 
         Ok(())
     }
 
     async fn index_block<'a, 'b: 'a>(
-        &'b mut self,
+        &'b self,
         conn: &mut DbConnection<'a>,
         block_number: BlockNumber,
         block_hash: H256,
+        msp_id: Option<ProviderId>,
     ) -> Result<(), IndexBlockError> {
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
 
@@ -265,7 +241,8 @@ where
                 ServiceState::update(conn, block_number as i64).await?;
 
                 for ev in block_events {
-                    self.route_event(conn, &ev.event, block_hash).await?;
+                    self.route_event(conn, &ev.event, block_hash, msp_id)
+                        .await?;
                 }
 
                 Ok(())
@@ -277,14 +254,17 @@ where
     }
 
     async fn route_event<'a, 'b: 'a>(
-        &'b mut self,
+        &'b self,
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
         block_hash: H256,
+        msp_id: Option<ProviderId>,
     ) -> Result<(), diesel::result::Error> {
         match self.indexer_mode {
             crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
-            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+            crate::IndexerMode::Lite => {
+                self.index_event_lite(conn, event, block_hash, msp_id).await
+            }
         }
     }
 
@@ -332,23 +312,25 @@ where
     }
 
     async fn index_event_lite<'a, 'b: 'a>(
-        &'b mut self,
+        &'b self,
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
         block_hash: H256,
+        msp_id: Option<ProviderId>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             RuntimeEvent::FileSystem(event) => {
                 // Only process FileSystem events if we have an MSP ID
-                if self.msp_id.is_none() {
+                if msp_id.is_none() {
                     trace!(target: LOG_TARGET, "No MSP ID configured, skipping FileSystem event in lite mode");
                     return Ok(());
                 }
-                self.index_file_system_event_lite(conn, event).await?
+                self.index_file_system_event_lite(conn, event, msp_id.unwrap())
+                    .await?
             }
             RuntimeEvent::Providers(event) => {
-                // Always process Provider events - they might contain our MSP registration
-                self.index_providers_event_lite(conn, event, block_hash)
+                // Always process Provider events
+                self.index_providers_event_lite(conn, event, block_hash, msp_id)
                     .await?
             }
             // Explicitly ignore other pallets in lite mode
@@ -598,13 +580,13 @@ where
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_file_system::Event<storage_hub_runtime::Runtime>,
+        current_msp_id: ProviderId,
     ) -> Result<(), diesel::result::Error> {
-        // We can safely unwrap msp_id here since the caller already checked it
-        let current_msp_id = self.msp_id.as_ref().unwrap();
+        let current_msp_id = &current_msp_id;
 
         // Filter events based on MSP relevance
         let should_index = match event {
-            pallet_file_system::Event::NewBucket { msp_id, .. } => {
+            pallet_file_system::Event::NewBucket {  .. } => {
                 // Index ALL buckets regardless of MSP ownership
                 true
             }
@@ -625,7 +607,7 @@ where
                     }
                 }
             }
-            pallet_file_system::Event::NewStorageRequest { bucket_id, .. } => {
+            pallet_file_system::Event::NewStorageRequest {  .. } => {
                 // Index ALL storage requests regardless of MSP ownership
                 true
             }
@@ -659,11 +641,11 @@ where
                 )
                 .await
             }
-            pallet_file_system::Event::MoveBucketRequested { bucket_id, .. } => {
+            pallet_file_system::Event::MoveBucketRequested {  .. } => {
                 // Index ALL move bucket requests regardless of MSP ownership
                 true
             }
-            pallet_file_system::Event::MoveBucketRejected { bucket_id, .. } => {
+            pallet_file_system::Event::MoveBucketRejected {  .. } => {
                 // Index ALL move bucket rejections regardless of MSP ownership
                 true
             }
@@ -675,7 +657,7 @@ where
                 // Only index if it's the current MSP
                 msp_id == current_msp_id
             }
-            pallet_file_system::Event::FileDeletionRequest { file_key, .. } => {
+            pallet_file_system::Event::FileDeletionRequest {  .. } => {
                 // Index ALL file deletion requests regardless of MSP ownership
                 true
             }
@@ -691,7 +673,7 @@ where
                 )
                 .await
             }
-            pallet_file_system::Event::MoveBucketRequestExpired { bucket_id, .. } => {
+            pallet_file_system::Event::MoveBucketRequestExpired {  .. } => {
                 // Index ALL move bucket request expirations regardless of MSP ownership
                 true
             }
@@ -1018,10 +1000,11 @@ where
     }
 
     async fn index_providers_event_lite<'a, 'b: 'a>(
-        &'b mut self,
+        &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
         block_hash: H256,
+        msp_id: Option<ProviderId>,
     ) -> Result<(), diesel::result::Error> {
         // Always index provider registration events to ensure MSPs and BSPs exist
         match event {
@@ -1037,12 +1020,12 @@ where
         }
 
         // For all other events, we need an MSP ID
-        if self.msp_id.is_none() {
+        if msp_id.is_none() {
             trace!(target: LOG_TARGET, "No MSP ID configured, skipping Providers event in lite mode");
             return Ok(());
         }
 
-        let current_msp_id = self.msp_id.as_ref().unwrap();
+        let current_msp_id = &msp_id.unwrap();
 
         // Filter events based on MSP relevance
         let should_index = match event {
