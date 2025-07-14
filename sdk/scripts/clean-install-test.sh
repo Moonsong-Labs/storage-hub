@@ -11,7 +11,7 @@ fi
 rm -rf node_modules wasm/pkg
 
 # 2. Build WASM package so pkg/ exists before install
-wasm-pack build ./wasm --target nodejs --out-dir pkg
+wasm-pack build ./wasm --target nodejs --release --out-dir pkg
 
 # 3. Fresh install (now pkg exists)
 pnpm install

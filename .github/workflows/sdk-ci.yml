@@ -53,8 +53,13 @@ jobs:
             cargo install wasm-pack --locked
           fi
 
-      # Install dependencies (builds WASM via preinstall)
-      - name: Install dependencies & build wasm
+      # Build WASM first so pkg/ exists for pnpm's file: dependency
+      - name: Build WASM crate
+        working-directory: sdk
+        run: wasm-pack build ./wasm --target nodejs --release --out-dir pkg
+
+      # Install dependencies
+      - name: Install dependencies
         run: pnpm install
 
       # Lint & format check
