@@ -20,7 +20,8 @@
         "typecheck": "tsc --noEmit",
         "size": "size-limit",
         "build:wasm": "wasm-pack build ./wasm --target nodejs --release --out-dir pkg",
-        "preinstall": "pnpm run build:wasm"
+        "preinstall": "pnpm run build:wasm",
+        "coverage": "vitest run --coverage"
     },
     "exports": {
         ".": {
@@ -35,14 +36,15 @@
         "@size-limit/preset-small-lib": "^9.0.0",
         "@typescript-eslint/eslint-plugin": "^7.4.0",
         "@typescript-eslint/parser": "^7.4.0",
+        "@vitest/coverage-v8": "^1.6.1",
+        "esbuild": "^0.19.0",
         "eslint": "^8.57.1",
         "eslint-config-prettier": "^9.0.0",
-        "esbuild": "^0.19.0",
         "lint-staged": "^15.2.0",
         "prettier": "^3.2.0",
         "size-limit": "^9.0.0",
         "typescript": "^5.4.0",
-        "vitest": "^1.2.0"
+        "vitest": "^1.6.1"
     },
     "size-limit": [
         {
