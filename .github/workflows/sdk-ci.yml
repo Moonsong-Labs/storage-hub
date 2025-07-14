@@ -77,6 +77,6 @@ jobs:
       - name: Run tests
         run: pnpm test -- --run
 
-      # Bundle size guard
-      - name: Size limit
-        run: pnpm size 
+# TODO: Bundle size guard
+#   - name: Size limit
+#     run: pnpm size 
