@@ -70,7 +70,7 @@ importers:
     dependencies:
       '@storagehub/wasm':
         specifier: file:./wasm/pkg
-        version: storagehub_wasm@file:sdk/wasm/pkg
+        version: storagehub-wasm@file:sdk/wasm/pkg
     devDependencies:
       '@size-limit/preset-small-lib':
         specifier: ^9.0.0
@@ -2879,7 +2879,7 @@ packages:
   std-env@3.9.0:
     resolution: {integrity: sha512-UGvjygr6F6tpH7o2qyqR6QYpwraIjKSdtzyBdyytFOHmPZY917kwdwLG0RbOjWOnKmnm3PeHjaoLLMie7kPLQw==}
 
-  storagehub_wasm@file:sdk/wasm/pkg:
+  storagehub-wasm@file:sdk/wasm/pkg:
     resolution: {directory: sdk/wasm/pkg, type: directory}
 
   streamx@2.21.1:
@@ -6259,7 +6259,7 @@ snapshots:
 
   std-env@3.9.0: {}
 
-  storagehub_wasm@file:sdk/wasm/pkg: {}
+  storagehub-wasm@file:sdk/wasm/pkg: {}
 
   streamx@2.21.1:
     dependencies:

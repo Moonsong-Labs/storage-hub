@@ -18,8 +18,8 @@
         "test": "vitest",
         "typecheck": "tsc --noEmit",
         "size": "size-limit",
-        "gen:wasm": "wasm-pack build ./wasm --target bundler --out-dir pkg --release",
-        "preinstall": "[ -d ./wasm/pkg ] || pnpm run gen:wasm"
+        "build:wasm": "wasm-pack build ./wasm --target nodejs --out-dir pkg",
+        "preinstall": "pnpm run build:wasm"
     },
     "exports": {
         ".": {
