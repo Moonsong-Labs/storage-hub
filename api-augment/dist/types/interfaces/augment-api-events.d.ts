@@ -17,7 +17,6 @@ import type { ITuple } from "@polkadot/types-codec/types";
 import type { AccountId32, H256 } from "@polkadot/types/interfaces/runtime";
 import type {
   CumulusPrimitivesCoreAggregateMessageOrigin,
-  FrameSupportDispatchRawOrigin,
   FrameSupportMessagesProcessMessageError,
   FrameSupportTokensMiscBalanceStatus,
   FrameSystemDispatchEventInfo,
@@ -2194,9 +2193,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewChallenge: AugmentedEvent<
         ApiType,
-        [who: FrameSupportDispatchRawOrigin, keyChallenged: H256],
+        [who: Option<AccountId32>, keyChallenged: H256],
         {
-          who: FrameSupportDispatchRawOrigin;
+          who: Option<AccountId32>;
           keyChallenged: H256;
         }
       >;
@@ -2241,6 +2240,18 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * A priority challenge was submitted.
+       **/
+      NewPriorityChallenge: AugmentedEvent<
+        ApiType,
+        [who: Option<AccountId32>, keyChallenged: H256, shouldRemoveKey: bool],
+        {
+          who: Option<AccountId32>;
+          keyChallenged: H256;
+          shouldRemoveKey: bool;
+        }
+      >;
+      /**
        * No record of the last tick the Provider submitted a proof for.
        **/
       NoRecordOfLastSubmittedProof: AugmentedEvent<
@@ -2248,18 +2259,6 @@ declare module "@polkadot/api-base/types/events" {
         [provider: H256],
         {
           provider: H256;
-        }
-      >;
-      /**
-       * A priority challenge was submitted.
-       **/
-      PriorityChallenge: AugmentedEvent<
-        ApiType,
-        [who: FrameSupportDispatchRawOrigin, keyChallenged: H256, shouldRemoveKey: bool],
-        {
-          who: FrameSupportDispatchRawOrigin;
-          keyChallenged: H256;
-          shouldRemoveKey: bool;
         }
       >;
       /**
