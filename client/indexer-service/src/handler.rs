@@ -437,7 +437,7 @@ where
             pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. } => {}
             pallet_proofs_dealer::Event::MutationsApplied { .. } => {}
             pallet_proofs_dealer::Event::NewChallenge { .. } => {}
-            pallet_proofs_dealer::Event::PriorityChallenge { .. } => {}
+            pallet_proofs_dealer::Event::NewPriorityChallenge { .. } => {}
             pallet_proofs_dealer::Event::ProofAccepted {
                 provider_id: provider,
                 proof: _proof,

@@ -28,7 +28,6 @@ pub mod pallet {
         traits::{fungible, Randomness},
     };
     use frame_system::pallet_prelude::*;
-    use frame_system::RawOrigin;
     use scale_info::prelude::fmt::Debug;
     use shp_traits::{
         CommitmentVerifier, MutateChallengeableProvidersInterface, ProofsDealerInterface,
@@ -174,8 +173,7 @@ pub mod pallet {
         type ChallengesFee: Get<BalanceFor<Self>>;
 
         /// The fee charged for submitting a priority challenge.
-        /// This fee goes to the Treasury, and is used to prevent spam. Registered Providers are
-        /// exempt from this fee.
+        /// This fee goes to the Treasury, and is used to prevent spam.
         #[pallet::constant]
         type PriorityChallengesFee: Get<BalanceFor<Self>>;
 
@@ -242,10 +240,10 @@ pub mod pallet {
         #[pallet::constant]
         type MaxSlashableProvidersPerTick: Get<u32>;
 
-        /// Custom origin that can execute privileged operations.
+        /// Custom origin that can dispatch new priority challenges.
         type PriorityChallengeOrigin: EnsureOrigin<Self::RuntimeOrigin>;
 
-        /// Custom origin that can execute challenge operations.
+        /// Custom origin that can dispatch regular challenges.
         type ChallengeOrigin: EnsureOrigin<Self::RuntimeOrigin>;
     }
 
@@ -446,13 +444,13 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// A manual challenge was submitted.
         NewChallenge {
-            who: RawOrigin<T::AccountId>,
+            who: Option<AccountIdFor<T>>,
             key_challenged: KeyFor<T>,
         },
 
         /// A priority challenge was submitted.
-        PriorityChallenge {
-            who: RawOrigin<T::AccountId>,
+        NewPriorityChallenge {
+            who: Option<AccountIdFor<T>>,
             key_challenged: KeyFor<T>,
             should_remove_key: bool,
         },
@@ -638,14 +636,11 @@ pub mod pallet {
 
             let who = origin.clone().into_signer();
 
-            let raw_origin: RawOrigin<T::AccountId> =
-                origin.into().map_err(|_| DispatchError::BadOrigin)?;
-
             Self::do_challenge(&who, &key)?;
 
             // Emit event.
             Self::deposit_event(Event::NewChallenge {
-                who: raw_origin,
+                who: who,
                 key_challenged: key,
             });
 
@@ -791,15 +786,12 @@ pub mod pallet {
 
             let who = origin.clone().into_signer();
 
-            let raw_origin: RawOrigin<T::AccountId> =
-                origin.into().map_err(|_| DispatchError::BadOrigin)?;
-
             // Execute priority challenge.
             Self::do_priority_challenge(&who, &key, should_remove_key)?;
 
             // Emit event.
-            Self::deposit_event(Event::PriorityChallenge {
-                who: raw_origin,
+            Self::deposit_event(Event::NewPriorityChallenge {
+                who: who,
                 key_challenged: key,
                 should_remove_key,
             });
@@ -897,42 +889,48 @@ pub mod pallet {
                 T::ChallengeTicksTolerance::get()
             );
 
-            // Check that if `ChallengesFee` is greater than 0, then `ChallengeOrigin` cannot be root or none.
+            // Check that if `ChallengeOrigin` allows root or none, then `ChallengesFee` must be zero.
             // This prevents the misconfiguration where a fee is charged but the origin is root or none (which cannot be charged).
-            if !T::ChallengesFee::get().is_zero() {
-                // Test that root origin is rejected by ChallengeOrigin
-                let root_origin = frame_system::RawOrigin::Root.into();
-                assert!(
-                    T::ChallengeOrigin::try_origin(root_origin).is_err(),
-                    "ChallengeOrigin cannot be root when ChallengesFee ({:?}) is greater than 0, as root cannot be charged fees",
-                    T::ChallengesFee::get()
-                );
 
-                // Test that none origin is rejected by ChallengeOrigin
-                let none_origin = frame_system::RawOrigin::None.into();
+            // Test if ChallengeOrigin accepts root origin
+            let root_origin = frame_system::RawOrigin::Root.into();
+            if T::ChallengeOrigin::try_origin(root_origin).is_ok() {
                 assert!(
-                    T::ChallengeOrigin::try_origin(none_origin).is_err(),
-                    "ChallengeOrigin cannot be none when ChallengesFee ({:?}) is greater than 0, as none cannot be charged fees",
+                    T::ChallengesFee::get().is_zero(),
+                    "ChallengesFee must be zero when ChallengeOrigin accepts root, as root cannot be charged fees. Current fee: {:?}",
                     T::ChallengesFee::get()
                 );
             }
 
-            // Check that if `PriorityChallengesFee` is greater than 0, then `PriorityChallengeOrigin` cannot be root or none.
-            // This prevents the misconfiguration where a fee is charged but the origin is root or none (which cannot be charged).
-            if !T::PriorityChallengesFee::get().is_zero() {
-                // Test that root origin is rejected by PriorityChallengeOrigin
-                let root_origin = frame_system::RawOrigin::Root.into();
+            // Test if ChallengeOrigin accepts none origin
+            let none_origin = frame_system::RawOrigin::None.into();
+            if T::ChallengeOrigin::try_origin(none_origin).is_ok() {
                 assert!(
-                    T::PriorityChallengeOrigin::try_origin(root_origin).is_err(),
-                    "PriorityChallengeOrigin cannot be root when PriorityChallengesFee ({:?}) is greater than 0, as root cannot be charged fees",
+                    T::ChallengesFee::get().is_zero(),
+                    "ChallengesFee must be zero when ChallengeOrigin accepts none, as none cannot be charged fees. Current fee: {:?}",
+                    T::ChallengesFee::get()
+                );
+            }
+
+            // Check that if `PriorityChallengeOrigin` allows root or none, then `PriorityChallengesFee` must be zero.
+            // This prevents the misconfiguration where a fee is charged but the origin is root or none (which cannot be charged).
+
+            // Test if PriorityChallengeOrigin accepts root origin
+            let root_origin = frame_system::RawOrigin::Root.into();
+            if T::PriorityChallengeOrigin::try_origin(root_origin).is_ok() {
+                assert!(
+                    T::PriorityChallengesFee::get().is_zero(),
+                    "PriorityChallengesFee must be zero when PriorityChallengeOrigin accepts root, as root cannot be charged fees. Current fee: {:?}",
                     T::PriorityChallengesFee::get()
                 );
+            }
 
-                // Test that none origin is rejected by PriorityChallengeOrigin
-                let none_origin = frame_system::RawOrigin::None.into();
+            // Test if PriorityChallengeOrigin accepts none origin
+            let none_origin = frame_system::RawOrigin::None.into();
+            if T::PriorityChallengeOrigin::try_origin(none_origin).is_ok() {
                 assert!(
-                    T::PriorityChallengeOrigin::try_origin(none_origin).is_err(),
-                    "PriorityChallengeOrigin cannot be none when PriorityChallengesFee ({:?}) is greater than 0, as none cannot be charged fees",
+                    T::PriorityChallengesFee::get().is_zero(),
+                    "PriorityChallengesFee must be zero when PriorityChallengeOrigin accepts none, as none cannot be charged fees. Current fee: {:?}",
                     T::PriorityChallengesFee::get()
                 );
             }

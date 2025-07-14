@@ -110,7 +110,7 @@ fn challenge_submit_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: frame_system::RawOrigin::Signed(1),
+                who: Some(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -159,7 +159,7 @@ fn challenge_submit_twice_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: frame_system::RawOrigin::Signed(1),
+                who: Some(1),
                 key_challenged: file_key_1,
             }
             .into(),
@@ -170,7 +170,7 @@ fn challenge_submit_twice_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: frame_system::RawOrigin::Signed(2),
+                who: Some(2),
                 key_challenged: file_key_2,
             }
             .into(),
@@ -219,7 +219,7 @@ fn challenge_submit_existing_challenge_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: frame_system::RawOrigin::Signed(1),
+                who: Some(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -262,7 +262,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: frame_system::RawOrigin::Signed(1),
+                who: Some(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -291,7 +291,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: frame_system::RawOrigin::Signed(1),
+                who: Some(1),
                 key_challenged: file_key,
             }
             .into(),
