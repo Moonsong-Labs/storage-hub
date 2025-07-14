@@ -1,10 +1,4 @@
-use std::{
-    collections::HashSet,
-    fmt::Debug,
-    path::PathBuf,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::HashSet, fmt::Debug, path::PathBuf, str::FromStr, sync::Arc};
 
 pub mod remote_file;
 
@@ -514,13 +508,13 @@ where
                 .map_err(into_rpc_error)?;
             chunks.push(chunk);
         }
-        
+
         drop(read_file_storage);
-        
+
         let chunks_stream = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
 
         let reader = tokio_util::io::StreamReader::new(
-            chunks_stream.map(|result| result.map(bytes::Bytes::from))
+            chunks_stream.map(|result| result.map(bytes::Bytes::from)),
         );
         let boxed_reader: Box<dyn tokio::io::AsyncRead + Send + Unpin> = Box::new(reader);
 

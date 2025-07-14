@@ -1,4 +1,3 @@
-
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -84,7 +83,6 @@ impl HttpFileHandler {
 
         Ok(bytes.to_vec())
     }
-
 }
 
 #[async_trait]
@@ -206,7 +204,9 @@ impl RemoteFileHandler for HttpFileHandler {
         let url = Url::parse(uri).map_err(|e| RemoteFileError::InvalidUrl(e.to_string()))?;
 
         if !self.is_supported(&url) {
-            return Err(RemoteFileError::UnsupportedProtocol(url.scheme().to_string()));
+            return Err(RemoteFileError::UnsupportedProtocol(
+                url.scheme().to_string(),
+            ));
         }
 
         let stream = ReaderStream::new(data);
@@ -271,7 +271,8 @@ mod tests {
     async fn test_fetch_metadata_success() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("HEAD", "/test.txt")
+        let _m = server
+            .mock("HEAD", "/test.txt")
             .with_status(200)
             .with_header("content-length", "1024")
             .with_header("content-type", "text/plain")
@@ -281,7 +282,7 @@ mod tests {
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let result = handler.fetch_metadata(&url).await;
         assert!(result.is_ok());
-        
+
         if let Ok((_, content_type)) = result {
             assert_eq!(content_type, Some("text/plain".to_string()));
         }
@@ -291,7 +292,11 @@ mod tests {
     async fn test_fetch_metadata_not_found() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("HEAD", "/missing.txt").with_status(404).create_async().await;
+        let _m = server
+            .mock("HEAD", "/missing.txt")
+            .with_status(404)
+            .create_async()
+            .await;
 
         let url = Url::parse(&format!("{}/missing.txt", server.url())).unwrap();
         let result = handler.fetch_metadata(&url).await;
@@ -303,7 +308,11 @@ mod tests {
     async fn test_fetch_metadata_forbidden() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("HEAD", "/forbidden.txt").with_status(403).create_async().await;
+        let _m = server
+            .mock("HEAD", "/forbidden.txt")
+            .with_status(403)
+            .create_async()
+            .await;
 
         let url = Url::parse(&format!("{}/forbidden.txt", server.url())).unwrap();
         let result = handler.fetch_metadata(&url).await;
@@ -315,7 +324,8 @@ mod tests {
     async fn test_fetch_metadata_file_too_large() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("HEAD", "/large.txt")
+        let _m = server
+            .mock("HEAD", "/large.txt")
             .with_status(200)
             .with_header("content-length", "2097152")
             .create_async()
@@ -332,7 +342,8 @@ mod tests {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let content = b"Hello, World!";
-        let _m = server.mock("GET", "/test.txt")
+        let _m = server
+            .mock("GET", "/test.txt")
             .with_status(200)
             .with_body(content)
             .create_async()
@@ -349,7 +360,8 @@ mod tests {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let content = b"Hello";
-        let _m = server.mock("GET", "/test.txt")
+        let _m = server
+            .mock("GET", "/test.txt")
             .match_header("range", "bytes=6-10")
             .with_status(206)
             .with_body(content)
@@ -366,7 +378,8 @@ mod tests {
     async fn test_upload_file_success() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("PUT", "/upload.txt")
+        let _m = server
+            .mock("PUT", "/upload.txt")
             .match_header("content-length", "13")
             .match_header("content-type", "text/plain")
             .with_status(200)
@@ -376,7 +389,7 @@ mod tests {
         let data = b"Hello, World!";
         let reader = Box::new(std::io::Cursor::new(data));
         let url = format!("{}/upload.txt", server.url());
-        
+
         handler
             .upload_file(&url, reader, 13, Some("text/plain".to_string()))
             .await
@@ -387,7 +400,8 @@ mod tests {
     async fn test_upload_file_without_content_type() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("PUT", "/upload2.txt")
+        let _m = server
+            .mock("PUT", "/upload2.txt")
             .match_header("content-length", "4")
             .with_status(201)
             .create_async()
@@ -396,18 +410,16 @@ mod tests {
         let data = b"test";
         let reader = Box::new(std::io::Cursor::new(data));
         let url = format!("{}/upload2.txt", server.url());
-        
-        handler
-            .upload_file(&url, reader, 4, None)
-            .await
-            .unwrap();
+
+        handler.upload_file(&url, reader, 4, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_upload_file_with_basic_auth() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("PUT", "/secure-upload.txt")
+        let _m = server
+            .mock("PUT", "/secure-upload.txt")
             .match_header("authorization", "Basic dXNlcjpwYXNz")
             .match_header("content-length", "6")
             .with_status(200)
@@ -416,19 +428,20 @@ mod tests {
 
         let data = b"secure";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("http://user:pass@{}/secure-upload.txt", server.host_with_port());
-        
-        handler
-            .upload_file(&url, reader, 6, None)
-            .await
-            .unwrap();
+        let url = format!(
+            "http://user:pass@{}/secure-upload.txt",
+            server.host_with_port()
+        );
+
+        handler.upload_file(&url, reader, 6, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_upload_file_forbidden() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("PUT", "/forbidden-upload.txt")
+        let _m = server
+            .mock("PUT", "/forbidden-upload.txt")
             .with_status(403)
             .create_async()
             .await;
@@ -436,10 +449,8 @@ mod tests {
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
         let url = format!("{}/forbidden-upload.txt", server.url());
-        
-        let result = handler
-            .upload_file(&url, reader, 4, None)
-            .await;
+
+        let result = handler.upload_file(&url, reader, 4, None).await;
 
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
@@ -449,7 +460,7 @@ mod tests {
         let handler = create_test_handler();
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        
+
         let result = handler
             .upload_file("not a valid url", reader, 4, None)
             .await;
@@ -462,19 +473,23 @@ mod tests {
         let handler = create_test_handler();
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        
+
         let result = handler
             .upload_file("ftp://example.com/file.txt", reader, 4, None)
             .await;
 
-        assert!(matches!(result, Err(RemoteFileError::UnsupportedProtocol(_))));
+        assert!(matches!(
+            result,
+            Err(RemoteFileError::UnsupportedProtocol(_))
+        ));
     }
 
     #[tokio::test]
     async fn test_upload_file_server_error() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("PUT", "/error-upload.txt")
+        let _m = server
+            .mock("PUT", "/error-upload.txt")
             .with_status(500)
             .create_async()
             .await;
@@ -482,10 +497,8 @@ mod tests {
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
         let url = format!("{}/error-upload.txt", server.url());
-        
-        let result = handler
-            .upload_file(&url, reader, 4, None)
-            .await;
+
+        let result = handler.upload_file(&url, reader, 4, None).await;
 
         assert!(matches!(result, Err(RemoteFileError::Other(_))));
     }
@@ -500,13 +513,11 @@ mod tests {
         let handler = HttpFileHandler::new(config).unwrap();
 
         let url = "http://10.255.255.1/timeout-upload.txt";
-        
+
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        
-        let result = handler
-            .upload_file(url, reader, 4, None)
-            .await;
+
+        let result = handler.upload_file(url, reader, 4, None).await;
 
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
@@ -516,7 +527,8 @@ mod tests {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let content = b"Streaming content";
-        let _m = server.mock("GET", "/stream.txt")
+        let _m = server
+            .mock("GET", "/stream.txt")
             .with_status(200)
             .with_body(content)
             .create_async()
@@ -538,19 +550,22 @@ mod tests {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
 
-        let _m1 = server.mock("GET", "/redirect1")
+        let _m1 = server
+            .mock("GET", "/redirect1")
             .with_status(302)
             .with_header("Location", &format!("{}/redirect2", server.url()))
             .create_async()
             .await;
 
-        let _m2 = server.mock("GET", "/redirect2")
+        let _m2 = server
+            .mock("GET", "/redirect2")
             .with_status(302)
             .with_header("Location", &format!("{}/final", server.url()))
             .create_async()
             .await;
 
-        let _m3 = server.mock("GET", "/final")
+        let _m3 = server
+            .mock("GET", "/final")
             .with_status(200)
             .with_body(b"Final content")
             .create_async()
@@ -571,19 +586,22 @@ mod tests {
         let handler = HttpFileHandler::new(config).unwrap();
 
         let mut server = Server::new_async().await;
-        let _m1 = server.mock("GET", "/redirect1")
+        let _m1 = server
+            .mock("GET", "/redirect1")
             .with_status(302)
             .with_header("Location", &format!("{}/redirect2", server.url()))
             .create_async()
             .await;
 
-        let _m2 = server.mock("GET", "/redirect2")
+        let _m2 = server
+            .mock("GET", "/redirect2")
             .with_status(302)
             .with_header("Location", &format!("{}/redirect3", server.url()))
             .create_async()
             .await;
 
-        let _m3 = server.mock("GET", "/redirect3")
+        let _m3 = server
+            .mock("GET", "/redirect3")
             .with_status(302)
             .with_header("Location", &format!("{}/final", server.url()))
             .create_async()
@@ -599,7 +617,8 @@ mod tests {
     async fn test_no_content_length_header() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("HEAD", "/no-length.txt")
+        let _m = server
+            .mock("HEAD", "/no-length.txt")
             .with_status(200)
             .with_header("content-type", "text/plain")
             .create_async()
@@ -617,7 +636,8 @@ mod tests {
         let full_content = b"This is the full content of the file";
 
         let mut server = Server::new_async().await;
-        let _m = server.mock("GET", "/no-range.txt")
+        let _m = server
+            .mock("GET", "/no-range.txt")
             .match_header("range", "bytes=5-9")
             .with_status(200)
             .with_body(full_content)
@@ -640,7 +660,8 @@ mod tests {
         let handler = HttpFileHandler::new(config).unwrap();
 
         let mut server = Server::new_async().await;
-        let _m = server.mock("GET", "/slow.txt")
+        let _m = server
+            .mock("GET", "/slow.txt")
             .with_status(200)
             .with_chunked_body(|_| {
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -659,7 +680,11 @@ mod tests {
     async fn test_unauthorized_error() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("GET", "/auth-required.txt").with_status(401).create_async().await;
+        let _m = server
+            .mock("GET", "/auth-required.txt")
+            .with_status(401)
+            .create_async()
+            .await;
 
         let url = Url::parse(&format!("{}/auth-required.txt", server.url())).unwrap();
         let result = handler.download(&url).await;
@@ -671,7 +696,11 @@ mod tests {
     async fn test_internal_server_error() {
         let handler = create_test_handler();
         let mut server = Server::new_async().await;
-        let _m = server.mock("GET", "/error.txt").with_status(500).create_async().await;
+        let _m = server
+            .mock("GET", "/error.txt")
+            .with_status(500)
+            .create_async()
+            .await;
 
         let url = Url::parse(&format!("{}/error.txt", server.url())).unwrap();
         let result = handler.download(&url).await;

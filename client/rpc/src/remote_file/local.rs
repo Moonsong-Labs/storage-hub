@@ -16,13 +16,10 @@ impl LocalFileHandler {
 
     fn url_to_path(url: &Url) -> Result<PathBuf, RemoteFileError> {
         match url.scheme() {
-            "" => {
-                Ok(PathBuf::from(url.path()))
-            }
-            "file" => {
-                url.to_file_path()
-                    .map_err(|_| RemoteFileError::InvalidUrl(format!("Invalid file URL: {}", url)))
-            }
+            "" => Ok(PathBuf::from(url.path())),
+            "file" => url
+                .to_file_path()
+                .map_err(|_| RemoteFileError::InvalidUrl(format!("Invalid file URL: {}", url))),
             scheme => Err(RemoteFileError::UnsupportedProtocol(scheme.to_string())),
         }
     }
@@ -254,15 +251,15 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("uploaded_file.txt");
         let file_url = format!("file://{}", file_path.display());
-        
+
         let test_content = b"Hello, uploaded file!";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
-        
+
         handler
             .upload_file(&file_url, data, test_content.len() as u64, None)
             .await
             .unwrap();
-        
+
         let content = tokio::fs::read(&file_path).await.unwrap();
         assert_eq!(content, test_content);
     }
@@ -272,10 +269,10 @@ mod tests {
         let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("uploaded_file2.txt");
-        
+
         let test_content = b"Plain path upload test";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
-        
+
         handler
             .upload_file(
                 file_path.to_str().unwrap(),
@@ -285,7 +282,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         let content = tokio::fs::read(&file_path).await.unwrap();
         assert_eq!(content, test_content);
     }
@@ -295,10 +292,10 @@ mod tests {
         let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("nested/dirs/uploaded_file.txt");
-        
+
         let test_content = b"Nested directory test";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
-        
+
         handler
             .upload_file(
                 file_path.to_str().unwrap(),
@@ -308,7 +305,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         assert!(file_path.exists());
         let content = tokio::fs::read(&file_path).await.unwrap();
         assert_eq!(content, test_content);
@@ -320,10 +317,10 @@ mod tests {
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(b"Old content").unwrap();
         temp_file.flush().unwrap();
-        
+
         let test_content = b"New content";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
-        
+
         handler
             .upload_file(
                 temp_file.path().to_str().unwrap(),
@@ -333,7 +330,7 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         let content = tokio::fs::read(temp_file.path()).await.unwrap();
         assert_eq!(content, test_content);
     }
@@ -343,10 +340,11 @@ mod tests {
         let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("large_file.bin");
-        
+
         let large_content = vec![0xAB; 1024 * 1024];
-        let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(large_content.clone()));
-        
+        let data: Box<dyn AsyncRead + Send + Unpin> =
+            Box::new(std::io::Cursor::new(large_content.clone()));
+
         handler
             .upload_file(
                 file_path.to_str().unwrap(),
@@ -356,10 +354,10 @@ mod tests {
             )
             .await
             .unwrap();
-        
+
         let metadata = tokio::fs::metadata(&file_path).await.unwrap();
         assert_eq!(metadata.len(), large_content.len() as u64);
-        
+
         let content = tokio::fs::read(&file_path).await.unwrap();
         assert_eq!(content.len(), large_content.len());
         assert_eq!(content[0], 0xAB);
@@ -370,18 +368,18 @@ mod tests {
     #[cfg(unix)]
     async fn test_upload_file_permission_denied() {
         use std::os::unix::fs::PermissionsExt;
-        
+
         let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
-        
+
         tokio::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o555))
             .await
             .unwrap();
-        
+
         let file_path = temp_dir.path().join("no_permission.txt");
         let test_content = b"Should fail";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
-        
+
         let result = handler
             .upload_file(
                 file_path.to_str().unwrap(),
@@ -390,11 +388,11 @@ mod tests {
                 None,
             )
             .await;
-        
+
         tokio::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o755))
             .await
             .unwrap();
-        
+
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
 }

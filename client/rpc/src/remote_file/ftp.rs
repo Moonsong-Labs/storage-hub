@@ -1,12 +1,11 @@
-
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
 use std::io::Cursor;
 use std::time::Duration;
 use suppaftp::types::FileType;
-use suppaftp::{AsyncFtpStream, FtpError};
 use suppaftp::types::Response;
+use suppaftp::{AsyncFtpStream, FtpError};
 use tokio::io::AsyncRead;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use url::Url;
@@ -31,11 +30,11 @@ impl FtpFileHandler {
         let host = url
             .host_str()
             .ok_or_else(|| RemoteFileError::InvalidUrl("Missing host".to_string()))?;
-        
+
         if host.is_empty() {
             return Err(RemoteFileError::InvalidUrl("Missing host".to_string()));
         }
-        
+
         let host = host.to_string();
 
         let port = url.port().unwrap_or(21);
@@ -123,10 +122,12 @@ impl FtpFileHandler {
                 Box::pin(async move {
                     use futures_util::io::AsyncReadExt;
                     let mut buffer = Vec::new();
-                    reader.read_to_end(&mut buffer).await
-                        .map_err(|e| FtpError::UnexpectedResponse(
-                            Response::new(0.into(), format!("IO error: {}", e).into_bytes())
-                        ))?;
+                    reader.read_to_end(&mut buffer).await.map_err(|e| {
+                        FtpError::UnexpectedResponse(Response::new(
+                            0.into(),
+                            format!("IO error: {}", e).into_bytes(),
+                        ))
+                    })?;
                     Ok((buffer, reader))
                 })
             }),
@@ -216,10 +217,12 @@ impl RemoteFileHandler for FtpFileHandler {
                 Box::pin(async move {
                     use futures_util::io::AsyncReadExt;
                     let mut buffer = vec![0u8; length as usize];
-                    let bytes_read = reader.read(&mut buffer).await
-                        .map_err(|e| FtpError::UnexpectedResponse(
-                            Response::new(0.into(), format!("IO error: {}", e).into_bytes())
-                        ))?;
+                    let bytes_read = reader.read(&mut buffer).await.map_err(|e| {
+                        FtpError::UnexpectedResponse(Response::new(
+                            0.into(),
+                            format!("IO error: {}", e).into_bytes(),
+                        ))
+                    })?;
                     buffer.truncate(bytes_read);
                     Ok((buffer, reader))
                 })
@@ -279,7 +282,7 @@ impl RemoteFileHandler for FtpFileHandler {
             let n = tokio::io::AsyncReadExt::read(&mut data, &mut buffer)
                 .await
                 .map_err(|e| RemoteFileError::IoError(e))?;
-            
+
             if n == 0 {
                 break;
             }
@@ -306,9 +309,9 @@ impl RemoteFileHandler for FtpFileHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     // Current Testing Limitations:
-    // 
+    //
     // The FTP handler is tightly coupled to suppaftp::AsyncFtpStream, which makes
     // unit testing challenging without an actual FTP server. The current tests only
     // cover:
@@ -329,7 +332,7 @@ mod tests {
     // 1. A mock FTP server library (not currently available in Rust ecosystem)
     // 2. Docker-based integration tests with a real FTP server
     // 3. Refactoring to use dependency injection for the FTP client
-    
+
     fn create_test_handler() -> FtpFileHandler {
         let config = RemoteFileConfig {
             max_file_size: 1024 * 1024,
@@ -423,12 +426,15 @@ mod tests {
         let data = b"test";
         let cursor = Cursor::new(data);
         let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
-        
+
         let result = handler
             .upload_file(uri, boxed_reader, data.len() as u64, None)
             .await;
-        
-        assert!(matches!(result, Err(RemoteFileError::UnsupportedProtocol(_))));
+
+        assert!(matches!(
+            result,
+            Err(RemoteFileError::UnsupportedProtocol(_))
+        ));
     }
 
     #[tokio::test]
@@ -442,15 +448,17 @@ mod tests {
         let data = b"This is larger than 10 bytes";
         let cursor = Cursor::new(data);
         let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
-        
+
         let result = handler
             .upload_file(uri, boxed_reader, data.len() as u64, None)
             .await;
-        
+
         assert!(result.is_err());
         if let Err(e) = result {
             match e {
-                RemoteFileError::Other(msg) => assert!(msg.contains("exceeds maximum allowed size")),
+                RemoteFileError::Other(msg) => {
+                    assert!(msg.contains("exceeds maximum allowed size"))
+                }
                 _ => panic!("Expected Other error with size limit message, got {:?}", e),
             }
         }
@@ -459,7 +467,7 @@ mod tests {
     #[tokio::test]
     async fn test_ftp_error_conversion() {
         use suppaftp::types::Response;
-        
+
         // Test 550 error (file not found)
         let error = FtpError::UnexpectedResponse(Response::new(550.into(), vec![]));
         let converted = FtpFileHandler::ftp_error_to_remote_error(error);

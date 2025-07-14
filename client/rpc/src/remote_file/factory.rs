@@ -1,4 +1,3 @@
-
 use super::{
     ftp::FtpFileHandler, http::HttpFileHandler, local::LocalFileHandler, RemoteFileConfig,
     RemoteFileError, RemoteFileHandler,
@@ -37,11 +36,17 @@ impl RemoteFileHandlerFactory {
         let url = match Url::parse(url_str) {
             Ok(url) => url,
             Err(_) => {
-                if url_str.starts_with('/') || url_str.starts_with("./") || url_str.starts_with("../") {
+                if url_str.starts_with('/')
+                    || url_str.starts_with("./")
+                    || url_str.starts_with("../")
+                {
                     Url::parse(&format!("file://{}", url_str))
                         .map_err(|e| RemoteFileError::InvalidUrl(format!("{}: {}", url_str, e)))?
                 } else {
-                    return Err(RemoteFileError::InvalidUrl(format!("Invalid URL: {}", url_str)));
+                    return Err(RemoteFileError::InvalidUrl(format!(
+                        "Invalid URL: {}",
+                        url_str
+                    )));
                 }
             }
         };
@@ -52,4 +57,3 @@ impl RemoteFileHandlerFactory {
         &["file", "http", "https", "ftp", "ftps"]
     }
 }
-
