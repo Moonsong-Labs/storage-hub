@@ -640,7 +640,7 @@ pub mod pallet {
 
             // Emit event.
             Self::deposit_event(Event::NewChallenge {
-                who: who,
+                who,
                 key_challenged: key,
             });
 
@@ -791,7 +791,7 @@ pub mod pallet {
 
             // Emit event.
             Self::deposit_event(Event::NewPriorityChallenge {
-                who: who,
+                who,
                 key_challenged: key,
                 should_remove_key,
             });
