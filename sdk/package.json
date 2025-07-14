@@ -15,6 +15,7 @@
         "dev": "node ./scripts/build.js --watch",
         "lint": "eslint \"{ts/**/*.ts,ts/**/*.tsx}\"",
         "format": "prettier --write \"{ts/**/*.ts,ts/**/*.tsx}\"",
+        "format:check": "prettier --check \"{ts/**/*.ts,ts/**/*.tsx}\"",
         "test": "vitest",
         "typecheck": "tsc --noEmit",
         "size": "size-limit",
