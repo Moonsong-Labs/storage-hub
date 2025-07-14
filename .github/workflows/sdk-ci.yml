@@ -77,6 +77,10 @@ jobs:
       - name: Run tests
         run: pnpm test -- --run
 
+      # Coverage check (fails if coverage <80%)
+      - name: Coverage
+        run: pnpm run coverage -- --run
+
 # TODO: Bundle size guard
 #   - name: Size limit
 #     run: pnpm size 
