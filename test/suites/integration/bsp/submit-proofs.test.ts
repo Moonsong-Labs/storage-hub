@@ -3,7 +3,6 @@ import {
   ShConsts,
   bspThreeKey,
   describeBspNet,
-  shUser,
   waitFor,
   type EnrichedBspApi,
   type FileMetadata
@@ -465,8 +464,35 @@ describeBspNet(
       }
     );
 
-    it("File is deleted by user", async () => {
-      // Get the root of the BSP that has the file before deletion.
+    it("Non-root user cannot initiate priority challenge", async () => {
+      // Attempt to call forcePriorityChallenge without sudo
+      const { events, extSuccess } = await userApi.block.seal({
+        calls: [
+          userApi.tx.proofsDealer.priorityChallenge(
+            oneBspfileMetadata.fileKey,
+            true // should_remove_key = true as test suite expects the file to be deleted.
+          )
+        ]
+      });
+
+      // The extrinsic should have failed.
+      assert.strictEqual(
+        extSuccess,
+        false,
+        "Non-root user should not be able to call forcePriorityChallenge"
+      );
+
+      // Get the event of the extrinsic failure.
+      const {
+        data: { dispatchError: eventInfo }
+      } = userApi.assert.fetchEvent(userApi.events.system.ExtrinsicFailed, events);
+
+      // Ensure it failed with BadOrigin error.
+      assert.strictEqual(eventInfo.isBadOrigin, true, "Error should be BadOrigin");
+    });
+
+    it("Priority challenge is initiated for file", async () => {
+      // Get the root of the BSP that has the file before priority challenge.
       const bspMetadata = await userApi.query.providers.backupStorageProviders(
         ShConsts.DUMMY_BSP_ID
       );
@@ -482,27 +508,41 @@ describeBspNet(
         "The root of the BSP should match the actual merkle forest root."
       );
 
-      // User sends file deletion request.
+      // Sudo initiates priority challenge for file removal.
       await userApi.block.seal({
         calls: [
-          userApi.tx.fileSystem.deleteFile(
-            oneBspfileMetadata.bucketId,
-            oneBspfileMetadata.fileKey,
-            oneBspfileMetadata.location,
-            oneBspfileMetadata.fileSize,
-            oneBspfileMetadata.fingerprint,
-            null
+          userApi.tx.sudo.sudo(
+            userApi.tx.proofsDealer.priorityChallenge(
+              oneBspfileMetadata.fileKey,
+              true // should_remove_key = true as test suite expects the file to be deleted.
+            )
           )
-        ],
-        signer: shUser
+        ]
       });
 
-      // Check for a file deletion request event.
-      await userApi.assert.eventPresent("fileSystem", "FileDeletionRequest");
-
-      // Wait for MSP to submit proof for the pending file deletion request
-      await userApi.wait.mspPendingFileDeletionRequestSubmitProof();
-      await userApi.block.seal();
+      // Check that the PriorityChallenge event was emitted.
+      const priorityChallengeEvent = await userApi.assert.eventPresent(
+        "proofsDealer",
+        "NewPriorityChallenge"
+      );
+      const priorityChallengeEventDataBlob =
+        userApi.events.proofsDealer.NewPriorityChallenge.is(priorityChallengeEvent.event) &&
+        priorityChallengeEvent.event.data;
+      assert(priorityChallengeEventDataBlob, "Event doesn't match Type");
+      strictEqual(
+        priorityChallengeEventDataBlob.keyChallenged.toString(),
+        oneBspfileMetadata.fileKey,
+        "The priority challenge event should contain the correct file key"
+      );
+      strictEqual(
+        priorityChallengeEventDataBlob.shouldRemoveKey.toString(),
+        "true",
+        "The priority challenge event should have shouldRemoveKey set to true"
+      );
+      assert(
+        priorityChallengeEventDataBlob.who.isNone,
+        "The priority challenge should be initiated by Root origin"
+      );
     });
 
     it("Priority challenge is included in checkpoint challenge round", async () => {

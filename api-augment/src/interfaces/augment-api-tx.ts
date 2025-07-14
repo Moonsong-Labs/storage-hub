@@ -2762,7 +2762,7 @@ declare module "@polkadot/api-base/types/submittable" {
       /**
        * Introduce a new challenge.
        *
-       * This function allows anyone to add a new challenge to the `ChallengesQueue`.
+       * This function allows authorized origins to add a new challenge to the `ChallengesQueue`.
        * The challenge will be dispatched in the coming blocks.
        * Users are charged a small fee for submitting a challenge, which
        * goes to the Treasury.
@@ -2782,6 +2782,13 @@ declare module "@polkadot/api-base/types/submittable" {
       forceInitialiseChallengeCycle: AugmentedSubmittable<
         (provider: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
+      >;
+      priorityChallenge: AugmentedSubmittable<
+        (
+          key: H256 | string | Uint8Array,
+          shouldRemoveKey: bool | boolean | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, bool]
       >;
       /**
        * Set the [`ChallengesTickerPaused`] to `true` or `false`.

@@ -162,6 +162,9 @@ pub type ChallengesQueueLengthFor<T> = <T as crate::Config>::ChallengesQueueLeng
 /// Syntactic sugar for the ChallengesFee type used in the proofs pallet.
 pub type ChallengesFeeFor<T> = <T as crate::Config>::ChallengesFee;
 
+/// Syntactic sugar for the PriorityChallengesFee type used in the proofs pallet.
+pub type PriorityChallengesFeeFor<T> = <T as crate::Config>::PriorityChallengesFee;
+
 /// Syntactic sugar for the StakeToChallengePeriod type used in the proofs pallet.
 pub type StakeToChallengePeriodFor<T> = <T as crate::Config>::StakeToChallengePeriod;
 

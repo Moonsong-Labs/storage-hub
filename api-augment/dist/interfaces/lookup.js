@@ -1721,8 +1721,13 @@ export default {
   PalletProofsDealerEvent: {
     _enum: {
       NewChallenge: {
-        who: "AccountId32",
+        who: "Option<AccountId32>",
         keyChallenged: "H256"
+      },
+      NewPriorityChallenge: {
+        who: "Option<AccountId32>",
+        keyChallenged: "H256",
+        shouldRemoveKey: "bool"
       },
       ProofAccepted: {
         providerId: "H256",
@@ -3860,6 +3865,10 @@ export default {
       },
       set_paused: {
         paused: "bool"
+      },
+      priority_challenge: {
+        key: "H256",
+        shouldRemoveKey: "bool"
       }
     }
   },

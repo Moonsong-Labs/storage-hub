@@ -20,6 +20,7 @@ pub mod weights;
 #[frame_support::pallet]
 pub mod pallet {
     use codec::FullCodec;
+    use frame_support::traits::{EnsureOrigin, OriginTrait};
     use frame_support::{
         dispatch::DispatchResultWithPostInfo,
         pallet_prelude::{ValueQuery, *},
@@ -171,6 +172,11 @@ pub mod pallet {
         #[pallet::constant]
         type ChallengesFee: Get<BalanceFor<Self>>;
 
+        /// The fee charged for submitting a priority challenge.
+        /// This fee goes to the Treasury, and is used to prevent spam.
+        #[pallet::constant]
+        type PriorityChallengesFee: Get<BalanceFor<Self>>;
+
         /// The target number of ticks for which to store the submitters that submitted valid proofs in them,
         /// stored in the `ValidProofSubmittersLastTicks` StorageMap. That storage will be trimmed down to this number
         /// of ticks in the `on_idle` hook of this pallet, to avoid bloating the state.
@@ -233,6 +239,12 @@ pub mod pallet {
         /// the execution of the `on_poll` hook bounded.
         #[pallet::constant]
         type MaxSlashableProvidersPerTick: Get<u32>;
+
+        /// Custom origin that can dispatch new priority challenges.
+        type PriorityChallengeOrigin: EnsureOrigin<Self::RuntimeOrigin>;
+
+        /// Custom origin that can dispatch regular challenges.
+        type ChallengeOrigin: EnsureOrigin<Self::RuntimeOrigin>;
     }
 
     #[pallet::pallet]
@@ -432,8 +444,15 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// A manual challenge was submitted.
         NewChallenge {
-            who: AccountIdFor<T>,
+            who: Option<AccountIdFor<T>>,
             key_challenged: KeyFor<T>,
+        },
+
+        /// A priority challenge was submitted.
+        NewPriorityChallenge {
+            who: Option<AccountIdFor<T>>,
+            key_challenged: KeyFor<T>,
+            should_remove_key: bool,
         },
 
         /// A proof was accepted.
@@ -605,15 +624,17 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         /// Introduce a new challenge.
         ///
-        /// This function allows anyone to add a new challenge to the `ChallengesQueue`.
+        /// This function allows authorized origins to add a new challenge to the `ChallengesQueue`.
         /// The challenge will be dispatched in the coming blocks.
         /// Users are charged a small fee for submitting a challenge, which
         /// goes to the Treasury.
         #[pallet::call_index(0)]
         #[pallet::weight(T::WeightInfo::challenge())]
         pub fn challenge(origin: OriginFor<T>, key: KeyFor<T>) -> DispatchResultWithPostInfo {
-            // Check that the extrinsic was signed and get the signer.
-            let who = ensure_signed(origin)?;
+            // Check that the extrinsic was executed by the custom origin.
+            T::ChallengeOrigin::ensure_origin(origin.clone())?;
+
+            let who = origin.into_signer();
 
             Self::do_challenge(&who, &key)?;
 
@@ -752,6 +773,31 @@ pub mod pallet {
             // This TX is free since is a sudo-only transaction used for testing.
             Ok(Pays::No.into())
         }
+
+        #[pallet::call_index(4)]
+        #[pallet::weight(Weight::zero())]
+        pub fn priority_challenge(
+            origin: OriginFor<T>,
+            key: KeyFor<T>,
+            should_remove_key: bool,
+        ) -> DispatchResultWithPostInfo {
+            // Check that the extrinsic was executed by the custom origin.
+            T::PriorityChallengeOrigin::ensure_origin(origin.clone())?;
+
+            let who = origin.into_signer();
+
+            // Execute priority challenge.
+            Self::do_priority_challenge(&who, &key, should_remove_key)?;
+
+            // Emit event.
+            Self::deposit_event(Event::NewPriorityChallenge {
+                who,
+                key_challenged: key,
+                should_remove_key,
+            });
+
+            Ok(().into())
+        }
     }
 
     #[pallet::hooks]
@@ -815,6 +861,8 @@ pub mod pallet {
         /// This integrity test checks that:
         /// 1. `CheckpointChallengePeriod` is greater or equal to the longest period a Provider can have.
         /// 2. `BlockFullnessPeriod` is smaller or equal than `ChallengeTicksTolerance`.
+        /// 3. If `ChallengesFee` is greater than 0, then `ChallengeOrigin` cannot be root or none (since root and none cannot be charged fees).
+        /// 4. If `PriorityChallengesFee` is greater than 0, then `PriorityChallengeOrigin` cannot be root or none (since root and none cannot be charged fees).
         ///
         /// Any code located in this hook is placed in an auto-generated test, and generated as a part
         /// of crate::construct_runtime's expansion.
@@ -840,6 +888,52 @@ pub mod pallet {
                 T::BlockFullnessPeriod::get(),
                 T::ChallengeTicksTolerance::get()
             );
+
+            // Check that if `ChallengeOrigin` allows root or none, then `ChallengesFee` must be zero.
+            // This prevents the misconfiguration where a fee is charged but the origin is root or none (which cannot be charged).
+
+            // Test if ChallengeOrigin accepts root origin
+            let root_origin = frame_system::RawOrigin::Root.into();
+            if T::ChallengeOrigin::try_origin(root_origin).is_ok() {
+                assert!(
+                    T::ChallengesFee::get().is_zero(),
+                    "ChallengesFee must be zero when ChallengeOrigin accepts root, as root cannot be charged fees. Current fee: {:?}",
+                    T::ChallengesFee::get()
+                );
+            }
+
+            // Test if ChallengeOrigin accepts none origin
+            let none_origin = frame_system::RawOrigin::None.into();
+            if T::ChallengeOrigin::try_origin(none_origin).is_ok() {
+                assert!(
+                    T::ChallengesFee::get().is_zero(),
+                    "ChallengesFee must be zero when ChallengeOrigin accepts none, as none cannot be charged fees. Current fee: {:?}",
+                    T::ChallengesFee::get()
+                );
+            }
+
+            // Check that if `PriorityChallengeOrigin` allows root or none, then `PriorityChallengesFee` must be zero.
+            // This prevents the misconfiguration where a fee is charged but the origin is root or none (which cannot be charged).
+
+            // Test if PriorityChallengeOrigin accepts root origin
+            let root_origin = frame_system::RawOrigin::Root.into();
+            if T::PriorityChallengeOrigin::try_origin(root_origin).is_ok() {
+                assert!(
+                    T::PriorityChallengesFee::get().is_zero(),
+                    "PriorityChallengesFee must be zero when PriorityChallengeOrigin accepts root, as root cannot be charged fees. Current fee: {:?}",
+                    T::PriorityChallengesFee::get()
+                );
+            }
+
+            // Test if PriorityChallengeOrigin accepts none origin
+            let none_origin = frame_system::RawOrigin::None.into();
+            if T::PriorityChallengeOrigin::try_origin(none_origin).is_ok() {
+                assert!(
+                    T::PriorityChallengesFee::get().is_zero(),
+                    "PriorityChallengesFee must be zero when PriorityChallengeOrigin accepts none, as none cannot be charged fees. Current fee: {:?}",
+                    T::PriorityChallengesFee::get()
+                );
+            }
         }
     }
 }

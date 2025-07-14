@@ -1689,6 +1689,11 @@ declare const _default: {
         who: string;
         keyChallenged: string;
       };
+      NewPriorityChallenge: {
+        who: string;
+        keyChallenged: string;
+        shouldRemoveKey: string;
+      };
       ProofAccepted: {
         providerId: string;
         proof: string;
@@ -3754,6 +3759,10 @@ declare const _default: {
       };
       set_paused: {
         paused: string;
+      };
+      priority_challenge: {
+        key: string;
+        shouldRemoveKey: string;
       };
     };
   };

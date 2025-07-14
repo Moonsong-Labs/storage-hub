@@ -2185,8 +2185,14 @@ declare module "@polkadot/types/lookup" {
   interface PalletProofsDealerEvent extends Enum {
     readonly isNewChallenge: boolean;
     readonly asNewChallenge: {
-      readonly who: AccountId32;
+      readonly who: Option<AccountId32>;
       readonly keyChallenged: H256;
+    } & Struct;
+    readonly isNewPriorityChallenge: boolean;
+    readonly asNewPriorityChallenge: {
+      readonly who: Option<AccountId32>;
+      readonly keyChallenged: H256;
+      readonly shouldRemoveKey: bool;
     } & Struct;
     readonly isProofAccepted: boolean;
     readonly asProofAccepted: {
@@ -2240,6 +2246,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly type:
       | "NewChallenge"
+      | "NewPriorityChallenge"
       | "ProofAccepted"
       | "NewChallengeSeed"
       | "NewCheckpointChallenge"
@@ -4654,7 +4661,17 @@ declare module "@polkadot/types/lookup" {
     readonly asSetPaused: {
       readonly paused: bool;
     } & Struct;
-    readonly type: "Challenge" | "SubmitProof" | "ForceInitialiseChallengeCycle" | "SetPaused";
+    readonly isPriorityChallenge: boolean;
+    readonly asPriorityChallenge: {
+      readonly key: H256;
+      readonly shouldRemoveKey: bool;
+    } & Struct;
+    readonly type:
+      | "Challenge"
+      | "SubmitProof"
+      | "ForceInitialiseChallengeCycle"
+      | "SetPaused"
+      | "PriorityChallenge";
   }
   /** @name PalletRandomnessCall (382) */
   interface PalletRandomnessCall extends Enum {
