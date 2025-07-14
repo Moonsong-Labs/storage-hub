@@ -1,7 +1,10 @@
 [package]
-name = "storagehub_wasm"
+name = "storagehub-wasm"
 version = "0.1.0"
 edition = "2021"
+description = "WASM support for the StorageHub SDK"
+license = "Apache-2.0"
+repository = "https://github.com/moonsong-labs/storage-hub"
 
 [lib]
 crate-type = ["cdylib"]
