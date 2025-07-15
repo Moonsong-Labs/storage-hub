@@ -422,6 +422,23 @@ impl ProviderConfigurations {
     }
 }
 
+/// Configuration for the Fisherman monitoring service
+#[derive(Debug, Parser, Clone)]
+pub struct FishermanConfigurations {
+    /// Run fisherman monitoring service.
+    ///
+    /// When enabled, the fisherman will monitor storage provider behavior,
+    /// validate proofs, and detect potential misbehavior on the network.
+    /// This automatically enables the indexer service as it depends on
+    /// indexed blockchain data for monitoring operations.
+    ///
+    /// Requires: Database URL (--database-url or DATABASE_URL env var)
+    ///
+    /// Example: --fisherman
+    #[arg(long)]
+    pub fisherman: bool,
+}
+
 #[derive(Debug, Parser, Clone)]
 pub struct IndexerConfigurations {
     /// Whether to enable the indexer.
@@ -534,6 +551,10 @@ pub struct Cli {
     /// Indexer configurations
     #[command(flatten)]
     pub indexer_config: IndexerConfigurations,
+
+    /// Fisherman monitoring service configurations
+    #[command(flatten)]
+    pub fisherman_config: FishermanConfigurations,
 }
 
 #[derive(Debug, Parser)]

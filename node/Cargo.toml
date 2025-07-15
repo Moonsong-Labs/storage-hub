@@ -53,6 +53,7 @@ shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-indexer-db = { workspace = true }
 shc-indexer-service = { workspace = true }
+shc-fisherman-service = { path = "../client/fisherman-service" }
 shc-rpc = { workspace = true }
 shc-client = { workspace = true }
 shp-constants = { workspace = true }

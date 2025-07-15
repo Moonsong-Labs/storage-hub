@@ -27,6 +27,7 @@ members = [
 	"client/forest-manager",
 	"client/indexer-db",
 	"client/indexer-service",
+	"client/fisherman-service",
 	"client/rpc",
 	"primitives/*",
 	"xcm-simulator",
