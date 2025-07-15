@@ -19,8 +19,9 @@
         "test": "vitest",
         "typecheck": "tsc --noEmit",
         "size": "size-limit",
+        "ensure:wasm-pack": "command -v wasm-pack >/dev/null 2>&1 || (rustup target add wasm32-unknown-unknown && cargo install wasm-pack --locked)",
         "build:wasm": "wasm-pack build ./wasm --target nodejs --release --out-dir pkg",
-        "preinstall": "pnpm run build:wasm",
+        "preinstall": "pnpm run ensure:wasm-pack && pnpm run build:wasm",
         "coverage": "vitest run --coverage"
     },
     "exports": {
