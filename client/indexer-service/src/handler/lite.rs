@@ -1,15 +1,16 @@
 //! Lite mode event handlers for the indexer service.
-//! 
+//!
 //! This module contains all lite mode event handlers that process events
 //! without MSP-specific filtering. All events are indexed in lite mode
 //! for future filtering logic implementation.
 
-use crate::handler::Handler;
 use anyhow::Result;
-use diesel_async::AsyncPgConnection as DbConnection;
-use sh_rust_storage_client::StorageClient as Storage;
+use log::trace;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_indexer_db::DbConnection;
 use storage_hub_runtime::{Hash as H256, RuntimeEvent};
-use tracing::trace;
+
+use super::IndexerService;
 
 use pallet_bucket_nfts;
 use pallet_file_system;
@@ -20,8 +21,12 @@ use pallet_storage_providers;
 
 const LOG_TARGET: &str = "indexer-service::lite_handlers";
 
-impl Handler {
-    pub(crate) async fn index_event_lite<'a, 'b: 'a>(
+impl<RuntimeApi> IndexerService<RuntimeApi>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+{
+    pub(super) async fn index_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
@@ -29,24 +34,27 @@ impl Handler {
     ) -> Result<(), diesel::result::Error> {
         match event {
             RuntimeEvent::FileSystem(event) => {
-                self.index_file_system_event_lite(conn, event)
-                    .await?
+                self.index_file_system_event_lite(conn, event).await?
             }
             RuntimeEvent::Providers(event) => {
                 self.index_providers_event_lite(conn, event, block_hash)
                     .await?
             }
             RuntimeEvent::BucketNfts(event) => {
-                self.index_bucket_nfts_event_lite(conn, event, block_hash).await?
+                self.index_bucket_nfts_event_lite(conn, event, block_hash)
+                    .await?
             }
             RuntimeEvent::PaymentStreams(event) => {
-                self.index_payment_streams_event_lite(conn, event, block_hash).await?
+                self.index_payment_streams_event_lite(conn, event, block_hash)
+                    .await?
             }
             RuntimeEvent::ProofsDealer(event) => {
-                self.index_proofs_dealer_event_lite(conn, event, block_hash).await?
+                self.index_proofs_dealer_event_lite(conn, event, block_hash)
+                    .await?
             }
             RuntimeEvent::Randomness(event) => {
-                self.index_randomness_event_lite(conn, event, block_hash).await?
+                self.index_randomness_event_lite(conn, event, block_hash)
+                    .await?
             }
             // System pallets - explicitly list all to ensure compilation errors on new events
             RuntimeEvent::System(_) => {}
@@ -146,7 +154,9 @@ impl Handler {
             | pallet_storage_providers::Event::BucketRootChanged { .. }
             | pallet_storage_providers::Event::ValuePropAdded { .. }
             | pallet_storage_providers::Event::ValuePropUnavailable { .. }
-            | pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider { .. }
+            | pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
+                ..
+            }
             | pallet_storage_providers::Event::FailedToSlashInsolventProvider { .. }
             | pallet_storage_providers::Event::FailedToStopAllCyclesForInsolventBsp { .. }
             | pallet_storage_providers::Event::FailedToInsertProviderTopUpExpiration { .. }

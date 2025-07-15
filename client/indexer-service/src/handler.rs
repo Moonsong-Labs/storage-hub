@@ -24,7 +24,7 @@ use sp_core::H256;
 use sp_runtime::traits::Header;
 use storage_hub_runtime::RuntimeEvent;
 
-mod lite_handlers;
+mod lite;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
 
