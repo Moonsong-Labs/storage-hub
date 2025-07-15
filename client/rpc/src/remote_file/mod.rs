@@ -85,7 +85,7 @@ pub trait RemoteFileHandler: Send + Sync {
 
     async fn upload_file(
         &self,
-        uri: &str,
+        url: &Url,
         data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
         size: u64,
         content_type: Option<String>,
