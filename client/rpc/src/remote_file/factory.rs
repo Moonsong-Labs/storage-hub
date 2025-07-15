@@ -11,19 +11,23 @@ impl RemoteFileHandlerFactory {
     pub fn create(
         url: &Url,
         config: RemoteFileConfig,
-    ) -> Result<Arc<dyn RemoteFileHandler>, RemoteFileError> {
+    ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
         match url.scheme() {
-            "" | "file" => Ok(Arc::new(LocalFileHandler::new()) as Arc<dyn RemoteFileHandler>),
+            "" | "file" => Ok((
+                Arc::new(LocalFileHandler::new()) as Arc<dyn RemoteFileHandler>,
+                url.clone(),
+            )),
 
             "http" | "https" => HttpFileHandler::new(config)
-                .map(|h| Arc::new(h) as Arc<dyn RemoteFileHandler>)
+                .map(|h| (Arc::new(h) as Arc<dyn RemoteFileHandler>, url.clone()))
                 .map_err(|e| {
                     RemoteFileError::Other(format!("Failed to create HTTP handler: {}", e))
                 }),
 
-            "ftp" | "ftps" => {
-                Ok(Arc::new(FtpFileHandler::new(config)) as Arc<dyn RemoteFileHandler>)
-            }
+            "ftp" | "ftps" => Ok((
+                Arc::new(FtpFileHandler::new(config)) as Arc<dyn RemoteFileHandler>,
+                url.clone(),
+            )),
 
             scheme => Err(RemoteFileError::UnsupportedProtocol(scheme.to_string())),
         }
@@ -32,7 +36,7 @@ impl RemoteFileHandlerFactory {
     pub fn create_from_string(
         url_str: &str,
         config: RemoteFileConfig,
-    ) -> Result<Arc<dyn RemoteFileHandler>, RemoteFileError> {
+    ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
         let url = match Url::parse(url_str) {
             Ok(url) => url,
             Err(_) => {
