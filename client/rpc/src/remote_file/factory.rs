@@ -41,14 +41,6 @@ impl RemoteFileHandlerFactory {
         let url = match Url::parse(url_str) {
             Ok(url) => url,
             Err(_) => {
-                // Check if the string contains "://" - if it does, it's a malformed URL with a scheme
-                if url_str.contains("://") {
-                    return Err(RemoteFileError::InvalidUrl(format!(
-                        "Malformed URL with scheme: {}",
-                        url_str
-                    )));
-                }
-
                 // Handle local paths
                 if url_str.starts_with('/')
                     || url_str.starts_with("./")

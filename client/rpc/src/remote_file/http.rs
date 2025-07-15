@@ -429,7 +429,8 @@ mod tests {
         let url = Url::parse(&format!(
             "http://user:pass@{}/secure-upload.txt",
             server.host_with_port()
-        )).unwrap();
+        ))
+        .unwrap();
 
         handler.upload_file(&url, reader, 6, None).await.unwrap();
     }
@@ -453,7 +454,6 @@ mod tests {
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
 
-
     #[tokio::test]
     async fn test_upload_file_unsupported_protocol() {
         let handler = create_test_handler();
@@ -461,9 +461,7 @@ mod tests {
         let reader = Box::new(std::io::Cursor::new(data));
 
         let url = Url::parse("ftp://example.com/file.txt").unwrap();
-        let result = handler
-            .upload_file(&url, reader, 4, None)
-            .await;
+        let result = handler.upload_file(&url, reader, 4, None).await;
 
         assert!(matches!(
             result,

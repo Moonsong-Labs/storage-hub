@@ -44,7 +44,6 @@ impl LocalFileHandler {
 
         Ok(())
     }
-
 }
 
 impl Default for LocalFileHandler {
@@ -293,12 +292,7 @@ mod tests {
 
         let url = Url::from_file_path(&file_path).unwrap();
         handler
-            .upload_file(
-                &url,
-                data,
-                test_content.len() as u64,
-                None,
-            )
+            .upload_file(&url, data, test_content.len() as u64, None)
             .await
             .unwrap();
 
@@ -319,12 +313,7 @@ mod tests {
 
         let url = Url::from_file_path(temp_file.path()).unwrap();
         handler
-            .upload_file(
-                &url,
-                data,
-                test_content.len() as u64,
-                None,
-            )
+            .upload_file(&url, data, test_content.len() as u64, None)
             .await
             .unwrap();
 
@@ -344,12 +333,7 @@ mod tests {
 
         let url = Url::from_file_path(&file_path).unwrap();
         handler
-            .upload_file(
-                &url,
-                data,
-                large_content.len() as u64,
-                None,
-            )
+            .upload_file(&url, data, large_content.len() as u64, None)
             .await
             .unwrap();
 
@@ -380,12 +364,7 @@ mod tests {
 
         let url = Url::from_file_path(&file_path).unwrap();
         let result = handler
-            .upload_file(
-                &url,
-                data,
-                test_content.len() as u64,
-                None,
-            )
+            .upload_file(&url, data, test_content.len() as u64, None)
             .await;
 
         tokio::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o755))

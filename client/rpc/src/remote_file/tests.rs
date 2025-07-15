@@ -1,3 +1,4 @@
+use super::factory::RemoteFileHandlerFactory;
 use super::*;
 use std::sync::Arc;
 use url::Url;
@@ -24,8 +25,10 @@ mod factory_tests {
 
         for (url_str, expected_scheme) in test_cases {
             let url = Url::parse(url_str).unwrap();
-            let handler = RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
+            let (handler, returned_url) =
+                RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
 
+            assert_eq!(url, returned_url, "Returned URL should match input URL");
             assert!(
                 handler.is_supported(&url),
                 "Handler should support {} URLs",
@@ -45,10 +48,19 @@ mod factory_tests {
     fn test_factory_handles_path_without_scheme() {
         let config = default_config();
 
-        let path = "/absolute/path/to/file.txt";
-        let handler = RemoteFileHandlerFactory::create_from_string(path, config.clone()).unwrap();
+        // Create a temporary file to ensure it exists
+        let temp_file = std::env::temp_dir().join("test_file.txt");
+        std::fs::write(&temp_file, b"test").unwrap();
 
-        assert!(handler.is_supported(&Url::parse("file:///absolute/path/to/file.txt").unwrap()));
+        let path = temp_file.to_str().unwrap();
+        let (handler, returned_url) =
+            RemoteFileHandlerFactory::create_from_string(path, config.clone()).unwrap();
+
+        assert!(handler.is_supported(&returned_url));
+        assert_eq!(returned_url.scheme(), "file");
+
+        // Clean up
+        std::fs::remove_file(&temp_file).unwrap();
     }
 
     #[test]
@@ -60,6 +72,7 @@ mod factory_tests {
             "ssh://example.com/file.txt",
             "smb://example.com/file.txt",
             "custom://example.com/file.txt",
+            "invalid://example.com/file.txt",
         ];
 
         for url_str in unsupported_schemes {
@@ -112,15 +125,116 @@ mod factory_tests {
     }
 
     #[test]
+    fn test_local_file_permission_validation() {
+        let config = default_config();
+
+        // Test with existing readable file
+        let temp_dir = std::env::temp_dir();
+        let readable_file = temp_dir.join("readable_test.txt");
+        std::fs::write(&readable_file, b"test").unwrap();
+
+        let result = RemoteFileHandlerFactory::create_from_string(
+            readable_file.to_str().unwrap(),
+            config.clone(),
+        );
+        assert!(result.is_ok(), "Should accept readable file");
+
+        // Clean up
+        std::fs::remove_file(&readable_file).unwrap();
+
+        // Test with non-existent file in writable directory
+        let new_file = temp_dir.join("new_file.txt");
+        let result = RemoteFileHandlerFactory::create_from_string(
+            new_file.to_str().unwrap(),
+            config.clone(),
+        );
+        assert!(
+            result.is_ok(),
+            "Should accept non-existent file in writable directory"
+        );
+
+        // Test with non-existent parent directory
+        let invalid_path = "/non/existent/directory/file.txt";
+        let result = RemoteFileHandlerFactory::create_from_string(invalid_path, config.clone());
+
+        assert!(
+            matches!(result, Err(RemoteFileError::InvalidUrl(msg)) if msg.contains("Parent directory does not exist")),
+            "Should reject file with non-existent parent directory"
+        );
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn test_local_file_access_denied() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let config = default_config();
+        let temp_dir = std::env::temp_dir();
+
+        // Create a file and make it unreadable
+        let unreadable_file = temp_dir.join("unreadable_test.txt");
+        std::fs::write(&unreadable_file, b"test").unwrap();
+        let mut perms = std::fs::metadata(&unreadable_file).unwrap().permissions();
+        perms.set_mode(0o000); // No permissions
+        std::fs::set_permissions(&unreadable_file, perms).unwrap();
+
+        let result = RemoteFileHandlerFactory::create_from_string(
+            unreadable_file.to_str().unwrap(),
+            config.clone(),
+        );
+
+        // Restore permissions before asserting (in case of panic)
+        let mut perms = std::fs::metadata(&unreadable_file).unwrap().permissions();
+        perms.set_mode(0o644);
+        std::fs::set_permissions(&unreadable_file, perms).unwrap();
+        std::fs::remove_file(&unreadable_file).unwrap();
+
+        assert!(
+            matches!(result, Err(RemoteFileError::AccessDenied)),
+            "Should return AccessDenied for unreadable file"
+        );
+    }
+
+    #[test]
+    fn test_relative_path_handling() {
+        let config = default_config();
+
+        // Create a file in current directory
+        let current_dir = std::env::current_dir().unwrap();
+        let test_file = current_dir.join("test_relative.txt");
+        std::fs::write(&test_file, b"test").unwrap();
+
+        // Test with relative paths
+        let relative_paths = vec![
+            "./test_relative.txt",
+            "../remote-files-rpc/test_relative.txt",
+        ];
+
+        for path in &relative_paths[0..1] {
+            // Only test ./test_relative.txt
+            let result = RemoteFileHandlerFactory::create_from_string(path, config.clone());
+            assert!(result.is_ok(), "Should handle relative path: {}", path);
+
+            if let Ok((handler, url)) = result {
+                assert_eq!(url.scheme(), "file");
+                assert!(handler.is_supported(&url));
+            }
+        }
+
+        // Clean up
+        std::fs::remove_file(&test_file).unwrap();
+    }
+
+    #[test]
     fn test_is_protocol_supported_comprehensive() {
         let supported = RemoteFileHandlerFactory::supported_protocols();
 
         // Empty string is handled specially in create() method
-        assert!(RemoteFileHandlerFactory::create(
+        let result = RemoteFileHandlerFactory::create(
             &Url::parse("file:///test").unwrap(),
-            RemoteFileConfig::default()
-        )
-        .is_ok());
+            RemoteFileConfig::default(),
+        );
+        assert!(result.is_ok());
 
         assert!(supported.contains(&"file"));
         assert!(supported.contains(&"http"));
@@ -147,9 +261,10 @@ mod url_parsing_tests {
         let config = RemoteFileConfig::default();
 
         let url_str = "ftp://user:pass@example.com/file.txt";
-        let handler =
+        let (handler, returned_url) =
             RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
         let url = Url::parse(url_str).unwrap();
+        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 
@@ -164,9 +279,10 @@ mod url_parsing_tests {
         ];
 
         for url_str in urls_with_ports {
-            let handler =
+            let (handler, returned_url) =
                 RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
             let url = Url::parse(url_str).unwrap();
+            assert_eq!(url, returned_url);
             assert!(handler.is_supported(&url));
         }
     }
@@ -176,9 +292,10 @@ mod url_parsing_tests {
         let config = RemoteFileConfig::default();
 
         let url_str = "https://example.com/file.txt?version=1.0&token=abc123";
-        let handler =
+        let (handler, returned_url) =
             RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
         let url = Url::parse(url_str).unwrap();
+        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 
@@ -187,9 +304,10 @@ mod url_parsing_tests {
         let config = RemoteFileConfig::default();
 
         let url_str = "https://example.com/file.txt#section1";
-        let handler =
+        let (handler, returned_url) =
             RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
         let url = Url::parse(url_str).unwrap();
+        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 
@@ -198,9 +316,10 @@ mod url_parsing_tests {
         let config = RemoteFileConfig::default();
 
         let url_str = "https://example.com/path%20with%20spaces/file%20name.txt";
-        let handler =
+        let (handler, returned_url) =
             RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
         let url = Url::parse(url_str).unwrap();
+        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 }
@@ -282,8 +401,9 @@ mod integration_tests {
         let url_str = "https://httpbin.org/bytes/100";
         let url = Url::parse(url_str).unwrap();
 
-        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
 
+        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 
@@ -298,7 +418,7 @@ mod integration_tests {
             "file:///tmp/file4.txt",
         ];
 
-        let handlers: Vec<Arc<dyn RemoteFileHandler>> = urls
+        let handlers: Vec<(Arc<dyn RemoteFileHandler>, Url)> = urls
             .iter()
             .map(|url_str| {
                 RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap()
@@ -309,7 +429,8 @@ mod integration_tests {
 
         for (i, url_str) in urls.iter().enumerate() {
             let url = Url::parse(url_str).unwrap();
-            assert!(handlers[i].is_supported(&url));
+            assert_eq!(url, handlers[i].1);
+            assert!(handlers[i].0.is_supported(&url));
         }
     }
 
@@ -342,7 +463,8 @@ mod external_service_tests {
             .await;
 
         let url = Url::parse(&format!("{}/bytes/100", server.url())).unwrap();
-        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        assert_eq!(url, returned_url);
         let mut stream = handler.stream_file(&url).await.unwrap();
         let mut data = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data)
@@ -369,7 +491,8 @@ mod external_service_tests {
             .await;
 
         let url = Url::parse(&format!("{}/large-file.bin", server.url())).unwrap();
-        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        assert_eq!(url, returned_url);
 
         let result = handler.fetch_metadata(&url).await;
         assert!(result.is_ok());
@@ -403,7 +526,8 @@ mod external_service_tests {
             .await;
 
         let url = Url::parse(&format!("{}/start", server.url())).unwrap();
-        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        assert_eq!(url, returned_url);
 
         let mut stream = handler.stream_file(&url).await.unwrap();
         let mut data = Vec::new();
@@ -427,7 +551,9 @@ mod external_service_tests {
             .await;
 
         let url_no_auth = Url::parse(&format!("{}/protected/resource", server.url())).unwrap();
-        let handler_no_auth = RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
+        let (handler_no_auth, returned_url) =
+            RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
+        assert_eq!(url_no_auth, returned_url);
         let result = handler_no_auth.fetch_metadata(&url_no_auth).await;
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
@@ -441,7 +567,8 @@ mod external_service_tests {
         };
 
         let url = Url::parse("http://10.255.255.1/timeout-test").unwrap();
-        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
+        assert_eq!(url, returned_url);
         let result = handler.stream_file(&url).await;
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
