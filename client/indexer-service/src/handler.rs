@@ -212,11 +212,12 @@ where
         }
 
         // now index the blocks
-        for (block_number, block_hash) in blocks_to_index {
+        for (block_number, block_hash, msp_id) in blocks_to_index {
             self.index_block(
                 &mut db_conn,
                 block_number as BlockNumber,
                 block_hash,
+                msp_id,
             )
             .await?
         }
@@ -229,6 +230,7 @@ where
         conn: &mut DbConnection<'a>,
         block_number: BlockNumber,
         block_hash: H256,
+        msp_id: Option<ProviderId>,
     ) -> Result<(), IndexBlockError> {
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
 
@@ -324,18 +326,17 @@ where
                 self.index_providers_event_lite(conn, event, block_hash)
                     .await?
             }
-            // Explicitly ignore other pallets in lite mode
-            RuntimeEvent::BucketNfts(_) => {
-                trace!(target: LOG_TARGET, "Ignoring BucketNfts event in lite mode");
+            RuntimeEvent::BucketNfts(event) => {
+                self.index_bucket_nfts_event_lite(conn, event, block_hash).await?
             }
-            RuntimeEvent::PaymentStreams(_) => {
-                trace!(target: LOG_TARGET, "Ignoring PaymentStreams event in lite mode");
+            RuntimeEvent::PaymentStreams(event) => {
+                self.index_payment_streams_event_lite(conn, event, block_hash).await?
             }
-            RuntimeEvent::ProofsDealer(_) => {
-                trace!(target: LOG_TARGET, "Ignoring ProofsDealer event in lite mode");
+            RuntimeEvent::ProofsDealer(event) => {
+                self.index_proofs_dealer_event_lite(conn, event, block_hash).await?
             }
-            RuntimeEvent::Randomness(_) => {
-                trace!(target: LOG_TARGET, "Ignoring Randomness event in lite mode");
+            RuntimeEvent::Randomness(event) => {
+                self.index_randomness_event_lite(conn, event, block_hash).await?
             }
             // System pallets - explicitly list all to ensure compilation errors on new events
             RuntimeEvent::System(_) => {}
@@ -948,6 +949,106 @@ where
             pallet_randomness::Event::NewOneEpochAgoRandomnessAvailable { .. } => {}
             pallet_randomness::Event::__Ignore(_, _) => {}
         }
+        Ok(())
+    }
+
+    async fn index_bucket_nfts_event_lite<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &pallet_bucket_nfts::Event<storage_hub_runtime::Runtime>,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        let should_index = match event {
+            // All events return true for now - ready for future filtering logic
+            pallet_bucket_nfts::Event::AccessShared { .. }
+            | pallet_bucket_nfts::Event::ItemReadAccessUpdated { .. }
+            | pallet_bucket_nfts::Event::ItemBurned { .. }
+            | pallet_bucket_nfts::Event::__Ignore { .. } => true,
+        };
+
+        if should_index {
+            self.index_bucket_nfts_event(conn, event).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn index_payment_streams_event_lite<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        let should_index = match event {
+            // All events return true for now - ready for future filtering logic
+            pallet_payment_streams::Event::PaymentStreamCreated { .. }
+            | pallet_payment_streams::Event::PaymentStreamUpdated { .. }
+            | pallet_payment_streams::Event::PaymentStreamCharged { .. }
+            | pallet_payment_streams::Event::PaymentStreamClosed { .. }
+            | pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. }
+            | pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. }
+            | pallet_payment_streams::Event::ProviderChargeableInfoUpdated { .. }
+            | pallet_payment_streams::Event::UserChargeableInfoUpdated { .. }
+            | pallet_payment_streams::Event::LastChargeableInfoUpdated { .. }
+            | pallet_payment_streams::Event::LastChargeableInfoRemoved { .. }
+            | pallet_payment_streams::Event::ProviderInsolvent { .. }
+            | pallet_payment_streams::Event::UserPaidDebts { .. }
+            | pallet_payment_streams::Event::UserSolvent { .. }
+            | pallet_payment_streams::Event::ChargeError { .. }
+            | pallet_payment_streams::Event::__Ignore { .. } => true,
+        };
+
+        if should_index {
+            self.index_payment_streams_event(conn, event).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn index_proofs_dealer_event_lite<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        let should_index = match event {
+            // All events return true for now - ready for future filtering logic
+            pallet_proofs_dealer::Event::ChallengeInitialised { .. }
+            | pallet_proofs_dealer::Event::ProofAccepted { .. }
+            | pallet_proofs_dealer::Event::NewChallengeSeed { .. }
+            | pallet_proofs_dealer::Event::MutationsApplied { .. }
+            | pallet_proofs_dealer::Event::NewChallengeCycleInitialised { .. }
+            | pallet_proofs_dealer::Event::SlashableProvider { .. }
+            | pallet_proofs_dealer::Event::ChallengesTickResult { .. }
+            | pallet_proofs_dealer::Event::ChallengesFailed { .. }
+            | pallet_proofs_dealer::Event::CheckpointChallengesFailed { .. }
+            | pallet_proofs_dealer::Event::ChallengePrioritiesSet { .. }
+            | pallet_proofs_dealer::Event::__Ignore { .. } => true,
+        };
+
+        if should_index {
+            self.index_proofs_dealer_event(conn, event).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn index_randomness_event_lite<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &pallet_randomness::Event<storage_hub_runtime::Runtime>,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        let should_index = match event {
+            // All events return true for now - ready for future filtering logic
+            pallet_randomness::Event::NewOneEpochAgoRandomnessAvailable { .. }
+            | pallet_randomness::Event::__Ignore { .. } => true,
+        };
+
+        if should_index {
+            self.index_randomness_event(conn, event).await?;
+        }
+
         Ok(())
     }
 }
