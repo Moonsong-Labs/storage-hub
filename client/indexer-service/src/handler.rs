@@ -1,7 +1,6 @@
-use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
-use log::{error, info, trace};
+use log::{error, info};
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::StorageProviderId;
 use sp_runtime::AccountId32;
@@ -18,7 +17,7 @@ use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{BlockNumber, ParachainClient},
 };
-use shc_indexer_db::{models::*, schema::msp, DbConnection, DbPool};
+use shc_indexer_db::{models::*, DbConnection, DbPool};
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_runtime::traits::Header;

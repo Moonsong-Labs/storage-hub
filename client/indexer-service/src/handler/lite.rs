@@ -176,7 +176,7 @@ where
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_bucket_nfts::Event<storage_hub_runtime::Runtime>,
-        block_hash: H256,
+        _block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
@@ -197,24 +197,24 @@ where
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
-        block_hash: H256,
+        _block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
-            pallet_payment_streams::Event::PaymentStreamCreated { .. }
-            | pallet_payment_streams::Event::PaymentStreamUpdated { .. }
-            | pallet_payment_streams::Event::PaymentStreamCharged { .. }
-            | pallet_payment_streams::Event::PaymentStreamClosed { .. }
+            pallet_payment_streams::Event::FixedRatePaymentStreamCreated { .. }
+            | pallet_payment_streams::Event::FixedRatePaymentStreamUpdated { .. }
+            | pallet_payment_streams::Event::FixedRatePaymentStreamDeleted { .. }
+            | pallet_payment_streams::Event::DynamicRatePaymentStreamCreated { .. }
             | pallet_payment_streams::Event::DynamicRatePaymentStreamUpdated { .. }
             | pallet_payment_streams::Event::DynamicRatePaymentStreamDeleted { .. }
-            | pallet_payment_streams::Event::ProviderChargeableInfoUpdated { .. }
-            | pallet_payment_streams::Event::UserChargeableInfoUpdated { .. }
+            | pallet_payment_streams::Event::PaymentStreamCharged { .. }
+            | pallet_payment_streams::Event::UsersCharged { .. }
             | pallet_payment_streams::Event::LastChargeableInfoUpdated { .. }
-            | pallet_payment_streams::Event::LastChargeableInfoRemoved { .. }
-            | pallet_payment_streams::Event::ProviderInsolvent { .. }
-            | pallet_payment_streams::Event::UserPaidDebts { .. }
+            | pallet_payment_streams::Event::UserWithoutFunds { .. }
+            | pallet_payment_streams::Event::UserPaidAllDebts { .. }
+            | pallet_payment_streams::Event::UserPaidSomeDebts { .. }
             | pallet_payment_streams::Event::UserSolvent { .. }
-            | pallet_payment_streams::Event::ChargeError { .. }
+            | pallet_payment_streams::Event::InconsistentTickProcessing { .. }
             | pallet_payment_streams::Event::__Ignore { .. } => true,
         };
 
@@ -229,20 +229,20 @@ where
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
-        block_hash: H256,
+        _block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
-            pallet_proofs_dealer::Event::ChallengeInitialised { .. }
+            pallet_proofs_dealer::Event::NewChallenge { .. }
             | pallet_proofs_dealer::Event::ProofAccepted { .. }
             | pallet_proofs_dealer::Event::NewChallengeSeed { .. }
-            | pallet_proofs_dealer::Event::MutationsApplied { .. }
-            | pallet_proofs_dealer::Event::NewChallengeCycleInitialised { .. }
+            | pallet_proofs_dealer::Event::NewCheckpointChallenge { .. }
             | pallet_proofs_dealer::Event::SlashableProvider { .. }
-            | pallet_proofs_dealer::Event::ChallengesTickResult { .. }
-            | pallet_proofs_dealer::Event::ChallengesFailed { .. }
-            | pallet_proofs_dealer::Event::CheckpointChallengesFailed { .. }
-            | pallet_proofs_dealer::Event::ChallengePrioritiesSet { .. }
+            | pallet_proofs_dealer::Event::NoRecordOfLastSubmittedProof { .. }
+            | pallet_proofs_dealer::Event::NewChallengeCycleInitialised { .. }
+            | pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. }
+            | pallet_proofs_dealer::Event::MutationsApplied { .. }
+            | pallet_proofs_dealer::Event::ChallengesTickerSet { .. }
             | pallet_proofs_dealer::Event::__Ignore { .. } => true,
         };
 
@@ -257,7 +257,7 @@ where
         &'b self,
         conn: &mut DbConnection<'a>,
         event: &pallet_randomness::Event<storage_hub_runtime::Runtime>,
-        block_hash: H256,
+        _block_hash: H256,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
