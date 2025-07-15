@@ -8,7 +8,7 @@ if [ ! -f "package.json" ]; then
 fi
 
 # 1. Clean previous artefacts
-rm -rf node_modules wasm/pkg
+rm -rf node_modules wasm/pkg/*
 
 # 2. Build WASM package so pkg/ exists before install
 wasm-pack build ./wasm --target nodejs --release --out-dir pkg
