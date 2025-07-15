@@ -330,12 +330,8 @@ where
         check_if_safe(ext)?;
 
         let config = RemoteFileConfig::default();
-        let handler = RemoteFileHandlerFactory::create_from_string(&file_path, config)
+        let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
-
-        let url = url::Url::parse(&file_path)
-            .or_else(|_| url::Url::parse(&format!("file://{}", file_path)))
-            .map_err(|e| into_rpc_error(format!("Invalid file path or URL: {:?}", e)))?;
 
         let (file_size, _content_type) = handler
             .fetch_metadata(&url)
@@ -493,12 +489,8 @@ where
         }
 
         let config = RemoteFileConfig::default();
-        let handler = if let Ok(url) = url::Url::parse(&file_path) {
-            RemoteFileHandlerFactory::create(&url, config)
-                .map_err(|e| into_rpc_error(format!("Failed to create file handler: {}", e)))?
-        } else {
-            Arc::new(local::LocalFileHandler::new()) as Arc<dyn RemoteFileHandler>
-        };
+        let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
+            .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
         let mut chunks = Vec::new();
         for chunk_idx in 0..total_chunks {
@@ -520,7 +512,7 @@ where
 
         let file_size = file_metadata.file_size();
         handler
-            .upload_file(&file_path, boxed_reader, file_size, None)
+            .upload_file(&url, boxed_reader, file_size, None)
             .await
             .map_err(|e| into_rpc_error(format!("Failed to save file: {}", e)))?;
 
