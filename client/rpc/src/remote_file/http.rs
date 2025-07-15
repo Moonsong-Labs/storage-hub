@@ -196,14 +196,12 @@ impl RemoteFileHandler for HttpFileHandler {
 
     async fn upload_file(
         &self,
-        uri: &str,
+        url: &Url,
         data: Box<dyn AsyncRead + Send + Unpin>,
         size: u64,
         content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        let url = Url::parse(uri).map_err(|e| RemoteFileError::InvalidUrl(e.to_string()))?;
-
-        if !self.is_supported(&url) {
+        if !self.is_supported(url) {
             return Err(RemoteFileError::UnsupportedProtocol(
                 url.scheme().to_string(),
             ));
@@ -388,7 +386,7 @@ mod tests {
 
         let data = b"Hello, World!";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/upload.txt", server.url());
+        let url = Url::parse(&format!("{}/upload.txt", server.url())).unwrap();
 
         handler
             .upload_file(&url, reader, 13, Some("text/plain".to_string()))
@@ -409,7 +407,7 @@ mod tests {
 
         let data = b"test";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/upload2.txt", server.url());
+        let url = Url::parse(&format!("{}/upload2.txt", server.url())).unwrap();
 
         handler.upload_file(&url, reader, 4, None).await.unwrap();
     }
@@ -428,10 +426,10 @@ mod tests {
 
         let data = b"secure";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!(
+        let url = Url::parse(&format!(
             "http://user:pass@{}/secure-upload.txt",
             server.host_with_port()
-        );
+        )).unwrap();
 
         handler.upload_file(&url, reader, 6, None).await.unwrap();
     }
@@ -448,25 +446,13 @@ mod tests {
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/forbidden-upload.txt", server.url());
+        let url = Url::parse(&format!("{}/forbidden-upload.txt", server.url())).unwrap();
 
         let result = handler.upload_file(&url, reader, 4, None).await;
 
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
 
-    #[tokio::test]
-    async fn test_upload_file_invalid_url() {
-        let handler = create_test_handler();
-        let data = b"data";
-        let reader = Box::new(std::io::Cursor::new(data));
-
-        let result = handler
-            .upload_file("not a valid url", reader, 4, None)
-            .await;
-
-        assert!(matches!(result, Err(RemoteFileError::InvalidUrl(_))));
-    }
 
     #[tokio::test]
     async fn test_upload_file_unsupported_protocol() {
@@ -474,8 +460,9 @@ mod tests {
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
 
+        let url = Url::parse("ftp://example.com/file.txt").unwrap();
         let result = handler
-            .upload_file("ftp://example.com/file.txt", reader, 4, None)
+            .upload_file(&url, reader, 4, None)
             .await;
 
         assert!(matches!(
@@ -496,7 +483,7 @@ mod tests {
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
-        let url = format!("{}/error-upload.txt", server.url());
+        let url = Url::parse(&format!("{}/error-upload.txt", server.url())).unwrap();
 
         let result = handler.upload_file(&url, reader, 4, None).await;
 
@@ -512,12 +499,12 @@ mod tests {
         };
         let handler = HttpFileHandler::new(config).unwrap();
 
-        let url = "http://10.255.255.1/timeout-upload.txt";
+        let url = Url::parse("http://10.255.255.1/timeout-upload.txt").unwrap();
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
 
-        let result = handler.upload_file(url, reader, 4, None).await;
+        let result = handler.upload_file(&url, reader, 4, None).await;
 
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }

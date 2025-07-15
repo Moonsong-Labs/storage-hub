@@ -246,15 +246,12 @@ impl RemoteFileHandler for FtpFileHandler {
 
     async fn upload_file(
         &self,
-        uri: &str,
+        url: &Url,
         mut data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
         size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        let url = Url::parse(uri)
-            .map_err(|e| RemoteFileError::InvalidUrl(format!("Invalid URL: {}", e)))?;
-
-        if !self.is_supported(&url) {
+        if !self.is_supported(url) {
             return Err(RemoteFileError::UnsupportedProtocol(
                 url.scheme().to_string(),
             ));
@@ -267,8 +264,8 @@ impl RemoteFileHandler for FtpFileHandler {
             )));
         }
 
-        let (_, _, _, _, path) = Self::parse_url(&url)?;
-        let mut stream = self.connect(&url).await?;
+        let (_, _, _, _, path) = Self::parse_url(url)?;
+        let mut stream = self.connect(url).await?;
 
         // Use put_with_stream for streaming upload
         let mut upload_stream = stream
@@ -422,13 +419,13 @@ mod tests {
     #[tokio::test]
     async fn test_upload_file_invalid_protocol() {
         let handler = create_test_handler();
-        let uri = "http://example.com/upload.txt";
+        let url = Url::parse("http://example.com/upload.txt").unwrap();
         let data = b"test";
         let cursor = Cursor::new(data);
         let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
 
         let result = handler
-            .upload_file(uri, boxed_reader, data.len() as u64, None)
+            .upload_file(&url, boxed_reader, data.len() as u64, None)
             .await;
 
         assert!(matches!(
@@ -444,13 +441,13 @@ mod tests {
             ..RemoteFileConfig::default()
         };
         let handler = FtpFileHandler::new(config);
-        let uri = "ftp://example.com/upload.txt";
+        let url = Url::parse("ftp://example.com/upload.txt").unwrap();
         let data = b"This is larger than 10 bytes";
         let cursor = Cursor::new(data);
         let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
 
         let result = handler
-            .upload_file(uri, boxed_reader, data.len() as u64, None)
+            .upload_file(&url, boxed_reader, data.len() as u64, None)
             .await;
 
         assert!(result.is_err());

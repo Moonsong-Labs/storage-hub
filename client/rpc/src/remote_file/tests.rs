@@ -514,15 +514,12 @@ mod handler_trait_tests {
 
         async fn upload_file(
             &self,
-            uri: &str,
+            url: &Url,
             _data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
             _size: u64,
             _content_type: Option<String>,
         ) -> Result<(), RemoteFileError> {
-            let url = Url::parse(uri)
-                .map_err(|e| RemoteFileError::InvalidUrl(format!("Invalid URL: {}", e)))?;
-
-            if self.is_supported(&url) {
+            if self.is_supported(url) {
                 Ok(())
             } else {
                 Err(RemoteFileError::UnsupportedProtocol(

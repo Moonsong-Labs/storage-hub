@@ -45,13 +45,6 @@ impl LocalFileHandler {
         Ok(())
     }
 
-    fn parse_uri_to_path(uri: &str) -> Result<PathBuf, RemoteFileError> {
-        if let Ok(url) = Url::parse(uri) {
-            Self::url_to_path(&url)
-        } else {
-            Ok(PathBuf::from(uri))
-        }
-    }
 }
 
 impl Default for LocalFileHandler {
@@ -124,12 +117,12 @@ impl RemoteFileHandler for LocalFileHandler {
 
     async fn upload_file(
         &self,
-        uri: &str,
+        url: &Url,
         mut data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
         _size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        let path = Self::parse_uri_to_path(uri)?;
+        let path = Self::url_to_path(url)?;
 
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await.map_err(|e| {
@@ -237,9 +230,9 @@ mod tests {
         let file_url = Url::parse("file:///path/to/file.txt").unwrap();
         assert!(handler.is_supported(&file_url));
 
-        let path_result = LocalFileHandler::parse_uri_to_path("/path/to/file.txt");
-        assert!(path_result.is_ok());
-        assert_eq!(path_result.unwrap(), PathBuf::from("/path/to/file.txt"));
+        // Test that regular paths can be converted to URLs
+        let path_url = Url::from_file_path("/path/to/file.txt").unwrap();
+        assert!(handler.is_supported(&path_url));
 
         let http_url = Url::parse("http://example.com/file.txt").unwrap();
         assert!(!handler.is_supported(&http_url));
@@ -255,8 +248,9 @@ mod tests {
         let test_content = b"Hello, uploaded file!";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
+        let url = Url::parse(&file_url).unwrap();
         handler
-            .upload_file(&file_url, data, test_content.len() as u64, None)
+            .upload_file(&url, data, test_content.len() as u64, None)
             .await
             .unwrap();
 
@@ -273,9 +267,10 @@ mod tests {
         let test_content = b"Plain path upload test";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
+        let url = Url::from_file_path(&file_path).unwrap();
         handler
             .upload_file(
-                file_path.to_str().unwrap(),
+                &url,
                 data,
                 test_content.len() as u64,
                 Some("text/plain".to_string()),
@@ -296,9 +291,10 @@ mod tests {
         let test_content = b"Nested directory test";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
+        let url = Url::from_file_path(&file_path).unwrap();
         handler
             .upload_file(
-                file_path.to_str().unwrap(),
+                &url,
                 data,
                 test_content.len() as u64,
                 None,
@@ -321,9 +317,10 @@ mod tests {
         let test_content = b"New content";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
+        let url = Url::from_file_path(temp_file.path()).unwrap();
         handler
             .upload_file(
-                temp_file.path().to_str().unwrap(),
+                &url,
                 data,
                 test_content.len() as u64,
                 None,
@@ -345,9 +342,10 @@ mod tests {
         let data: Box<dyn AsyncRead + Send + Unpin> =
             Box::new(std::io::Cursor::new(large_content.clone()));
 
+        let url = Url::from_file_path(&file_path).unwrap();
         handler
             .upload_file(
-                file_path.to_str().unwrap(),
+                &url,
                 data,
                 large_content.len() as u64,
                 None,
@@ -380,9 +378,10 @@ mod tests {
         let test_content = b"Should fail";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
+        let url = Url::from_file_path(&file_path).unwrap();
         let result = handler
             .upload_file(
-                file_path.to_str().unwrap(),
+                &url,
                 data,
                 test_content.len() as u64,
                 None,
