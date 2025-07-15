@@ -230,7 +230,6 @@ where
         conn: &mut DbConnection<'a>,
         block_number: BlockNumber,
         block_hash: H256,
-        msp_id: Option<ProviderId>,
     ) -> Result<(), IndexBlockError> {
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
 
@@ -316,21 +315,14 @@ where
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
         block_hash: H256,
-        msp_id: Option<ProviderId>,
     ) -> Result<(), diesel::result::Error> {
         match event {
             RuntimeEvent::FileSystem(event) => {
-                // Only process FileSystem events if we have an MSP ID
-                if msp_id.is_none() {
-                    trace!(target: LOG_TARGET, "No MSP ID configured, skipping FileSystem event in lite mode");
-                    return Ok(());
-                }
-                self.index_file_system_event_lite(conn, event, msp_id.unwrap())
+                self.index_file_system_event_lite(conn, event)
                     .await?
             }
             RuntimeEvent::Providers(event) => {
-                // Always process Provider events
-                self.index_providers_event_lite(conn, event, block_hash, msp_id)
+                self.index_providers_event_lite(conn, event, block_hash)
                     .await?
             }
             // Explicitly ignore other pallets in lite mode
