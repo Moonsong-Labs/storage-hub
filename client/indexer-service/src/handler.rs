@@ -2,8 +2,8 @@ use diesel::prelude::*;
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info, trace};
-use shc_common::traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_common::types::{ProviderId, StorageProviderId};
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::types::StorageProviderId;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
 use thiserror::Error;
@@ -34,22 +34,20 @@ pub(crate) const LOG_TARGET: &str = "indexer-service";
 pub enum IndexerServiceCommand {}
 
 // The IndexerService actor
-pub struct IndexerService<RuntimeApi, K = Arc<dyn ReadOnlyKeystore>> {
+pub struct IndexerService<RuntimeApi> {
     client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
-    keystore: K,
 }
 
 // Implement the Actor trait for IndexerService
-impl<RuntimeApi, K> Actor for IndexerService<RuntimeApi, K>
+impl<RuntimeApi> Actor for IndexerService<RuntimeApi>
 where
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    K: ReadOnlyKeystore + Send + Sync + 'static,
 {
     type Message = IndexerServiceCommand;
-    type EventLoop = IndexerServiceEventLoop<RuntimeApi, K>;
+    type EventLoop = IndexerServiceEventLoop<RuntimeApi>;
     type EventBusProvider = (); // We're not using an event bus for now
 
     fn handle_message(
@@ -69,32 +67,23 @@ where
 }
 
 // Implement methods for IndexerService
-impl<RuntimeApi, K> IndexerService<RuntimeApi, K>
+impl<RuntimeApi> IndexerService<RuntimeApi>
 where
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    K: ReadOnlyKeystore,
 {
     pub fn new(
         client: Arc<ParachainClient<RuntimeApi>>,
         db_pool: DbPool,
         indexer_mode: crate::IndexerMode,
-        keystore: K,
     ) -> Self {
         Self {
             client,
             db_pool,
             indexer_mode,
-            keystore,
         }
     }
 
-    /// Check if a bucket belongs to the current MSP.
-    ///
-    /// Used in lite mode only for events requiring ownership filtering:
-    /// - BucketPrivacyUpdated
-    /// - BucketDeleted
-    /// - BucketRootChanged
     async fn handle_finality_notification<Block>(
         &mut self,
         notification: sc_client_api::FinalityNotification<Block>,
@@ -725,9 +714,9 @@ where
 }
 
 // Define the EventLoop for IndexerService
-pub struct IndexerServiceEventLoop<RuntimeApi, K> {
+pub struct IndexerServiceEventLoop<RuntimeApi> {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
-    actor: IndexerService<RuntimeApi, K>,
+    actor: IndexerService<RuntimeApi>,
 }
 
 enum MergedEventLoopMessage<Block>
@@ -739,15 +728,14 @@ where
 }
 
 // Implement ActorEventLoop for IndexerServiceEventLoop
-impl<RuntimeApi, K> ActorEventLoop<IndexerService<RuntimeApi, K>>
-    for IndexerServiceEventLoop<RuntimeApi, K>
+impl<RuntimeApi> ActorEventLoop<IndexerService<RuntimeApi>>
+    for IndexerServiceEventLoop<RuntimeApi>
 where
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    K: ReadOnlyKeystore + Send + Sync + 'static,
 {
     fn new(
-        actor: IndexerService<RuntimeApi, K>,
+        actor: IndexerService<RuntimeApi>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
     ) -> Self {
         Self { actor, receiver }

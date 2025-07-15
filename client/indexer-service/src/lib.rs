@@ -3,7 +3,7 @@ pub mod handler;
 use std::sync::Arc;
 
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::ParachainClient;
 use shc_indexer_db::DbPool;
 
@@ -44,19 +44,17 @@ impl std::str::FromStr for IndexerMode {
 
 pub async fn spawn_indexer_service<
     RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>,
-    K: ReadOnlyKeystore + Send + Sync + 'static,
 >(
     task_spawner: &TaskSpawner,
     client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: IndexerMode,
-    keystore: K,
-) -> ActorHandle<IndexerService<RuntimeApi, K>> {
+) -> ActorHandle<IndexerService<RuntimeApi>> {
     let task_spawner = task_spawner
         .with_name("indexer-service")
         .with_group("network");
 
-    let indexer_service = IndexerService::new(client, db_pool, indexer_mode, keystore);
+    let indexer_service = IndexerService::new(client, db_pool, indexer_mode);
 
     task_spawner.spawn_actor(indexer_service)
 }
