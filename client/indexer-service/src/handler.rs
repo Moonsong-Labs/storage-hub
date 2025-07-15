@@ -100,8 +100,6 @@ where
 
         let service_state = ServiceState::get(&mut db_conn).await?;
 
-        // Collect block hashes first to avoid borrowing issues
-        let mut blocks_to_index = Vec::new();
         for block_number in
             (service_state.last_processed_block as BlockNumber + 1)..=finalized_block_number
         {
@@ -109,18 +107,8 @@ where
                 .client
                 .block_hash(block_number)?
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
-
-            blocks_to_index.push((block_number, block_hash));
-        }
-
-        // now index the blocks
-        for (block_number, block_hash) in blocks_to_index {
-            self.index_block(
-                &mut db_conn,
-                block_number as BlockNumber,
-                block_hash,
-            )
-            .await?
+            self.index_block(&mut db_conn, block_number as BlockNumber, block_hash)
+                .await?;
         }
 
         Ok(())
@@ -240,7 +228,6 @@ where
                 value_prop_id: _,
                 root,
             } => {
-                // Get the existing MSP - it should have been created during MSP registration
                 let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
 
                 Bucket::create(
@@ -261,7 +248,6 @@ where
                 bucket_id,
                 value_prop_id: _,
             } => {
-                // Get the existing MSP - it should have been created during MSP registration
                 let new_msp = Msp::get_by_onchain_msp_id(conn, new_msp_id.to_string()).await?;
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
             }
@@ -285,8 +271,6 @@ where
                 file_key: _,
                 new_root,
             } => {
-                // Ensure BSP exists before updating merkle root
-                let _ = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
             }
@@ -297,13 +281,10 @@ where
                 skipped_file_keys: _,
                 new_root,
             } => {
-                // Get the existing BSP - it should have been created during BSP registration
-                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
-
-                // Update the merkle root for the BSP
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
 
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
                 for file_key in confirmed_file_keys {
                     let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                     BspFile::create(conn, bsp.id, file.id).await?;
@@ -342,18 +323,7 @@ where
             }
             pallet_file_system::Event::MoveBucketRequested { .. } => {}
             pallet_file_system::Event::NewCollectionAndAssociation { .. } => {}
-            pallet_file_system::Event::AcceptedBspVolunteer {
-                bsp_id: _,
-                bucket_id: _,
-                location: _,
-                fingerprint: _,
-                multiaddresses: _,
-                owner: _,
-                size: _,
-            } => {
-                // TODO: Implement AcceptedBspVolunteer event handling logic
-                // This event is indexed in lite mode but the implementation will be added later
-            }
+            pallet_file_system::Event::AcceptedBspVolunteer { .. } => {}
             pallet_file_system::Event::StorageRequestFulfilled { file_key } => {
                 File::update_step(
                     conn,
@@ -500,8 +470,6 @@ where
                 proof: _proof,
                 last_tick_proven,
             } => {
-                // Ensure BSP exists before updating last tick proven
-                let _ = Bsp::get_by_onchain_bsp_id(conn, provider.to_string()).await?;
                 Bsp::update_last_tick_proven(
                     conn,
                     provider.to_string(),
@@ -591,7 +559,7 @@ where
 
                     Bsp::update_stake(conn, bsp_id.to_string(), stake).await?;
                 }
-                StorageProviderId::MainStorageProvider(_msp_id) => {
+                StorageProviderId::MainStorageProvider(_) => {
                     Bsp::update_capacity(conn, who.to_string(), new_capacity.into()).await?;
                 }
             },
@@ -627,7 +595,10 @@ where
                 )
                 .await?;
             }
-            pallet_storage_providers::Event::MspSignOffSuccess { who, msp_id: _ } => {
+            pallet_storage_providers::Event::MspSignOffSuccess {
+                who,
+                msp_id: _msp_id,
+            } => {
                 Msp::delete(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::BucketRootChanged {
@@ -647,9 +618,6 @@ where
                 provider_id,
                 top_up_metadata: _top_up_metadata,
             } => {
-                // Get the existing BSP before updating stake
-                let _ = Bsp::get_by_onchain_bsp_id(conn, provider_id.to_string()).await?;
-
                 let stake = self
                     .client
                     .runtime_api()
@@ -663,12 +631,8 @@ where
             pallet_storage_providers::Event::TopUpFulfilled { .. } => {}
             pallet_storage_providers::Event::ValuePropAdded { .. } => {}
             pallet_storage_providers::Event::ValuePropUnavailable { .. } => {}
-            pallet_storage_providers::Event::MultiAddressAdded { provider_id: _, .. } => {
-                // TODO: Handle multi address addition
-            }
-            pallet_storage_providers::Event::MultiAddressRemoved { provider_id: _, .. } => {
-                // TODO: Handle multi address removal
-            }
+            pallet_storage_providers::Event::MultiAddressAdded { .. } => {}
+            pallet_storage_providers::Event::MultiAddressRemoved { .. } => {}
             pallet_storage_providers::Event::ProviderInsolvent { .. } => {}
             pallet_storage_providers::Event::BucketsOfInsolventMsp { .. } => {
                 // TODO: Should we index this? Since this buckets are all going to have moves requested

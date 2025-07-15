@@ -150,42 +150,17 @@ export class NetworkLauncher {
     }
 
     if (this.config.indexer) {
-      // In lite mode, only MSPs should run indexers (they have the keystore)
-      // In full mode, any node can run the indexer
-      if (this.config.indexerMode !== "lite") {
-        composeYaml.services["sh-user"].command.push("--indexer");
-        composeYaml.services["sh-user"].command.push(
-          "--database-url=postgresql://postgres:postgres@sh-postgres:5432/storage_hub"
-        );
-      }
-      
+      composeYaml.services["sh-user"].command.push("--indexer");
+      composeYaml.services["sh-user"].command.push(
+        "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+      );
       if (this.type === "fullnet") {
-        // In lite mode, only MSP1 runs the indexer
-        // In full mode, all MSPs can run the indexer
-        if (this.config.indexerMode === "lite") {
-          // Only MSP1 gets indexer flags in lite mode
-          composeYaml.services["sh-msp-1"].command.push("--indexer");
-          composeYaml.services["sh-msp-1"].command.push(
-            "--database-url=postgresql://postgres:postgres@sh-postgres:5432/storage_hub"
-          );
-          composeYaml.services["sh-msp-1"].command.push(`--indexer-mode=lite`);
-        } else {
-          // In full mode (or when indexerMode is not specified), all MSPs get indexer flags
-          composeYaml.services["sh-msp-1"].command.push("--indexer");
-          composeYaml.services["sh-msp-1"].command.push(
-            "--database-url=postgresql://postgres:postgres@sh-postgres:5432/storage_hub"
-          );
-          composeYaml.services["sh-msp-2"].command.push("--indexer");
-          composeYaml.services["sh-msp-2"].command.push(
-            "--database-url=postgresql://postgres:postgres@sh-postgres:5432/storage_hub"
-          );
-          
-          // Add indexer mode if specified
-          if (this.config.indexerMode) {
-            composeYaml.services["sh-msp-1"].command.push(`--indexer-mode=${this.config.indexerMode}`);
-            composeYaml.services["sh-msp-2"].command.push(`--indexer-mode=${this.config.indexerMode}`);
-          }
-        }
+        composeYaml.services["sh-msp-1"].command.push(
+          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+        );
+        composeYaml.services["sh-msp-2"].command.push(
+          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+        );
       }
     }
 
@@ -877,13 +852,6 @@ export type NetLaunchConfig = {
    * This will also launch the environment with an attached postgres db
    */
   indexer?: boolean;
-
-  /**
-   * Optional parameter to set the indexer mode when indexer is enabled.
-   * 'full' - indexes all events (default)
-   * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
-   */
-  indexerMode?: "full" | "lite";
 
   /**
    * Optional parameter to define what toxics to apply to the network.
