@@ -2,6 +2,7 @@ use super::{
     ftp::FtpFileHandler, http::HttpFileHandler, local::LocalFileHandler, RemoteFileConfig,
     RemoteFileError, RemoteFileHandler,
 };
+use std::path::PathBuf;
 use std::sync::Arc;
 use url::Url;
 
@@ -40,10 +41,48 @@ impl RemoteFileHandlerFactory {
         let url = match Url::parse(url_str) {
             Ok(url) => url,
             Err(_) => {
+                // Check if the string contains "://" - if it does, it's a malformed URL with a scheme
+                if url_str.contains("://") {
+                    return Err(RemoteFileError::InvalidUrl(format!(
+                        "Malformed URL with scheme: {}",
+                        url_str
+                    )));
+                }
+
+                // Handle local paths
                 if url_str.starts_with('/')
                     || url_str.starts_with("./")
                     || url_str.starts_with("../")
                 {
+                    // Validate local file permissions before creating the URL
+                    let path = PathBuf::from(url_str);
+
+                    // Check if the file exists and is readable OR if we can create it
+                    if path.exists() {
+                        // Check if we can read the existing file
+                        std::fs::File::open(&path).map_err(|e| match e.kind() {
+                            std::io::ErrorKind::PermissionDenied => RemoteFileError::AccessDenied,
+                            std::io::ErrorKind::NotFound => RemoteFileError::NotFound,
+                            _ => RemoteFileError::IoError(e),
+                        })?;
+                    } else {
+                        // Check if we can create the file (test write permissions on parent directory)
+                        if let Some(parent) = path.parent() {
+                            if !parent.exists() {
+                                return Err(RemoteFileError::InvalidUrl(format!(
+                                    "Parent directory does not exist for path: {}",
+                                    url_str
+                                )));
+                            }
+                            // Test write permissions by checking if parent is writable
+                            let metadata = std::fs::metadata(parent)
+                                .map_err(|e| RemoteFileError::IoError(e))?;
+                            if metadata.permissions().readonly() {
+                                return Err(RemoteFileError::AccessDenied);
+                            }
+                        }
+                    }
+
                     Url::parse(&format!("file://{}", url_str))
                         .map_err(|e| RemoteFileError::InvalidUrl(format!("{}: {}", url_str, e)))?
                 } else {
