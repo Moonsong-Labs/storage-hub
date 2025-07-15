@@ -12,7 +12,7 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::{
-    convert_raw_multiaddress_to_multiaddr, get_provider_id_from_keystore, EventsRetrievalError,
+    convert_raw_multiaddress_to_multiaddr, EventsRetrievalError,
 };
 use shc_common::{
     blockchain_utils::get_events_at_block,
@@ -89,22 +89,6 @@ where
         }
     }
 
-    /// Detect the MSP ID from the keystore for the given block hash.
-    ///
-    /// Returns Option<ProviderId> if an MSP ID is found; None otherwise.
-    fn detect_msp_id(&self, block_hash: &H256) -> Option<ProviderId> {
-        match get_provider_id_from_keystore(&self.client, &self.keystore, block_hash) {
-            Ok(Some(provider_id)) => {
-                if let StorageProviderId::MainStorageProvider(msp_id) = provider_id {
-                    Some(msp_id)
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-
     /// Check if a bucket belongs to the current MSP.
     ///
     /// Used in lite mode only for events requiring ownership filtering:
@@ -138,20 +122,15 @@ where
                 .block_hash(block_number)?
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
 
-            let msp_id = (self.indexer_mode == crate::IndexerMode::Lite)
-                .then(|| self.detect_msp_id(&block_hash))
-                .flatten();
-
-            blocks_to_index.push((block_number, block_hash, msp_id));
+            blocks_to_index.push((block_number, block_hash));
         }
 
         // now index the blocks
-        for (block_number, block_hash, msp_id) in blocks_to_index {
+        for (block_number, block_hash) in blocks_to_index {
             self.index_block(
                 &mut db_conn,
                 block_number as BlockNumber,
                 block_hash,
-                msp_id,
             )
             .await?
         }
@@ -164,7 +143,6 @@ where
         conn: &mut DbConnection<'a>,
         block_number: BlockNumber,
         block_hash: H256,
-        msp_id: Option<ProviderId>,
     ) -> Result<(), IndexBlockError> {
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
 
@@ -175,7 +153,7 @@ where
                 ServiceState::update(conn, block_number as i64).await?;
 
                 for ev in block_events {
-                    self.route_event(conn, &ev.event, block_hash, msp_id)
+                    self.route_event(conn, &ev.event, block_hash)
                         .await?;
                 }
 
@@ -192,12 +170,11 @@ where
         conn: &mut DbConnection<'a>,
         event: &RuntimeEvent,
         block_hash: H256,
-        msp_id: Option<ProviderId>,
     ) -> Result<(), diesel::result::Error> {
         match self.indexer_mode {
             crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
             crate::IndexerMode::Lite => {
-                self.index_event_lite(conn, event, block_hash, msp_id).await
+                self.index_event_lite(conn, event, block_hash).await
             }
         }
     }
