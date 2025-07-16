@@ -30,6 +30,7 @@ mod benchmarks {
         types::{MaxMultiAddressAmount, MultiAddress},
         TotalBspsCapacity, UsedBspsCapacity,
     };
+    use scale_info::prelude::format;
     use shp_constants::GIGAUNIT;
     use sp_runtime::{
         traits::{Hash, One},

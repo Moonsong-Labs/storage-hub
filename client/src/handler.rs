@@ -12,12 +12,10 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, FileDeletionRequest, FinalisedBspConfirmStoppedStoring,
-        FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, FinalisedProofSubmittedForPendingFileDeletionRequest,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest, ProcessFileDeletionRequest,
+        AcceptedBspVolunteer, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
@@ -39,14 +37,12 @@ use crate::{
     file_download_manager::FileDownloadManager,
     tasks::{
         bsp_charge_fees::{BspChargeFeesConfig, BspChargeFeesTask},
-        bsp_delete_file::BspDeleteFileTask,
         bsp_download_file::BspDownloadFileTask,
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
-        msp_delete_file::{MspDeleteFileConfig, MspDeleteFileTask},
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
         msp_retry_bucket_move::MspRetryBucketMoveTask,
         msp_stop_storing_insolvent_user::MspStopStoringInsolventUserTask,
@@ -63,8 +59,6 @@ use crate::{
 /// Configuration parameters for Storage Providers.
 #[derive(Clone, Debug)]
 pub struct ProviderConfig {
-    /// Configuration for MSP delete file task.
-    pub msp_delete_file: MspDeleteFileConfig,
     /// Configuration for MSP charge fees task.
     pub msp_charge_fees: MspChargeFeesConfig,
     /// Configuration for MSP move bucket task.
@@ -292,10 +286,6 @@ where
             context: self.clone(),
             critical: true,
             [
-                // MspDeleteFileTask handles events for deleting individual files from an MSP.
-                FileDeletionRequest => MspDeleteFileTask,
-                ProcessFileDeletionRequest => MspDeleteFileTask,
-                FinalisedProofSubmittedForPendingFileDeletionRequest => MspDeleteFileTask,
                 FinalisedBucketMovedAway => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket => MspDeleteBucketTask,
                 NewStorageRequest => MspUploadFileTask,
@@ -373,8 +363,6 @@ where
                 MoveBucketAccepted => BspMoveBucketTask,
                 MoveBucketRejected => BspMoveBucketTask,
                 MoveBucketExpired => BspMoveBucketTask,
-                // Task that listen for `FinalisedBspConfirmStoppedStoring` to delete file
-                FinalisedBspConfirmStoppedStoring => BspDeleteFileTask,
             ]
         );
 

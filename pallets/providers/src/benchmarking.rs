@@ -4,6 +4,7 @@
 
 use super::*;
 use frame_benchmarking::v2::*;
+use scale_info::prelude::format;
 use sp_runtime::Saturating;
 
 pub trait BenchmarkHelpers<T: crate::Config> {

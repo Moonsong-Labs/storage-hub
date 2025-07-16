@@ -608,25 +608,6 @@ declare module "@polkadot/api-base/types/submittable" {
         (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
       >;
-      deleteFile: AugmentedSubmittable<
-        (
-          bucketId: H256 | string | Uint8Array,
-          fileKey: H256 | string | Uint8Array,
-          location: Bytes | string | Uint8Array,
-          size: u64 | AnyNumber | Uint8Array,
-          fingerprint: H256 | string | Uint8Array,
-          maybeInclusionForestProof:
-            | Option<SpTrieStorageProofCompactProof>
-            | null
-            | Uint8Array
-            | SpTrieStorageProofCompactProof
-            | {
-                encodedNodes?: any;
-              }
-            | string
-        ) => SubmittableExtrinsic<ApiType>,
-        [H256, H256, Bytes, u64, H256, Option<SpTrieStorageProofCompactProof>]
-      >;
       /**
        * Issue a new storage request for a file
        **/
@@ -726,22 +707,6 @@ declare module "@polkadot/api-base/types/submittable" {
       mspStopStoringBucketForInsolventUser: AugmentedSubmittable<
         (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
-      >;
-      pendingFileDeletionRequestSubmitProof: AugmentedSubmittable<
-        (
-          user: AccountId32 | string | Uint8Array,
-          fileKey: H256 | string | Uint8Array,
-          fileSize: u64 | AnyNumber | Uint8Array,
-          bucketId: H256 | string | Uint8Array,
-          forestProof:
-            | SpTrieStorageProofCompactProof
-            | {
-                encodedNodes?: any;
-              }
-            | string
-            | Uint8Array
-        ) => SubmittableExtrinsic<ApiType>,
-        [AccountId32, H256, u64, H256, SpTrieStorageProofCompactProof]
       >;
       requestMoveBucket: AugmentedSubmittable<
         (
