@@ -69,16 +69,8 @@ where
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(
-        client: Arc<ParachainClient<RuntimeApi>>,
-        db_pool: DbPool,
-        indexer_mode: crate::IndexerMode,
-    ) -> Self {
-        Self {
-            client,
-            db_pool,
-            indexer_mode,
-        }
+    pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool, indexer_mode: crate::IndexerMode) -> Self {
+        Self { client, db_pool, indexer_mode }
     }
 
     async fn handle_finality_notification<Block>(
