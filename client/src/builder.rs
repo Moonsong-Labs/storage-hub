@@ -25,8 +25,7 @@ use shc_rpc::StorageHubClientRpcConfig;
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
     bsp_submit_proof::BspSubmitProofConfig, bsp_upload_file::BspUploadFileConfig,
-    msp_charge_fees::MspChargeFeesConfig, msp_delete_file::MspDeleteFileConfig,
-    msp_move_bucket::MspMoveBucketConfig,
+    msp_charge_fees::MspChargeFeesConfig, msp_move_bucket::MspMoveBucketConfig,
 };
 
 use super::{
@@ -61,7 +60,6 @@ where
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
     // Configuration options for tasks and services
-    msp_delete_file_config: Option<MspDeleteFileConfig>,
     msp_charge_fees_config: Option<MspChargeFeesConfig>,
     msp_move_bucket_config: Option<MspMoveBucketConfig>,
     bsp_upload_file_config: Option<BspUploadFileConfig>,
@@ -90,7 +88,6 @@ where
             capacity_config: None,
             indexer_db_pool: None,
             notify_period: None,
-            msp_delete_file_config: None,
             msp_charge_fees_config: None,
             msp_move_bucket_config: None,
             bsp_upload_file_config: None,
@@ -239,15 +236,6 @@ where
                 .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
             keystore,
         )
-    }
-
-    /// Set configuration options for the MSP delete file task.
-    pub fn with_msp_delete_file_config(
-        &mut self,
-        config: Option<MspDeleteFileOptions>,
-    ) -> &mut Self {
-        self.msp_delete_file_config = config.map(Into::into);
-        self
     }
 
     /// Set configuration options for the MSP charge fees task.
@@ -479,7 +467,6 @@ where
                 .clone(),
             ProviderConfig {
                 capacity_config: self.capacity_config.expect("Capacity Config not set"),
-                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
                 msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
                 msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
                 bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
@@ -526,7 +513,6 @@ where
                 .clone(),
             ProviderConfig {
                 capacity_config: self.capacity_config.expect("Capacity Config not set"),
-                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
                 msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
                 msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
                 bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
@@ -574,7 +560,6 @@ where
                 .clone(),
             ProviderConfig {
                 capacity_config: self.capacity_config.expect("Capacity Config not set"),
-                msp_delete_file: self.msp_delete_file_config.unwrap_or_default(),
                 msp_charge_fees: self.msp_charge_fees_config.unwrap_or_default(),
                 msp_move_bucket: self.msp_move_bucket_config.unwrap_or_default(),
                 bsp_upload_file: self.bsp_upload_file_config.unwrap_or_default(),
@@ -586,24 +571,6 @@ where
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
         )
-    }
-}
-
-/// Configuration options for the MSP Delete File task.
-#[derive(Debug, Clone, Deserialize, Default)]
-pub struct MspDeleteFileOptions {
-    /// Maximum number of times to retry a file deletion request.
-    pub max_try_count: Option<u32>,
-    /// Maximum tip amount to use when submitting a file deletion request extrinsic.
-    pub max_tip: Option<f64>,
-}
-
-impl Into<MspDeleteFileConfig> for MspDeleteFileOptions {
-    fn into(self) -> MspDeleteFileConfig {
-        MspDeleteFileConfig {
-            max_try_count: self.max_try_count.unwrap_or_default(),
-            max_tip: self.max_tip.unwrap_or_default(),
-        }
     }
 }
 

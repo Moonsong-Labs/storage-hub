@@ -1157,8 +1157,7 @@ mod users {
 
     use crate::{sh_sibling_account_account_id, CHARLIE, SH_PARA_ID};
     use pallet_file_system::types::{
-        FileKeyWithProof, MaxFilePathSize, MaxNumberOfPeerIds, MaxPeerIdSize,
-        PendingFileDeletionRequest, ReplicationTarget,
+        FileKeyWithProof, MaxFilePathSize, MaxNumberOfPeerIds, MaxPeerIdSize, ReplicationTarget,
     };
     use pallet_storage_providers::types::ValueProposition;
     use sp_trie::CompactProof;
@@ -1369,73 +1368,6 @@ mod users {
                 simulated_proof.clone(),
                 vec_of_key_proofs.clone()
             ));
-        });
-
-        // Now request deletion of the file
-        MockParachain::execute_with(|| {
-            let destination: Location = (Parent, Parachain(SH_PARA_ID)).into();
-            let file_deletion_call =
-                storagehub::RuntimeCall::FileSystem(pallet_file_system::Call::<
-                    storagehub::Runtime,
-                >::delete_file {
-                    bucket_id: bucket_id.clone(),
-                    file_key: file_key.clone(),
-                    location: file_location.clone(),
-                    size: size,
-                    fingerprint: file_fingerprint.clone(),
-                    maybe_inclusion_forest_proof: None,
-                });
-            // Remember, this message will be executed from the context of StorageHub
-            let message: Xcm<()> = vec![
-                WithdrawAsset((Parent, 100 * CENTS).into()),
-                BuyExecution {
-                    fees: (Parent, 100 * CENTS).into(),
-                    weight_limit: Unlimited,
-                },
-                Transact {
-                    origin_kind: OriginKind::SovereignAccount,
-                    fallback_max_weight: None,
-                    call: file_deletion_call.encode().into(),
-                },
-                RefundSurplus,
-                DepositAsset {
-                    assets: Wild(All),
-                    beneficiary: (Parent, Parachain(NON_SYS_PARA_ID)).into(),
-                },
-            ]
-            .into();
-            assert_ok!(parachain::PolkadotXcm::send_xcm(Here, destination, message));
-        });
-
-        // We check now that there's a pending file deletion request for this file
-        StorageHub::execute_with(|| {
-            assert_eq!(
-                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
-                    parachain_account_in_sh.clone()
-                )
-                .len(),
-                1
-            );
-            let file_deletion_request_deposit = <storagehub::Runtime as pallet_file_system::Config>::FileDeletionRequestDeposit::get();
-            let mut file_deletion_requests_vec: BoundedVec<
-                PendingFileDeletionRequest<storagehub::Runtime>,
-                <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
-            > = BoundedVec::new();
-            let pending_file_deletion_request = PendingFileDeletionRequest {
-                user: parachain_account_in_sh.clone(),
-                file_key: file_key.clone(),
-                file_size: size,
-                bucket_id: bucket_id.clone(),
-                deposit_paid_for_creation: file_deletion_request_deposit,
-                queue_priority_challenge: true,
-            };
-            file_deletion_requests_vec.force_push(pending_file_deletion_request);
-            assert_eq!(
-                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
-                    parachain_account_in_sh.clone()
-                ),
-                file_deletion_requests_vec
-            )
         });
     }
 
@@ -1762,85 +1694,6 @@ mod users {
                 simulated_proof.clone(),
                 vec_of_key_proofs.clone()
             ));
-        });
-
-        // Now request deletion of the file
-        MockParachain::execute_with(|| {
-            let destination: Location = (Parent, Parachain(1)).into();
-            let file_deletion_call =
-                storagehub::RuntimeCall::FileSystem(pallet_file_system::Call::<
-                    storagehub::Runtime,
-                >::delete_file {
-                    bucket_id: bucket_id.clone(),
-                    file_key: file_key.clone(),
-                    location: file_location.clone(),
-                    size,
-                    fingerprint: file_fingerprint.clone(),
-                    maybe_inclusion_forest_proof: None,
-                });
-            // Remember, this message will be executed from the context of StorageHub
-            let message: Xcm<()> = vec![
-                DescendOrigin(
-                    AccountId32 {
-                        network: None,
-                        id: CHARLIE.into(),
-                    }
-                    .into(),
-                ),
-                WithdrawAsset((Parent, 100 * CENTS).into()),
-                BuyExecution {
-                    fees: (Parent, 100 * CENTS).into(),
-                    weight_limit: Unlimited,
-                },
-                Transact {
-                    origin_kind: OriginKind::SovereignAccount,
-                    fallback_max_weight: None,
-                    call: file_deletion_call.encode().into(),
-                },
-                RefundSurplus,
-                DepositAsset {
-                    assets: Wild(All),
-                    beneficiary: (AccountId32 {
-                        network: None,
-                        id: CHARLIE.into(),
-                    },)
-                        .into(),
-                },
-            ]
-            .into();
-            assert_ok!(parachain::PolkadotXcm::send_xcm(Here, destination, message));
-        });
-
-        // We check now that there's a pending file deletion request for this file
-        StorageHub::execute_with(|| {
-            assert_eq!(
-                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
-                    charlie_parachain_account_in_sh.clone()
-                )
-                .len(),
-                1
-            );
-            let file_deletion_request_deposit = <storagehub::Runtime as pallet_file_system::Config>::FileDeletionRequestDeposit::get();
-
-            let mut file_deletion_requests_vec: BoundedVec<
-                PendingFileDeletionRequest<storagehub::Runtime>,
-                <storagehub::Runtime as pallet_file_system::Config>::MaxUserPendingDeletionRequests,
-            > = BoundedVec::new();
-            let pending_file_deletion_request = PendingFileDeletionRequest {
-                user: charlie_parachain_account_in_sh.clone(),
-                file_key: file_key.clone(),
-                file_size: size,
-                bucket_id: bucket_id.clone(),
-                deposit_paid_for_creation: file_deletion_request_deposit,
-                queue_priority_challenge: true,
-            };
-            file_deletion_requests_vec.force_push(pending_file_deletion_request);
-            assert_eq!(
-                pallet_file_system::PendingFileDeletionRequests::<storagehub::Runtime>::get(
-                    charlie_parachain_account_in_sh.clone()
-                ),
-                file_deletion_requests_vec
-            )
         });
     }
 }

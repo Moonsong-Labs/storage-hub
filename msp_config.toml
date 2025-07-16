@@ -20,13 +20,6 @@ node_key = "0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be"
 # Path to keystores
 keystore_path = "./docker/dev-keystores"
 
-# Configuration for the MSP Delete File task
-[provider.msp_delete_file]
-# Maximum number of times to retry a file deletion request
-max_try_count = 5
-# Maximum tip amount to use when submitting a file deletion request extrinsic
-max_tip = 100.0
-
 # Configuration for the MSP Charge Fees task
 [provider.msp_charge_fees]
 # Minimum debt threshold for charging users

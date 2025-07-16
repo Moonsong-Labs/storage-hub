@@ -232,7 +232,6 @@ where
             max_storage_capacity,
             jump_capacity,
             msp_charging_period,
-            msp_delete_file,
             msp_charge_fees,
             msp_move_bucket,
             bsp_upload_file,
@@ -272,7 +271,6 @@ where
                     jump_capacity.unwrap_or_default(),
                 )));
 
-            storage_hub_builder.with_msp_delete_file_config(msp_delete_file.clone());
             storage_hub_builder.with_msp_charge_fees_config(msp_charge_fees.clone());
             storage_hub_builder.with_msp_move_bucket_config(msp_move_bucket.clone());
             storage_hub_builder.with_bsp_upload_file_config(bsp_upload_file.clone());

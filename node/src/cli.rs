@@ -7,7 +7,7 @@ use crate::command::ProviderOptions;
 
 use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
-    BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
+    BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
 };
 use shc_indexer_service::IndexerMode;
 
@@ -185,35 +185,6 @@ pub struct ProviderConfigurations {
     ]))]
     pub msp_charging_period: Option<u32>,
 
-    // ============== MSP Delete File task options ==============
-    /// Enable and configure MSP Delete File task.
-    #[clap(long)]
-    pub msp_delete_file_task: bool,
-
-    /// Maximum number of times to retry a file deletion request.
-    #[clap(
-        long,
-        value_name = "COUNT",
-        help_heading = "MSP Delete File Options",
-        required_if_eq_all([
-            ("msp_delete_file_task", "true"),
-            ("provider_type", "msp"),
-        ])
-    )]
-    pub msp_delete_file_max_try_count: Option<u32>,
-
-    /// Maximum tip amount to use when submitting a file deletion request extrinsic.
-    #[clap(
-        long,
-        value_name = "AMOUNT",
-        help_heading = "MSP Delete File Options",
-        required_if_eq_all([
-            ("msp_delete_file_task", "true"),
-            ("provider_type", "msp"),
-        ])
-    )]
-    pub msp_delete_file_max_tip: Option<f64>,
-
     // ============== MSP Charge Fees task options ==============
     /// Enable and configure MSP Charge Fees task.
     #[clap(long)]
@@ -349,7 +320,6 @@ impl ProviderConfigurations {
             .clone()
             .expect("Provider type is required");
 
-        let mut msp_delete_file = None;
         let mut msp_charge_fees = None;
         let mut msp_move_bucket = None;
         let mut bsp_upload_file = None;
@@ -360,13 +330,6 @@ impl ProviderConfigurations {
         // Only set MSP options if provider_type is MSP
         if provider_type == ProviderType::Msp {
             // If specific task flags are enabled, use the provided options
-            if self.msp_delete_file_task {
-                let mut options = MspDeleteFileOptions::default();
-                options.max_try_count = self.msp_delete_file_max_try_count;
-                options.max_tip = self.msp_delete_file_max_tip;
-                msp_delete_file = Some(options);
-            }
-
             if self.msp_charge_fees_task {
                 let mut options = MspChargeFeesOptions::default();
                 options.min_debt = self.msp_charge_fees_min_debt;
@@ -447,7 +410,6 @@ impl ProviderConfigurations {
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
             msp_charging_period: self.msp_charging_period,
-            msp_delete_file,
             msp_charge_fees,
             msp_move_bucket,
             bsp_upload_file,
@@ -560,8 +522,7 @@ pub struct Cli {
         "provider", "provider_type", "max_storage_capacity", "jump_capacity", 
         "storage_layer", "storage_path", "extrinsic_retry_timeout", "sync_mode_min_blocks_behind",
         "check_for_pending_proofs_period", "max_blocks_behind_to_catch_up_root_changes",
-        "msp_charging_period",  "msp_delete_file_task", "msp_delete_file_max_try_count",
-        "msp_delete_file_max_tip", "msp_charge_fees_task", "msp_charge_fees_min_debt",
+        "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
         "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", 
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",

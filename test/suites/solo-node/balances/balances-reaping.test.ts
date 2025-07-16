@@ -63,7 +63,6 @@ describe("Balances Pallet: Reaping", async () => {
     } = await api.query.system.account(alice.address);
     console.log("Alice balance: ", free.toHuman());
 
-
     await api.tx.balances.transferAllowDeath(randomAccount.address, amount).signAndSend(alice);
     await api.createBlock();
 
@@ -74,7 +73,7 @@ describe("Balances Pallet: Reaping", async () => {
     const amountSend = balAvail.toBigInt() - ROUGH_TRANSFER_FEE;
 
     await api.tx.balances
-      .transferAllowDeath(alice.address, amountSend) // In case this fail check if the transfer fee is high enough for the transfer to be successful 
+      .transferAllowDeath(alice.address, amountSend) // In case this fail check if the transfer fee is high enough for the transfer to be successful
       .signAndSend(randomAccount);
     await api.createBlock();
 

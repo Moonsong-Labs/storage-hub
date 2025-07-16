@@ -20,7 +20,7 @@ use crate::{
 
 use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
-    BspUploadFileOptions, MspChargeFeesOptions, MspDeleteFileOptions, MspMoveBucketOptions,
+    BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
 };
 
 /// Configuration for the provider.
@@ -39,9 +39,6 @@ pub struct ProviderOptions {
     /// MSP charging fees frequency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msp_charging_period: Option<u32>,
-    /// Configuration options for MSP delete file task.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub msp_delete_file: Option<MspDeleteFileOptions>,
     /// Configuration options for MSP charge fees task.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msp_charge_fees: Option<MspChargeFeesOptions>,

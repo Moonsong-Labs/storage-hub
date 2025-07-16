@@ -42,16 +42,14 @@ use crate::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
         FileLocation, Fingerprint, ForestProof, MerkleHash, MoveBucketRequestMetadata,
-        MultiAddresses, PeerIds, PendingFileDeletionRequest, PendingStopStoringRequest,
-        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
-        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest,
+        ReplicationTarget, ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
-    BucketsWithStorageRequests, Error, Event, HoldReason, MspsAmountOfPendingFileDeletionRequests,
-    Pallet, PendingFileDeletionRequests, PendingMoveBucketRequests, PendingStopStoringRequests,
-    StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+    BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingMoveBucketRequests,
+    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -1940,38 +1938,11 @@ where
     /// TODO: We should also clean up the MSP (decreasing its used capacity, the bucket size, etc) if it has already confirmed storing the file,
     /// but we can't apply delta... so we need to think about how to do this.
     fn cleanup_storage_request(
-        revoker: EitherAccountIdOrMspId<T>,
+        _revoker: EitherAccountIdOrMspId<T>,
         file_key: MerkleHash<T>,
         storage_request_metadata: &StorageRequestMetadata<T>,
     ) -> DispatchResult {
-        // Check if there are already BSPs who have confirmed to store the file.
-        if storage_request_metadata.bsps_confirmed >= ReplicationTargetType::<T>::one() {
-            // Apply Remove mutation of the file key to the BSPs that have confirmed storing the file (proofs of inclusion).
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                &file_key, true,
-            )?;
-
-            // Emit event.
-            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                issuer: revoker,
-                file_key,
-            });
-        }
-
-        if let Some((_, true)) = storage_request_metadata.msp {
-            // Create deletion request without queuing a priority challenge to avoid doing this twice.
-            // Doing this will force the MSP to delete the file.
-            Self::do_delete_file(
-                storage_request_metadata.owner.clone(),
-                storage_request_metadata.bucket_id,
-                file_key,
-                storage_request_metadata.location.clone(),
-                storage_request_metadata.fingerprint,
-                storage_request_metadata.size,
-                None,
-                false,
-            )?;
-        }
+        // TODO: Call `delete_file` - user signature needs to be added to StorageRequestMetadata to be able to call it
 
         // Remove storage request bsps
         let removed = <StorageRequestBsps<T>>::drain_prefix(&file_key)
@@ -2483,302 +2454,6 @@ where
         Ok((sp_id, new_root))
     }
 
-    /// Queue a pending file deletion request.
-    ///
-    /// This involves
-    ///
-    /// `queue_priority_challenge` should be set to `false` to avoid sending a priority challenge to the BSPs. This flag was introduced to
-    /// to target and ensure the MSP deletes the file key from its forest.
-    pub(crate) fn do_delete_file(
-        sender: T::AccountId,
-        bucket_id: BucketIdFor<T>,
-        file_key: MerkleHash<T>,
-        location: FileLocation<T>,
-        fingerprint: Fingerprint<T>,
-        size: StorageDataUnit<T>,
-        maybe_inclusion_forest_proof: Option<ForestProof<T>>,
-        queue_priority_challenge: bool,
-    ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
-        // Check that the user that's sending the deletion request is not currently insolvent.
-        // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
-        // to delete their files and buckets using the available extrinsics or resolve their
-        // insolvency manually.
-        ensure!(
-            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&sender),
-            Error::<T>::OperationNotAllowedWithInsolventUser
-        );
-
-        // Compute the file key hash.
-        let computed_file_key = Self::compute_file_key(
-            sender.clone(),
-            bucket_id,
-            location.clone(),
-            size,
-            fingerprint,
-        )
-        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
-
-        // Check that the metadata corresponds to the expected file key.
-        ensure!(
-            file_key == computed_file_key,
-            Error::<T>::InvalidFileKeyMetadata
-        );
-
-        // Check if sender is the owner of the bucket.
-        ensure!(
-            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&sender, &bucket_id)?,
-            Error::<T>::NotBucketOwner
-        );
-
-        let msp_id = <T::Providers as ReadBucketsInterface>::get_msp_of_bucket(&bucket_id)?;
-
-        // The bucket must be stored by an MSP before deletion to maintain consistency between the bucket root and runtime state.
-        // This is required because the runtime needs the MSP to provide a proof of inclusion to apply a remove delta for an existing file key.
-        let msp_id = msp_id.ok_or(Error::<T>::OperationNotAllowedWhileBucketIsNotStoredByMsp)?;
-
-        let file_key_included = match maybe_inclusion_forest_proof {
-            // If the user did not supply a proof of inclusion, queue a pending deletion file request.
-            // This will allow the MSP to provide the proof of (non-)inclusion. Until the MSP provides the proof, it is
-            // removed from the privileged providers' list, which means it is not allowed to charge users.
-            None => {
-                let pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&sender);
-
-                // Ensure the file key is not already in the pending deletion requests.
-                ensure!(
-                    !pending_file_deletion_requests
-                        .iter()
-                        .any(|req| req.file_key == file_key),
-                    Error::<T>::FileKeyAlreadyPendingDeletion
-                );
-
-                // Get the deposit amount that the user has to pay for this file deletion request.
-                let file_deletion_request_deposit = T::FileDeletionRequestDeposit::get();
-
-                // Hold the deposit from the user's balance.
-                T::Currency::hold(
-                    &HoldReason::FileDeletionRequestHold.into(),
-                    &sender,
-                    file_deletion_request_deposit,
-                )?;
-
-                // Create the pending file deletion request object to store in storage.
-                let pending_file_deletion_request = PendingFileDeletionRequest {
-                    user: sender.clone(),
-                    file_key,
-                    bucket_id,
-                    file_size: size,
-                    deposit_paid_for_creation: file_deletion_request_deposit,
-                    queue_priority_challenge,
-                };
-
-                // Add the file key to the pending deletion requests.
-                PendingFileDeletionRequests::<T>::try_append(
-                    &sender,
-                    pending_file_deletion_request,
-                )
-                .map_err(|_| Error::<T>::MaxUserPendingDeletionRequestsReached)?;
-
-                // Remove the MSP from the privileged providers list.
-                <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::remove_privileged_provider(&msp_id);
-
-                // Add one to the amount of pending file deletion requests for the MSP.
-                MspsAmountOfPendingFileDeletionRequests::<T>::mutate(&msp_id, |amount| {
-                    *amount = amount.saturating_add(1);
-                });
-
-                false
-            }
-            // If the user supplied a proof of inclusion, verify the proof and queue a priority challenge to remove the file key from all the providers.
-            Some(inclusion_forest_proof) => {
-                // Get the root of the bucket.
-                let bucket_root =
-                    <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
-                        .ok_or(Error::<T>::BucketNotFound)?;
-
-                // Verify the proof of inclusion.
-                let proven_keys =
-                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
-                        &bucket_root,
-                        &[file_key],
-                        &inclusion_forest_proof,
-                    )?;
-
-                // Ensure that the file key IS part of the owner's forest.
-                ensure!(
-                    proven_keys.contains(&file_key),
-                    Error::<T>::ExpectedInclusionProof
-                );
-
-                // Compute new root after removing file key from forest partial trie.
-                let new_root =
-                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
-                        &bucket_root,
-                        &[(file_key, TrieRemoveMutation::default().into())],
-                        &inclusion_forest_proof,
-                        Some(bucket_id.encode()),
-                    )?;
-
-                // Update root of the Bucket.
-                <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
-                    bucket_id, new_root,
-                )?;
-
-                // Decrease size of the bucket.
-                <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
-
-                // Decrease the MSP's used capacity.
-                <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-                    &msp_id, size,
-                )?;
-
-                if queue_priority_challenge {
-                    // Initiate the priority challenge to remove the file key from all the providers.
-                    <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                        &file_key, true,
-                    )?;
-
-                    // Emit event.
-                    Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                        issuer: EitherAccountIdOrMspId::<T>::AccountId(sender.clone()),
-                        file_key,
-                    });
-                }
-
-                true
-            }
-        };
-
-        Ok((file_key_included, msp_id))
-    }
-
-    pub(crate) fn do_pending_file_deletion_request_submit_proof(
-        sender: T::AccountId,
-        user: T::AccountId,
-        file_key: MerkleHash<T>,
-        file_size: StorageDataUnit<T>,
-        bucket_id: BucketIdFor<T>,
-        forest_proof: ForestProof<T>,
-    ) -> Result<(bool, ProviderIdFor<T>), DispatchError> {
-        let msp_id = <T::Providers as shp_traits::ReadProvidersInterface>::get_provider_id(&sender)
-            .ok_or(Error::<T>::NotAMsp)?;
-
-        // Check that the provider is indeed an MSP.
-        ensure!(
-            <T::Providers as ReadStorageProvidersInterface>::is_msp(&msp_id),
-            Error::<T>::NotAMsp
-        );
-
-        // Check that the MSP is storing the bucket.
-        ensure!(
-            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(&msp_id, &bucket_id),
-            Error::<T>::MspNotStoringBucket
-        );
-
-        // Get the user's pending file deletion requests.
-        let mut pending_file_deletion_requests = <PendingFileDeletionRequests<T>>::get(&user);
-
-        // Ensure the file key is in the pending deletion requests and remove it.
-        let pending_file_deletion_request_index = pending_file_deletion_requests
-            .iter()
-            .position(|req| req.file_key == file_key)
-            .ok_or(Error::<T>::FileKeyNotPendingDeletion)?;
-        let pending_file_deletion_request =
-            pending_file_deletion_requests.remove(pending_file_deletion_request_index);
-
-        // Get the root of the bucket.
-        let bucket_root =
-            <T::Providers as shp_traits::ReadBucketsInterface>::get_root_bucket(&bucket_id)
-                .ok_or(Error::<T>::BucketNotFound)?;
-
-        // Verify the proof of inclusion.
-        let proven_keys =
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_generic_forest_proof(
-                &bucket_root,
-                &[file_key],
-                &forest_proof,
-            )?;
-
-        let file_key_included = proven_keys.contains(&file_key);
-
-        // If the file key was part of the forest, remove it from the forest, update the root of the bucket and return the deposit to the user.
-        if file_key_included {
-            // Compute new root after removing file key from forest partial trie.
-            let new_root =
-                <T::ProofDealer as shp_traits::ProofsDealerInterface>::generic_apply_delta(
-                    &bucket_root,
-                    &[(file_key, TrieRemoveMutation::default().into())],
-                    &forest_proof,
-                    Some(Self::do_encode_generic_apply_delta_event_info(bucket_id)),
-                )?;
-
-            // Update root of the Bucket.
-            <T::Providers as shp_traits::MutateBucketsInterface>::change_root_bucket(
-                bucket_id, new_root,
-            )?;
-
-            // Decrease size of the bucket.
-            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, file_size)?;
-
-            // Decrease the used capacity of the MSP.
-            <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-                &msp_id, file_size,
-            )?;
-
-            // Initiate the priority challenge to remove the file key from all the providers.
-            if pending_file_deletion_request.queue_priority_challenge {
-                <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-                    &file_key, true,
-                )?;
-
-                // Emit event.
-                Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                    issuer: EitherAccountIdOrMspId::<T>::MspId(msp_id),
-                    file_key,
-                });
-            }
-
-            // Return the file deletion request deposit to the user owner of the file.
-            T::Currency::release(
-                &HoldReason::FileDeletionRequestHold.into(),
-                &pending_file_deletion_request.user,
-                pending_file_deletion_request.deposit_paid_for_creation,
-                Precision::Exact,
-            )?;
-        } else {
-            // If the file key was not a part of the forest, give the file deletion request deposit to the MSP for their troubles:
-
-            // Get the MSP payment account.
-            let msp_payment_account =
-                <T::Providers as shp_traits::ReadProvidersInterface>::get_payment_account(msp_id)
-                    .ok_or(Error::<T>::FailedToGetPaymentAccount)?;
-
-            // Transfer the deposit to the MSP.
-            T::Currency::transfer_on_hold(
-                &HoldReason::FileDeletionRequestHold.into(),
-                &pending_file_deletion_request.user,
-                &msp_payment_account,
-                pending_file_deletion_request.deposit_paid_for_creation,
-                Precision::Exact,
-                Restriction::Free,
-                Fortitude::Force,
-            )?;
-        }
-
-        // Insert the updated pending file deletion requests back to storage.
-        <PendingFileDeletionRequests<T>>::insert(&user, pending_file_deletion_requests);
-
-        // Substract one from the amount of pending file deletion requests for the MSP.
-        MspsAmountOfPendingFileDeletionRequests::<T>::mutate(&msp_id, |amount| {
-            *amount = amount.saturating_sub(1);
-            if *amount == 0 {
-                // If the MSP has no more pending file deletion requests, add it back to the privileged providers.
-                <<T as crate::Config>::PaymentStreams as PaymentStreamsInterface>::add_privileged_provider(&msp_id);
-            }
-        });
-
-        Ok((file_key_included, msp_id))
-    }
-
     /// Create a collection.
     fn create_collection(owner: T::AccountId) -> Result<CollectionIdFor<T>, DispatchError> {
         // TODO: Parametrize the collection settings.
@@ -2832,10 +2507,6 @@ where
             Ok(file_metadata) => Ok(file_metadata.file_key::<FileKeyHasher<T>>()),
             Err(_) => return Err(Error::<T>::FailedToCreateFileMetadata.into()),
         }
-    }
-
-    fn do_encode_generic_apply_delta_event_info(bucket_id: BucketIdFor<T>) -> Vec<u8> {
-        bucket_id.encode()
     }
 
     fn do_decode_generic_apply_delta_event_info(
