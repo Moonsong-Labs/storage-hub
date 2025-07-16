@@ -10,7 +10,6 @@ use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
     BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
 };
-use shc_indexer_service::IndexerMode;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
