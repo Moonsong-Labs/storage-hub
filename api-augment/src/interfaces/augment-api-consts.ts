@@ -451,6 +451,11 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       minNotFullBlocksRatio: Perbill & AugmentedConst<ApiType>;
       /**
+       * The fee charged for submitting a priority challenge.
+       * This fee goes to the Treasury, and is used to prevent spam.
+       **/
+      priorityChallengesFee: u128 & AugmentedConst<ApiType>;
+      /**
        * The number of random challenges that are generated per block, using the random seed
        * generated for that block.
        **/

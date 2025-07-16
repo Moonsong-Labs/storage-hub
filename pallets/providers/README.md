@@ -25,8 +25,6 @@ A Main Storage Provider (MSP) is responsible for storing the complete file provi
 
 MSPs are compensated for their services by the user. The amount is agreed upon when the user selects the MSP, and it's typically higher than what a Backup Storage Provider receives due to the infrastructure required for convenient data retrieval.
 
-MSPs are required to regularly prove that they continue to store the data they've committed to. This ensures the integrity and availability of the data in the system.
-
 ### Backup Storage Providers (BSPs)
 
 Backup Storage Providers (BSPs) store a portion of the user's file and must have it readily available to be served to another Storage Provider if the user designates a new MSP. Unlike MSPs, BSPs do not need to make the data available for public retrieval.

@@ -32,10 +32,10 @@ use crate::{
         ChallengeTicksToleranceFor, ChallengesFeeFor, ChallengesQueueLengthFor,
         CheckpointChallengePeriodFor, CustomChallenge, ForestVerifierFor, ForestVerifierProofFor,
         KeyFor, KeyVerifierFor, KeyVerifierProofFor, MaxCustomChallengesPerBlockFor,
-        MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor, MinChallengePeriodFor, Proof,
-        ProofSubmissionRecord, ProviderIdFor, ProvidersPalletFor, RandomChallengesPerBlockFor,
-        RandomnessOutputFor, RandomnessProviderFor, StakeToChallengePeriodFor,
-        TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
+        MaxSlashableProvidersPerTickFor, MaxSubmittersPerTickFor, MinChallengePeriodFor,
+        PriorityChallengesFeeFor, Proof, ProofSubmissionRecord, ProviderIdFor, ProvidersPalletFor,
+        RandomChallengesPerBlockFor, RandomnessOutputFor, RandomnessProviderFor,
+        StakeToChallengePeriodFor, TargetTicksStorageOfSubmittersFor, TreasuryAccountFor,
     },
     weights::WeightInfo,
     ChallengesQueue, ChallengesTicker, ChallengesTickerPaused, Error, Event, LastCheckpointTick,
@@ -100,21 +100,64 @@ where
     /// This is to prevent spamming the network with challenges. If the challenge is already queued,
     /// just return. Otherwise, add the challenge to the queue.
     ///
+    /// Arguments:
+    /// - `who`: Origin of the challenge request. If `Some(AccountId)`, represents a signed origin that will be charged the fee.
+    ///   If `None`, represents a Root or None origin that is exempt from fees (None only allowed if the CustomOrigin permits it).
+    ///
     /// Failures:
     /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.
     /// - `ChallengesQueueOverflow`: If the challenges queue is full.
-    pub fn do_challenge(who: &AccountIdFor<T>, key: &KeyFor<T>) -> DispatchResult {
-        // Charge a fee for the challenge.
-        BalancePalletFor::<T>::transfer(
-            &who,
-            &TreasuryAccountFor::<T>::get(),
-            ChallengesFeeFor::<T>::get(),
-            Preservation::Expendable,
-        )
-        .map_err(|_| Error::<T>::FeeChargeFailed)?;
-
+    pub fn do_challenge(who: &Option<AccountIdFor<T>>, key: &KeyFor<T>) -> DispatchResult {
+        // Charge a fee for the challenge only if origin is not root and fee is > 0
+        if let Some(who) = who {
+            let fee = ChallengesFeeFor::<T>::get();
+            if !fee.is_zero() {
+                BalancePalletFor::<T>::transfer(
+                    &who,
+                    &TreasuryAccountFor::<T>::get(),
+                    fee,
+                    Preservation::Expendable,
+                )
+                .map_err(|_| Error::<T>::FeeChargeFailed)?;
+            }
+        };
         // Enqueue challenge.
         Self::enqueue_challenge(key)
+    }
+
+    /// Add priority challenge to PriorityChallengesQueue.
+    ///
+    /// Charges a fee for the priority challenge.
+    /// This is to prevent spamming the network with priority challenges. If the challenge is already queued,
+    /// just return. Otherwise, add the challenge to the queue.
+    ///
+    /// Arguments:
+    /// - `who`: Origin of the priority challenge request. If `Some(AccountId)`, represents a signed origin that will be charged the fee.
+    ///   If `None`, represents a Root or None origin that is exempt from fees (None only allowed if the CustomOrigin permits it).
+    ///
+    /// Failures:
+    /// - `FeeChargeFailed`: If the fee transfer to the treasury account fails.
+    /// - `PriorityChallengesQueueOverflow`: If the priority challenges queue is full.
+    pub fn do_priority_challenge(
+        who: &Option<AccountIdFor<T>>,
+        key: &KeyFor<T>,
+        should_remove_key: bool,
+    ) -> DispatchResult {
+        // Charge a fee for the priority challenge only if origin is not root and fee is > 0
+        if let Some(who) = who {
+            let fee = PriorityChallengesFeeFor::<T>::get();
+            if !fee.is_zero() {
+                BalancePalletFor::<T>::transfer(
+                    &who,
+                    &TreasuryAccountFor::<T>::get(),
+                    fee,
+                    Preservation::Expendable,
+                )
+                .map_err(|_| Error::<T>::FeeChargeFailed)?;
+            }
+        };
+        // Enqueue priority challenge.
+        Self::enqueue_challenge_with_priority(key, should_remove_key)
     }
 
     /// Submit proof.

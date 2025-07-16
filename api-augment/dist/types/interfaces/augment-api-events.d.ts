@@ -2193,9 +2193,9 @@ declare module "@polkadot/api-base/types/events" {
        **/
       NewChallenge: AugmentedEvent<
         ApiType,
-        [who: AccountId32, keyChallenged: H256],
+        [who: Option<AccountId32>, keyChallenged: H256],
         {
-          who: AccountId32;
+          who: Option<AccountId32>;
           keyChallenged: H256;
         }
       >;
@@ -2237,6 +2237,18 @@ declare module "@polkadot/api-base/types/events" {
         {
           challengesTicker: u32;
           challenges: Vec<PalletProofsDealerCustomChallenge>;
+        }
+      >;
+      /**
+       * A priority challenge was submitted.
+       **/
+      NewPriorityChallenge: AugmentedEvent<
+        ApiType,
+        [who: Option<AccountId32>, keyChallenged: H256, shouldRemoveKey: bool],
+        {
+          who: Option<AccountId32>;
+          keyChallenged: H256;
+          shouldRemoveKey: bool;
         }
       >;
       /**

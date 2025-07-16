@@ -110,7 +110,7 @@ fn challenge_submit_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: Some(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -159,7 +159,7 @@ fn challenge_submit_twice_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: Some(1),
                 key_challenged: file_key_1,
             }
             .into(),
@@ -170,7 +170,7 @@ fn challenge_submit_twice_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 2,
+                who: Some(2),
                 key_challenged: file_key_2,
             }
             .into(),
@@ -219,7 +219,7 @@ fn challenge_submit_existing_challenge_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: Some(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -262,7 +262,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: Some(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -291,7 +291,7 @@ fn challenge_submit_in_two_rounds_succeed() {
         // Check that the event is emitted.
         System::assert_last_event(
             Event::NewChallenge {
-                who: 1,
+                who: Some(1),
                 key_challenged: file_key,
             }
             .into(),
@@ -334,7 +334,7 @@ fn challenge_submit_by_regular_user_with_no_funds_fail() {
         // Mock a FileKey.
         let file_key = BlakeTwo256::hash(b"file_key");
 
-        // Dispatch challenge extrinsic.
+        // Dispatch challenge extrinsic - should fail with FeeChargeFailed since user has no funds.
         assert_noop!(
             ProofsDealer::challenge(user, file_key),
             crate::Error::<Test>::FeeChargeFailed

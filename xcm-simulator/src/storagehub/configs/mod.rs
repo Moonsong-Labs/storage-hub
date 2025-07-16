@@ -756,6 +756,7 @@ parameter_types! {
     pub const ChallengesQueueLength: u32 = 100;
     pub const CheckpointChallengePeriod: u32 = 30;
     pub const ChallengesFee: Balance = 1 * UNIT;
+    pub const PriorityChallengesFee: Balance = 0;
     pub const StakeToChallengePeriod: Balance = 200 * UNIT;
     pub const MinChallengePeriod: u32 = 30;
     pub const ChallengeTicksTolerance: u32 = 50;
@@ -780,6 +781,7 @@ impl pallet_proofs_dealer::Config for Runtime {
     type CheckpointChallengePeriod =
         runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod;
     type ChallengesFee = ChallengesFee;
+    type PriorityChallengesFee = PriorityChallengesFee;
     type Treasury = TreasuryAccount;
     // TODO: Once the client logic to keep track of CR randomness deadlines and execute their submissions is implemented
     // AND after the chain has been live for enough time to have enough providers to avoid the commit-reveal randomness being
@@ -793,6 +795,8 @@ impl pallet_proofs_dealer::Config for Runtime {
     type BlockFullnessHeadroom = BlockFullnessHeadroom;
     type MinNotFullBlocksRatio = MinNotFullBlocksRatio;
     type MaxSlashableProvidersPerTick = MaxSlashableProvidersPerTick;
+    type ChallengeOrigin = EnsureSigned<AccountId>;
+    type PriorityChallengeOrigin = EnsureRoot<AccountId>;
 }
 
 /// Structure to mock a verifier that returns `true` when `proof` is not empty
