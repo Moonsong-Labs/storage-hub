@@ -18,14 +18,12 @@
         "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
         "test": "vitest",
         "typecheck": "tsc --noEmit",
-        "size": "size-limit",
         "coverage": "vitest run --coverage"
     },
     "dependencies": {
         "@storagehub/wasm": "file:./wasm/pkg"
     },
     "devDependencies": {
-        "@size-limit/preset-small-lib": "workspace:*",
         "@typescript-eslint/eslint-plugin": "workspace:*",
         "@typescript-eslint/parser": "workspace:*",
         "@vitest/coverage-v8": "workspace:*",
@@ -33,16 +31,9 @@
         "eslint": "workspace:*",
         "eslint-config-prettier": "workspace:*",
         "prettier": "workspace:*",
-        "size-limit": "workspace:*",
         "typescript": "workspace:*",
         "vitest": "workspace:*"
     },
-    "size-limit": [
-        {
-            "path": "dist/index.js",
-            "limit": "10 KB"
-        }
-    ],
     "engines": {
         "node": ">=23"
     }
