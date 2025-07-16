@@ -1,37 +1,21 @@
 {
-    "name": "@storagehub/sdk",
+    "name": "@storagehub-sdk/root",
+    "private": true,
     "version": "0.1.0",
-    "description": "StorageHub TypeScript SDK",
-    "type": "module",
-    "main": "./dist/index.js",
-    "module": "./dist/index.js",
-    "types": "./dist/index.d.ts",
-    "files": [
-        "dist",
-        "pkg"
+    "description": "Workspace root for StorageHub SDK monorepo",
+    "packageManager": "pnpm@8.12.1",
+    "workspaces": [
+        "core",
+        "client"
     ],
     "scripts": {
-        "build": "node ./scripts/build.js",
-        "dev": "node ./scripts/build.js --watch",
-        "lint": "eslint \"{ts/**/*.ts,ts/**/*.tsx}\"",
-        "format": "prettier --write \"{ts/**/*.ts,ts/**/*.tsx}\"",
-        "format:check": "prettier --check \"{ts/**/*.ts,ts/**/*.tsx}\"",
-        "test": "vitest",
-        "typecheck": "tsc --noEmit",
-        "size": "size-limit",
-        "ensure:wasm-pack": "command -v wasm-pack >/dev/null 2>&1 || (rustup target add wasm32-unknown-unknown && cargo install wasm-pack --locked)",
-        "build:wasm": "wasm-pack build ./wasm --target nodejs --release --out-dir pkg",
-        "preinstall": "pnpm run ensure:wasm-pack && pnpm run build:wasm",
-        "coverage": "vitest run --coverage"
-    },
-    "exports": {
-        ".": {
-            "import": "./dist/index.js",
-            "require": "./dist/index.cjs"
-        }
-    },
-    "dependencies": {
-        "@storagehub/wasm": "file:./wasm/pkg"
+        "build": "pnpm --filter ./core run build && pnpm --filter ./client run build",
+        "test": "pnpm --filter ./core run test -- --run && pnpm --filter ./client run test -- --run",
+        "lint": "pnpm --filter ./core run lint && pnpm --filter ./client run lint",
+        "format": "pnpm --filter ./core run format && pnpm --filter ./client run format",
+        "format:check": "pnpm --filter ./core run format:check && pnpm --filter ./client run format:check",
+        "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./client run typecheck",
+        "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./client run coverage"
     },
     "devDependencies": {
         "@size-limit/preset-small-lib": "^9.0.0",
@@ -47,14 +31,7 @@
         "typescript": "^5.4.0",
         "vitest": "^1.6.1"
     },
-    "size-limit": [
-        {
-            "path": "dist/index.js",
-            "limit": "10 KB"
-        }
-    ],
     "engines": {
-        "node": ">=18"
-    },
-    "packageManager": "pnpm@8.12.1"
+        "node": ">=23"
+    }
 }

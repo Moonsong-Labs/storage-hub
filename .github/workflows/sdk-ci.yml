@@ -56,7 +56,7 @@ jobs:
       # Build WASM first so pkg/ exists for pnpm's file: dependency
       - name: Build WASM crate
         working-directory: sdk
-        run: wasm-pack build ./wasm --target nodejs --release --out-dir pkg
+        run: wasm-pack build ./core/wasm --target nodejs --release --out-dir pkg
 
       # Install dependencies
       - name: Install dependencies
