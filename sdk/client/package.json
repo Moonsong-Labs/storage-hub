@@ -1,0 +1,48 @@
+{
+    "name": "@storagehub-sdk/client",
+    "version": "0.1.0",
+    "description": "High-level façade around @storagehub-sdk/core for easy StorageHub integration",
+    "type": "module",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "node ../scripts/build.js",
+        "dev": "node ../scripts/build.js --watch",
+        "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
+        "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
+        "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
+        "test": "vitest",
+        "typecheck": "tsc --noEmit",
+        "size": "size-limit",
+        "coverage": "vitest run --coverage"
+    },
+    "dependencies": {
+        "@storagehub-sdk/core": "workspace:*"
+    },
+    "devDependencies": {
+        "@size-limit/preset-small-lib": "workspace:*",
+        "@typescript-eslint/eslint-plugin": "workspace:*",
+        "@typescript-eslint/parser": "workspace:*",
+        "@vitest/coverage-v8": "workspace:*",
+        "esbuild": "workspace:*",
+        "eslint": "workspace:*",
+        "eslint-config-prettier": "workspace:*",
+        "prettier": "workspace:*",
+        "size-limit": "workspace:*",
+        "typescript": "workspace:*",
+        "vitest": "workspace:*"
+    },
+    "size-limit": [
+        {
+            "path": "dist/index.js",
+            "limit": "5 KB"
+        }
+    ],
+    "engines": {
+        "node": ">=23"
+    }
+}
