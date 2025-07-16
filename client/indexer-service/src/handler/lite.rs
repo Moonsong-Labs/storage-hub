@@ -243,6 +243,7 @@ where
             | pallet_proofs_dealer::Event::MutationsAppliedForProvider { .. }
             | pallet_proofs_dealer::Event::MutationsApplied { .. }
             | pallet_proofs_dealer::Event::ChallengesTickerSet { .. }
+            | pallet_proofs_dealer::Event::NewPriorityChallenge { .. }
             | pallet_proofs_dealer::Event::__Ignore { .. } => true,
         };
 
