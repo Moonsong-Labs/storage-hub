@@ -22,17 +22,6 @@
     "dependencies": {
         "@storagehub-sdk/core": "workspace:*"
     },
-    "devDependencies": {
-        "@typescript-eslint/eslint-plugin": "workspace:*",
-        "@typescript-eslint/parser": "workspace:*",
-        "@vitest/coverage-v8": "workspace:*",
-        "esbuild": "workspace:*",
-        "eslint": "workspace:*",
-        "eslint-config-prettier": "workspace:*",
-        "prettier": "workspace:*",
-        "typescript": "workspace:*",
-        "vitest": "workspace:*"
-    },
     "engines": {
         "node": ">=23"
     }

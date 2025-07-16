@@ -3,6 +3,7 @@
     "private": true,
     "version": "0.1.0",
     "description": "Workspace root for StorageHub SDK monorepo",
+    "type": "module",
     "packageManager": "pnpm@8.12.1",
     "workspaces": [
         "core",
@@ -18,16 +19,17 @@
         "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./client run coverage"
     },
     "devDependencies": {
-        "@typescript-eslint/eslint-plugin": "^7.4.0",
-        "@typescript-eslint/parser": "^7.4.0",
-        "@vitest/coverage-v8": "^1.6.1",
-        "esbuild": "^0.19.0",
-        "eslint": "^8.57.1",
-        "eslint-config-prettier": "^9.0.0",
-        "lint-staged": "^15.2.0",
-        "prettier": "^3.2.0",
-        "typescript": "^5.4.0",
-        "vitest": "^1.6.1"
+        "@eslint/eslintrc": "2.1.4",
+        "@typescript-eslint/eslint-plugin": "^8.37.0",
+        "@typescript-eslint/parser": "^8.37.0",
+        "@vitest/coverage-v8": "^3.2.4",
+        "esbuild": "^0.25.6",
+        "eslint": "^9.31.0",
+        "eslint-config-prettier": "^10.1.5",
+        "lint-staged": "^16.1.2",
+        "prettier": "^3.6.2",
+        "typescript": "~5.5.4",
+        "vitest": "^3.2.4"
     },
     "engines": {
         "node": ">=23"
