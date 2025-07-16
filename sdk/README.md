@@ -12,7 +12,7 @@
 4. **WASM target & tool** (one-time):
    ```bash
    rustup target add wasm32-unknown-unknown
-   cargo install wasm-pack # if not already installed
+   cargo install wasm-pack
    ```
 
 ---
@@ -22,7 +22,7 @@
 ```bash
 cd sdk
 pnpm install           # builds the WASM crate automatically
-pnpm run build         # bundles the TypeScript SDK
+pnpm run build
 ```
 
 ### Smoke-test the WASM helper
@@ -57,8 +57,3 @@ sdk/
 ```
 
 ---
-
-## Troubleshooting
-
-* **WASM build fails** – Ensure `wasm-pack` is on your `$PATH` and the `wasm32-unknown-unknown` target is installed.
-* **Engine warnings** – Other workspace packages may target newer Node versions; they can be ignored when working only in `sdk/`. 
