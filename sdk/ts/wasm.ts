@@ -1,3 +1,3 @@
-import * as wasm from '@storagehub/wasm';
+import * as wasm_export from '@storagehub/wasm';
 
-export const { add } = wasm;
+export const { add } = wasm_export;
