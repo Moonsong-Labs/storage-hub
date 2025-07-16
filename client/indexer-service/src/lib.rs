@@ -19,6 +19,9 @@ pub enum IndexerMode {
     /// Lite indexing mode - indexes only essential data for storage operations
     #[serde(rename = "lite")]
     Lite,
+    /// Fishing indexing mode - indexes only file creation/deletion events for fisherman monitoring
+    #[serde(rename = "fishing")]
+    Fishing,
 }
 
 impl Default for IndexerMode {
@@ -34,8 +37,9 @@ impl std::str::FromStr for IndexerMode {
         match s.to_lowercase().as_str() {
             "full" => Ok(Self::Full),
             "lite" => Ok(Self::Lite),
+            "fishing" => Ok(Self::Fishing),
             _ => Err(format!(
-                "Invalid indexer mode: '{}'. Expected 'full' or 'lite'",
+                "Invalid indexer mode: '{}'. Expected 'full', 'lite', or 'fishing'",
                 s
             )),
         }

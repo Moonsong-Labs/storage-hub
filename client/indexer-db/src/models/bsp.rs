@@ -160,6 +160,29 @@ impl Bsp {
             .await?;
         Ok(())
     }
+
+    pub async fn get_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: Vec<u8>,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        use crate::models::file::File;
+
+        let file = match File::get_by_file_key(conn, file_key).await {
+            Ok(f) => f,
+            Err(_) => return Ok(vec![]), // No file found, return empty vector
+        };
+
+        let bsp_ids: Vec<i64> = bsp_file::table
+            .filter(bsp_file::file_id.eq(file.id))
+            .select(bsp_file::bsp_id)
+            .load::<i64>(conn)
+            .await?;
+
+        bsp::table
+            .filter(bsp::id.eq_any(bsp_ids))
+            .load::<Self>(conn)
+            .await
+    }
 }
 
 #[derive(Debug, Queryable, Insertable, Selectable)]

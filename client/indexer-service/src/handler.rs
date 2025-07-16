@@ -139,6 +139,7 @@ where
         match self.indexer_mode {
             crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
             crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+            crate::IndexerMode::Fishing => self.index_event_fishing(conn, event, block_hash).await,
         }
     }
 
@@ -182,6 +183,53 @@ where
             RuntimeEvent::Parameters(_) => {}
         }
 
+        Ok(())
+    }
+
+    async fn index_event_fishing<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &RuntimeEvent,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            RuntimeEvent::FileSystem(fs_event) => {
+                match fs_event {
+                    // File creation events
+                    pallet_file_system::Event::NewStorageRequest { .. } => {
+                        self.index_file_system_event(conn, fs_event).await?
+                    }
+                    // File deletion events
+                    pallet_file_system::Event::StorageRequestRevoked { .. } |
+                    pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {
+                        self.index_file_system_event(conn, fs_event).await?
+                    }
+                    // BSP-file association events (needed to track which BSPs hold files)
+                    pallet_file_system::Event::BspConfirmedStoring { .. } |
+                    pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {
+                        self.index_file_system_event(conn, fs_event).await?
+                    }
+                    // Bucket events (needed to maintain file-bucket relationships)
+                    pallet_file_system::Event::NewBucket { .. } |
+                    pallet_file_system::Event::BucketDeleted { .. } => {
+                        self.index_file_system_event(conn, fs_event).await?
+                    }
+                    _ => {} // Ignore other file system events
+                }
+            }
+            RuntimeEvent::Providers(provider_event) => {
+                match provider_event {
+                    // BSP registration/deregistration (needed to maintain BSP records)
+                    pallet_storage_providers::Event::BspSignUpSuccess { .. } |
+                    pallet_storage_providers::Event::BspSignOffSuccess { .. } |
+                    pallet_storage_providers::Event::BspDeleted { .. } => {
+                        self.index_providers_event(conn, provider_event, block_hash).await?
+                    }
+                    _ => {} // Ignore other provider events
+                }
+            }
+            _ => {} // Ignore all other runtime events
+        }
         Ok(())
     }
 
@@ -691,7 +739,13 @@ where
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "IndexerService starting up in {:?} mode!", self.actor.indexer_mode);
+        info!(target: LOG_TARGET, "IndexerService starting up in {} mode!", 
+            match self.actor.indexer_mode {
+                crate::IndexerMode::Full => "Full",
+                crate::IndexerMode::Lite => "Lite (MSP-specific indexing)",
+                crate::IndexerMode::Fishing => "Fishing (file tracking only)",
+            }
+        );
 
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 

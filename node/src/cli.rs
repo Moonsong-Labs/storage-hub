@@ -453,6 +453,7 @@ pub struct IndexerConfigurations {
     ///
     /// - `full`: Indexes all blockchain data
     /// - `lite`: Indexes only essential data for storage operations
+    /// - `fishing`: Indexes only file creation/deletion events for fisherman monitoring
     #[arg(long, value_parser = clap::value_parser!(IndexerMode), default_value = "full")]
     pub indexer_mode: IndexerMode,
 

@@ -404,6 +404,13 @@ where
     };
 
     // Start indexer if explicitly requested OR if fisherman is enabled (fisherman depends on indexer)
+    let indexer_mode = if fisherman_config.fisherman && !indexer_config.indexer {
+        // Default to fishing mode for fisherman-only nodes
+        shc_indexer_service::IndexerMode::Fishing
+    } else {
+        indexer_config.indexer_mode
+    };
+    
     if indexer_config.indexer || fisherman_config.fisherman {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
         spawn_indexer_service(
@@ -412,7 +419,7 @@ where
             maybe_db_pool.clone().expect(
                 "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
             ),
-            indexer_config.indexer_mode,
+            indexer_mode,
         )
         .await;
 

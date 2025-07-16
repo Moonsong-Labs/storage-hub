@@ -172,4 +172,17 @@ impl Bucket {
             .await?;
         Ok(buckets)
     }
+
+    pub async fn get_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: Vec<u8>,
+    ) -> Result<Option<Self>, diesel::result::Error> {
+        let file = crate::models::file::File::get_by_file_key(conn, file_key).await?;
+
+        bucket::table
+            .filter(bucket::id.eq(file.bucket_id))
+            .first::<Self>(conn)
+            .await
+            .optional()
+    }
 }
