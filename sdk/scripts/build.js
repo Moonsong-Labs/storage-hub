@@ -2,11 +2,11 @@
 import { build } from 'esbuild';
 import { join } from 'node:path';
 
-const root = new URL('..', import.meta.url).pathname;
+const packageRoot = process.cwd();
 
 await build({
-    entryPoints: [join(root, 'ts', 'index.ts')],
-    outfile: join(root, 'dist', 'index.js'),
+    entryPoints: [join(packageRoot, 'src', 'index.ts')],
+    outfile: join(packageRoot, 'dist', 'index.js'),
     bundle: true,
     sourcemap: true,
     minify: true,

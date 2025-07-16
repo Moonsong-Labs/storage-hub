@@ -12,15 +12,6 @@
         "noUncheckedIndexedAccess": true,
         "forceConsistentCasingInFileNames": true,
         "skipLibCheck": true,
-        "baseUrl": ".",
-        "paths": {
-            "@storagehub/wasm": [
-                "wasm/pkg"
-            ]
-        }
-    },
-    "include": [
-        "ts/**/*",
-        "wasm/pkg/**/*"
-    ]
+        "baseUrl": "."
+    }
 }
