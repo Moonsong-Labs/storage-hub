@@ -44,6 +44,7 @@ shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
 shc-blockchain-service = { workspace = true }
 shc-file-transfer-service = { workspace = true }
+shc-fisherman-service = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }

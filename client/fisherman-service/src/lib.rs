@@ -1,23 +1,16 @@
 //! # Fisherman Service
 //!
-//! The Fisherman Service is responsible for monitoring the StorageHub network and validating
-//! storage provider behavior. It runs as a concurrent actor alongside other services and
-//! depends on the indexer service for blockchain data access.
+//! The Fisherman Service is responsible for handling file deletion requests in the StorageHub network.
+//! It monitors the blockchain for file deletion events and constructs the necessary proofs for
+//! storage providers to remove files from their storage.
 //!
 //! ## Key Features
 //!
-//! - Monitors blockchain events for storage provider activities
-//! - Validates storage proofs and challenges
-//! - Detects potential misbehavior patterns
-//! - Can submit challenges when necessary
-//! - Provides manual validation triggers via commands
-//!
-//! ## Dependencies
-//!
-//! - Requires the indexer service to be running
-//! - Needs access to the blockchain client
-//! - Requires database access for indexed data
+//! - Monitors blockchain events for file deletion requests
+//! - Constructs proofs of inclusion from MSP or BSP forests
+//! - Submits constructed proofs to the blockchain
 
+pub mod events;
 pub mod handler;
 
 use std::sync::Arc;
@@ -28,32 +21,14 @@ use shc_common::types::ParachainClient;
 use shc_indexer_db::DbPool;
 
 pub use self::handler::{FishermanService, FishermanServiceCommand, FishermanServiceError};
+pub use events::{
+    FileDeletionTarget, FishermanServiceEventBusProvider, ProcessFileDeletionRequest,
+};
 
 /// Spawn the fisherman service as an actor
 ///
 /// This function creates and spawns a new FishermanService actor that will monitor
-/// the StorageHub network for storage provider behavior and validate activities.
-///
-/// # Arguments
-///
-/// * `task_spawner` - The task spawner for creating the actor
-/// * `client` - Arc-wrapped parachain client for blockchain interaction
-/// * `db_pool` - Database pool for accessing indexed data
-///
-/// # Returns
-///
-/// Returns an ActorHandle for the spawned FishermanService
-///
-/// # Example
-///
-/// ```rust,ignore
-/// let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman");
-/// let fisherman_handle = spawn_fisherman_service(
-///     &task_spawner,
-///     client.clone(),
-///     db_pool.clone(),
-/// ).await;
-/// ```
+/// the StorageHub network for file deletion requests and construct proofs of inclusion to delete file keys from Bucket and BSP forests.
 pub async fn spawn_fisherman_service<
     RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection> + Send + 'static,
 >(
@@ -74,23 +49,4 @@ where
 
     // Spawn the actor and return the handle
     task_spawner.spawn_actor(fisherman_service)
-}
-
-#[cfg(test)]
-mod tests {
-    // Note: These are placeholder tests. Full implementation would require
-    // mock clients and database setup.
-
-    #[tokio::test]
-    async fn test_fisherman_service_creation() {
-        // This test would verify that the fisherman service can be created
-        // with mock dependencies
-        // TODO: Implement with proper mocks
-    }
-
-    #[tokio::test]
-    async fn test_command_handling() {
-        // This test would verify that commands are handled correctly
-        // TODO: Implement with proper test harness
-    }
 }

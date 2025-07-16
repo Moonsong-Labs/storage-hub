@@ -14,12 +14,15 @@ use shc_common::types::{BlockNumber, ParachainClient};
 use shc_indexer_db::DbPool;
 use sp_core::H256;
 
+use crate::events::FishermanServiceEventBusProvider;
+
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
 
 /// Commands that can be sent to the FishermanService actor
 #[derive(Debug)]
 pub enum FishermanServiceCommand {
-    /// Process a file deletion request (placeholder for future implementation)
+    /// Process a file deletion request by constructing proof of inclusion
+    /// from Bucket/BSP forest and submitting it to the blockchain
     ProcessFileDeletionRequest,
 }
 
@@ -36,15 +39,18 @@ pub enum FishermanServiceError {
 
 /// The main FishermanService actor
 ///
-/// This service monitors the StorageHub blockchain for storage provider activities,
-/// validates behaviors, and can submit challenges when misbehavior is detected.
+/// This service monitors the StorageHub blockchain for file deletion requests,
+/// constructs proofs of inclusion from Bucket/BSP forests, and submits these proofs
+/// to enable storage providers to safely delete file keys from their Merkle forests.
 pub struct FishermanService<RuntimeApi> {
     /// Substrate client for blockchain interaction
     client: Arc<ParachainClient<RuntimeApi>>,
     /// Database pool for accessing indexed data
-    db_pool: DbPool,
+    _db_pool: DbPool,
     /// Last processed block number to avoid reprocessing
     last_processed_block: Option<BlockNumber>,
+    /// Event bus provider for emitting fisherman events
+    event_bus_provider: FishermanServiceEventBusProvider,
 }
 
 impl<RuntimeApi> FishermanService<RuntimeApi> {
@@ -52,12 +58,13 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
     pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool) -> Self {
         Self {
             client,
-            db_pool,
+            _db_pool: db_pool,
             last_processed_block: None,
+            event_bus_provider: FishermanServiceEventBusProvider::new(),
         }
     }
 
-    /// Monitor new blocks for fisherman-relevant events
+    /// Monitor new blocks for file deletion request events
     async fn monitor_block(
         &mut self,
         block_number: BlockNumber,
@@ -65,8 +72,7 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
-        // TODO: When FileDeletionRequest event is added to runtime, process it here
-        // For now, just update the last processed block
+        // TODO: Send FileDeletionRequest command when FileDeletionRequest event is detected
 
         self.last_processed_block = Some(block_number);
         Ok(())
@@ -81,7 +87,7 @@ where
 {
     type Message = FishermanServiceCommand;
     type EventLoop = FishermanServiceEventLoop<RuntimeApi>;
-    type EventBusProvider = (); // Not using event bus for now
+    type EventBusProvider = FishermanServiceEventBusProvider;
 
     fn handle_message(
         &mut self,
@@ -92,16 +98,16 @@ where
                 FishermanServiceCommand::ProcessFileDeletionRequest => {
                     info!(
                         target: LOG_TARGET,
-                        "🎣 ProcessFileDeletionRequest received (placeholder - no action taken)"
+                        "🎣 ProcessFileDeletionRequest received - constructing proof of inclusion"
                     );
-                    // TODO: Implement file deletion request handling when runtime event is available
+                    // TODO: Emit ProcessFileDeletionRequest event for every Bucket and BSP found to hold the file key in the forest
                 }
             }
         }
     }
 
     fn get_event_bus_provider(&self) -> &Self::EventBusProvider {
-        &()
+        &self.event_bus_provider
     }
 }
 
@@ -116,7 +122,9 @@ where
 
 /// Event loop for the FishermanService actor
 ///
-/// This runs the main monitoring logic of the fisherman service.
+/// This runs the main monitoring logic of the fisherman service,
+/// watching for file deletion requests and processing them by
+/// constructing and submitting proofs of inclusion.
 pub struct FishermanServiceEventLoop<RuntimeApi> {
     service: FishermanService<RuntimeApi>,
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand>,

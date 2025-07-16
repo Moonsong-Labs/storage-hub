@@ -8,6 +8,7 @@ description = "Fisherman monitoring service for StorageHub parachain"
 [dependencies]
 # Actor framework dependencies
 shc-actors-framework = { path = "../actors-framework" }
+shc-actors-derive = { path = "../actors-derive" }
 shc-common = { path = "../common" }
 shc-indexer-db = { path = "../indexer-db" }
 
