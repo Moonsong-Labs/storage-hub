@@ -7,7 +7,7 @@ node_modules/
 /dist/
 
 # Test coverage
-/coverage/
+**/coverage/
 
 # Logs
 npm-debug.log*

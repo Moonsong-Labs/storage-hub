@@ -1,16 +1,16 @@
 export interface StorageHubClientOptions {
-    endpoint?: string;
+  endpoint?: string;
 }
 
 export class StorageHubClient {
-    public readonly endpoint?: string;
+  public readonly endpoint: string | undefined;
 
-    private constructor(opts: StorageHubClientOptions) {
-        this.endpoint = opts.endpoint;
-    }
+  private constructor(opts: StorageHubClientOptions) {
+    this.endpoint = opts.endpoint;
+  }
 
-    static async connect(opts: StorageHubClientOptions = {}): Promise<StorageHubClient> {
-        // For now no network connection; just return instance
-        return new StorageHubClient(opts);
-    }
-} 
+  static async connect(opts: StorageHubClientOptions = {}): Promise<StorageHubClient> {
+    // For now no network connection; just return instance
+    return new StorageHubClient(opts);
+  }
+}
