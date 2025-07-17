@@ -14563,6 +14563,7 @@ dependencies = [
  "mockito",
  "pallet-file-system-runtime-api",
  "pallet-proofs-dealer-runtime-api",
+ "percent-encoding",
  "reqwest",
  "sc-rpc-api",
  "serde",

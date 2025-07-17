@@ -42,10 +42,9 @@ impl RemoteFileHandlerFactory {
             Ok(url) => url,
             Err(_) => {
                 // Handle local paths
-                if url_str.starts_with('/')
-                    || url_str.starts_with("./")
-                    || url_str.starts_with("../")
                 {
+                    // Accept any non-URL string as a local path (absolute, relative, or bare file names)
+
                     // Validate local file permissions before creating the URL
                     let path = PathBuf::from(url_str);
 
@@ -59,29 +58,37 @@ impl RemoteFileHandlerFactory {
                         })?;
                     } else {
                         // Check if we can create the file (test write permissions on parent directory)
-                        if let Some(parent) = path.parent() {
-                            if !parent.exists() {
-                                return Err(RemoteFileError::InvalidUrl(format!(
-                                    "Parent directory does not exist for path: {}",
-                                    url_str
-                                )));
-                            }
-                            // Test write permissions by checking if parent is writable
-                            let metadata = std::fs::metadata(parent)
-                                .map_err(|e| RemoteFileError::IoError(e))?;
-                            if metadata.permissions().readonly() {
-                                return Err(RemoteFileError::AccessDenied);
-                            }
+                        let parent = match path.parent() {
+                            Some(p) if !p.as_os_str().is_empty() => p,
+                            _ => std::path::Path::new("."),
+                        };
+                        if !parent.exists() {
+                            return Err(RemoteFileError::InvalidUrl(format!(
+                                "Parent directory does not exist for path: {}",
+                                url_str
+                            )));
+                        }
+                        let metadata =
+                            std::fs::metadata(parent).map_err(|e| RemoteFileError::IoError(e))?;
+                        if metadata.permissions().readonly() {
+                            return Err(RemoteFileError::AccessDenied);
                         }
                     }
 
-                    Url::parse(&format!("file://{}", url_str))
-                        .map_err(|e| RemoteFileError::InvalidUrl(format!("{}: {}", url_str, e)))?
-                } else {
-                    return Err(RemoteFileError::InvalidUrl(format!(
-                        "Invalid URL: {}",
-                        url_str
-                    )));
+                    // Always use absolute paths for file:// URLs
+                    let abs_path = if path.is_absolute() {
+                        path
+                    } else {
+                        std::env::current_dir()
+                            .map_err(|e| RemoteFileError::IoError(e))?
+                            .join(&path)
+                    };
+                    Url::from_file_path(&abs_path).map_err(|_| {
+                        RemoteFileError::InvalidUrl(format!(
+                            "Could not convert '{}' to file URL",
+                            abs_path.display()
+                        ))
+                    })?
                 }
             }
         };

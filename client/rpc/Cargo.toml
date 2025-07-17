@@ -52,6 +52,7 @@ std = []
 [dev-dependencies]
 tempfile = "3.0"
 mockito = "1.7"
+percent-encoding = "2"
 
 [lints]
 workspace = true
