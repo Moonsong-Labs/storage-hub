@@ -51,6 +51,7 @@ mod tests;
 #[frame_support::pallet]
 pub mod pallet {
     use super::{types::*, weights::WeightInfo};
+    use codec::HasCompact;
     use frame_support::{
         dispatch::DispatchResult,
         pallet_prelude::{ValueQuery, *},
@@ -72,7 +73,6 @@ pub mod pallet {
         },
         BoundedVec, MultiSignature,
     };
-    use codec::HasCompact;
     use sp_weights::WeightMeter;
 
     #[pallet::config]
@@ -1411,15 +1411,23 @@ pub mod pallet {
             fingerprint: Fingerprint<T>,
         ) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            
-            Self::do_request_delete_file(who.clone(), signed_message.clone(), signature.clone(), bucket_id, location, size, fingerprint)?;
-            
+
+            Self::do_request_delete_file(
+                who.clone(),
+                signed_message.clone(),
+                signature.clone(),
+                bucket_id,
+                location,
+                size,
+                fingerprint,
+            )?;
+
             // Emit the event
             Self::deposit_event(Event::RequestFileDeletion {
                 signed_message,
-                signature
+                signature,
             });
-            
+
             Ok(())
         }
     }

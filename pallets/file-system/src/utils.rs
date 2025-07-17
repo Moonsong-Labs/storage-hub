@@ -14,9 +14,9 @@ use num_bigint::BigUint;
 use sp_runtime::{
     traits::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
-        Saturating, Zero, Verify
+        Saturating, Verify, Zero,
     },
-    ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError, MultiSignature
+    ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError, MultiSignature,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
@@ -39,7 +39,14 @@ use sp_std::collections::btree_map::BTreeMap;
 use crate::{
     pallet,
     types::{
-        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor, CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionMessage, FileKeyHasher, FileKeyWithProof, FileLocation, Fingerprint, ForestProof, MerkleHash, MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestMspResponse, TickNumber, ValuePropId, FileOperation
+        BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
+        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionMessage,
+        FileKeyHasher, FileKeyWithProof, FileLocation, FileOperation, Fingerprint, ForestProof,
+        MerkleHash, MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
+        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
+        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
     BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingMoveBucketRequests,
@@ -97,7 +104,9 @@ where
     T: pallet::Config,
 {
     /// Helper function to convert T::AccountId to AccountId32 for signature verification
-    fn account_id_to_account_id32(account_id: &T::AccountId) -> Result<sp_core::crypto::AccountId32, Error<T>> {
+    fn account_id_to_account_id32(
+        account_id: &T::AccountId,
+    ) -> Result<sp_core::crypto::AccountId32, Error<T>> {
         let account_bytes = account_id.encode();
         sp_core::crypto::AccountId32::try_from(account_bytes.as_slice())
             .map_err(|_| Error::<T>::InvalidSignature)
@@ -1151,44 +1160,61 @@ where
         Ok((msp_id, bucket_owner))
     }
 
-        /// Placeholder function for requesting file deletion.
-        ///
-        /// This function will be implemented later to handle the actual file deletion logic.
-        /// For now, it just returns Ok(()).
-        pub(crate) fn do_request_delete_file(
-            who: T::AccountId,
-            signed_message: FileDeletionMessage<T>,
-            signature: MultiSignature,
-            bucket_id: BucketIdFor<T>,
-            location: FileLocation<T>,
-            size: StorageDataUnit<T>,
-            fingerprint: Fingerprint<T>,
-        ) -> DispatchResult {
-            // Encode the message for signature verification
-            let message_encoded = signed_message.encode();
-            
-            // Verify the signature
-            let account_id_32 = Self::account_id_to_account_id32(&who)?;
-            let is_valid = signature.verify(&message_encoded[..], &account_id_32);
-            ensure!(is_valid, Error::<T>::InvalidSignature);
-            
-            // Compute file key from the provided metadata
-            let file_key = Self::compute_file_key(
-                who.clone(),
-                bucket_id,
-                location.clone(),
-                size,
-                fingerprint,
-            )?;
-            
-            // Verify that the file_key in the signed message matches the computed one
-            ensure!(signed_message.file_key == file_key, Error::<T>::InvalidFileKeyMetadata);
-            
-            // Verify that the operation is Delete
-            ensure!(signed_message.operation == FileOperation::Delete, Error::<T>::InvalidFileKeyMetadata);
-            
-            Ok(())
-        }
+    /// Placeholder function for requesting file deletion.
+    ///
+    /// This function will be implemented later to handle the actual file deletion logic.
+    /// For now, it just returns Ok(()).
+    pub(crate) fn do_request_delete_file(
+        who: T::AccountId,
+        signed_message: FileDeletionMessage<T>,
+        signature: MultiSignature,
+        bucket_id: BucketIdFor<T>,
+        location: FileLocation<T>,
+        size: StorageDataUnit<T>,
+        fingerprint: Fingerprint<T>,
+    ) -> DispatchResult {
+        // Check that the user that's sending the deletion request is not currently insolvent.
+        // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
+        // to delete their files and buckets using the available extrinsics or resolve their
+        // insolvency manually.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&who),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
+        // Check if sender is the owner of the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&who, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
+
+        // Encode the message for signature verification
+        let message_encoded = signed_message.encode();
+
+        // Verify the signature (This is not strictly needed, but prevents the fisherman node to do useless work)
+        let account_id_32 = Self::account_id_to_account_id32(&who)?;
+        let is_valid = signature.verify(&message_encoded[..], &account_id_32);
+        ensure!(is_valid, Error::<T>::InvalidSignature);
+
+        // Compute file key from the provided metadata
+        let computed_file_key =
+            Self::compute_file_key(who.clone(), bucket_id, location.clone(), size, fingerprint)
+                .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
+
+        // Verify that the file_key in the signed message matches the computed one
+        ensure!(
+            signed_message.file_key == computed_file_key,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Verify that the operation is Delete
+        ensure!(
+            signed_message.operation == FileOperation::Delete,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
+        Ok(())
+    }
 
     /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.
     ///
