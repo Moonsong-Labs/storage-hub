@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Rustfmt Check
-        run: cargo fmt --all -- --check
+        uses: cargo fmt --all -- --check
 
   check-rust-lint:
     name: "Check lint with clippy"
