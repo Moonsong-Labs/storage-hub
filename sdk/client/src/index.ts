@@ -1,1 +1,1 @@
-export { StorageHubClient } from './StorageHubClient'; 
+export { StorageHubClient } from './StorageHubClient';

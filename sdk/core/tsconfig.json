@@ -3,7 +3,12 @@
     "compilerOptions": {
         "rootDir": "src",
         "outDir": "dist",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
         "paths": {
+            "./wasm": [
+                "./src/wasm.ts"
+            ],
             "@storagehub/wasm": [
                 "wasm/pkg"
             ]

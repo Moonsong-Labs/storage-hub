@@ -53,11 +53,6 @@ jobs:
             cargo install wasm-pack --locked
           fi
 
-      # Build WASM first so pkg/ exists for pnpm's file: dependency
-      - name: Build WASM crate
-        working-directory: sdk
-        run: wasm-pack build ./core/wasm --target nodejs --release --out-dir pkg
-
       # Install dependencies
       - name: Install dependencies
         run: pnpm install
@@ -73,9 +68,13 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
-      # Unit tests
+      # Unit tests core
       - name: Run tests
-        run: pnpm test -- --run
+        run: pnpm test:core -- --run
+
+      # Unit tests client
+      - name: Run tests
+        run: pnpm test:client -- --run
 
       # Coverage check (fails if coverage <80%)
       - name: Coverage

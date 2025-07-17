@@ -11,12 +11,16 @@
     ],
     "scripts": {
         "build": "pnpm --filter ./core run build && pnpm --filter ./client run build",
-        "test": "pnpm --filter ./core run test -- --run && pnpm --filter ./client run test -- --run",
+        "build:wasm": "pnpm --filter ./core run build:wasm",
+        "test": "pnpm run test:core && pnpm run test:client",
+        "test:core": "pnpm --filter ./core run test -- --run",
+        "test:client": "pnpm --filter ./client run test -- --run",
         "lint": "pnpm --filter ./core run lint && pnpm --filter ./client run lint",
         "format": "pnpm --filter ./core run format && pnpm --filter ./client run format",
         "format:check": "pnpm --filter ./core run format:check && pnpm --filter ./client run format:check",
         "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./client run typecheck",
-        "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./client run coverage"
+        "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./client run coverage",
+        "clean": "node scripts/clean.js"
     },
     "devDependencies": {
         "@eslint/eslintrc": "2.1.4",

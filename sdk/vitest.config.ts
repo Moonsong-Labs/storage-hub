@@ -1,15 +1,22 @@
 import { defineConfig } from 'vitest/config';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 
 // TODO: set coverage to 95% according to specs
 const COVERAGE_THRESHOLD = 0;
 
 export default defineConfig({
+    resolve: {
+        alias: {
+            '@storagehub/wasm': resolve(fileURLToPath(new URL('.', import.meta.url)), 'core/wasm/pkg'),
+        },
+    },
     test: {
         environment: 'node',
         globals: true,
         coverage: {
             provider: 'v8',
-            exclude: ['scripts/**', 'wasm/pkg/**'],
+            exclude: ['scripts/**', '**/wasm/pkg/**'],
             reporter: ['text', 'html'],
             all: true,
             thresholds: {
