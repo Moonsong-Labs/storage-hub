@@ -11534,7 +11534,7 @@ mod file_deletion_signature_tests {
     use super::*;
 
     #[test]
-    fn test_file_deletion_signature_verification_happy_path() {
+    fn file_owner_can_request_file_deletion() {
         new_test_ext().execute_with(|| {
             // 1. Setup: Create account and get keypair
             let alice_pair = Keyring::Alice.pair();
