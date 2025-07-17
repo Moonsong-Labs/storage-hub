@@ -11598,4 +11598,125 @@ mod file_deletion_signature_tests {
             );
         });
     }
+
+    #[test]
+    fn message_not_signed_by_owner_fail() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create owner account
+            let alice_account = Keyring::Alice.to_account_id();
+            let alice_origin = RuntimeOrigin::signed(alice_account.clone());
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&alice_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"buen_fla".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key as done in the actual implementation
+            let file_key = FileSystem::compute_file_key(
+                alice_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // 2. Construct the message
+            let signed_message = FileDeletionMessage::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 3. Non owner signs the message
+            let non_owner_pair = Keyring::Bob.pair();
+            let message_encoded = signed_message.encode();
+            let non_owner_signature_bytes = non_owner_pair.sign(&message_encoded);
+            let signature = MultiSignature::Sr25519(non_owner_signature_bytes);
+
+            // 4. Call the extrinsic - caller is the owner, but the message was signed by other account.
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    alice_origin,
+                    signed_message.clone(),
+                    signature.clone(),
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::InvalidSignature
+            );
+        });
+    }
+
+    #[test]
+    fn non_owner_cannot_request_for_file_deletion() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create owner account
+            let alice_account = Keyring::Alice.to_account_id();
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&alice_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"buen_fla".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key as done in the actual implementation
+            let file_key = FileSystem::compute_file_key(
+                alice_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // 2. Construct the message
+            let signed_message = FileDeletionMessage::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 3. Non owner signs the message
+            let non_owner_pair = Keyring::Bob.pair();
+            let non_owner_account = Keyring::Bob.to_account_id();
+            let non_owner_origin = RuntimeOrigin::signed(non_owner_account.clone());
+            let message_encoded = signed_message.encode();
+            let non_owner_signature_bytes = non_owner_pair.sign(&message_encoded);
+            let signature = MultiSignature::Sr25519(non_owner_signature_bytes);
+
+            // 4. Call the extrinsic - caller is the owner, but the message was signed by other account.
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    non_owner_origin,
+                    signed_message.clone(),
+                    signature.clone(),
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::NotBucketOwner
+            );
+        });
+    }
 }

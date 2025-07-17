@@ -1202,7 +1202,7 @@ where
         // Encode the message for signature verification
         let message_encoded = signed_message.encode();
 
-        // Verify the signature (This is not strictly needed, but prevents the fisherman node to do useless work)
+        // Verify the signature (This is not strictly needed to do here, but prevents the fisherman node to do useless work)
         let account_id_32 = Self::account_id_to_account_id32(&who)?;
         let is_valid = signature.verify(&message_encoded[..], &account_id_32);
         ensure!(is_valid, Error::<T>::InvalidSignature);
