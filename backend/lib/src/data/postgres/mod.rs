@@ -4,6 +4,6 @@
 //! allowing the backend to query blockchain-indexed data.
 
 pub mod client;
-pub mod queries;
+// pub mod queries; // TODO: Fix compilation errors in queries module
 
 pub use client::PostgresClient;

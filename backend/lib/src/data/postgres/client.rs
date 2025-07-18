@@ -59,24 +59,12 @@ impl PostgresClient {
         Ok(Self { pool })
     }
 
-    /// Get a connection from the pool
-    ///
-    /// This is primarily used internally and by the queries module
-    pub(super) async fn get_connection(
-        &self,
-    ) -> Result<
-        diesel_async::pooled_connection::bb8::PooledConnection<'_, AsyncDieselConnectionManager<AsyncPgConnection>>,
-        PostgresError,
-    > {
-        Ok(self.pool.get().await?)
-    }
-
     /// Test the database connection
     ///
     /// # Returns
     /// Ok(()) if the connection is successful, otherwise an error
     pub async fn test_connection(&self) -> Result<(), PostgresError> {
-        let _conn = self.get_connection().await?;
+        let _conn = self.pool.get().await?;
         Ok(())
     }
 }

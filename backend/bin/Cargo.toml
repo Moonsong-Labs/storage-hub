@@ -9,3 +9,9 @@ path = "src/main.rs"
 
 [dependencies]
 sh-backend-lib = { path = "../lib" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+axum = "0.7"
+toml = "0.8"
+serde = { version = "1.0", features = ["derive"] }

@@ -4,7 +4,7 @@ pub mod handlers;
 pub mod routes;
 
 use axum::http::header::CONTENT_TYPE;
-use axum::http::{HeaderValue, Method};
+use axum::http::Method;
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
