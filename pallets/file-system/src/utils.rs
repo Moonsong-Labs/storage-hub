@@ -32,7 +32,7 @@ use shp_traits::{
     CommitRevealRandomnessInterface, MutateBucketsInterface, MutateProvidersInterface, MutateStorageProvidersInterface,
     PaymentStreamsInterface, PricePerGigaUnitPerTickInterface, ProofsDealerInterface,
     ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
-    ReadUserSolvencyInterface, TrieAddMutation, TrieMutation, TrieRemoveMutation,
+    ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 use sp_std::collections::btree_map::BTreeMap;
 
@@ -1228,12 +1228,13 @@ where
         Ok(())
     }
 
-    /// Execute actual file deletion with forest proof verification.
+    /// Execute actual file deletion (provider's root update) if proof verifies
     ///
-    /// This function extracts the file owner from the signature, validates the deletion request,
+    /// This function validates the deletion request against the provided file owner,
     /// verifies the forest proof, and performs the actual file deletion from the provider's forest.
     ///
     /// # Arguments
+    /// * `file_owner` - The account that originally signed the deletion request
     /// * `signed_message` - The signed deletion message containing file key and operation
     /// * `signature` - The signature from the original file owner
     /// * `bucket_id` - The bucket containing the file
@@ -1243,6 +1244,7 @@ where
     /// * `provider_id` - The provider (MSP/BSP) storing the file
     /// * `forest_proof` - Proof that the file exists in the provider's forest
     pub(crate) fn do_delete_file(
+        file_owner: T::AccountId,
         signed_message: FileDeletionMessage<T>,
         signature: MultiSignature,
         bucket_id: BucketIdFor<T>,
@@ -1252,31 +1254,22 @@ where
         provider_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Phase 1: Extract account from signature
+        // Phase 1: Verify signature against provided file owner
         let message_encoded = signed_message.encode();
-        let who = Self::extract_account_from_signature(&signature, &message_encoded)?;
-
-        // Phase 2: Perform same validations as do_request_delete_file
-        // Check that the user is not currently insolvent
-        ensure!(
-            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&who),
-            Error::<T>::OperationNotAllowedWithInsolventUser
-        );
-
-        // Check if sender is the owner of the bucket
-        ensure!(
-            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&who, &bucket_id)?,
-            Error::<T>::NotBucketOwner
-        );
-
-        // Verify the signature
-        let account_id_32 = Self::account_id_to_account_id32(&who)?;
+        let account_id_32 = Self::account_id_to_account_id32(&file_owner)?;
         let is_valid = signature.verify(&message_encoded[..], &account_id_32);
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
+        // Phase 2: Perform validations 
+        // Check if sender is the owner of the bucket
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&file_owner, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
+
         // Compute file key from the provided metadata
         let computed_file_key =
-            Self::compute_file_key(who.clone(), bucket_id, location.clone(), size, fingerprint)
+            Self::compute_file_key(file_owner.clone(), bucket_id, location.clone(), size, fingerprint)
                 .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
         // Verify that the file_key in the signed message matches the computed one
@@ -1285,104 +1278,53 @@ where
             Error::<T>::InvalidFileKeyMetadata
         );
 
+        // Check that the user is not currently insolvent
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Verify that the operation is Delete
         ensure!(
             signed_message.operation == FileOperation::Delete,
             Error::<T>::InvalidFileKeyMetadata
         );
 
-        // Phase 3: Forest proof verification
-        let is_msp = <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id);
-        let is_bsp = <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id);
-        
-        ensure!(is_msp || is_bsp, Error::<T>::InvalidProviderType);
-
-        // Get provider's current root hash
-        let _provider_root = if is_msp {
-            <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
-                .ok_or(Error::<T>::BucketNotFound)?
-        } else {
-            <T::Providers as ReadProvidersInterface>::get_root(provider_id)
-                .ok_or(Error::<T>::InvalidProviderType)?
-        };
-
-        // Verify forest proof
-        let challenges = vec![computed_file_key];
-        let verified_keys = <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
-            &provider_id,
-            &challenges,
-            &forest_proof,
-        ).map_err(|_| Error::<T>::ForestProofVerificationFailed)?;
-
-        ensure!(
-            verified_keys.contains(&computed_file_key),
-            Error::<T>::ProviderNotStoringFile
-        );
-
-        // Phase 4: Actual file deletion
-        // Remove file from provider's forest
-        let mutations = vec![(computed_file_key, TrieMutation::Remove(TrieRemoveMutation::new()))];
-        let new_root = <T::ProofDealer as ProofsDealerInterface>::apply_delta(
-            &provider_id,
-            &mutations,
-            &forest_proof,
-        ).map_err(|_| Error::<T>::ForestProofVerificationFailed)?;
-
-        // Update provider's root hash
-        if is_msp {
-            <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
-        } else {
-            <T::Providers as MutateProvidersInterface>::update_root(provider_id, new_root)?;
-        }
-
-        // Update provider's used capacity
-        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&provider_id, size)?;
-
-        // Update bucket size if MSP
-        if is_msp {
-            <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
-        }
-
-        // Update payment streams - decrease payment rate for file deletion
-        // TODO: Implement payment stream updates for file deletion
-        // The exact mechanism depends on the payment stream implementation
-        // For now, we'll skip this as it requires complex rate calculations
-
-        // Emit appropriate event
-        if is_msp {
-            Self::deposit_event(Event::MspFileDeletionCompleted {
-                user: who,
-                file_key: computed_file_key,
-                file_size: size,
-                bucket_id,
-                msp_id: provider_id,
-            });
-        } else {
-            Self::deposit_event(Event::BspFileDeletionCompleted {
-                user: who,
-                file_key: computed_file_key,
-                file_size: size,
-                bsp_id: provider_id,
-            });
+        // Phase 3: Forest proof verification and file deletion
+        match (
+            <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id),
+            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id),
+        ) {
+            // is_msp == true, is_bsp == false
+            (true, false) => {
+                Self::delete_file_from_msp(
+                    file_owner,
+                    computed_file_key,
+                    size,
+                    bucket_id,
+                    provider_id,
+                    forest_proof,
+                )?;
+            }
+            // is_msp == false, is_bsp == true
+            (false, true) => {
+                Self::delete_file_from_bsp(
+                    file_owner,
+                    computed_file_key,
+                    size,
+                    provider_id,
+                    forest_proof,
+                )?;
+            }
+            // Something wrong happened
+            (false, false) => {
+                return Err(Error::<T>::InvalidProviderType.into());
+            }
         }
 
         Ok(())
     }
 
-    /// Extract account ID from signature by trying to verify it
-    fn extract_account_from_signature(
-        _signature: &MultiSignature,
-        _message: &[u8],
-    ) -> Result<T::AccountId, DispatchError> {
-        // For now, we'll need to implement a way to extract the account from the signature
-        // This is a placeholder that will need to be implemented based on the signature type
-        // The signature verification process typically involves trying different account derivations
-        // until one succeeds, but this requires more complex cryptographic operations
-        
-        // TODO: Implement proper signature -> account extraction
-        // For now, return an error to indicate this needs implementation
-        Err(Error::<T>::FailedToExtractAccountFromSignature.into())
-    }
 
     /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.
     ///
@@ -2763,6 +2705,111 @@ where
             })
             .collect()
     }
+
+    /// Update MSP bucket root after file deletion
+    pub(crate) fn delete_file_from_msp(
+        file_owner: T::AccountId,
+        file_key: MerkleHash<T>,
+        size: StorageDataUnit<T>,
+        bucket_id: BucketIdFor<T>,
+        provider_id: ProviderIdFor<T>,
+        forest_proof: ForestProof<T>,
+    ) -> DispatchResult {
+        // Get current bucket root
+        let bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
+            .ok_or(Error::<T>::BucketNotFound)?;
+
+        // Verify that the file key IS part of the bucket's forest
+        let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_generic_forest_proof(
+            &bucket_root,
+            &[file_key],
+            &forest_proof,
+        )?;
+
+        // Ensure that the file key IS part of the bucket's forest
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
+        );
+
+        // Compute new root after removing file key from forest
+        let new_root = <T::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+            &bucket_root,
+            &[(file_key, TrieRemoveMutation::default().into())],
+            &forest_proof,
+            Some(bucket_id.encode()),
+        )?;
+
+        // Update root of the bucket
+        <T::Providers as MutateBucketsInterface>::change_root_bucket(
+            bucket_id, new_root,
+        )?;
+
+        // Decrease bucket size
+        <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+
+        // Emit the MSP file deletion completed event
+        Self::deposit_event(Event::MspFileDeletionCompleted {
+            user: file_owner,
+            file_key,
+            file_size: size,
+            bucket_id,
+            msp_id: provider_id,
+        });
+
+        Ok(())
+    }
+
+    /// Update BSP root after root deletion
+    pub(crate) fn delete_file_from_bsp(
+        file_owner: T::AccountId,
+        file_key: MerkleHash<T>,
+        size: StorageDataUnit<T>,
+        provider_id: ProviderIdFor<T>,
+        forest_proof: ForestProof<T>,
+    ) -> DispatchResult {
+        // Get current BSP root
+        let _old_root = <T::Providers as ReadProvidersInterface>::get_root(provider_id)
+            .ok_or(Error::<T>::NotABsp)?;
+
+        // Verify that the file key IS part of the BSP's forest
+        let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
+            &provider_id,
+            &[file_key],
+            &forest_proof,
+        )?;
+
+        // Ensure that the file key IS part of the BSP's forest
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
+        );
+
+        // Compute new root after removing file key from forest
+        let new_root = <T::ProofDealer as ProofsDealerInterface>::apply_delta(
+            &provider_id,
+            &[(file_key, TrieRemoveMutation::default().into())],
+            &forest_proof,
+        )?;
+
+        // Update root of BSP
+        <T::Providers as MutateProvidersInterface>::update_root(provider_id, new_root)?;
+
+        // Decrease capacity used by the BSP
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &provider_id, size,
+        )?;
+
+        // Emit the BSP file deletion completed event
+        Self::deposit_event(Event::BspFileDeletionCompleted {
+            user: file_owner,
+            file_key,
+            file_size: size,
+            bsp_id: provider_id,
+        });
+
+        Ok(())
+    }
 }
 
 mod hooks {
@@ -3073,5 +3120,6 @@ mod hooks {
             // Consume the weight used by this function.
             meter.consume(T::WeightInfo::process_expired_move_bucket_request());
         }
+
     }
 }

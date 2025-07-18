@@ -931,8 +931,6 @@ pub mod pallet {
         ProviderNotStoringFile,
         /// Invalid provider type for this operation.
         InvalidProviderType,
-        /// Failed to extract account from signature.
-        FailedToExtractAccountFromSignature,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1460,11 +1458,12 @@ pub mod pallet {
         /// from the `RequestFileDeletion` event. It requires a valid forest proof showing that the
         /// file exists in the specified provider's forest before allowing deletion.
         ///
-        /// The signature is used to extract the original file owner, and all validations from
-        /// `request_delete_file` are re-performed to ensure security.
+        /// The fisherman node provides the file owner account, and the signature is verified against
+        /// this account. 
         ///
         /// # Arguments
         /// * `origin` - The origin of the call (fisherman node)
+        /// * `file_owner` - The account that originally signed the deletion request
         /// * `signed_message` - The signed deletion message containing file key and operation
         /// * `signature` - The signature from the original file owner
         /// * `bucket_id` - The bucket containing the file
@@ -1477,6 +1476,7 @@ pub mod pallet {
         #[pallet::weight(Weight::zero())]
         pub fn delete_file(
             origin: OriginFor<T>,
+            file_owner: T::AccountId,
             signed_message: FileDeletionMessage<T>,
             signature: MultiSignature,
             bucket_id: BucketIdFor<T>,
@@ -1486,9 +1486,11 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
+            // We dont care about who is calling this extrinsic (either fisherman, msp or bsp node)
             let _caller = ensure_signed(origin)?;
 
             Self::do_delete_file(
+                file_owner,
                 signed_message.clone(),
                 signature.clone(),
                 bucket_id,
