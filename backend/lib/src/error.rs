@@ -13,8 +13,8 @@ pub enum Error {
     #[error("Configuration error: {0}")]
     Config(String),
 
-    #[error("Not found")]
-    NotFound,
+    #[error("Not found: {0}")]
+    NotFound(String),
 
     #[error("Internal server error")]
     Internal,
@@ -30,7 +30,7 @@ impl IntoResponse for Error {
         let (status, message) = match self {
             Error::Database(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
             Error::Config(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
-            Error::NotFound => (StatusCode::NOT_FOUND, "Not found".to_string()),
+            Error::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             Error::Internal => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Internal error".to_string(),

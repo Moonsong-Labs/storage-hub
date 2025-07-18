@@ -26,6 +26,9 @@ async-trait = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 
+# Utilities
+hex = { workspace = true }
+
 # Feature-gated dependencies
 jsonrpsee = { workspace = true, optional = true }
 

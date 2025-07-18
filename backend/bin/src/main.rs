@@ -8,7 +8,7 @@ use sh_backend_lib::{
     api::create_app,
     config::Config,
     data::{
-        postgres::PostgresClient,
+        postgres::{PostgresClient, PostgresClientTrait},
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
     services::Services,
@@ -16,6 +16,9 @@ use sh_backend_lib::{
 use std::sync::Arc;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+#[cfg(feature = "mocks")]
+use sh_backend_lib::mocks::MockPostgresClient;
 
 #[tokio::main]
 async fn main() {
@@ -50,27 +53,10 @@ async fn main() {
     info!("Initialized in-memory storage");
 
     // Initialize PostgreSQL client
-    let postgres_client = match PostgresClient::new(&config.database.url).await {
-        Ok(client) => {
-            // Test the connection
-            match client.test_connection().await {
-                Ok(_) => {
-                    info!("Connected to PostgreSQL at {}", config.database.url);
-                    Arc::new(client)
-                }
-                Err(e) => {
-                    error!("Failed to connect to PostgreSQL: {}", e);
-                    info!("Starting without PostgreSQL connection - some features may be unavailable");
-                    // For now, we'll exit. In a real implementation, you might want to:
-                    // - Use a mock client
-                    // - Start with limited functionality
-                    // - Retry connection periodically
-                    std::process::exit(1);
-                }
-            }
-        }
+    let postgres_client: Arc<dyn PostgresClientTrait> = match create_postgres_client(&config).await {
+        Ok(client) => client,
         Err(e) => {
-            error!("Failed to create PostgreSQL client: {}", e);
+            error!("Failed to initialize PostgreSQL client: {}", e);
             std::process::exit(1);
         }
     };
@@ -118,6 +104,63 @@ async fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
                 CONFIG_PATH, e
             );
             Ok(Config::default())
+        }
+    }
+}
+
+/// Create PostgreSQL client based on configuration
+///
+/// This function will return either a real PostgreSQL client or a mock client
+/// depending on the configuration and available features.
+async fn create_postgres_client(
+    config: &Config,
+) -> Result<Arc<dyn PostgresClientTrait>, Box<dyn std::error::Error>> {
+    #[cfg(feature = "mocks")]
+    {
+        if config.database.mock_mode {
+            info!("Using mock PostgreSQL client (mock_mode enabled)");
+            return Ok(Arc::new(MockPostgresClient::new()));
+        }
+    }
+
+    // Try to create real PostgreSQL client
+    match PostgresClient::new(&config.database.url).await {
+        Ok(client) => {
+            // Test the connection
+            match client.test_connection().await {
+                Ok(_) => {
+                    info!("Connected to PostgreSQL at {}", config.database.url);
+                    Ok(Arc::new(client))
+                }
+                Err(e) => {
+                    error!("Failed to connect to PostgreSQL: {}", e);
+                    
+                    #[cfg(feature = "mocks")]
+                    {
+                        info!("Falling back to mock PostgreSQL client");
+                        return Ok(Arc::new(MockPostgresClient::new()));
+                    }
+                    
+                    #[cfg(not(feature = "mocks"))]
+                    {
+                        Err(Box::new(e))
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            error!("Failed to create PostgreSQL client: {}", e);
+            
+            #[cfg(feature = "mocks")]
+            {
+                info!("Falling back to mock PostgreSQL client");
+                return Ok(Arc::new(MockPostgresClient::new()));
+            }
+            
+            #[cfg(not(feature = "mocks"))]
+            {
+                Err(Box::new(e))
+            }
         }
     }
 }
