@@ -740,6 +740,21 @@ pub mod pallet {
             signed_message: FileDeletionMessage<T>,
             signature: MultiSignature,
         },
+        /// Notifies that a file deletion has been completed successfully by an MSP.
+        MspFileDeletionCompleted {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            file_size: StorageDataUnit<T>,
+            bucket_id: BucketIdFor<T>,
+            msp_id: ProviderIdFor<T>,
+        },
+        /// Notifies that a file deletion has been completed successfully by a BSP.
+        BspFileDeletionCompleted {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            file_size: StorageDataUnit<T>,
+            bsp_id: ProviderIdFor<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -910,6 +925,14 @@ pub mod pallet {
         FailedToCreateFileMetadata,
         /// Invalid signature provided for file operation
         InvalidSignature,
+        /// Forest proof verification failed.
+        ForestProofVerificationFailed,
+        /// Provider is not storing the file.
+        ProviderNotStoringFile,
+        /// Invalid provider type for this operation.
+        InvalidProviderType,
+        /// Failed to extract account from signature.
+        FailedToExtractAccountFromSignature,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1427,6 +1450,54 @@ pub mod pallet {
                 signed_message,
                 signature,
             });
+
+            Ok(())
+        }
+
+        /// Delete a file from the system with forest proof verification.
+        ///
+        /// This extrinsic allows fisherman nodes to execute file deletion based on signed messages
+        /// from the `RequestFileDeletion` event. It requires a valid forest proof showing that the
+        /// file exists in the specified provider's forest before allowing deletion.
+        ///
+        /// The signature is used to extract the original file owner, and all validations from
+        /// `request_delete_file` are re-performed to ensure security.
+        ///
+        /// # Arguments
+        /// * `origin` - The origin of the call (fisherman node)
+        /// * `signed_message` - The signed deletion message containing file key and operation
+        /// * `signature` - The signature from the original file owner
+        /// * `bucket_id` - The bucket containing the file
+        /// * `location` - The file location within the bucket
+        /// * `size` - The file size
+        /// * `fingerprint` - The file fingerprint
+        /// * `provider_id` - The provider (MSP/BSP) storing the file
+        /// * `forest_proof` - Proof that the file exists in the provider's forest
+        #[pallet::call_index(17)]
+        #[pallet::weight(Weight::zero())]
+        pub fn delete_file(
+            origin: OriginFor<T>,
+            signed_message: FileDeletionMessage<T>,
+            signature: MultiSignature,
+            bucket_id: BucketIdFor<T>,
+            location: FileLocation<T>,
+            size: StorageDataUnit<T>,
+            fingerprint: Fingerprint<T>,
+            provider_id: ProviderIdFor<T>,
+            forest_proof: ForestProof<T>,
+        ) -> DispatchResult {
+            let _caller = ensure_signed(origin)?;
+
+            Self::do_delete_file(
+                signed_message.clone(),
+                signature.clone(),
+                bucket_id,
+                location,
+                size,
+                fingerprint,
+                provider_id,
+                forest_proof,
+            )?;
 
             Ok(())
         }
