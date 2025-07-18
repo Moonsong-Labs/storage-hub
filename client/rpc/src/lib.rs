@@ -489,8 +489,9 @@ where
         }
 
         let config = RemoteFileConfig::default();
-        let (handler, url) = RemoteFileHandlerFactory::create_from_string_for_write(&file_path, config)
-            .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
+        let (handler, url) =
+            RemoteFileHandlerFactory::create_from_string_for_write(&file_path, config)
+                .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
         let mut chunks = Vec::new();
         for chunk_idx in 0..total_chunks {
@@ -1006,13 +1007,11 @@ fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
 /// Converts RemoteFileError into RPC error, preserving original IO error messages.
 fn remote_file_error_to_rpc_error(e: remote_file::RemoteFileError) -> JsonRpseeError {
     match e {
-        remote_file::RemoteFileError::IoError(io_err) => {
-            JsonRpseeError::owned(
-                INTERNAL_ERROR_CODE,
-                INTERNAL_ERROR_MSG,
-                Some(format!("{:?}", io_err)),
-            )
-        }
+        remote_file::RemoteFileError::IoError(io_err) => JsonRpseeError::owned(
+            INTERNAL_ERROR_CODE,
+            INTERNAL_ERROR_MSG,
+            Some(format!("{:?}", io_err)),
+        ),
         other => into_rpc_error(other),
     }
 }

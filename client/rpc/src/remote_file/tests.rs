@@ -92,11 +92,7 @@ mod factory_tests {
     fn test_factory_validates_url_format() {
         let config = default_config();
 
-        let invalid_urls = vec![
-            "",
-            "://example.com",
-            "http://[invalid",
-        ];
+        let invalid_urls = vec!["", "://example.com", "http://[invalid"];
 
         for invalid_url in invalid_urls {
             let result = RemoteFileHandlerFactory::create_from_string(invalid_url, config.clone());

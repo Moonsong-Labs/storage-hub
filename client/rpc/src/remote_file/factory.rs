@@ -88,8 +88,8 @@ impl RemoteFileHandlerFactory {
                             )));
                         }
                         if parent.exists() {
-                            let metadata =
-                                std::fs::metadata(parent).map_err(|e| RemoteFileError::IoError(e))?;
+                            let metadata = std::fs::metadata(parent)
+                                .map_err(|e| RemoteFileError::IoError(e))?;
                             if metadata.permissions().readonly() {
                                 return Err(RemoteFileError::AccessDenied);
                             }
