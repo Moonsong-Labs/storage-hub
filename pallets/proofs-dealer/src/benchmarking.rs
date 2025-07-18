@@ -87,7 +87,7 @@ mod benchmarks {
 
         // Verify the challenge event was emitted.
         let expected_event = <T as pallet::Config>::RuntimeEvent::from(Event::NewChallenge {
-            who: caller,
+            who: Some(caller),
             key_challenged: file_key,
         });
         frame_system::Pallet::<T>::assert_last_event(expected_event.into());
