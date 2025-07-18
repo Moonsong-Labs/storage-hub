@@ -30,6 +30,7 @@ members = [
 	"client/rpc",
 	"primitives/*",
 	"xcm-simulator",
+	"sdk/core/wasm",
 ]
 resolver = "2"
 
