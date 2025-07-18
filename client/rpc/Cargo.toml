@@ -19,7 +19,7 @@ jsonrpsee = { features = [
 ], workspace = true }
 tokio = { workspace = true }
 async-trait = "0.1"
-reqwest = { version = "0.11", features = ["stream", "rustls-tls"] }
+reqwest = { version = "0.11", features = ["stream", "rustls-tls"], default-features = false }
 url = "2.5"
 suppaftp = { version = "6.0", features = ["async", "rustls"] }
 tokio-util = { version = "0.7", features = ["io"] }
