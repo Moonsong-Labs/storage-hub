@@ -179,15 +179,6 @@ impl File {
         Ok(peer_ids)
     }
 
-    /// Get all files belonging to a specific user account
-    ///
-    /// # Example
-    /// ```ignore
-    /// use sp_runtime::AccountId32;
-    ///
-    /// let user: AccountId32 = /* ... */;
-    /// let files = File::get_user_files(&mut conn, user.as_ref()).await?;
-    /// ```
     pub async fn get_user_files<'a>(
         conn: &mut DbConnection<'a>,
         user_account: impl AsRef<[u8]>,
@@ -200,16 +191,6 @@ impl File {
         Ok(files)
     }
 
-    /// Get all files belonging to a specific user account and stored by a specific MSP
-    ///
-    /// # Example
-    /// ```ignore
-    /// use sp_runtime::AccountId32;
-    ///
-    /// let user: AccountId32 = /* ... */;
-    /// let msp_id: i64 = /* ... */;
-    /// let files = File::get_user_files_by_msp(&mut conn, user.as_ref(), msp_id).await?;
-    /// ```
     pub async fn get_user_files_by_msp<'a>(
         conn: &mut DbConnection<'a>,
         user_account: impl AsRef<[u8]>,
@@ -224,6 +205,55 @@ impl File {
             .load(conn)
             .await?;
         Ok(files)
+    }
+
+    pub async fn get_msp_peer_ids(
+        &self,
+        conn: &mut DbConnection<'_>,
+    ) -> Result<Vec<PeerId>, diesel::result::Error> {
+        use crate::schema::{msp, msp_file, msp_multiaddress, multiaddress};
+
+        // Get MSP peer IDs through msp_file association
+        let peer_ids: Vec<PeerId> = msp_file::table
+            .filter(msp_file::file_id.eq(self.id))
+            .inner_join(msp::table.on(msp_file::msp_id.eq(msp::id)))
+            .inner_join(msp_multiaddress::table.on(msp::id.eq(msp_multiaddress::msp_id)))
+            .inner_join(
+                multiaddress::table.on(multiaddress::id.eq(msp_multiaddress::multiaddress_id)),
+            )
+            .select(multiaddress::all_columns)
+            .distinct()
+            .load::<MultiAddress>(conn)
+            .await?
+            .into_iter()
+            .filter_map(|multiaddress| {
+                Multiaddr::try_from(multiaddress.address)
+                    .ok()
+                    .and_then(|ma| PeerId::try_from_multiaddr(&ma))
+            })
+            .collect();
+
+        Ok(peer_ids)
+    }
+
+    pub async fn get_msp_by_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<Option<crate::models::Msp>, diesel::result::Error> {
+        use crate::schema::{msp, msp_file};
+
+        let file_key = file_key.as_ref().to_vec();
+
+        let msp = file::table
+            .filter(file::file_key.eq(file_key))
+            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
+            .inner_join(msp::table.on(msp_file::msp_id.eq(msp::id)))
+            .select(msp::all_columns)
+            .first::<crate::models::Msp>(conn)
+            .await
+            .optional()?;
+
+        Ok(msp)
     }
 }
 

@@ -295,8 +295,8 @@ pub fn run() -> Result<()> {
             let indexer_config = if let Some(opts) = indexer_options {
                 crate::cli::IndexerConfigurations {
                     indexer: opts.indexer,
+                    indexer_mode: shc_indexer_service::IndexerMode::Full,
                     database_url: opts.database_url,
-                    indexer_mode: Default::default(),
                 }
             } else {
                 cli.indexer_config

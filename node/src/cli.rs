@@ -1,5 +1,6 @@
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Deserializer};
+use shc_indexer_service::IndexerMode;
 use std::{path::PathBuf, str::FromStr};
 use storage_hub_runtime::StorageDataUnit;
 
@@ -9,7 +10,6 @@ use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
     BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
 };
-use shc_indexer_service::IndexerMode;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -452,6 +452,7 @@ pub struct IndexerConfigurations {
     ///
     /// - `full`: Indexes all blockchain data
     /// - `lite`: Indexes only essential data for storage operations
+    /// - `fishing`: Indexes only file creation/deletion events for fisherman monitoring
     #[arg(long, value_parser = clap::value_parser!(IndexerMode), default_value = "full")]
     pub indexer_mode: IndexerMode,
 

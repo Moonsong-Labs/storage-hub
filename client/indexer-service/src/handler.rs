@@ -21,6 +21,7 @@ use sp_core::H256;
 use sp_runtime::traits::Header;
 use storage_hub_runtime::RuntimeEvent;
 
+mod fishing;
 mod lite;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
@@ -147,6 +148,7 @@ where
         match self.indexer_mode {
             crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
             crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+            crate::IndexerMode::Fishing => self.index_event_fishing(conn, event, block_hash).await,
         }
     }
 
@@ -338,12 +340,24 @@ where
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
                 File::delete(conn, file_key.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest { .. } => {}
+            pallet_file_system::Event::MspAcceptedStorageRequest { file_key } => {
+                let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
+
+                if let Some(msp_id) = bucket.msp_id {
+                    MspFile::create(conn, msp_id, file.id).await?;
+                }
+            }
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
-            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => {
-                // TODO: Index this
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+                msp_id,
+                bucket_id,
+                owner: _,
+            } => {
+                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
             }
             pallet_file_system::Event::SpStopStoringInsolventUser {
                 sp_id,
@@ -362,7 +376,14 @@ where
             pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
-            pallet_file_system::Event::MspStoppedStoringBucket { .. } => {}
+            pallet_file_system::Event::MspStoppedStoringBucket {
+                msp_id,
+                bucket_id,
+                owner: _,
+            } => {
+                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
+            }
             pallet_file_system::Event::BucketDeleted {
                 who: _,
                 bucket_id,
@@ -699,7 +720,13 @@ where
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "IndexerService starting up in {:?} mode!", self.actor.indexer_mode);
+        info!(target: LOG_TARGET, "IndexerService starting up in {} mode!",
+            match self.actor.indexer_mode {
+                crate::IndexerMode::Full => "Full",
+                crate::IndexerMode::Lite => "Lite (MSP-specific indexing)",
+                crate::IndexerMode::Fishing => "Fishing (file tracking only)",
+            }
+        );
 
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 
