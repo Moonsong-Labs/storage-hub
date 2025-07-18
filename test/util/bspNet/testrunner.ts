@@ -130,6 +130,7 @@ export async function describeMspNet<
     fullNetConfig.bspStartingWeight = options.bspStartingWeight;
     fullNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
     fullNetConfig.indexer = options.indexer;
+    fullNetConfig.indexerMode = options.indexerMode;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 

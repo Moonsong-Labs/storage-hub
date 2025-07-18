@@ -9,6 +9,7 @@ use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
     BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
 };
+use shc_indexer_service::IndexerMode;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -429,6 +430,13 @@ pub struct IndexerConfigurations {
     /// If enabled, a Postgres database must be set up (see the indexer README for details).
     #[arg(long, default_value = "false")]
     pub indexer: bool,
+
+    /// The mode in which the indexer runs.
+    ///
+    /// - `full`: Indexes all blockchain data
+    /// - `lite`: Indexes only essential data for storage operations
+    #[arg(long, value_parser = clap::value_parser!(IndexerMode), default_value = "full")]
+    pub indexer_mode: IndexerMode,
 
     /// Postgres database URL.
     ///

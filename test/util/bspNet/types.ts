@@ -152,6 +152,13 @@ export type BspNetConfig = {
    * If true, runs launched userNode has attached indexer service enabled.
    */
   indexer?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode when indexer is enabled.
+   * 'full' - indexes all events (default)
+   * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
+   */
+  indexerMode?: "full" | "lite";
 };
 
 /**
@@ -337,6 +344,12 @@ export type TestOptions = {
   extrinsicRetryTimeout?: number;
   /** If true, runs launched userNode has attached indexer service enabled. */
   indexer?: boolean;
+  /**
+   * Optional parameter to set the indexer mode when indexer is enabled.
+   * 'full' - indexes all events (default)
+   * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
+   */
+  indexerMode?: "full" | "lite";
 };
 
 /**

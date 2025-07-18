@@ -21,6 +21,8 @@ use sp_core::H256;
 use sp_runtime::traits::Header;
 use storage_hub_runtime::RuntimeEvent;
 
+mod lite;
+
 pub(crate) const LOG_TARGET: &str = "indexer-service";
 
 // Since the indexed data should be used directly from the database,
@@ -32,6 +34,7 @@ pub enum IndexerServiceCommand {}
 pub struct IndexerService<RuntimeApi> {
     client: Arc<ParachainClient<RuntimeApi>>,
     db_pool: DbPool,
+    indexer_mode: crate::IndexerMode,
 }
 
 // Implement the Actor trait for IndexerService
@@ -66,8 +69,16 @@ where
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool) -> Self {
-        Self { client, db_pool }
+    pub fn new(
+        client: Arc<ParachainClient<RuntimeApi>>,
+        db_pool: DbPool,
+        indexer_mode: crate::IndexerMode,
+    ) -> Self {
+        Self {
+            client,
+            db_pool,
+            indexer_mode,
+        }
     }
 
     async fn handle_finality_notification<Block>(
@@ -75,7 +86,7 @@ where
         notification: sc_client_api::FinalityNotification<Block>,
     ) -> Result<(), HandleFinalityNotificationError>
     where
-        Block: sp_runtime::traits::Block,
+        Block: sp_runtime::traits::Block<Hash = H256>,
         Block::Header: Header<Number = BlockNumber>,
     {
         let finalized_block_hash = notification.hash;
@@ -116,7 +127,7 @@ where
                 ServiceState::update(conn, block_number as i64).await?;
 
                 for ev in block_events {
-                    self.index_event(conn, &ev.event, block_hash).await?;
+                    self.route_event(conn, &ev.event, block_hash).await?;
                 }
 
                 Ok(())
@@ -125,6 +136,18 @@ where
         .await?;
 
         Ok(())
+    }
+
+    async fn route_event<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &RuntimeEvent,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        match self.indexer_mode {
+            crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
+            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+        }
     }
 
     async fn index_event<'a, 'b: 'a>(
@@ -677,7 +700,7 @@ where
     }
 
     async fn run(mut self) {
-        info!(target: LOG_TARGET, "IndexerService starting up!");
+        info!(target: LOG_TARGET, "IndexerService starting up in {:?} mode!", self.actor.indexer_mode);
 
         let finality_notification_stream = self.actor.client.finality_notification_stream();
 
