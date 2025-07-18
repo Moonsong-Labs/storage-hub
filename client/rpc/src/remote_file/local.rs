@@ -93,7 +93,7 @@ impl RemoteFileHandler for LocalFileHandler {
         file.seek(std::io::SeekFrom::Start(offset)).await?;
 
         let mut buffer = vec![0u8; length as usize];
-        let bytes_read = file.read_exact(&mut buffer).await.map_err(|e| {
+        file.read_exact(&mut buffer).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::UnexpectedEof {
                 RemoteFileError::Other("Requested chunk extends beyond file size".to_string())
             } else {
@@ -101,7 +101,6 @@ impl RemoteFileHandler for LocalFileHandler {
             }
         })?;
 
-        buffer.truncate(bytes_read);
         Ok(Bytes::from(buffer))
     }
 
