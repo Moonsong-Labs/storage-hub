@@ -63,6 +63,11 @@ impl RemoteFileHandlerFactory {
                         return Err(RemoteFileError::InvalidUrl("Empty path".to_string()));
                     }
 
+                    // Check if this looks like a malformed URL (contains :// but failed to parse)
+                    if url_str.contains("://") {
+                        return Err(RemoteFileError::InvalidUrl(format!("Invalid URL: {}", url_str)));
+                    }
+
                     // Accept any non-URL string as a local path (absolute, relative, or bare file names)
 
                     // Validate local file permissions before creating the URL
@@ -81,7 +86,7 @@ impl RemoteFileHandlerFactory {
                             Some(p) if !p.as_os_str().is_empty() => p,
                             _ => std::path::Path::new("."),
                         };
-                        if !parent.exists() && !for_write {
+                        if !parent.exists() && for_write {
                             return Err(RemoteFileError::InvalidUrl(format!(
                                 "Parent directory does not exist for path: {}",
                                 url_str
