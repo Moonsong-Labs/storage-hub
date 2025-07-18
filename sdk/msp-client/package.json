@@ -1,5 +1,5 @@
 {
-    "name": "@storagehub-sdk/client",
+    "name": "@storagehub-sdk/msp-client",
     "version": "0.1.0",
     "description": "High-level façade around @storagehub-sdk/core for easy StorageHub integration",
     "type": "module",
