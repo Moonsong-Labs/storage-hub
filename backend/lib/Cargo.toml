@@ -1,0 +1,27 @@
+[package]
+name = "sh-backend-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Web framework
+axum = "0.7"
+tokio = { version = "1", features = ["full"] }
+
+# Workspace dependencies
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Local dependencies
+shc-indexer-db = { path = "../../client/indexer-db" }
+
+# Feature-gated dependencies
+diesel = { workspace = true, optional = true }
+diesel-async = { workspace = true, optional = true }
+jsonrpsee = { workspace = true, optional = true }
+
+[features]
+default = []
+mocks = ["dep:diesel", "dep:diesel-async", "dep:jsonrpsee"]

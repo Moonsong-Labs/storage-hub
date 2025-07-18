@@ -30,6 +30,8 @@ members = [
 	"client/rpc",
 	"primitives/*",
 	"xcm-simulator",
+	"backend/lib",
+	"backend/bin",
 ]
 resolver = "2"
 
