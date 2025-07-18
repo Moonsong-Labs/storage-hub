@@ -82,6 +82,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libpq-dev
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Build All
         # TODO: Make this only build the parachain node project
         run: cargo build --release
