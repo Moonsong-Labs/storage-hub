@@ -7,9 +7,11 @@ edition = "2021"
 # Web framework
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
+tower-http = { version = "0.5", features = ["cors"] }
 
 # Workspace dependencies
 serde = { workspace = true }
+serde_json = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
@@ -17,11 +19,19 @@ anyhow = { workspace = true }
 # Local dependencies
 shc-indexer-db = { path = "../../client/indexer-db" }
 
+# Async trait support
+async-trait = { workspace = true }
+
+# Database dependencies
+diesel = { workspace = true }
+diesel-async = { workspace = true }
+
 # Feature-gated dependencies
-diesel = { workspace = true, optional = true }
-diesel-async = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, optional = true }
+
+[dev-dependencies]
+axum-test = "15"
 
 [features]
 default = []
-mocks = ["dep:diesel", "dep:diesel-async", "dep:jsonrpsee"]
+mocks = ["dep:jsonrpsee"]
