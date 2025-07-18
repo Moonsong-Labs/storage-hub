@@ -48,12 +48,37 @@ node -e "import('@storagehub/sdk').then(m => console.log('2+3 =', m.add(2,3)))"
 ## Folder structure
 
 ```
-sdk/
-  ts/          – TypeScript source
-  wasm/        – Rust crate
-    pkg/       – Generated JS/WASM package (git-ignored)
-  dist/        – Bundled JS output (git-ignored)
-  scripts/     – Helper scripts
+sdk/ – workspace root, pnpm workspace + shared tooling
+├─ package.json
+├─ tsconfig.json
+├─ vitest.config.ts
+├─ scripts/
+│  ├─ build.js
+│  └─ clean.js
+├─ .gitignore
+│
+├─ core/  – “@storagehub-sdk/core”
+│  ├─ package.json
+│  ├─ tsconfig.json
+│  ├─ src/
+│  │   ├─ index.ts
+│  │   ├─ wasm.ts
+│  │   └─ types/
+│  │       └─ storagehub-wasm.d.ts
+│  ├─ tests/
+│  │   └─ wasm.spec.ts
+│  └─ wasm/
+│      ├─ Cargo.toml
+│      ├─ src/
+│      └─ pkg/
+│
+└─ msp-client/ – “@storagehub-sdk/msp-client” façade
+   ├─ package.json
+   ├─ tsconfig.json
+   ├─ src/
+   │   ├─ MspClient.ts
+   │   └─ index.ts
+   └─ tests/
 ```
 
 ---
