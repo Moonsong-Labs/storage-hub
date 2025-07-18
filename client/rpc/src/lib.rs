@@ -336,7 +336,7 @@ where
         let (file_size, _content_type) = handler
             .fetch_metadata(&url)
             .await
-            .map_err(|e| into_rpc_error(format!("Failed to fetch file metadata: {:?}", e)))?;
+            .map_err(remote_file_error_to_rpc_error)?;
 
         if file_size == 0 {
             return Err(into_rpc_error(FileStorageError::FileIsEmpty));
@@ -345,7 +345,7 @@ where
         let mut stream = handler
             .stream_file(&url)
             .await
-            .map_err(|e| into_rpc_error(format!("Failed to stream file: {:?}", e)))?;
+            .map_err(remote_file_error_to_rpc_error)?;
 
         let mut file_data_trie = self.file_storage.write().await.new_file_data_trie();
         let mut chunk_id: u64 = 0;
@@ -489,7 +489,7 @@ where
         }
 
         let config = RemoteFileConfig::default();
-        let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
+        let (handler, url) = RemoteFileHandlerFactory::create_from_string_for_write(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
         let mut chunks = Vec::new();
@@ -514,7 +514,7 @@ where
         handler
             .upload_file(&url, boxed_reader, file_size, None)
             .await
-            .map_err(|e| into_rpc_error(format!("Failed to save file: {}", e)))?;
+            .map_err(remote_file_error_to_rpc_error)?;
 
         Ok(SaveFileToDisk::Success(file_metadata))
     }
@@ -1001,6 +1001,20 @@ fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
         INTERNAL_ERROR_MSG,
         Some(format!("{:?}", e)),
     )
+}
+
+/// Converts RemoteFileError into RPC error, preserving original IO error messages.
+fn remote_file_error_to_rpc_error(e: remote_file::RemoteFileError) -> JsonRpseeError {
+    match e {
+        remote_file::RemoteFileError::IoError(io_err) => {
+            JsonRpseeError::owned(
+                INTERNAL_ERROR_CODE,
+                INTERNAL_ERROR_MSG,
+                Some(format!("{:?}", io_err)),
+            )
+        }
+        other => into_rpc_error(other),
+    }
 }
 
 async fn generate_key_proof<FL, C, Block>(

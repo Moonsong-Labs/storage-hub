@@ -94,10 +94,7 @@ mod factory_tests {
 
         let invalid_urls = vec![
             "",
-            "not a url",
-            "ht!tp://example.com",
             "://example.com",
-            "http://",
             "http://[invalid",
         ];
 

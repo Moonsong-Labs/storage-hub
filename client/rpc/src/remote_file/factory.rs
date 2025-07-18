@@ -38,11 +38,31 @@ impl RemoteFileHandlerFactory {
         url_str: &str,
         config: RemoteFileConfig,
     ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
+        Self::create_from_string_with_mode(url_str, config, false)
+    }
+
+    pub fn create_from_string_for_write(
+        url_str: &str,
+        config: RemoteFileConfig,
+    ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
+        Self::create_from_string_with_mode(url_str, config, true)
+    }
+
+    fn create_from_string_with_mode(
+        url_str: &str,
+        config: RemoteFileConfig,
+        for_write: bool,
+    ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
         let url = match Url::parse(url_str) {
             Ok(url) => url,
             Err(_) => {
                 // Handle local paths
                 {
+                    // Validate that we have a non-empty string
+                    if url_str.is_empty() {
+                        return Err(RemoteFileError::InvalidUrl("Empty path".to_string()));
+                    }
+
                     // Accept any non-URL string as a local path (absolute, relative, or bare file names)
 
                     // Validate local file permissions before creating the URL
@@ -62,16 +82,18 @@ impl RemoteFileHandlerFactory {
                             Some(p) if !p.as_os_str().is_empty() => p,
                             _ => std::path::Path::new("."),
                         };
-                        if !parent.exists() {
+                        if !parent.exists() && !for_write {
                             return Err(RemoteFileError::InvalidUrl(format!(
                                 "Parent directory does not exist for path: {}",
                                 url_str
                             )));
                         }
-                        let metadata =
-                            std::fs::metadata(parent).map_err(|e| RemoteFileError::IoError(e))?;
-                        if metadata.permissions().readonly() {
-                            return Err(RemoteFileError::AccessDenied);
+                        if parent.exists() {
+                            let metadata =
+                                std::fs::metadata(parent).map_err(|e| RemoteFileError::IoError(e))?;
+                            if metadata.permissions().readonly() {
+                                return Err(RemoteFileError::AccessDenied);
+                            }
                         }
                     }
 
