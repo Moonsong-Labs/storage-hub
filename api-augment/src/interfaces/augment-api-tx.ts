@@ -19,6 +19,7 @@ import type {
   CumulusPrimitivesParachainInherentParachainInherentData,
   PalletBalancesAdjustmentDirection,
   PalletFileSystemBucketMoveRequestResponse,
+  PalletFileSystemFileDeletionMessage,
   PalletFileSystemFileKeyWithProof,
   PalletFileSystemReplicationTarget,
   PalletFileSystemStorageRequestMspBucketResponse,
@@ -610,6 +611,34 @@ declare module "@polkadot/api-base/types/submittable" {
       mspStopStoringBucketForInsolventUser: AugmentedSubmittable<
         (bucketId: H256 | string | Uint8Array) => SubmittableExtrinsic<ApiType>,
         [H256]
+      >;
+      /**
+       * Request deletion of a file using a signed message.
+       *
+       * The origin must be signed and the signature must be valid for the given message.
+       * The message must contain the file key and the delete operation.
+       * File metadata is provided separately for ownership verification.
+       **/
+      requestDeleteFile: AugmentedSubmittable<
+        (
+          signedMessage:
+            | PalletFileSystemFileDeletionMessage
+            | { fileKey?: any; operation?: any }
+            | string
+            | Uint8Array,
+          signature:
+            | SpRuntimeMultiSignature
+            | { Ed25519: any }
+            | { Sr25519: any }
+            | { Ecdsa: any }
+            | string
+            | Uint8Array,
+          bucketId: H256 | string | Uint8Array,
+          location: Bytes | string | Uint8Array,
+          size: u64 | AnyNumber | Uint8Array,
+          fingerprint: H256 | string | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [PalletFileSystemFileDeletionMessage, SpRuntimeMultiSignature, H256, Bytes, u64, H256]
       >;
       requestMoveBucket: AugmentedSubmittable<
         (

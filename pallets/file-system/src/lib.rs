@@ -71,7 +71,7 @@ pub mod pallet {
             Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating,
             Zero,
         },
-        BoundedVec,
+        BoundedVec, MultiSignature,
     };
     use sp_weights::WeightMeter;
 
@@ -735,6 +735,11 @@ pub mod pallet {
             amount_to_transfer: BalanceOf<T>,
             error: DispatchError,
         },
+        /// Notifies that a file deletion has been requested with a signed message.
+        RequestFileDeletion {
+            signed_message: FileDeletionMessage<T>,
+            signature: MultiSignature,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -903,6 +908,8 @@ pub mod pallet {
         FailedToComputeFileKey,
         /// Failed to create file metadata
         FailedToCreateFileMetadata,
+        /// Invalid signature provided for file operation
+        InvalidSignature,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1382,6 +1389,43 @@ pub mod pallet {
                 msp_id,
                 owner,
                 bucket_id,
+            });
+
+            Ok(())
+        }
+
+        /// Request deletion of a file using a signed message.
+        ///
+        /// The origin must be signed and the signature must be valid for the given message.
+        /// The message must contain the file key and the delete operation.
+        /// File metadata is provided separately for ownership verification.
+        #[pallet::call_index(16)]
+        #[pallet::weight(Weight::zero())]
+        pub fn request_delete_file(
+            origin: OriginFor<T>,
+            signed_message: FileDeletionMessage<T>,
+            signature: MultiSignature,
+            bucket_id: BucketIdFor<T>,
+            location: FileLocation<T>,
+            size: StorageDataUnit<T>,
+            fingerprint: Fingerprint<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            Self::do_request_delete_file(
+                who.clone(),
+                signed_message.clone(),
+                signature.clone(),
+                bucket_id,
+                location,
+                size,
+                fingerprint,
+            )?;
+
+            // Emit the event
+            Self::deposit_event(Event::RequestFileDeletion {
+                signed_message,
+                signature,
             });
 
             Ok(())

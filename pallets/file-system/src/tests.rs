@@ -3,15 +3,16 @@ use crate::{
     mock::*,
     types::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
-        FileKeyWithProof, FileLocation, MoveBucketRequestMetadata, PeerIds, ProviderIdFor,
-        ReplicationTarget, StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse, StorageRequestTtl,
-        ThresholdType, TickNumber, ValuePropId,
+        FileDeletionMessage, FileKeyWithProof, FileLocation, FileOperation,
+        MoveBucketRequestMetadata, PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit,
+        StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
+        StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
     Config, Error, Event, NextAvailableStorageRequestExpirationTick, PendingMoveBucketRequests,
     PendingStopStoringRequests, StorageRequestExpirations, StorageRequests,
 };
+use codec::Encode;
 use frame_support::{
     assert_noop, assert_ok,
     dispatch::DispatchResultWithPostInfo,
@@ -29,12 +30,12 @@ use shp_traits::{
     PricePerGigaUnitPerTickInterface, ReadBucketsInterface, ReadProvidersInterface,
     ReadStorageProvidersInterface,
 };
-use sp_core::{ByteArray, Hasher, H256};
+use sp_core::{ByteArray, Hasher, Pair, H256};
 use sp_keyring::sr25519::Keyring;
 use sp_runtime::{
     bounded_vec,
     traits::{BlakeTwo256, Convert, Get},
-    BoundedVec,
+    BoundedVec, MultiSignature,
 };
 use sp_std::cmp::max;
 use sp_trie::CompactProof;
@@ -11527,4 +11528,262 @@ fn calculate_upfront_amount_to_pay(
 				.saturating_mul(<Test as crate::Config>::StorageDataUnitToBalance::convert(size))
 				.checked_div(shp_constants::GIGAUNIT.into())
 				.unwrap_or_default()
+}
+
+mod file_deletion_signature_tests {
+    use super::*;
+
+    #[test]
+    fn file_owner_can_request_file_deletion() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create account and get keypair
+            let alice_pair = Keyring::Alice.pair();
+            let alice_account = Keyring::Alice.to_account_id();
+            let alice_origin = RuntimeOrigin::signed(alice_account.clone());
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&alice_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"buen_fla".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key as done in the actual implementation
+            let file_key = FileSystem::compute_file_key(
+                alice_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // 2. Construct the message
+            let signed_message = FileDeletionMessage::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 3. Sign the message
+            let message_encoded = signed_message.encode();
+            let signature_bytes = alice_pair.sign(&message_encoded);
+            let signature = MultiSignature::Sr25519(signature_bytes);
+
+            // 4. Call the extrinsic
+            assert_ok!(FileSystem::request_delete_file(
+                alice_origin,
+                signed_message.clone(),
+                signature.clone(),
+                bucket_id,
+                location,
+                size,
+                fingerprint
+            ));
+
+            // 5. Verify the event was emitted
+            System::assert_last_event(
+                Event::RequestFileDeletion {
+                    signed_message,
+                    signature,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn message_not_signed_by_owner_fail() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create owner account
+            let alice_account = Keyring::Alice.to_account_id();
+            let alice_origin = RuntimeOrigin::signed(alice_account.clone());
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&alice_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"buen_fla".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key as done in the actual implementation
+            let file_key = FileSystem::compute_file_key(
+                alice_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // 2. Construct the message
+            let signed_message = FileDeletionMessage::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 3. Non owner signs the message
+            let non_owner_pair = Keyring::Bob.pair();
+            let message_encoded = signed_message.encode();
+            let non_owner_signature_bytes = non_owner_pair.sign(&message_encoded);
+            let signature = MultiSignature::Sr25519(non_owner_signature_bytes);
+
+            // 4. Call the extrinsic - caller is the owner, but the message was signed by other account.
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    alice_origin,
+                    signed_message.clone(),
+                    signature.clone(),
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::InvalidSignature
+            );
+        });
+    }
+
+    #[test]
+    fn non_owner_cannot_request_for_file_deletion() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create owner account
+            let alice_account = Keyring::Alice.to_account_id();
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&alice_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"buen_fla".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key as done in the actual implementation
+            let file_key = FileSystem::compute_file_key(
+                alice_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // 2. Construct the message
+            let signed_message = FileDeletionMessage::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 3. Non owner signs the message
+            let non_owner_pair = Keyring::Bob.pair();
+            let non_owner_account = Keyring::Bob.to_account_id();
+            let non_owner_origin = RuntimeOrigin::signed(non_owner_account.clone());
+            let message_encoded = signed_message.encode();
+            let non_owner_signature_bytes = non_owner_pair.sign(&message_encoded);
+            let signature = MultiSignature::Sr25519(non_owner_signature_bytes);
+
+            // 4. Call the extrinsic - caller is the owner, but the message was signed by other account.
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    non_owner_origin,
+                    signed_message.clone(),
+                    signature.clone(),
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::NotBucketOwner
+            );
+        });
+    }
+
+    #[test]
+    fn insolvent_user_cannot_request_file_deletion() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create Eve account (the one that can be made insolvent) and get keypair
+            let eve_pair = Keyring::Eve.pair();
+            let eve_account = Keyring::Eve.to_account_id();
+            let eve_origin = RuntimeOrigin::signed(eve_account.clone());
+
+            // Make Eve NOT insolvent initially so we can create a bucket
+            let _guard = set_eve_insolvent(false);
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&eve_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"buen_fla".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key as done in the actual implementation
+            let file_key = FileSystem::compute_file_key(
+                eve_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // 2. Construct the message
+            let signed_message = FileDeletionMessage::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 3. Sign the message with Eve's key (valid signature)
+            let message_encoded = signed_message.encode();
+            let signature_bytes = eve_pair.sign(&message_encoded);
+            let signature = MultiSignature::Sr25519(signature_bytes);
+
+            // 4. Drop the first guard and make Eve insolvent
+            drop(_guard);
+            let _guard = set_eve_insolvent(true);
+
+            // 5. Call the extrinsic - should fail due to insolvency
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    eve_origin,
+                    signed_message.clone(),
+                    signature.clone(),
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::OperationNotAllowedWithInsolventUser
+            );
+        });
+    }
 }
