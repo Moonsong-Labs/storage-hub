@@ -26,13 +26,8 @@ impl LocalFileHandler {
 
     async fn validate_file(path: &Path) -> Result<(), RemoteFileError> {
         let metadata = tokio::fs::metadata(path).await.map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                RemoteFileError::NotFound
-            } else if e.kind() == std::io::ErrorKind::PermissionDenied {
-                RemoteFileError::AccessDenied
-            } else {
-                RemoteFileError::IoError(e)
-            }
+            // Preserve original IO errors to maintain OS error messages
+            RemoteFileError::IoError(e)
         })?;
 
         if !metadata.is_file() {
@@ -219,7 +214,7 @@ mod tests {
         let url = Url::parse("file:///non/existent/file.txt").unwrap();
 
         let result = handler.fetch_metadata(&url).await;
-        assert!(matches!(result, Err(RemoteFileError::NotFound)));
+        assert!(matches!(result, Err(RemoteFileError::IoError(_))));
     }
 
     #[tokio::test]

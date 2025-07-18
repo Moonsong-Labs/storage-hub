@@ -71,10 +71,9 @@ impl RemoteFileHandlerFactory {
                     // Check if the file exists and is readable OR if we can create it
                     if path.exists() {
                         // Check if we can read the existing file
-                        std::fs::File::open(&path).map_err(|e| match e.kind() {
-                            std::io::ErrorKind::PermissionDenied => RemoteFileError::AccessDenied,
-                            std::io::ErrorKind::NotFound => RemoteFileError::NotFound,
-                            _ => RemoteFileError::IoError(e),
+                        std::fs::File::open(&path).map_err(|e| {
+                            // Preserve original IO errors to maintain OS error messages
+                            RemoteFileError::IoError(e)
                         })?;
                     } else {
                         // Check if we can create the file (test write permissions on parent directory)
