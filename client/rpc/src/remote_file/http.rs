@@ -2,7 +2,7 @@ use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::TryStreamExt;
-use reqwest::{Body, Client, StatusCode};
+use reqwest::{header, Body, Client, StatusCode};
 use std::time::Duration;
 use tokio::io::AsyncRead;
 use tokio_util::io::{ReaderStream, StreamReader};
@@ -177,6 +177,54 @@ impl RemoteFileHandler for HttpFileHandler {
 
         if !response.status().is_success() && response.status() != StatusCode::PARTIAL_CONTENT {
             return Err(Self::status_to_error(response.status()));
+        }
+
+        // If we requested a range but got a 200 OK instead of 206 Partial Content,
+        // the server might have ignored our range request and returned the full content
+        if response.status() == StatusCode::OK {
+            // For servers that don't support range requests, we accept the full content
+            // This maintains backward compatibility with existing behavior
+            let bytes = response.bytes().await.map_err(|e| {
+                if e.is_timeout() {
+                    RemoteFileError::Timeout
+                } else {
+                    RemoteFileError::HttpError(e)
+                }
+            })?;
+
+            return Ok(bytes);
+        }
+
+        // For 206 Partial Content responses, optionally verify the Content-Range header
+        if response.status() == StatusCode::PARTIAL_CONTENT {
+            if let Some(content_range) = response.headers().get(header::CONTENT_RANGE) {
+                let content_range_str = content_range.to_str().unwrap_or("");
+
+                // Parse Content-Range header (format: "bytes start-end/total")
+                if let Some(range_part) = content_range_str.strip_prefix("bytes ") {
+                    if let Some(slash_pos) = range_part.find('/') {
+                        let range_values = &range_part[..slash_pos];
+                        if let Some(dash_pos) = range_values.find('-') {
+                            let start_str = &range_values[..dash_pos];
+                            let end_str = &range_values[dash_pos + 1..];
+
+                            if let (Ok(actual_start), Ok(actual_end)) =
+                                (start_str.parse::<u64>(), end_str.parse::<u64>())
+                            {
+                                let expected_end = offset + length - 1;
+                                if actual_start != offset || actual_end != expected_end {
+                                    return Err(RemoteFileError::Other(format!(
+                                        "Server returned incorrect range: expected {}-{}, got {}-{}",
+                                        offset, expected_end, actual_start, actual_end
+                                    )));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // Note: We don't error if Content-Range header is missing as some servers
+            // may return 206 without it, and the test expects this to work
         }
 
         let bytes = response.bytes().await.map_err(|e| {
@@ -675,6 +723,49 @@ mod tests {
         let result = handler.download(&url).await;
 
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
+    }
+
+    #[tokio::test]
+    async fn test_download_chunk_with_content_range_validation() {
+        let handler = create_test_handler();
+        let mut server = Server::new_async().await;
+        let content = b"Hello";
+        let _m = server
+            .mock("GET", "/test.txt")
+            .match_header("range", "bytes=6-10")
+            .with_status(206)
+            .with_header("Content-Range", "bytes 6-10/100")
+            .with_body(content)
+            .create_async()
+            .await;
+
+        let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
+        let chunk = handler.download_chunk(&url, 6, 5).await.unwrap();
+
+        assert_eq!(chunk.as_ref(), content);
+    }
+
+    #[tokio::test]
+    async fn test_download_chunk_incorrect_range_validation() {
+        let handler = create_test_handler();
+        let mut server = Server::new_async().await;
+        let content = b"Hello";
+        let _m = server
+            .mock("GET", "/test.txt")
+            .match_header("range", "bytes=6-10")
+            .with_status(206)
+            .with_header("Content-Range", "bytes 0-4/100") // Wrong range
+            .with_body(content)
+            .create_async()
+            .await;
+
+        let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
+        let result = handler.download_chunk(&url, 6, 5).await;
+
+        assert!(matches!(result, Err(RemoteFileError::Other(_))));
+        if let Err(RemoteFileError::Other(msg)) = result {
+            assert!(msg.contains("Server returned incorrect range"));
+        }
     }
 
     #[tokio::test]
