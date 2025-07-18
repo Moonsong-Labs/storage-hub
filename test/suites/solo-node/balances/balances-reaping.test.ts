@@ -1,4 +1,4 @@
-import assert, { strictEqual } from "node:assert";
+import { strictEqual } from "node:assert";
 import { after, before, describe, it } from "node:test";
 import {
   alice,
