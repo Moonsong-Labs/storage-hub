@@ -1,0 +1,59 @@
+name: Backend CI
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  push:
+    branches:
+      - main
+      - perm-*
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend.yml'
+  workflow_dispatch:
+
+jobs:
+  check-backend-fmt:
+    name: "Check backend format with rustfmt"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - name: Rustfmt Check Backend
+        run: |
+          cargo fmt --manifest-path backend/lib/Cargo.toml -- --check
+          cargo fmt --manifest-path backend/bin/Cargo.toml -- --check
+
+  check-backend-lint:
+    name: "Check backend lint with clippy"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          workspaces: backend
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Clippy Check Backend
+        run: |
+          cargo clippy --manifest-path backend/lib/Cargo.toml --all-targets --features mocks -- -D warnings
+          cargo clippy --manifest-path backend/bin/Cargo.toml --all-targets -- -D warnings
+
+  test-backend:
+    name: "Test backend"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+          workspaces: backend
+      - name: Install libpq-dev
+        run: sudo apt-get update && sudo apt-get install -y libpq-dev
+      - name: Run Backend Tests
+        run: cargo test --manifest-path backend/lib/Cargo.toml --features mocks
