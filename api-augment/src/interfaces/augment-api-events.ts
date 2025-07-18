@@ -27,6 +27,7 @@ import type {
   FrameSupportTokensMiscBalanceStatus,
   FrameSystemDispatchEventInfo,
   PalletFileSystemEitherAccountIdOrMspId,
+  PalletFileSystemFileDeletionMessage,
   PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
@@ -39,6 +40,7 @@ import type {
   PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieMutation,
   SpRuntimeDispatchError,
+  SpRuntimeMultiSignature,
   SpWeightsWeightV2Weight,
   StagingXcmV5AssetAssets,
   StagingXcmV5Location,
@@ -691,6 +693,14 @@ declare module "@polkadot/api-base/types/events" {
           mspId: H256;
           proofOfInclusion: bool;
         }
+      >;
+      /**
+       * Notifies that a file deletion has been requested with a signed message.
+       **/
+      RequestFileDeletion: AugmentedEvent<
+        ApiType,
+        [signedMessage: PalletFileSystemFileDeletionMessage, signature: SpRuntimeMultiSignature],
+        { signedMessage: PalletFileSystemFileDeletionMessage; signature: SpRuntimeMultiSignature }
       >;
       /**
        * Notifies that a SP has stopped storing a file because its owner has become insolvent.
