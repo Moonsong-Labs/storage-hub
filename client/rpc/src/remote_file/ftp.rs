@@ -232,7 +232,7 @@ impl RemoteFileHandler for FtpFileHandler {
 
         // Reset REST position for future commands
         if offset > 0 {
-            let _ = stream.resume_transfer(0).await;
+            stream.resume_transfer(0).await.map_err(Self::ftp_error_to_remote_error)?;
         }
 
         let _ = stream.quit().await;
