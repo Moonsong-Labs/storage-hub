@@ -211,12 +211,12 @@ impl File {
         &self,
         conn: &mut DbConnection<'_>,
     ) -> Result<Vec<PeerId>, diesel::result::Error> {
-        use crate::schema::{bucket, msp, msp_multiaddress, multiaddress};
+        use crate::schema::{msp, msp_file, msp_multiaddress, multiaddress};
 
-        // Get MSP peer IDs through bucket association
-        let peer_ids: Vec<PeerId> = bucket::table
-            .filter(bucket::id.eq(self.bucket_id))
-            .inner_join(msp::table.on(bucket::msp_id.eq(msp::id.nullable())))
+        // Get MSP peer IDs through msp_file association
+        let peer_ids: Vec<PeerId> = msp_file::table
+            .filter(msp_file::file_id.eq(self.id))
+            .inner_join(msp::table.on(msp_file::msp_id.eq(msp::id)))
             .inner_join(msp_multiaddress::table.on(msp::id.eq(msp_multiaddress::msp_id)))
             .inner_join(
                 multiaddress::table.on(multiaddress::id.eq(msp_multiaddress::multiaddress_id)),
@@ -240,14 +240,14 @@ impl File {
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
     ) -> Result<Option<crate::models::Msp>, diesel::result::Error> {
-        use crate::schema::{bucket, msp};
+        use crate::schema::{msp, msp_file};
 
         let file_key = file_key.as_ref().to_vec();
 
         let msp = file::table
             .filter(file::file_key.eq(file_key))
-            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
-            .inner_join(msp::table.on(bucket::msp_id.eq(msp::id.nullable())))
+            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
+            .inner_join(msp::table.on(msp_file::msp_id.eq(msp::id)))
             .select(msp::all_columns)
             .first::<crate::models::Msp>(conn)
             .await
