@@ -51,7 +51,7 @@ impl RemoteFileHandlerFactory {
     fn create_from_string_with_mode(
         url_str: &str,
         config: RemoteFileConfig,
-        for_write: bool,
+        _for_write: bool,
     ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
         let url = match Url::parse(url_str) {
             Ok(url) => url,
@@ -65,7 +65,10 @@ impl RemoteFileHandlerFactory {
 
                     // Check if this looks like a malformed URL (contains :// but failed to parse)
                     if url_str.contains("://") {
-                        return Err(RemoteFileError::InvalidUrl(format!("Invalid URL: {}", url_str)));
+                        return Err(RemoteFileError::InvalidUrl(format!(
+                            "Invalid URL: {}",
+                            url_str
+                        )));
                     }
 
                     // Accept any non-URL string as a local path (absolute, relative, or bare file names)
@@ -86,12 +89,9 @@ impl RemoteFileHandlerFactory {
                             Some(p) if !p.as_os_str().is_empty() => p,
                             _ => std::path::Path::new("."),
                         };
-                        if !parent.exists() && for_write {
-                            return Err(RemoteFileError::InvalidUrl(format!(
-                                "Parent directory does not exist for path: {}",
-                                url_str
-                            )));
-                        }
+                        // Don't check parent directory existence here.
+                        // For write operations, the handler will create directories as needed.
+                        // For read operations, the actual read will fail if the file doesn't exist.
                         if parent.exists() {
                             let metadata = std::fs::metadata(parent)
                                 .map_err(|e| RemoteFileError::IoError(e))?;

@@ -148,13 +148,17 @@ mod factory_tests {
             "Should accept non-existent file in writable directory"
         );
 
-        // Test with non-existent parent directory for write operations
-        let invalid_path = "/non/existent/directory/file.txt";
-        let result = RemoteFileHandlerFactory::create_from_string_for_write(invalid_path, config.clone());
+        // Test that non-existent parent directory is allowed for write operations
+        // (the handler will create directories as needed)
+        let path_with_nonexistent_parent = "/non/existent/directory/file.txt";
+        let result = RemoteFileHandlerFactory::create_from_string_for_write(
+            path_with_nonexistent_parent,
+            config.clone(),
+        );
 
         assert!(
-            matches!(result, Err(RemoteFileError::InvalidUrl(msg)) if msg.contains("Parent directory does not exist")),
-            "Should reject file with non-existent parent directory when writing"
+            result.is_ok(),
+            "Should allow file with non-existent parent directory when writing"
         );
     }
 
