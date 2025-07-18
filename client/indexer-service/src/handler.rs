@@ -10,9 +10,7 @@ use thiserror::Error;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::blockchain_utils::{
-    convert_raw_multiaddress_to_multiaddr, EventsRetrievalError,
-};
+use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
 use shc_common::{
     blockchain_utils::get_events_at_block,
     types::{BlockNumber, ParachainClient},
@@ -129,8 +127,7 @@ where
                 ServiceState::update(conn, block_number as i64).await?;
 
                 for ev in block_events {
-                    self.route_event(conn, &ev.event, block_hash)
-                        .await?;
+                    self.route_event(conn, &ev.event, block_hash).await?;
                 }
 
                 Ok(())
@@ -149,9 +146,7 @@ where
     ) -> Result<(), diesel::result::Error> {
         match self.indexer_mode {
             crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
-            crate::IndexerMode::Lite => {
-                self.index_event_lite(conn, event, block_hash).await
-            }
+            crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
         }
     }
 
@@ -674,7 +669,6 @@ where
         }
         Ok(())
     }
-
 }
 
 // Define the EventLoop for IndexerService
@@ -692,8 +686,7 @@ where
 }
 
 // Implement ActorEventLoop for IndexerServiceEventLoop
-impl<RuntimeApi> ActorEventLoop<IndexerService<RuntimeApi>>
-    for IndexerServiceEventLoop<RuntimeApi>
+impl<RuntimeApi> ActorEventLoop<IndexerService<RuntimeApi>> for IndexerServiceEventLoop<RuntimeApi>
 where
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
