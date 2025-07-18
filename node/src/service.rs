@@ -410,7 +410,7 @@ where
     } else {
         indexer_config.indexer_mode
     };
-    
+
     if indexer_config.indexer || fisherman_config.fisherman {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
         spawn_indexer_service(

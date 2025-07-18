@@ -169,7 +169,7 @@ impl Bsp {
 
         let file = match File::get_by_file_key(conn, file_key).await {
             Ok(f) => f,
-            Err(_) => return Ok(vec![]), // No file found, return empty vector
+            Err(_) => return Ok(vec![]),
         };
 
         let bsp_ids: Vec<i64> = bsp_file::table

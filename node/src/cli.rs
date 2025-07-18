@@ -1,8 +1,8 @@
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Deserializer};
+use shc_indexer_service::IndexerMode;
 use std::{path::PathBuf, str::FromStr};
 use storage_hub_runtime::StorageDataUnit;
-use shc_indexer_service::IndexerMode;
 
 use crate::command::ProviderOptions;
 
