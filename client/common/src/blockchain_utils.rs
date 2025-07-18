@@ -6,12 +6,16 @@ use std::{str::FromStr, sync::Arc};
 use thiserror::Error;
 
 use codec::Decode;
+use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{backend::StorageProvider, StorageKey};
+use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 
 use crate::{
-    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
-    types::{Multiaddresses, ParachainClient, StorageHubEventsVec},
+    traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi},
+    types::{
+        Multiaddresses, ParachainClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
+    },
 };
 
 lazy_static! {
@@ -83,5 +87,53 @@ pub fn convert_raw_multiaddress_to_multiaddr(raw_multiaddr: &[u8]) -> Option<Mul
             error!("Failed to parse Multiaddress from bytes: {:?}", e);
             None
         }
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum GetProviderIdError {
+    #[error("Multiple provider IDs found for BCSV keys. Managing multiple providers at once is not supported.")]
+    MultipleProviderIds,
+    #[error("Runtime API error while getting Provider ID: {0}")]
+    RuntimeApiError(String),
+}
+
+/// Get the Provider ID linked to the [`BCSV_KEY_TYPE`] keys in the keystore.
+///
+/// This function searches for all BCSV keys in the keystore and queries the runtime
+/// to get the associated Provider ID for each key.
+///
+/// # Returns
+/// - `Ok(None)` if no Provider ID is found for any BCSV key
+/// - `Ok(Some(provider_id))` if exactly one Provider ID is found
+/// - `Err(GetProviderIdError::MultipleProviderIds)` if multiple Provider IDs are found
+/// - `Err(GetProviderIdError::RuntimeApiError)` if there's an error calling the runtime API
+pub fn get_provider_id_from_keystore<RuntimeApi, K>(
+    client: &Arc<ParachainClient<RuntimeApi>>,
+    keystore: &K,
+    block_hash: &H256,
+) -> Result<Option<StorageProviderId>, GetProviderIdError>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    K: ReadOnlyKeystore + ?Sized,
+{
+    let mut provider_ids_found = Vec::new();
+
+    for key in keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
+        let maybe_provider_id = client
+            .runtime_api()
+            .get_storage_provider_id(*block_hash, &key.into())
+            .map_err(|e| GetProviderIdError::RuntimeApiError(e.to_string()))?;
+
+        if let Some(provider_id) = maybe_provider_id {
+            provider_ids_found.push(provider_id);
+        }
+    }
+
+    match provider_ids_found.len() {
+        0 => Ok(None),
+        1 => Ok(Some(provider_ids_found[0])),
+        _ => Err(GetProviderIdError::MultipleProviderIds),
     }
 }

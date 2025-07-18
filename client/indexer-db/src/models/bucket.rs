@@ -108,6 +108,14 @@ impl Bucket {
         Ok(())
     }
 
+    pub async fn get_by_id<'a>(
+        conn: &mut DbConnection<'a>,
+        id: i64,
+    ) -> Result<Self, diesel::result::Error> {
+        let bucket = bucket::table.filter(bucket::id.eq(id)).first(conn).await?;
+        Ok(bucket)
+    }
+
     pub async fn get_by_onchain_bucket_id<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: Vec<u8>,
@@ -117,5 +125,51 @@ impl Bucket {
             .first(conn)
             .await?;
         Ok(bucket)
+    }
+
+    /// Get all buckets belonging to a specific user account
+    ///
+    /// # Example
+    /// ```ignore
+    /// use sp_runtime::AccountId32;
+    ///
+    /// let user: AccountId32 = /* ... */;
+    /// let buckets = Bucket::get_user_buckets(&mut conn, user.to_string()).await?;
+    /// ```
+    pub async fn get_user_buckets<'a>(
+        conn: &mut DbConnection<'a>,
+        user_account: impl Into<String>,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let account = user_account.into();
+        let buckets = bucket::table
+            .filter(bucket::account.eq(account))
+            .load(conn)
+            .await?;
+        Ok(buckets)
+    }
+
+    /// Get all buckets belonging to a specific user account and assigned to a specific MSP
+    ///
+    /// # Example
+    /// ```ignore
+    /// use sp_runtime::AccountId32;
+    /// use storage_hub_runtime::StorageProviderId;
+    ///
+    /// let user: AccountId32 = /* ... */;
+    /// let msp_id: StorageProviderId = /* ... */;
+    /// let buckets = Bucket::get_user_buckets_by_msp(&mut conn, user.to_string(), msp_id).await?;
+    /// ```
+    pub async fn get_user_buckets_by_msp<'a>(
+        conn: &mut DbConnection<'a>,
+        user_account: impl Into<String>,
+        msp_id: i64,
+    ) -> Result<Vec<Self>, diesel::result::Error> {
+        let account = user_account.into();
+        let buckets = bucket::table
+            .filter(bucket::account.eq(account))
+            .filter(bucket::msp_id.eq(msp_id))
+            .load(conn)
+            .await?;
+        Ok(buckets)
     }
 }
