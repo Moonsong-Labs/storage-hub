@@ -1175,6 +1175,7 @@ where
     ///
     /// Note: This function only validates the deletion request but does not perform the actual
     /// file deletion. It serves as a preliminary check before the deletion process can proceed.
+    /// TODO: we probably want to hold a user deposit to prevent users to spam the network
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
         signed_message: FileDeletionMessage<T>,

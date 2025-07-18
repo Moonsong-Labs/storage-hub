@@ -11719,4 +11719,71 @@ mod file_deletion_signature_tests {
             );
         });
     }
+
+    #[test]
+    fn insolvent_user_cannot_request_file_deletion() {
+        new_test_ext().execute_with(|| {
+            // 1. Setup: Create Eve account (the one that can be made insolvent) and get keypair
+            let eve_pair = Keyring::Eve.pair();
+            let eve_account = Keyring::Eve.to_account_id();
+            let eve_origin = RuntimeOrigin::signed(eve_account.clone());
+
+            // Make Eve NOT insolvent initially so we can create a bucket
+            let _guard = set_eve_insolvent(false);
+
+            // Setup MSP and bucket
+            let msp = Keyring::Charlie.to_account_id();
+            let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+
+            let bucket_name =
+                BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+            let (bucket_id, _) =
+                create_bucket(&eve_account, bucket_name, msp_id, value_prop_id, false);
+
+            // Test file metadata
+            let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+            let file_content = b"buen_fla".to_vec();
+            let size = 4;
+            let fingerprint = BlakeTwo256::hash(&file_content);
+
+            // Compute file key as done in the actual implementation
+            let file_key = FileSystem::compute_file_key(
+                eve_account.clone(),
+                bucket_id,
+                location.clone(),
+                size,
+                fingerprint,
+            )
+            .unwrap();
+
+            // 2. Construct the message
+            let signed_message = FileDeletionMessage::<Test> {
+                file_key,
+                operation: FileOperation::Delete,
+            };
+
+            // 3. Sign the message with Eve's key (valid signature)
+            let message_encoded = signed_message.encode();
+            let signature_bytes = eve_pair.sign(&message_encoded);
+            let signature = MultiSignature::Sr25519(signature_bytes);
+
+            // 4. Drop the first guard and make Eve insolvent
+            drop(_guard);
+            let _guard = set_eve_insolvent(true);
+
+            // 5. Call the extrinsic - should fail due to insolvency
+            assert_noop!(
+                FileSystem::request_delete_file(
+                    eve_origin,
+                    signed_message.clone(),
+                    signature.clone(),
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint
+                ),
+                Error::<Test>::OperationNotAllowedWithInsolventUser
+            );
+        });
+    }
 }
