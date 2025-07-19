@@ -37,9 +37,6 @@ pub struct PostgresClient {
 
 impl PostgresClient {
     /// Create a new PostgreSQL client with the given database URL
-    ///
-    /// # Arguments
-    /// * `database_url` - PostgreSQL connection string
     pub async fn new(database_url: &str) -> Result<Self, PostgresError> {
         let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
         let pool = Pool::builder()
@@ -51,9 +48,6 @@ impl PostgresClient {
     }
 
     /// Test the database connection
-    ///
-    /// # Returns
-    /// Ok(()) if the connection is successful, otherwise an error
     pub async fn test_connection(&self) -> Result<(), PostgresError> {
         let _conn = self.pool.get().await?;
         Ok(())

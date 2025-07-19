@@ -28,7 +28,6 @@ pub struct InMemoryStorage {
 }
 
 impl InMemoryStorage {
-    /// Create a new in-memory storage instance
     pub fn new() -> Self {
         Self {
             counters: Arc::new(RwLock::new(HashMap::new())),

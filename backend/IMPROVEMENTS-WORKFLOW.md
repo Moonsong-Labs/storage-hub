@@ -115,3 +115,9 @@ To minimize conflicts:
 - **Minimum** (with 4 engineers working in parallel): 1-2 days
 - **Maximum** (with dependencies and complexity): 3-4 days
 - **Single engineer**: 5-7 days sequential work
+
+
+## Prompt
+Given the current branch name, start working on the corresponding stream described in the @backend/IMPROVEMENTS-WORKFLOW.md document.
+Please commit your changes often to allow for easy review.
+I also suggest you make use of subagents to manage context effectively
