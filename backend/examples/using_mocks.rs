@@ -10,7 +10,7 @@ use sh_backend_lib::{
         postgres::PostgresClientTrait,
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
-    mocks::MockPostgresClient,
+    data::postgres::MockPostgresClient,
     services::Services,
 };
 use std::sync::Arc;

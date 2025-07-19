@@ -6,7 +6,12 @@
 pub mod client;
 // pub mod queries; // TODO: Fix compilation errors in queries module
 
+#[cfg(feature = "mocks")]
+pub mod mock;
+
 pub use client::PostgresClient;
+#[cfg(feature = "mocks")]
+pub use mock::MockPostgresClient;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

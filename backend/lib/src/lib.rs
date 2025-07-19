@@ -8,8 +8,6 @@ pub mod data;
 pub mod error;
 pub mod services;
 
-#[cfg(feature = "mocks")]
-pub mod mocks;
 
 pub use api::create_app;
 pub use config::Config;
@@ -24,7 +22,7 @@ mod tests {
     use services::Services;
     use std::sync::Arc;
 
-    use crate::mocks::MockPostgresClient;
+    use crate::data::postgres::MockPostgresClient;
     
 
 

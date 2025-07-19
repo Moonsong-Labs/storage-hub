@@ -29,7 +29,7 @@ mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use crate::data::storage::{BoxedStorageWrapper, InMemoryStorage};
-    use crate::mocks::MockPostgresClient;
+    use crate::data::postgres::MockPostgresClient;
     use std::sync::Arc;
 
     fn create_test_app() -> Router {

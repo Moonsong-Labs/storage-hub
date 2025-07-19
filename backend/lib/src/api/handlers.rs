@@ -60,7 +60,7 @@ pub async fn health_check() -> Json<Value> {
 mod tests {
     use super::*;
     use crate::data::storage::{BoxedStorageWrapper, InMemoryStorage};
-    use crate::mocks::MockPostgresClient;
+    use crate::data::postgres::MockPostgresClient;
     use std::sync::Arc;
 
     fn create_test_services() -> Services {

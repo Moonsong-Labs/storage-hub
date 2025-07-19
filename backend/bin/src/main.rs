@@ -18,7 +18,7 @@ use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[cfg(feature = "mocks")]
-use sh_backend_lib::mocks::MockPostgresClient;
+use sh_backend_lib::data::postgres::MockPostgresClient;
 
 #[tokio::main]
 async fn main() {
