@@ -3,10 +3,14 @@
 //! This module provides RPC client functionality for interacting with
 //! the StorageHub blockchain runtime.
 
+pub mod client;
 pub mod connection;
+pub mod ws_connection;
 
 #[cfg(feature = "mocks")]
 pub mod mock;
+#[cfg(feature = "mocks")]
+pub mod mock_connection;
 
 use async_trait::async_trait;
 use jsonrpsee::core::Error as RpcError;
@@ -81,9 +85,17 @@ pub trait StorageHubRpcTrait: Send + Sync {
     async fn get_storage_request_status(&self, file_key: &[u8]) -> Result<Option<String>, RpcError>;
 }
 
-// Re-export connection types
-pub use connection::{RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcConfig, RpcResult};
+// Re-export client
+pub use client::StorageHubRpcClient;
 
-// Re-export mock implementation when mocks feature is enabled
+// Re-export connection types
+pub use connection::{RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcConfig, RpcResult, IntoRpcError};
+
+// Re-export WebSocket connection
+pub use ws_connection::{WsConnection, WsConnectionBuilder};
+
+// Re-export mock implementations when mocks feature is enabled
 #[cfg(feature = "mocks")]
 pub use mock::MockStorageHubRpc;
+#[cfg(feature = "mocks")]
+pub use mock_connection::{MockConnection, MockConnectionBuilder, ErrorMode};

@@ -29,12 +29,12 @@ diesel-async = { workspace = true }
 # Utilities
 hex = { workspace = true }
 
-# Feature-gated dependencies
-jsonrpsee = { workspace = true, optional = true }
+# RPC dependencies
+jsonrpsee = { workspace = true, features = ["ws-client"] }
 
 [dev-dependencies]
 axum-test = "15"
 
 [features]
 default = []
-mocks = ["dep:jsonrpsee"]
+mocks = []

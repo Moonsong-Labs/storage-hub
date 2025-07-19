@@ -141,8 +141,7 @@ pub trait IntoRpcError {
     fn into_rpc_error(self) -> RpcConnectionError;
 }
 
-// Implement IntoRpcError for jsonrpsee errors when the feature is enabled
-#[cfg(feature = "mocks")]
+// Implement IntoRpcError for jsonrpsee errors
 impl IntoRpcError for jsonrpsee::core::Error {
     fn into_rpc_error(self) -> RpcConnectionError {
         use jsonrpsee::core::client::Error as ClientError;
