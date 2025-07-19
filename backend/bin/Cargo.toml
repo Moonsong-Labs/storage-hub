@@ -8,10 +8,18 @@ name = "backend"
 path = "src/main.rs"
 
 [dependencies]
+# Local dependencies
 sh-backend-lib = { path = "../lib" }
-tokio = { version = "1", features = ["full"] }
+
+# Workspace dependencies
+tokio = { workspace = true, features = ["full"] }
+axum = "0.7"
+toml = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+# Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-axum = "0.7"
-toml = "0.8"
-serde = { version = "1.0", features = ["derive"] }
+
+# CLI
+clap = { workspace = true }
