@@ -40,15 +40,6 @@ impl PostgresClient {
     ///
     /// # Arguments
     /// * `database_url` - PostgreSQL connection string
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use sh_backend_lib::data::postgres::PostgresClient;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let client = PostgresClient::new("postgres://user:pass@localhost/storagehub").await?;
-    /// # Ok(())
-    /// # }
-    /// ```
     pub async fn new(database_url: &str) -> Result<Self, PostgresError> {
         let config = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
         let pool = Pool::builder()

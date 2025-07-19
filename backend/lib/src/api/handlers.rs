@@ -17,8 +17,6 @@ pub struct CounterResponse {
 }
 
 /// Increment counter handler
-/// 
-/// POST /counter/inc
 pub async fn increment_counter(
     State(services): State<Services>,
 ) -> Result<Json<CounterResponse>> {
@@ -27,8 +25,6 @@ pub async fn increment_counter(
 }
 
 /// Decrement counter handler
-/// 
-/// POST /counter/dec
 pub async fn decrement_counter(
     State(services): State<Services>,
 ) -> Result<Json<CounterResponse>> {
@@ -37,8 +33,6 @@ pub async fn decrement_counter(
 }
 
 /// Get current counter value handler
-/// 
-/// GET /counter
 pub async fn get_counter(
     State(services): State<Services>,
 ) -> Result<Json<CounterResponse>> {
@@ -47,8 +41,6 @@ pub async fn get_counter(
 }
 
 /// Health check handler
-/// 
-/// GET /health
 pub async fn health_check() -> Json<Value> {
     Json(json!({
         "status": "ok",
