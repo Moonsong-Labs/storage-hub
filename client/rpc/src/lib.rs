@@ -1,13 +1,11 @@
-use std::{
-    collections::HashSet,
-    fmt::Debug,
-    fs::File,
-    io::{Read, Write},
-    path::PathBuf,
-    str::FromStr,
-    sync::Arc,
-};
+use std::{collections::HashSet, fmt::Debug, path::PathBuf, str::FromStr, sync::Arc};
 
+pub mod remote_file;
+
+#[cfg(test)]
+mod tests;
+
+use futures::StreamExt;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
     proc_macros::rpc,
@@ -18,10 +16,11 @@ use log::{debug, error, info};
 use sc_rpc_api::check_if_safe;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
-use tokio::{fs, fs::create_dir_all, sync::RwLock};
+use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
+use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -328,15 +327,27 @@ where
         owner: AccountId32,
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult> {
-        // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Open file in the local file system.
-        let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
+        let config = RemoteFileConfig::default();
+        let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
+            .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
-        // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
+        let (file_size, _content_type) = handler
+            .fetch_metadata(&url)
+            .await
+            .map_err(remote_file_error_to_rpc_error)?;
+
+        if file_size == 0 {
+            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
+        }
+
+        let mut stream = handler
+            .stream_file(&url)
+            .await
+            .map_err(remote_file_error_to_rpc_error)?;
+
         let mut file_data_trie = self.file_storage.write().await.new_file_data_trie();
-        // A chunk id is simply an integer index.
         let mut chunk_id: u64 = 0;
 
         // Read file in chunks of [`FILE_CHUNK_SIZE`] into buffer then push buffer into a vector.
@@ -344,21 +355,18 @@ where
         // If `ErrorKind::Interrupted` is found, the operation is simply retried, as per
         // https://doc.rust-lang.org/std/io/trait.Read.html#errors-1
         loop {
-            let mut chunk = Vec::with_capacity(FILE_CHUNK_SIZE as usize);
-            let read_result = <File as Read>::by_ref(&mut file)
-                .take(FILE_CHUNK_SIZE)
-                .read_to_end(&mut chunk);
-            match read_result {
-                // Reached EOF, break loop.
+            let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
+
+            match stream.read(&mut chunk).await {
                 Ok(0) => {
                     debug!(target: LOG_TARGET, "Finished reading file");
                     break;
                 }
-                // Haven't reached EOF yet, continue loop.
                 Ok(bytes_read) => {
                     debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
 
-                    // Build the actual [`FileDataTrie`] by inserting each chunk into it.
+                    chunk.truncate(bytes_read);
+
                     file_data_trie
                         .write_chunk(&ChunkId::new(chunk_id), &chunk)
                         .map_err(into_rpc_error)?;
@@ -366,25 +374,21 @@ where
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
-                    return Err(into_rpc_error(e));
+                    return Err(into_rpc_error(format!(
+                        "Error reading file stream: {:?}",
+                        e
+                    )));
                 }
             }
         }
 
-        // Generate the necessary metadata so we can insert file into the File Storage.
         let root = file_data_trie.get_root();
-        let fs_metadata = file.metadata().map_err(into_rpc_error)?;
 
-        if fs_metadata.len() == 0 {
-            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
-        }
-
-        // Build StorageHub's [`FileMetadata`]
         let file_metadata = FileMetadata::new(
             <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
             bucket_id.as_ref().to_vec(),
             location.clone().into(),
-            fs_metadata.len(),
+            file_size,
             root.as_ref().into(),
         )
         .map_err(into_rpc_error)?;
@@ -484,24 +488,34 @@ where
             }));
         }
 
-        let file_path = PathBuf::from(file_path.clone());
+        let config = RemoteFileConfig::default();
+        let (handler, url) =
+            RemoteFileHandlerFactory::create_from_string_for_write(&file_path, config)
+                .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
-        // Create parent directories if they don't exist.
-        create_dir_all(&file_path.parent().unwrap())
-            .await
-            .map_err(into_rpc_error)?;
-
-        // Open file in the local file system.
-        let mut file = File::create(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
-
-        // Write file data to disk.
-        for chunk_id in 0..total_chunks {
-            let chunk_id = ChunkId::new(chunk_id);
+        let mut chunks = Vec::new();
+        for chunk_idx in 0..total_chunks {
+            let chunk_id = ChunkId::new(chunk_idx);
             let chunk = read_file_storage
                 .get_chunk(&file_key, &chunk_id)
                 .map_err(into_rpc_error)?;
-            file.write_all(&chunk).map_err(into_rpc_error)?;
+            chunks.push(chunk);
         }
+
+        drop(read_file_storage);
+
+        let chunks_stream = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
+
+        let reader = tokio_util::io::StreamReader::new(
+            chunks_stream.map(|result| result.map(bytes::Bytes::from)),
+        );
+        let boxed_reader: Box<dyn tokio::io::AsyncRead + Send + Unpin> = Box::new(reader);
+
+        let file_size = file_metadata.file_size();
+        handler
+            .upload_file(&url, boxed_reader, file_size, None)
+            .await
+            .map_err(remote_file_error_to_rpc_error)?;
 
         Ok(SaveFileToDisk::Success(file_metadata))
     }
@@ -988,6 +1002,18 @@ fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
         INTERNAL_ERROR_MSG,
         Some(format!("{:?}", e)),
     )
+}
+
+/// Converts RemoteFileError into RPC error, preserving original IO error messages.
+fn remote_file_error_to_rpc_error(e: remote_file::RemoteFileError) -> JsonRpseeError {
+    match e {
+        remote_file::RemoteFileError::IoError(io_err) => JsonRpseeError::owned(
+            INTERNAL_ERROR_CODE,
+            INTERNAL_ERROR_MSG,
+            Some(format!("{:?}", io_err)),
+        ),
+        other => into_rpc_error(other),
+    }
 }
 
 async fn generate_key_proof<FL, C, Block>(
