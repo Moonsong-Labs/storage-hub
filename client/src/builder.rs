@@ -53,6 +53,7 @@ where
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService>>,
     blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH, RuntimeApi>>>,
+    fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<RuntimeApi>>>,
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
     forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
@@ -82,6 +83,7 @@ where
             task_spawner: Some(task_spawner),
             file_transfer: None,
             blockchain: None,
+            fisherman: None,
             storage_path: None,
             file_storage: None,
             forest_storage_handler: None,
@@ -185,6 +187,29 @@ where
             .await;
 
         self.blockchain = Some(blockchain_service_handle);
+        self
+    }
+
+    /// Spawn and add the Fisherman Service.
+    ///
+    /// The Fisherman Service monitors the blockchain for file deletion requests
+    /// and constructs proofs of inclusion for storage providers to delete
+    /// file keys from Bucket and BSP forests.
+    pub async fn with_fisherman_service(
+        &mut self,
+        client: Arc<ParachainClient<RuntimeApi>>,
+        db_pool: DbPool,
+    ) -> &mut Self {
+        let fisherman_service_handle = shc_fisherman_service::spawn_fisherman_service(
+            self.task_spawner
+                .as_ref()
+                .expect("Task spawner is not set."),
+            client,
+            db_pool,
+        )
+        .await;
+
+        self.fisherman = Some(fisherman_service_handle);
         self
     }
 
@@ -457,6 +482,10 @@ where
                 .as_ref()
                 .expect("Blockchain Service not set.")
                 .clone(),
+            self.fisherman
+                .as_ref()
+                .expect("Fisherman Service not set.")
+                .clone(),
             self.file_storage
                 .as_ref()
                 .expect("File Storage not set.")
@@ -502,6 +531,10 @@ where
             self.blockchain
                 .as_ref()
                 .expect("Blockchain Service not set.")
+                .clone(),
+            self.fisherman
+                .as_ref()
+                .expect("Fisherman Service not set.")
                 .clone(),
             self.file_storage
                 .as_ref()
@@ -549,6 +582,10 @@ where
             self.blockchain
                 .as_ref()
                 .expect("Blockchain Service not set.")
+                .clone(),
+            self.fisherman
+                .as_ref()
+                .expect("Fisherman Service not set.")
                 .clone(),
             self.file_storage
                 .as_ref()

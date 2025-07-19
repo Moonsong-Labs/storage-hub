@@ -29,6 +29,7 @@ use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
 };
+use shc_fisherman_service::{events::ProcessFileDeletionRequest, FishermanService};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
@@ -41,6 +42,7 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
+        fisherman_process_file_deletion::FishermanProcessFileDeletionTask,
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
@@ -90,6 +92,8 @@ where
     pub file_transfer: ActorHandle<FileTransferService>,
     /// The actor handle for the blockchain service.
     pub blockchain: ActorHandle<BlockchainService<NT::FSH, RuntimeApi>>,
+    /// The actor handle for the fisherman service.
+    pub fisherman: ActorHandle<FishermanService<RuntimeApi>>,
     /// The file storage layer which stores all files in chunks.
     pub file_storage: Arc<RwLock<NT::FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
@@ -128,6 +132,7 @@ where
             task_spawner: self.task_spawner.clone(),
             file_transfer: self.file_transfer.clone(),
             blockchain: self.blockchain.clone(),
+            fisherman: self.fisherman.clone(),
             file_storage: self.file_storage.clone(),
             forest_storage_handler: self.forest_storage_handler.clone(),
             provider_config: self.provider_config.clone(),
@@ -148,6 +153,7 @@ where
         task_spawner: TaskSpawner,
         file_transfer: ActorHandle<FileTransferService>,
         blockchain: ActorHandle<BlockchainService<NT::FSH, RuntimeApi>>,
+        fisherman: ActorHandle<FishermanService<RuntimeApi>>,
         file_storage: Arc<RwLock<NT::FL>>,
         forest_storage_handler: NT::FSH,
         provider_config: ProviderConfig,
@@ -168,6 +174,7 @@ where
             task_spawner,
             file_transfer,
             blockchain,
+            fisherman,
             file_storage,
             forest_storage_handler,
             provider_config,
@@ -375,6 +382,17 @@ where
             [
                 RemoteDownloadRequest => BspDownloadFileTask,
                 RemoteUploadRequest => BspUploadFileTask,
+            ]
+        );
+
+        // Subscribing tasks to events from the FishermanService.
+        subscribe_actor_event_map!(
+            service: &self.fisherman,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+            [
+                ProcessFileDeletionRequest => FishermanProcessFileDeletionTask,
             ]
         );
     }

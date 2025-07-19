@@ -4,6 +4,7 @@
 use futures::{Stream, StreamExt};
 use log::{error, info};
 use shc_blockchain_service::capacity_manager::CapacityConfig;
+use shc_fisherman_service::spawn_fisherman_service;
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
 use std::{cell::RefCell, env, path::PathBuf, sync::Arc, time::Duration};
@@ -70,7 +71,7 @@ use sp_keystore::{Keystore, KeystorePtr};
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{
-    cli::{self, IndexerConfigurations, ProviderType, StorageLayer},
+    cli::{self, FishermanConfigurations, IndexerConfigurations, ProviderType, StorageLayer},
     command::ProviderOptions,
 };
 
@@ -343,6 +344,7 @@ async fn start_dev_impl<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_config: IndexerConfigurations,
+    fisherman_config: FishermanConfigurations,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -401,7 +403,8 @@ where
         None
     };
 
-    if indexer_config.indexer {
+    // Start indexer if explicitly requested OR if fisherman is enabled (fisherman depends on indexer)
+    if indexer_config.indexer || fisherman_config.fisherman {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
         spawn_indexer_service(
             &task_spawner,
@@ -412,6 +415,27 @@ where
             indexer_config.indexer_mode,
         )
         .await;
+
+        if fisherman_config.fisherman {
+            info!("📊 Indexer automatically enabled for fisherman dependency");
+        }
+    }
+
+    // Start fisherman service if requested
+    if fisherman_config.fisherman {
+        info!("🎣 Starting Fisherman monitoring service...");
+
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
+        spawn_fisherman_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+
+        info!("🎣 Fisherman service started successfully");
     }
 
     let signing_dev_key = config
@@ -1543,6 +1567,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: IndexerConfigurations,
+    fisherman_config: FishermanConfigurations,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -1557,6 +1582,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1568,6 +1594,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1579,6 +1606,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1590,6 +1618,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1601,6 +1630,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1614,6 +1644,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
             config,
             None,
             indexer_options,
+            fisherman_config,
             hwbench,
             para_id,
             sealing,
