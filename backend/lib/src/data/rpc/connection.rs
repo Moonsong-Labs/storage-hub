@@ -1,0 +1,197 @@
+//! RPC connection abstraction for StorageHub
+//!
+//! This module provides a trait-based abstraction for RPC connections,
+//! allowing for different implementations (HTTP, WebSocket, mock, etc.)
+//! while maintaining a consistent interface.
+
+use async_trait::async_trait;
+use serde::{de::DeserializeOwned, Serialize};
+use std::error::Error as StdError;
+use std::fmt;
+
+/// Error type for RPC operations
+#[derive(Debug, thiserror::Error)]
+pub enum RpcConnectionError {
+    /// Network or transport-related errors
+    #[error("Transport error: {0}")]
+    Transport(String),
+    
+    /// JSON-RPC protocol errors
+    #[error("RPC error: {0}")]
+    Rpc(String),
+    
+    /// Serialization/deserialization errors
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+    
+    /// Request timeout errors
+    #[error("Request timeout")]
+    Timeout,
+    
+    /// Connection closed or unavailable
+    #[error("Connection closed")]
+    ConnectionClosed,
+    
+    /// Other errors
+    #[error("Other error: {0}")]
+    Other(String),
+}
+
+/// Result type for RPC operations
+pub type RpcResult<T> = Result<T, RpcConnectionError>;
+
+/// Trait for RPC connections
+///
+/// This trait abstracts the underlying RPC transport mechanism,
+/// allowing for different implementations while maintaining a
+/// consistent interface for making RPC calls.
+#[async_trait]
+pub trait RpcConnection: Send + Sync {
+    /// Execute a JSON-RPC method call
+    ///
+    /// # Arguments
+    /// * `method` - The RPC method name to call
+    /// * `params` - The parameters to send with the method call
+    ///
+    /// # Returns
+    /// The deserialized result of the RPC call
+    async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
+    where
+        P: Serialize + Send + Sync,
+        R: DeserializeOwned;
+    
+    /// Execute a JSON-RPC method call without parameters
+    ///
+    /// # Arguments
+    /// * `method` - The RPC method name to call
+    ///
+    /// # Returns
+    /// The deserialized result of the RPC call
+    async fn call_no_params<R>(&self, method: &str) -> RpcResult<R>
+    where
+        R: DeserializeOwned
+    {
+        // Default implementation using empty tuple as params
+        self.call::<_, R>(method, ()).await
+    }
+    
+    /// Check if the connection is currently active
+    ///
+    /// # Returns
+    /// `true` if the connection is active and ready for use
+    async fn is_connected(&self) -> bool;
+    
+    /// Close the connection gracefully
+    ///
+    /// This method should clean up any resources associated with
+    /// the connection. After calling this method, the connection
+    /// should not be used for further RPC calls.
+    async fn close(&self) -> RpcResult<()>;
+}
+
+/// Builder trait for creating RPC connections
+///
+/// This trait allows for flexible configuration of RPC connections
+/// before establishing them.
+#[async_trait]
+pub trait RpcConnectionBuilder: Send + Sync {
+    /// The type of connection this builder creates
+    type Connection: RpcConnection;
+    
+    /// Build and establish the RPC connection
+    ///
+    /// # Returns
+    /// A new RPC connection ready for use
+    async fn build(self) -> RpcResult<Self::Connection>;
+}
+
+/// Configuration for RPC connections
+#[derive(Debug, Clone)]
+pub struct RpcConfig {
+    /// The RPC endpoint URL
+    pub url: String,
+    
+    /// Request timeout in seconds
+    pub timeout_secs: Option<u64>,
+    
+    /// Maximum number of concurrent requests
+    pub max_concurrent_requests: Option<usize>,
+    
+    /// Whether to verify TLS certificates (for HTTPS/WSS)
+    pub verify_tls: bool,
+}
+
+impl Default for RpcConfig {
+    fn default() -> Self {
+        Self {
+            url: String::new(),
+            timeout_secs: Some(30),
+            max_concurrent_requests: Some(100),
+            verify_tls: true,
+        }
+    }
+}
+
+/// Trait for types that can be converted to RPC errors
+///
+/// This allows different RPC implementations to convert their
+/// specific error types to our generic `RpcConnectionError`.
+pub trait IntoRpcError {
+    /// Convert this error into an `RpcConnectionError`
+    fn into_rpc_error(self) -> RpcConnectionError;
+}
+
+// Implement IntoRpcError for jsonrpsee errors when the feature is enabled
+#[cfg(feature = "mocks")]
+impl IntoRpcError for jsonrpsee::core::Error {
+    fn into_rpc_error(self) -> RpcConnectionError {
+        use jsonrpsee::core::client::Error as ClientError;
+        
+        match self {
+            Self::Call(e) => RpcConnectionError::Rpc(e.to_string()),
+            Self::Transport(e) => RpcConnectionError::Transport(e.to_string()),
+            Self::RestartNeeded(e) => RpcConnectionError::ConnectionClosed,
+            Self::ParseError(e) => RpcConnectionError::Serialization(e.to_string()),
+            Self::InvalidSubscriptionId => RpcConnectionError::Rpc("Invalid subscription ID".to_string()),
+            Self::InvalidRequestId(e) => RpcConnectionError::Rpc(format!("Invalid request ID: {}", e)),
+            Self::RequestTimeout => RpcConnectionError::Timeout,
+            Self::MaxSlotsExceeded => RpcConnectionError::Rpc("Max concurrent requests exceeded".to_string()),
+            Self::AlreadySubscribed(e) => RpcConnectionError::Rpc(format!("Already subscribed: {}", e)),
+            Self::HttpNotImplemented => RpcConnectionError::Other("HTTP not implemented".to_string()),
+            Self::EmptyBatchRequest => RpcConnectionError::Rpc("Empty batch request".to_string()),
+            Self::RegisterMethod(e) => RpcConnectionError::Rpc(format!("Failed to register method: {}", e)),
+            other => RpcConnectionError::Other(other.to_string()),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_rpc_config_default() {
+        let config = RpcConfig::default();
+        assert_eq!(config.url, "");
+        assert_eq!(config.timeout_secs, Some(30));
+        assert_eq!(config.max_concurrent_requests, Some(100));
+        assert!(config.verify_tls);
+    }
+    
+    #[test]
+    fn test_rpc_connection_error_display() {
+        let errors = vec![
+            RpcConnectionError::Transport("Network error".to_string()),
+            RpcConnectionError::Rpc("Method not found".to_string()),
+            RpcConnectionError::Serialization("Invalid JSON".to_string()),
+            RpcConnectionError::Timeout,
+            RpcConnectionError::ConnectionClosed,
+            RpcConnectionError::Other("Unknown error".to_string()),
+        ];
+        
+        for error in errors {
+            // Just ensure Display is implemented
+            let _ = format!("{}", error);
+        }
+    }
+}

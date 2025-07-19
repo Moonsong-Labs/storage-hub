@@ -3,6 +3,8 @@
 //! This module provides RPC client functionality for interacting with
 //! the StorageHub blockchain runtime.
 
+pub mod connection;
+
 #[cfg(feature = "mocks")]
 pub mod mock;
 
@@ -78,6 +80,9 @@ pub trait StorageHubRpcTrait: Send + Sync {
     /// Get storage request status
     async fn get_storage_request_status(&self, file_key: &[u8]) -> Result<Option<String>, RpcError>;
 }
+
+// Re-export connection types
+pub use connection::{RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcConfig, RpcResult};
 
 // Re-export mock implementation when mocks feature is enabled
 #[cfg(feature = "mocks")]
