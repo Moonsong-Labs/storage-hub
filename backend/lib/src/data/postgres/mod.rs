@@ -4,14 +4,22 @@
 //! allowing the backend to query blockchain-indexed data.
 
 pub mod client;
+pub mod connection;
+pub mod pg_connection;
 // pub mod queries; // TODO: Fix compilation errors in queries module
 
 #[cfg(feature = "mocks")]
 pub mod mock;
+#[cfg(feature = "mocks")]
+pub mod mock_connection;
 
 pub use client::PostgresClient;
+pub use connection::{DbConnection, DbConnectionError, DbConfig, ConnectionProvider};
+pub use pg_connection::PgConnection;
 #[cfg(feature = "mocks")]
 pub use mock::MockPostgresClient;
+#[cfg(feature = "mocks")]
+pub use mock_connection::{MockDbConnection, MockErrorConfig, MockTestData};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
