@@ -13,11 +13,14 @@ pub mod mock;
 #[cfg(feature = "mocks")]
 pub mod mock_connection;
 
-pub use client::PostgresClient;
+// Main client
+pub use client::{PostgresClient, PostgresError};
+
+// Connection types
 pub use connection::{DbConnection, DbConnectionError, DbConfig, ConnectionProvider};
 pub use pg_connection::PgConnection;
-#[cfg(feature = "mocks")]
-pub use mock::MockPostgresClient;
+
+// Mock types (only with mocks feature)
 #[cfg(feature = "mocks")]
 pub use mock_connection::{MockDbConnection, MockErrorConfig, MockTestData};
 

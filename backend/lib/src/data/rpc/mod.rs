@@ -85,17 +85,13 @@ pub trait StorageHubRpcTrait: Send + Sync {
     async fn get_storage_request_status(&self, file_key: &[u8]) -> Result<Option<String>, RpcError>;
 }
 
-// Re-export client
+// Main client
 pub use client::StorageHubRpcClient;
 
-// Re-export connection types
+// Connection types
 pub use connection::{RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcConfig, RpcResult, IntoRpcError};
-
-// Re-export WebSocket connection
 pub use ws_connection::{WsConnection, WsConnectionBuilder};
 
-// Re-export mock implementations when mocks feature is enabled
-#[cfg(feature = "mocks")]
-pub use mock::MockStorageHubRpc;
+// Mock types (only with mocks feature)
 #[cfg(feature = "mocks")]
 pub use mock_connection::{MockConnection, MockConnectionBuilder, ErrorMode};
