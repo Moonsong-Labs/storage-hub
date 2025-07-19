@@ -9,8 +9,6 @@ pub mod pg_connection;
 // pub mod queries; // TODO: Fix compilation errors in queries module
 
 #[cfg(feature = "mocks")]
-pub mod mock;
-#[cfg(feature = "mocks")]
 pub mod mock_connection;
 
 // Main client

@@ -8,8 +8,6 @@ pub mod connection;
 pub mod ws_connection;
 
 #[cfg(feature = "mocks")]
-pub mod mock;
-#[cfg(feature = "mocks")]
 pub mod mock_connection;
 
 use async_trait::async_trait;
