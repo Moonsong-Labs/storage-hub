@@ -36,5 +36,5 @@ jsonrpsee = { workspace = true, features = ["ws-client"] }
 axum-test = "15"
 
 [features]
-default = []
+default = ["mocks"]
 mocks = []
