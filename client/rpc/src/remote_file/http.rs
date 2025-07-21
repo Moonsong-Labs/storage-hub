@@ -29,8 +29,8 @@ impl HttpFileHandler {
             .build()
             .map_err(|e| RemoteFileError::Other(format!("Failed to build HTTP client: {}", e)))?;
 
-        Ok(Self { 
-            client, 
+        Ok(Self {
+            client,
             config,
             base_url: url.clone(),
         })
@@ -68,7 +68,10 @@ impl HttpFileHandler {
         }
     }
 
-    async fn handle_full_content(&self, response: reqwest::Response) -> Result<Bytes, RemoteFileError> {
+    async fn handle_full_content(
+        &self,
+        response: reqwest::Response,
+    ) -> Result<Bytes, RemoteFileError> {
         // For servers that don't support range requests, we accept the full content
         // This maintains backward compatibility with existing behavior
         response.bytes().await.map_err(Self::map_request_error)
@@ -83,7 +86,8 @@ impl HttpFileHandler {
         // Optionally verify the Content-Range header
         if let Some(content_range) = response.headers().get(header::CONTENT_RANGE) {
             let content_range_str = content_range.to_str().unwrap_or("");
-            if let Err(e) = self.parse_and_validate_content_range(content_range_str, offset, length) {
+            if let Err(e) = self.parse_and_validate_content_range(content_range_str, offset, length)
+            {
                 return Err(e);
             }
         }
@@ -100,28 +104,28 @@ impl HttpFileHandler {
         expected_length: u64,
     ) -> Result<(u64, u64), RemoteFileError> {
         // Parse Content-Range header (format: "bytes start-end/total")
-        let range_part = header
-            .strip_prefix("bytes ")
-            .ok_or_else(|| RemoteFileError::Other("Invalid Content-Range header format".to_string()))?;
+        let range_part = header.strip_prefix("bytes ").ok_or_else(|| {
+            RemoteFileError::Other("Invalid Content-Range header format".to_string())
+        })?;
 
-        let slash_pos = range_part
-            .find('/')
-            .ok_or_else(|| RemoteFileError::Other("Invalid Content-Range header format".to_string()))?;
+        let slash_pos = range_part.find('/').ok_or_else(|| {
+            RemoteFileError::Other("Invalid Content-Range header format".to_string())
+        })?;
 
         let range_values = &range_part[..slash_pos];
-        let dash_pos = range_values
-            .find('-')
-            .ok_or_else(|| RemoteFileError::Other("Invalid Content-Range header format".to_string()))?;
+        let dash_pos = range_values.find('-').ok_or_else(|| {
+            RemoteFileError::Other("Invalid Content-Range header format".to_string())
+        })?;
 
         let start_str = &range_values[..dash_pos];
         let end_str = &range_values[dash_pos + 1..];
 
-        let actual_start = start_str
-            .parse::<u64>()
-            .map_err(|_| RemoteFileError::Other("Invalid start value in Content-Range".to_string()))?;
-        let actual_end = end_str
-            .parse::<u64>()
-            .map_err(|_| RemoteFileError::Other("Invalid end value in Content-Range".to_string()))?;
+        let actual_start = start_str.parse::<u64>().map_err(|_| {
+            RemoteFileError::Other("Invalid start value in Content-Range".to_string())
+        })?;
+        let actual_end = end_str.parse::<u64>().map_err(|_| {
+            RemoteFileError::Other("Invalid end value in Content-Range".to_string())
+        })?;
 
         let expected_end = expected_offset + expected_length - 1;
         if actual_start != expected_offset || actual_end != expected_end {
@@ -135,7 +139,12 @@ impl HttpFileHandler {
     }
 
     pub async fn download(&self) -> Result<Vec<u8>, RemoteFileError> {
-        let response = self.client.get(self.base_url.as_str()).send().await.map_err(Self::map_request_error)?;
+        let response = self
+            .client
+            .get(self.base_url.as_str())
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
 
         if !response.status().is_success() {
             return Err(Self::status_to_error(response.status()));
@@ -167,13 +176,18 @@ impl HttpFileHandler {
 #[async_trait]
 impl RemoteFileHandler for HttpFileHandler {
     async fn get_file_size(&self) -> Result<u64, RemoteFileError> {
-        let response = self.client.head(self.base_url.as_str()).send().await.map_err(Self::map_request_error)?;
+        let response = self
+            .client
+            .head(self.base_url.as_str())
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
 
         match response.status() {
             status if status.is_success() => {
-                let content_length = response
-                    .content_length()
-                    .ok_or_else(|| RemoteFileError::Other("Content-Length header missing".to_string()))?;
+                let content_length = response.content_length().ok_or_else(|| {
+                    RemoteFileError::Other("Content-Length header missing".to_string())
+                })?;
 
                 self.validate_file_size(content_length)?;
 
@@ -183,10 +197,13 @@ impl RemoteFileHandler for HttpFileHandler {
         }
     }
 
-    async fn stream_file(
-        &self,
-    ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
-        let response = self.client.get(self.base_url.as_str()).send().await.map_err(Self::map_request_error)?;
+    async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
+        let response = self
+            .client
+            .get(self.base_url.as_str())
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
 
         match response.status() {
             status if status.is_success() => {
@@ -210,7 +227,8 @@ impl RemoteFileHandler for HttpFileHandler {
                     stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
                 );
                 // Wrap the reader in a buffered reader with configured chunk size
-                let buffered_reader = tokio::io::BufReader::with_capacity(self.config.chunk_size, reader);
+                let buffered_reader =
+                    tokio::io::BufReader::with_capacity(self.config.chunk_size, reader);
 
                 Ok(Box::new(buffered_reader) as Box<dyn AsyncRead + Send + Unpin>)
             }
@@ -218,11 +236,7 @@ impl RemoteFileHandler for HttpFileHandler {
         }
     }
 
-    async fn download_chunk(
-        &self,
-        offset: u64,
-        length: u64,
-    ) -> Result<Bytes, RemoteFileError> {
+    async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         let range = format!("bytes={}-{}", offset, offset + length - 1);
 
         let response = self
@@ -235,7 +249,9 @@ impl RemoteFileHandler for HttpFileHandler {
 
         match response.status() {
             StatusCode::OK => self.handle_full_content(response).await,
-            StatusCode::PARTIAL_CONTENT => self.handle_partial_content(response, offset, length).await,
+            StatusCode::PARTIAL_CONTENT => {
+                self.handle_partial_content(response, offset, length).await
+            }
             status => Err(Self::status_to_error(status)),
         }
     }

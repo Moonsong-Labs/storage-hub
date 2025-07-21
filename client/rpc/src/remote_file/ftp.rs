@@ -192,9 +192,7 @@ impl RemoteFileHandler for FtpFileHandler {
         Ok(size as u64)
     }
 
-    async fn stream_file(
-        &self,
-    ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
+    async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
         // For now, we'll download the entire file and wrap it in a cursor
         // TODO: Implement true streaming when suppaftp provides better async streaming support
         let data = self.download().await?;
@@ -203,11 +201,7 @@ impl RemoteFileHandler for FtpFileHandler {
         Ok(Box::new(cursor) as Box<dyn AsyncRead + Send + Unpin>)
     }
 
-    async fn download_chunk(
-        &self,
-        offset: u64,
-        length: u64,
-    ) -> Result<Bytes, RemoteFileError> {
+    async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         let mut stream = self.connect().await?;
 
         // Use REST command to set the starting position
@@ -259,7 +253,6 @@ impl RemoteFileHandler for FtpFileHandler {
         size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-
         if size as u64 > self.config.max_file_size {
             return Err(RemoteFileError::Other(format!(
                 "File size {} exceeds maximum allowed size {}",
