@@ -328,10 +328,9 @@ where
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult> {
         // Check if the execution is safe.
-        // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Open file in the local file system.
+        // Create file handler for local or remote file.
         let config = RemoteFileConfig::default();
         let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
@@ -350,7 +349,6 @@ where
             .await
             .map_err(remote_file_error_to_rpc_error)?;
 
-        // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
         // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
         let mut file_data_trie = self.file_storage.write().await.new_file_data_trie();
         // A chunk id is simply an integer index.
@@ -391,7 +389,6 @@ where
             }
         }
 
-        // Generate the necessary metadata so we can insert file into the File Storage.
         // Generate the necessary metadata so we can insert file into the File Storage.
         let root = file_data_trie.get_root();
 
@@ -500,10 +497,8 @@ where
             }));
         }
 
-        // Create parent directories if they don't exist.
-        // Create parent directories if they don't exist.
+        // Create file handler for writing to local or remote destination.
         let config = RemoteFileConfig::default();
-        // Open file in the local file system.
         let (handler, url) =
             RemoteFileHandlerFactory::create_from_string_for_write(&file_path, config)
                 .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
@@ -522,7 +517,7 @@ where
         // TODO: Optimize memory usage for large file transfers
         // Current implementation loads all chunks into memory before streaming to remote location.
         // This can cause memory exhaustion for large files.
-        // 
+        //
         // Proposed solution: Implement true streaming by:
         // 1. Create a custom Stream implementation that reads chunks on-demand
         // 2. Pass this stream directly to the remote handler
@@ -541,7 +536,7 @@ where
         let boxed_reader: Box<dyn tokio::io::AsyncRead + Send + Unpin> = Box::new(reader);
 
         let file_size = file_metadata.file_size();
-        // Write file data to disk.
+        // Write file data to destination (local or remote).
         handler
             .upload_file(&url, boxed_reader, file_size, None)
             .await
