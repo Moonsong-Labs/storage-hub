@@ -11,7 +11,7 @@ pub mod ws_connection;
 pub mod mock_connection;
 
 use async_trait::async_trait;
-use jsonrpsee::core::Error as RpcError;
+use jsonrpsee::core::client::Error as RpcError;
 use serde::{Deserialize, Serialize};
 
 /// File metadata on the blockchain

@@ -22,7 +22,8 @@ mod tests {
     use services::Services;
     use std::sync::Arc;
 
-    use crate::data::postgres::MockPostgresClient;
+    use crate::data::postgres::{MockDbConnection, PostgresClient};
+    use crate::data::rpc::{MockConnection, StorageHubRpcClient};
     
 
 
@@ -45,10 +46,15 @@ mod tests {
         let storage: Arc<dyn data::storage::BoxedStorage> = Arc::new(boxed_storage);
         
         // Create test postgres client
-        let postgres: Arc<dyn data::postgres::PostgresClientTrait> = Arc::new(MockPostgresClient::new());
+        let mock_conn = Arc::new(MockDbConnection::new());
+        let postgres: Arc<dyn data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(mock_conn));
+        
+        // Create test RPC client
+        let mock_rpc_conn = Arc::new(MockConnection::new());
+        let rpc: Arc<dyn data::rpc::StorageHubRpcTrait> = Arc::new(StorageHubRpcClient::new(mock_rpc_conn));
         
         // Create services and app
-        let services = Services::new(storage, postgres);
+        let services = Services::new(storage, postgres, rpc);
         create_app(services)
     }
 

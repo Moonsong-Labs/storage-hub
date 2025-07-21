@@ -5,13 +5,13 @@
 //! StorageHub blockchain.
 
 use async_trait::async_trait;
-use jsonrpsee::core::Error as RpcError;
+use jsonrpsee::core::client::Error as RpcError;
 use serde_json::json;
 use std::sync::Arc;
 
 use super::{
     FileMetadata, BucketInfo, ProviderInfo, TransactionReceipt,
-    StorageHubRpcTrait, RpcConnection, IntoRpcError,
+    StorageHubRpcTrait, RpcConnection,
 };
 
 /// StorageHub RPC client that uses an RpcConnection
@@ -124,8 +124,7 @@ impl StorageHubRpcTrait for StorageHubRpcClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::rpc::{MockConnection, MockConnectionBuilder, ErrorMode};
-    use serde_json::Value;
+    use crate::data::rpc::{MockConnectionBuilder, ErrorMode};
     
     #[tokio::test]
     async fn test_get_file_metadata() {

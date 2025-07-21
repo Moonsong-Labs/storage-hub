@@ -9,7 +9,7 @@ use super::connection::{
 use async_trait::async_trait;
 use jsonrpsee::{
     ws_client::{WsClient, WsClientBuilder},
-    core::client::{ClientT, Subscription, SubscriptionClientT},
+    core::client::ClientT,
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;

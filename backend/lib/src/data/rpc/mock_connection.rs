@@ -4,7 +4,7 @@
 //! with predefined responses and error scenarios for testing purposes.
 
 use super::connection::{
-    RpcConfig, RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult,
+    RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult,
 };
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};

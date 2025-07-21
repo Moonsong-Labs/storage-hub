@@ -8,19 +8,14 @@ use super::connection::{DbConnection, DbConnectionError};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use diesel::{
-    associations::HasTable,
     backend::Backend,
     connection::{LoadConnection, TransactionManager},
-    dsl::SqlTypeOf,
-    expression::QueryMetadata,
-    insertable::CanInsertInSingleQuery,
     query_builder::{AsQuery, QueryFragment, QueryId},
-    result::{ConnectionError, ConnectionResult, Error as DieselError, QueryResult},
-    sql_types::HasSqlType,
-    AsyncConnection, RunQueryDsl,
+    result::{ConnectionResult, Error as DieselError, QueryResult},
+    RunQueryDsl,
 };
-use diesel_async::{AsyncPgConnection, SimpleAsyncConnection};
-use shc_indexer_db::models::{Bucket, File, FileStorageRequestStep, Msp};
+use diesel_async::{AsyncConnection, AsyncPgConnection, SimpleAsyncConnection};
+use shc_indexer_db::models::{Bucket, File, Msp};
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -455,8 +450,7 @@ impl DbConnection for MockDbConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{File, FileStorageRequestStep};
-    use chrono::NaiveDateTime;
+    use shc_indexer_db::models::{File, FileStorageRequestStep};
 
     #[tokio::test]
     async fn test_successful_connection() {

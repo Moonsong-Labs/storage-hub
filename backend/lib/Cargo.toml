@@ -28,6 +28,7 @@ diesel-async = { workspace = true }
 
 # Utilities
 hex = { workspace = true }
+chrono = { workspace = true }
 
 # RPC dependencies
 jsonrpsee = { workspace = true, features = ["ws-client"] }

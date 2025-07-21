@@ -6,8 +6,6 @@
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
-use std::error::Error as StdError;
-use std::fmt;
 
 /// Error type for RPC operations
 #[derive(Debug, thiserror::Error)]
@@ -142,14 +140,13 @@ pub trait IntoRpcError {
 }
 
 // Implement IntoRpcError for jsonrpsee errors
-impl IntoRpcError for jsonrpsee::core::Error {
+impl IntoRpcError for jsonrpsee::core::client::Error {
     fn into_rpc_error(self) -> RpcConnectionError {
-        use jsonrpsee::core::client::Error as ClientError;
         
         match self {
             Self::Call(e) => RpcConnectionError::Rpc(e.to_string()),
             Self::Transport(e) => RpcConnectionError::Transport(e.to_string()),
-            Self::RestartNeeded(e) => RpcConnectionError::ConnectionClosed,
+            Self::RestartNeeded(_) => RpcConnectionError::ConnectionClosed,
             Self::ParseError(e) => RpcConnectionError::Serialization(e.to_string()),
             Self::InvalidSubscriptionId => RpcConnectionError::Rpc("Invalid subscription ID".to_string()),
             Self::InvalidRequestId(e) => RpcConnectionError::Rpc(format!("Invalid request ID: {}", e)),

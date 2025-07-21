@@ -60,15 +60,22 @@ pub async fn health_check() -> Json<Value> {
 mod tests {
     use super::*;
     use crate::data::storage::{BoxedStorageWrapper, InMemoryStorage};
-    use crate::data::postgres::MockPostgresClient;
+    use crate::data::postgres::{MockDbConnection, PostgresClient};
+    use crate::data::rpc::{MockConnection, MockConnectionBuilder, StorageHubRpcClient};
     use std::sync::Arc;
 
     fn create_test_services() -> Services {
         let memory_storage = InMemoryStorage::new();
         let boxed_storage = BoxedStorageWrapper::new(memory_storage);
         let storage: Arc<dyn crate::data::storage::BoxedStorage> = Arc::new(boxed_storage);
-        let postgres: Arc<dyn crate::data::postgres::PostgresClientTrait> = Arc::new(MockPostgresClient::new());
-        Services::new(storage, postgres)
+        let mock_conn = Arc::new(MockDbConnection::new());
+        let postgres: Arc<dyn crate::data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(mock_conn));
+        
+        // Create mock RPC client
+        let mock_rpc_conn = Arc::new(MockConnection::new());
+        let rpc: Arc<dyn crate::data::rpc::StorageHubRpcTrait> = Arc::new(StorageHubRpcClient::new(mock_rpc_conn));
+        
+        Services::new(storage, postgres, rpc)
     }
 
     #[tokio::test]

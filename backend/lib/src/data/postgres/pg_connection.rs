@@ -5,9 +5,8 @@
 
 use super::connection::{DbConfig, DbConnection, DbConnectionError};
 use async_trait::async_trait;
-use bb8::Pool;
 use diesel_async::{
-    pooled_connection::{AsyncDieselConnectionManager, PoolError},
+    pooled_connection::{bb8::Pool, AsyncDieselConnectionManager, PoolError},
     AsyncPgConnection,
 };
 use std::fmt::Debug;
