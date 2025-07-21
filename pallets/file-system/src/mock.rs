@@ -655,6 +655,8 @@ impl crate::Config for Test {
     type UltraHighSecurityReplicationTarget = ConstU32<6>;
     type MaxReplicationTarget = ConstU32<7>;
     type TickRangeToMaximumThreshold = ConstU64<30>;
+    type OffchainSignature = Signature;
+    type OffchainPublic = <Signature as Verify>::Signer;
 }
 
 // Use a RwLock for Eve’s insolvency status.

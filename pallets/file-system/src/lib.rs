@@ -68,10 +68,10 @@ pub mod pallet {
     use shp_traits::ProofsDealerInterface;
     use sp_runtime::{
         traits::{
-            Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating,
-            Zero,
+            Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, IdentifyAccount,
+            One, Saturating, Verify, Zero,
         },
-        BoundedVec, MultiSignature,
+        BoundedVec,
     };
     use sp_weights::WeightMeter;
 
@@ -256,6 +256,13 @@ pub mod pallet {
 
         /// Converter from the StorageDataUnit type to the Balance type.
         type StorageDataUnitToBalance: Convert<StorageDataUnit<Self>, BalanceOf<Self>>;
+
+        type OffchainSignature: Verify<Signer = Self::OffchainPublic> + Parameter;
+
+        /// Off-Chain public key.
+        ///
+        /// Must identify as an on-chain `Self::AccountId`.
+        type OffchainPublic: IdentifyAccount<AccountId = Self::AccountId>;
 
         /// The treasury account of the runtime, where a fraction of each payment goes.
         #[pallet::constant]
@@ -738,7 +745,7 @@ pub mod pallet {
         /// Notifies that a file deletion has been requested with a signed message.
         RequestFileDeletion {
             signed_message: FileDeletionMessage<T>,
-            signature: MultiSignature,
+            signature: T::OffchainSignature,
         },
     }
 
@@ -1404,7 +1411,7 @@ pub mod pallet {
         pub fn request_delete_file(
             origin: OriginFor<T>,
             signed_message: FileDeletionMessage<T>,
-            signature: MultiSignature,
+            signature: T::OffchainSignature,
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             size: StorageDataUnit<T>,

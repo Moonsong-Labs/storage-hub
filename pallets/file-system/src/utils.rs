@@ -16,7 +16,7 @@ use sp_runtime::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
         Saturating, Verify, Zero,
     },
-    ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError, MultiSignature,
+    ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
@@ -103,15 +103,6 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    /// Helper function to convert T::AccountId to AccountId32 for signature verification
-    fn account_id_to_account_id32(
-        account_id: &T::AccountId,
-    ) -> Result<sp_core::crypto::AccountId32, Error<T>> {
-        let account_bytes = account_id.encode();
-        sp_core::crypto::AccountId32::try_from(account_bytes.as_slice())
-            .map_err(|_| Error::<T>::InvalidSignature)
-    }
-
     /// This function is used primarily for the runtime API exposed for BSPs to call before they attempt to volunteer for a storage request.
     pub fn is_storage_request_open_to_volunteers(
         file_key: MerkleHash<T>,
@@ -1179,7 +1170,7 @@ where
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
         signed_message: FileDeletionMessage<T>,
-        signature: MultiSignature,
+        signature: T::OffchainSignature,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
         size: StorageDataUnit<T>,
@@ -1203,9 +1194,7 @@ where
         // Encode the message for signature verification
         let message_encoded = signed_message.encode();
 
-        // Verify the signature (This is not strictly needed to do here, but prevents the fisherman node to do useless work)
-        let account_id_32 = Self::account_id_to_account_id32(&who)?;
-        let is_valid = signature.verify(&message_encoded[..], &account_id_32);
+        let is_valid = signature.verify(&message_encoded[..], &who);
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Compute file key from the provided metadata
