@@ -1,4 +1,3 @@
-use super::{RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
 use std::path::{Path, PathBuf};
@@ -6,12 +5,17 @@ use tokio::fs::{self, File};
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use url::Url;
 
+use super::{RemoteFileError, RemoteFileHandler};
+
 #[derive(Debug, Clone)]
-pub struct LocalFileHandler;
+pub struct LocalFileHandler {
+    file_path: PathBuf,
+}
 
 impl LocalFileHandler {
-    pub fn new() -> Self {
-        Self
+    pub fn new(url: &Url) -> Result<Self, RemoteFileError> {
+        let file_path = Self::url_to_path(url)?;
+        Ok(Self { file_path })
     }
 
     fn url_to_path(url: &Url) -> Result<PathBuf, RemoteFileError> {
@@ -41,54 +45,35 @@ impl LocalFileHandler {
     }
 }
 
-impl Default for LocalFileHandler {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 #[async_trait]
 impl RemoteFileHandler for LocalFileHandler {
-    async fn fetch_metadata(&self, url: &Url) -> Result<(u64, Option<String>), RemoteFileError> {
-        let path = Self::url_to_path(url)?;
-        Self::validate_file(&path).await?;
+    async fn get_file_size(&self, _url: &Url) -> Result<u64, RemoteFileError> {
+        Self::validate_file(&self.file_path).await?;
 
-        let metadata = tokio::fs::metadata(&path).await?;
-        let size = metadata.len();
-
-        let content_type = path
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .and_then(|ext| {
-                mime_guess::from_ext(ext)
-                    .first()
-                    .map(|mime| mime.to_string())
-            });
-
-        Ok((size, content_type))
+        let metadata = tokio::fs::metadata(&self.file_path).await?;
+        Ok(metadata.len())
     }
 
     async fn stream_file(
         &self,
-        url: &Url,
+        _url: &Url,
     ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
-        let path = Self::url_to_path(url)?;
-        Self::validate_file(&path).await?;
+        Self::validate_file(&self.file_path).await?;
 
-        let file = File::open(&path).await?;
+        let file = File::open(&self.file_path).await?;
         Ok(Box::new(file))
     }
 
     async fn download_chunk(
         &self,
-        url: &Url,
+        _url: &Url,
         offset: u64,
         length: u64,
     ) -> Result<Bytes, RemoteFileError> {
-        let path = Self::url_to_path(url)?;
-        Self::validate_file(&path).await?;
+        Self::validate_file(&self.file_path).await?;
 
-        let mut file = File::open(&path).await?;
+        let mut file = File::open(&self.file_path).await?;
 
         file.seek(std::io::SeekFrom::Start(offset)).await?;
 
@@ -115,6 +100,7 @@ impl RemoteFileHandler for LocalFileHandler {
         _size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
+        // Use the URL parameter to allow uploading to different paths
         let path = Self::url_to_path(url)?;
 
         if let Some(parent) = path.parent() {
@@ -163,16 +149,16 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[tokio::test]
-    async fn test_local_file_metadata() {
+    async fn test_local_file_size() {
         let mut temp_file = NamedTempFile::new().unwrap();
         let test_content = b"Hello, StorageHub!";
         temp_file.write_all(test_content).unwrap();
         temp_file.flush().unwrap();
 
-        let handler = LocalFileHandler::new();
-
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
-        let (size, _content_type) = handler.fetch_metadata(&url).await.unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
+
+        let size = handler.get_file_size(&url).await.unwrap();
         assert_eq!(size, test_content.len() as u64);
     }
 
@@ -183,8 +169,8 @@ mod tests {
         temp_file.write_all(test_content).unwrap();
         temp_file.flush().unwrap();
 
-        let handler = LocalFileHandler::new();
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
 
         let mut stream = handler.stream_file(&url).await.unwrap();
         let mut buffer = Vec::new();
@@ -200,8 +186,8 @@ mod tests {
         temp_file.write_all(test_content).unwrap();
         temp_file.flush().unwrap();
 
-        let handler = LocalFileHandler::new();
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
 
         let chunk = handler.download_chunk(&url, 7, 10).await.unwrap();
         assert_eq!(&chunk[..], &test_content[7..17]);
@@ -209,18 +195,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_file_not_found() {
-        let handler = LocalFileHandler::new();
         let url = Url::parse("file:///non/existent/file.txt").unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
 
-        let result = handler.fetch_metadata(&url).await;
+        let result = handler.get_file_size(&url).await;
         assert!(matches!(result, Err(RemoteFileError::IoError(_))));
     }
 
     #[tokio::test]
     async fn test_url_schemes() {
-        let handler = LocalFileHandler::new();
-
         let file_url = Url::parse("file:///path/to/file.txt").unwrap();
+        let handler = LocalFileHandler::new(&file_url).unwrap();
         assert!(handler.is_supported(&file_url));
 
         // Test that regular paths can be converted to URLs
@@ -233,15 +218,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_with_file_url() {
-        let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("uploaded_file.txt");
         let file_url = format!("file://{}", file_path.display());
+        let url = Url::parse(&file_url).unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
 
         let test_content = b"Hello, uploaded file!";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
-        let url = Url::parse(&file_url).unwrap();
         handler
             .upload_file(&url, data, test_content.len() as u64, None)
             .await
@@ -253,14 +238,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_with_plain_path() {
-        let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("uploaded_file2.txt");
+        let url = Url::from_file_path(&file_path).unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
 
         let test_content = b"Plain path upload test";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
-        let url = Url::from_file_path(&file_path).unwrap();
         handler
             .upload_file(
                 &url,
@@ -277,14 +262,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_creates_parent_directories() {
-        let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("nested/dirs/uploaded_file.txt");
+        let url = Url::from_file_path(&file_path).unwrap();
+        // Use a different file for handler initialization
+        let init_path = temp_dir.path().join("init.txt");
+        let init_url = Url::from_file_path(&init_path).unwrap();
+        let handler = LocalFileHandler::new(&init_url).unwrap();
 
         let test_content = b"Nested directory test";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
-        let url = Url::from_file_path(&file_path).unwrap();
         handler
             .upload_file(&url, data, test_content.len() as u64, None)
             .await
@@ -297,15 +285,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_overwrites_existing() {
-        let handler = LocalFileHandler::new();
         let mut temp_file = NamedTempFile::new().unwrap();
         temp_file.write_all(b"Old content").unwrap();
         temp_file.flush().unwrap();
 
+        let url = Url::from_file_path(temp_file.path()).unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
+
         let test_content = b"New content";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
-        let url = Url::from_file_path(temp_file.path()).unwrap();
         handler
             .upload_file(&url, data, test_content.len() as u64, None)
             .await
@@ -317,15 +306,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_large_file_streaming() {
-        let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("large_file.bin");
+        let url = Url::from_file_path(&file_path).unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
 
         let large_content = vec![0xAB; 1024 * 1024];
         let data: Box<dyn AsyncRead + Send + Unpin> =
             Box::new(std::io::Cursor::new(large_content.clone()));
 
-        let url = Url::from_file_path(&file_path).unwrap();
         handler
             .upload_file(&url, data, large_content.len() as u64, None)
             .await
@@ -345,18 +334,18 @@ mod tests {
     async fn test_upload_file_permission_denied() {
         use std::os::unix::fs::PermissionsExt;
 
-        let handler = LocalFileHandler::new();
         let temp_dir = tempfile::tempdir().unwrap();
+        let file_path = temp_dir.path().join("no_permission.txt");
+        let url = Url::from_file_path(&file_path).unwrap();
+        let handler = LocalFileHandler::new(&url).unwrap();
 
         tokio::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o555))
             .await
             .unwrap();
 
-        let file_path = temp_dir.path().join("no_permission.txt");
         let test_content = b"Should fail";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
 
-        let url = Url::from_file_path(&file_path).unwrap();
         let result = handler
             .upload_file(&url, data, test_content.len() as u64, None)
             .await;

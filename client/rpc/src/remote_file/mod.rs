@@ -67,7 +67,7 @@ impl From<std::io::Error> for RemoteFileError {
 
 #[async_trait]
 pub trait RemoteFileHandler: Send + Sync {
-    async fn fetch_metadata(&self, url: &Url) -> Result<(u64, Option<String>), RemoteFileError>;
+    async fn get_file_size(&self, url: &Url) -> Result<u64, RemoteFileError>;
 
     async fn stream_file(
         &self,
@@ -100,6 +100,7 @@ pub struct RemoteFileConfig {
     pub follow_redirects: bool,
     pub max_redirects: u32,
     pub user_agent: String,
+    pub chunk_size: usize,
 }
 
 impl Default for RemoteFileConfig {
@@ -111,6 +112,7 @@ impl Default for RemoteFileConfig {
             follow_redirects: true,
             max_redirects: 10,
             user_agent: "StorageHub-Client/1.0".to_string(),
+            chunk_size: 8192, // 8KB default
         }
     }
 }

@@ -14,21 +14,17 @@ impl RemoteFileHandlerFactory {
         config: RemoteFileConfig,
     ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
         match url.scheme() {
-            "" | "file" => Ok((
-                Arc::new(LocalFileHandler::new()) as Arc<dyn RemoteFileHandler>,
-                url.clone(),
-            )),
+            "" | "file" => LocalFileHandler::new(url)
+                .map(|h| (Arc::new(h) as Arc<dyn RemoteFileHandler>, url.clone())),
 
-            "http" | "https" => HttpFileHandler::new(config)
+            "http" | "https" => HttpFileHandler::new(config, url)
                 .map(|h| (Arc::new(h) as Arc<dyn RemoteFileHandler>, url.clone()))
                 .map_err(|e| {
                     RemoteFileError::Other(format!("Failed to create HTTP handler: {}", e))
                 }),
 
-            "ftp" | "ftps" => Ok((
-                Arc::new(FtpFileHandler::new(config)) as Arc<dyn RemoteFileHandler>,
-                url.clone(),
-            )),
+            "ftp" | "ftps" => FtpFileHandler::new(config, url)
+                .map(|h| (Arc::new(h) as Arc<dyn RemoteFileHandler>, url.clone())),
 
             scheme => Err(RemoteFileError::UnsupportedProtocol(scheme.to_string())),
         }
@@ -56,7 +52,7 @@ impl RemoteFileHandlerFactory {
         let url = match Url::parse(url_str) {
             Ok(url) => url,
             Err(_) => {
-                // Handle local paths
+                // Try to parse as a local file path
                 {
                     // Validate that we have a non-empty string
                     if url_str.is_empty() {
@@ -89,9 +85,7 @@ impl RemoteFileHandlerFactory {
                             Some(p) if !p.as_os_str().is_empty() => p,
                             _ => std::path::Path::new("."),
                         };
-                        // Don't check parent directory existence here.
-                        // For write operations, the handler will create directories as needed.
-                        // For read operations, the actual read will fail if the file doesn't exist.
+                        // Only validate parent directory permissions if it exists
                         if parent.exists() {
                             let metadata = std::fs::metadata(parent)
                                 .map_err(|e| RemoteFileError::IoError(e))?;

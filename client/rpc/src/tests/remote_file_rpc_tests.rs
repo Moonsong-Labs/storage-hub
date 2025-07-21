@@ -8,37 +8,57 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
+    use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandlerFactory};
     use url::Url;
 
     #[test]
     fn test_location_validation() {
         // Test various location formats that might be passed via RPC
         let test_locations = vec![
-            ("https://example.com/file.txt", true),
-            ("http://example.com/file.txt", true),
-            ("ftp://example.com/file.txt", true),
-            ("ftps://example.com/file.txt", true),
-            ("file:///path/to/file.txt", true),
-            ("sftp://example.com/file.txt", false), // Unsupported
-            ("", false),                            // Empty - not a valid URL
+            ("https://example.com/file.txt", Ok(())),
+            ("http://example.com/file.txt", Ok(())),
+            ("ftp://example.com/file.txt", Ok(())),
+            ("ftps://example.com/file.txt", Ok(())),
+            ("file:///path/to/file.txt", Ok(())),
+            ("sftp://example.com/file.txt", Err("sftp")), // Unsupported protocol
         ];
 
         let config = RemoteFileConfig::default();
 
-        for (location, should_succeed) in test_locations {
+        for (location, expected) in test_locations {
             if let Ok(url) = Url::parse(location) {
                 let result = RemoteFileHandlerFactory::create(&url, config.clone());
 
-                assert_eq!(
-                    result.is_ok(),
-                    should_succeed,
-                    "Location '{}' validation failed",
-                    location
-                );
+                match (expected, result) {
+                    (Ok(()), Ok(_)) => {
+                        // Expected success
+                    }
+                    (Err(expected_protocol), Err(RemoteFileError::UnsupportedProtocol(proto))) => {
+                        assert_eq!(
+                            proto, expected_protocol,
+                            "Expected unsupported protocol '{}', got '{}'",
+                            expected_protocol, proto
+                        );
+                    }
+                    (expected, actual) => {
+                        panic!(
+                            "Location '{}': expected {:?}, got {:?}",
+                            location,
+                            expected,
+                            actual.map(|_| "Ok(handler)")
+                        );
+                    }
+                }
             } else {
-                // If URL parsing fails, handler creation should also fail
-                assert!(!should_succeed, "Expected '{}' to be invalid URL", location);
+                // Empty string "" is not a valid URL and won't parse
+                match expected {
+                    Err(_) => {
+                        // Expected failure due to invalid URL
+                    }
+                    Ok(()) => {
+                        panic!("Expected '{}' to be a valid URL but parsing failed", location);
+                    }
+                }
             }
         }
     }
@@ -55,36 +75,24 @@ mod tests {
         let config = RemoteFileConfig::default();
 
         for location in locations {
-            if let Ok(url) = Url::parse(location) {
-                // Verify the handler can be created
-                let result = RemoteFileHandlerFactory::create(&url, config.clone());
-
-                assert!(result.is_ok(), "Failed to create handler for: {}", location);
+            let url = Url::parse(location).expect("Test URLs should be valid");
+            
+            // Verify the handler can be created
+            match RemoteFileHandlerFactory::create(&url, config.clone()) {
+                Ok(_) => {
+                    // Success - handler created for URL with special characters
+                }
+                Err(e) => {
+                    panic!(
+                        "Failed to create handler for '{}': {:?}",
+                        location, e
+                    );
+                }
             }
         }
     }
 
-    #[test]
-    fn test_local_path_handling() {
-        // Test that local paths are treated correctly
-        let config = RemoteFileConfig::default();
-
-        // Absolute paths should be treated as local files
-        let local_paths = vec![
-            "/absolute/path/file.txt",
-            "./relative/path/file.txt",
-            "../parent/path/file.txt",
-        ];
-
-        for path in local_paths {
-            // These are not valid URLs, so they should be handled as local files
-            // in the actual RPC implementation
-            assert!(Url::parse(path).is_err());
-        }
-
-        // file:// URLs should work
-        let file_url = Url::parse("file:///absolute/path/file.txt").unwrap();
-        let handler = RemoteFileHandlerFactory::create(&file_url, config.clone());
-        assert!(handler.is_ok());
-    }
+    // Note: Local file path handling is thoroughly tested in remote_file/tests.rs
+    // including permission validation and access denied scenarios.
+    // The RPC integration tests focus on URL validation and protocol support.
 }

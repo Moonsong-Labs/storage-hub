@@ -501,6 +501,7 @@ mod config_tests {
             max_redirects: 5,
             follow_redirects: false,
             user_agent: "CustomAgent/1.0".to_string(),
+            chunk_size: 16384,
         };
 
         assert_eq!(config.max_file_size, 10 * 1024 * 1024 * 1024);
@@ -509,6 +510,7 @@ mod config_tests {
         assert_eq!(config.max_redirects, 5);
         assert!(!config.follow_redirects);
         assert_eq!(config.user_agent, "CustomAgent/1.0");
+        assert_eq!(config.chunk_size, 16384);
     }
 }
 
@@ -616,8 +618,9 @@ mod external_service_tests {
         let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
         assert_eq!(url, returned_url);
 
-        let result = handler.fetch_metadata(&url).await;
+        let result = handler.get_file_size(&url).await;
         assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2097152);
     }
 
     #[tokio::test]
@@ -676,7 +679,7 @@ mod external_service_tests {
         let (handler_no_auth, returned_url) =
             RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
         assert_eq!(url_no_auth, returned_url);
-        let result = handler_no_auth.fetch_metadata(&url_no_auth).await;
+        let result = handler_no_auth.get_file_size(&url_no_auth).await;
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
 
@@ -708,17 +711,13 @@ mod handler_trait_tests {
         supported_scheme: String,
         file_content: Vec<u8>,
         file_size: u64,
-        content_type: Option<String>,
     }
 
     #[async_trait]
     impl RemoteFileHandler for MockHandler {
-        async fn fetch_metadata(
-            &self,
-            url: &Url,
-        ) -> Result<(u64, Option<String>), RemoteFileError> {
+        async fn get_file_size(&self, url: &Url) -> Result<u64, RemoteFileError> {
             if self.is_supported(url) {
-                Ok((self.file_size, self.content_type.clone()))
+                Ok(self.file_size)
             } else {
                 Err(RemoteFileError::UnsupportedProtocol(
                     url.scheme().to_string(),
@@ -779,19 +778,17 @@ mod handler_trait_tests {
     }
 
     #[tokio::test]
-    async fn test_mock_handler_metadata() {
+    async fn test_mock_handler_get_file_size() {
         let handler = MockHandler {
             supported_scheme: "mock".to_string(),
             file_content: b"test content".to_vec(),
             file_size: 12,
-            content_type: Some("text/plain".to_string()),
         };
 
         let url = Url::parse("mock://example.com/file.txt").unwrap();
-        let (size, content_type) = handler.fetch_metadata(&url).await.unwrap();
+        let size = handler.get_file_size(&url).await.unwrap();
 
         assert_eq!(size, 12);
-        assert_eq!(content_type, Some("text/plain".to_string()));
     }
 
     #[tokio::test]
@@ -800,7 +797,6 @@ mod handler_trait_tests {
             supported_scheme: "mock".to_string(),
             file_content: b"streaming data".to_vec(),
             file_size: 14,
-            content_type: None,
         };
 
         let url = Url::parse("mock://example.com/file.txt").unwrap();
@@ -820,7 +816,6 @@ mod handler_trait_tests {
             supported_scheme: "mock".to_string(),
             file_content: b"0123456789abcdef".to_vec(),
             file_size: 16,
-            content_type: None,
         };
 
         let url = Url::parse("mock://example.com/file.txt").unwrap();
@@ -834,17 +829,16 @@ mod handler_trait_tests {
     #[tokio::test]
     async fn test_mock_handler_unsupported() {
         let handler = MockHandler {
-            supported_scheme: "mock".to_string(),
+            supported_scheme: "mock".to_string(),  
             file_content: vec![],
             file_size: 0,
-            content_type: None,
         };
 
         let url = Url::parse("http://example.com/file.txt").unwrap();
 
         assert!(!handler.is_supported(&url));
 
-        let result = handler.fetch_metadata(&url).await;
+        let result = handler.get_file_size(&url).await;
         assert!(matches!(
             result,
             Err(RemoteFileError::UnsupportedProtocol(_))

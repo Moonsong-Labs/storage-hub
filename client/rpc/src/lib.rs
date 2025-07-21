@@ -327,14 +327,17 @@ where
         owner: AccountId32,
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult> {
+        // Check if the execution is safe.
+        // Check if the execution is safe.
         check_if_safe(ext)?;
 
+        // Open file in the local file system.
         let config = RemoteFileConfig::default();
         let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
-        let (file_size, _content_type) = handler
-            .fetch_metadata(&url)
+        let file_size = handler
+            .get_file_size(&url)
             .await
             .map_err(remote_file_error_to_rpc_error)?;
 
@@ -347,22 +350,28 @@ where
             .await
             .map_err(remote_file_error_to_rpc_error)?;
 
+        // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
+        // Instantiate an "empty" [`FileDataTrie`] so we can write the file chunks into it.
         let mut file_data_trie = self.file_storage.write().await.new_file_data_trie();
+        // A chunk id is simply an integer index.
         let mut chunk_id: u64 = 0;
 
         // Read file in chunks of [`FILE_CHUNK_SIZE`] into buffer then push buffer into a vector.
         // Loops until EOF or until some error that is NOT `ErrorKind::Interrupted` is found.
         // If `ErrorKind::Interrupted` is found, the operation is simply retried, as per
         // https://doc.rust-lang.org/std/io/trait.Read.html#errors-1
+        // Build the actual [`FileDataTrie`] by inserting each chunk into it.
         loop {
             let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
 
             match stream.read(&mut chunk).await {
                 Ok(0) => {
+                    // Reached EOF, break loop.
                     debug!(target: LOG_TARGET, "Finished reading file");
                     break;
                 }
                 Ok(bytes_read) => {
+                    // Haven't reached EOF yet, continue loop.
                     debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
 
                     chunk.truncate(bytes_read);
@@ -382,8 +391,11 @@ where
             }
         }
 
+        // Generate the necessary metadata so we can insert file into the File Storage.
+        // Generate the necessary metadata so we can insert file into the File Storage.
         let root = file_data_trie.get_root();
 
+        // Build StorageHub's [`FileMetadata`]
         let file_metadata = FileMetadata::new(
             <AccountId32 as AsRef<[u8]>>::as_ref(&owner).to_vec(),
             bucket_id.as_ref().to_vec(),
@@ -488,7 +500,10 @@ where
             }));
         }
 
+        // Create parent directories if they don't exist.
+        // Create parent directories if they don't exist.
         let config = RemoteFileConfig::default();
+        // Open file in the local file system.
         let (handler, url) =
             RemoteFileHandlerFactory::create_from_string_for_write(&file_path, config)
                 .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
@@ -504,6 +519,20 @@ where
 
         drop(read_file_storage);
 
+        // TODO: Optimize memory usage for large file transfers
+        // Current implementation loads all chunks into memory before streaming to remote location.
+        // This can cause memory exhaustion for large files.
+        // 
+        // Proposed solution: Implement true streaming by:
+        // 1. Create a custom Stream implementation that reads chunks on-demand
+        // 2. Pass this stream directly to the remote handler
+        // 3. This would allow chunks to be read from source and written to destination
+        //    without buffering the entire file in memory
+        //
+        // Example approach:
+        // - Create ChunkStream that implements Stream<Item = Result<Bytes, Error>>
+        // - Read chunks from file_data_trie as they're pulled by the consumer
+        // - This enables true streaming with constant memory usage
         let chunks_stream = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
 
         let reader = tokio_util::io::StreamReader::new(
@@ -512,6 +541,7 @@ where
         let boxed_reader: Box<dyn tokio::io::AsyncRead + Send + Unpin> = Box::new(reader);
 
         let file_size = file_metadata.file_size();
+        // Write file data to disk.
         handler
             .upload_file(&url, boxed_reader, file_size, None)
             .await

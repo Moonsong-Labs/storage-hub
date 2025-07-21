@@ -1,4 +1,3 @@
-use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
 use futures_util::TryStreamExt;
@@ -8,13 +7,16 @@ use tokio::io::AsyncRead;
 use tokio_util::io::{ReaderStream, StreamReader};
 use url::Url;
 
+use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
+
 pub struct HttpFileHandler {
     client: Client,
     config: RemoteFileConfig,
+    base_url: Url,
 }
 
 impl HttpFileHandler {
-    pub fn new(config: RemoteFileConfig) -> Result<Self, RemoteFileError> {
+    pub fn new(config: RemoteFileConfig, url: &Url) -> Result<Self, RemoteFileError> {
         let client = Client::builder()
             .user_agent(&config.user_agent)
             .connect_timeout(Duration::from_secs(config.connection_timeout))
@@ -27,11 +29,15 @@ impl HttpFileHandler {
             .build()
             .map_err(|e| RemoteFileError::Other(format!("Failed to build HTTP client: {}", e)))?;
 
-        Ok(Self { client, config })
+        Ok(Self { 
+            client, 
+            config,
+            base_url: url.clone(),
+        })
     }
 
-    pub fn default() -> Result<Self, RemoteFileError> {
-        Self::new(RemoteFileConfig::default())
+    pub fn default(url: &Url) -> Result<Self, RemoteFileError> {
+        Self::new(RemoteFileConfig::default(), url)
     }
 
     fn status_to_error(status: StatusCode) -> RemoteFileError {
@@ -43,14 +49,93 @@ impl HttpFileHandler {
         }
     }
 
-    pub async fn download(&self, url: &Url) -> Result<Vec<u8>, RemoteFileError> {
-        let response = self.client.get(url.as_str()).send().await.map_err(|e| {
-            if e.is_timeout() {
-                RemoteFileError::Timeout
-            } else {
-                RemoteFileError::HttpError(e)
+    fn map_request_error(e: reqwest::Error) -> RemoteFileError {
+        if e.is_timeout() {
+            RemoteFileError::Timeout
+        } else {
+            RemoteFileError::HttpError(e)
+        }
+    }
+
+    fn validate_file_size(&self, size: u64) -> Result<(), RemoteFileError> {
+        if size > self.config.max_file_size {
+            Err(RemoteFileError::Other(format!(
+                "File size {} exceeds maximum allowed size {}",
+                size, self.config.max_file_size
+            )))
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn handle_full_content(&self, response: reqwest::Response) -> Result<Bytes, RemoteFileError> {
+        // For servers that don't support range requests, we accept the full content
+        // This maintains backward compatibility with existing behavior
+        response.bytes().await.map_err(Self::map_request_error)
+    }
+
+    async fn handle_partial_content(
+        &self,
+        response: reqwest::Response,
+        offset: u64,
+        length: u64,
+    ) -> Result<Bytes, RemoteFileError> {
+        // Optionally verify the Content-Range header
+        if let Some(content_range) = response.headers().get(header::CONTENT_RANGE) {
+            let content_range_str = content_range.to_str().unwrap_or("");
+            if let Err(e) = self.parse_and_validate_content_range(content_range_str, offset, length) {
+                return Err(e);
             }
-        })?;
+        }
+        // Note: We don't error if Content-Range header is missing as some servers
+        // may return 206 without it, and the test expects this to work
+
+        response.bytes().await.map_err(Self::map_request_error)
+    }
+
+    fn parse_and_validate_content_range(
+        &self,
+        header: &str,
+        expected_offset: u64,
+        expected_length: u64,
+    ) -> Result<(u64, u64), RemoteFileError> {
+        // Parse Content-Range header (format: "bytes start-end/total")
+        let range_part = header
+            .strip_prefix("bytes ")
+            .ok_or_else(|| RemoteFileError::Other("Invalid Content-Range header format".to_string()))?;
+
+        let slash_pos = range_part
+            .find('/')
+            .ok_or_else(|| RemoteFileError::Other("Invalid Content-Range header format".to_string()))?;
+
+        let range_values = &range_part[..slash_pos];
+        let dash_pos = range_values
+            .find('-')
+            .ok_or_else(|| RemoteFileError::Other("Invalid Content-Range header format".to_string()))?;
+
+        let start_str = &range_values[..dash_pos];
+        let end_str = &range_values[dash_pos + 1..];
+
+        let actual_start = start_str
+            .parse::<u64>()
+            .map_err(|_| RemoteFileError::Other("Invalid start value in Content-Range".to_string()))?;
+        let actual_end = end_str
+            .parse::<u64>()
+            .map_err(|_| RemoteFileError::Other("Invalid end value in Content-Range".to_string()))?;
+
+        let expected_end = expected_offset + expected_length - 1;
+        if actual_start != expected_offset || actual_end != expected_end {
+            return Err(RemoteFileError::Other(format!(
+                "Server returned incorrect range: expected {}-{}, got {}-{}",
+                expected_offset, expected_end, actual_start, actual_end
+            )));
+        }
+
+        Ok((actual_start, actual_end))
+    }
+
+    pub async fn download(&self) -> Result<Vec<u8>, RemoteFileError> {
+        let response = self.client.get(self.base_url.as_str()).send().await.map_err(Self::map_request_error)?;
 
         if !response.status().is_success() {
             return Err(Self::status_to_error(response.status()));
@@ -73,13 +158,7 @@ impl HttpFileHandler {
             }
         })?;
 
-        if bytes.len() as u64 > self.config.max_file_size {
-            return Err(RemoteFileError::Other(format!(
-                "Downloaded file size {} exceeds maximum allowed size {}",
-                bytes.len(),
-                self.config.max_file_size
-            )));
-        }
+        self.validate_file_size(bytes.len() as u64)?;
 
         Ok(bytes.to_vec())
     }
@@ -87,75 +166,54 @@ impl HttpFileHandler {
 
 #[async_trait]
 impl RemoteFileHandler for HttpFileHandler {
-    async fn fetch_metadata(&self, url: &Url) -> Result<(u64, Option<String>), RemoteFileError> {
-        let response = self.client.head(url.as_str()).send().await.map_err(|e| {
-            if e.is_timeout() {
-                RemoteFileError::Timeout
-            } else {
-                RemoteFileError::HttpError(e)
+    async fn get_file_size(&self, _url: &Url) -> Result<u64, RemoteFileError> {
+        let response = self.client.head(self.base_url.as_str()).send().await.map_err(Self::map_request_error)?;
+
+        match response.status() {
+            status if status.is_success() => {
+                let content_length = response
+                    .content_length()
+                    .ok_or_else(|| RemoteFileError::Other("Content-Length header missing".to_string()))?;
+
+                self.validate_file_size(content_length)?;
+
+                Ok(content_length)
             }
-        })?;
-
-        if !response.status().is_success() {
-            return Err(Self::status_to_error(response.status()));
+            status => Err(Self::status_to_error(status)),
         }
-
-        let content_length = response
-            .content_length()
-            .ok_or_else(|| RemoteFileError::Other("Content-Length header missing".to_string()))?;
-
-        if content_length > self.config.max_file_size {
-            return Err(RemoteFileError::Other(format!(
-                "File size {} exceeds maximum allowed size {}",
-                content_length, self.config.max_file_size
-            )));
-        }
-
-        let content_type = response
-            .headers()
-            .get("content-type")
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string());
-
-        Ok((content_length, content_type))
     }
 
     async fn stream_file(
         &self,
-        url: &Url,
+        _url: &Url,
     ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
-        let response = self.client.get(url.as_str()).send().await.map_err(|e| {
-            if e.is_timeout() {
-                RemoteFileError::Timeout
-            } else {
-                RemoteFileError::HttpError(e)
+        let response = self.client.get(self.base_url.as_str()).send().await.map_err(Self::map_request_error)?;
+
+        match response.status() {
+            status if status.is_success() => {
+                if let Some(content_length) = response.content_length() {
+                    if content_length > self.config.max_file_size {
+                        return Err(RemoteFileError::Other(format!(
+                            "File size {} exceeds maximum allowed size {}",
+                            content_length, self.config.max_file_size
+                        )));
+                    }
+                }
+
+                let stream = response.bytes_stream();
+                let reader = StreamReader::new(
+                    stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
+                );
+
+                Ok(Box::new(reader) as Box<dyn AsyncRead + Send + Unpin>)
             }
-        })?;
-
-        if !response.status().is_success() {
-            return Err(Self::status_to_error(response.status()));
+            status => Err(Self::status_to_error(status)),
         }
-
-        if let Some(content_length) = response.content_length() {
-            if content_length > self.config.max_file_size {
-                return Err(RemoteFileError::Other(format!(
-                    "File size {} exceeds maximum allowed size {}",
-                    content_length, self.config.max_file_size
-                )));
-            }
-        }
-
-        let stream = response.bytes_stream();
-        let reader = StreamReader::new(
-            stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
-        );
-
-        Ok(Box::new(reader) as Box<dyn AsyncRead + Send + Unpin>)
     }
 
     async fn download_chunk(
         &self,
-        url: &Url,
+        _url: &Url,
         offset: u64,
         length: u64,
     ) -> Result<Bytes, RemoteFileError> {
@@ -163,79 +221,17 @@ impl RemoteFileHandler for HttpFileHandler {
 
         let response = self
             .client
-            .get(url.as_str())
+            .get(self.base_url.as_str())
             .header("Range", range)
             .send()
             .await
-            .map_err(|e| {
-                if e.is_timeout() {
-                    RemoteFileError::Timeout
-                } else {
-                    RemoteFileError::HttpError(e)
-                }
-            })?;
+            .map_err(Self::map_request_error)?;
 
-        if !response.status().is_success() && response.status() != StatusCode::PARTIAL_CONTENT {
-            return Err(Self::status_to_error(response.status()));
+        match response.status() {
+            StatusCode::OK => self.handle_full_content(response).await,
+            StatusCode::PARTIAL_CONTENT => self.handle_partial_content(response, offset, length).await,
+            status => Err(Self::status_to_error(status)),
         }
-
-        // If we requested a range but got a 200 OK instead of 206 Partial Content,
-        // the server might have ignored our range request and returned the full content
-        if response.status() == StatusCode::OK {
-            // For servers that don't support range requests, we accept the full content
-            // This maintains backward compatibility with existing behavior
-            let bytes = response.bytes().await.map_err(|e| {
-                if e.is_timeout() {
-                    RemoteFileError::Timeout
-                } else {
-                    RemoteFileError::HttpError(e)
-                }
-            })?;
-
-            return Ok(bytes);
-        }
-
-        // For 206 Partial Content responses, optionally verify the Content-Range header
-        if response.status() == StatusCode::PARTIAL_CONTENT {
-            if let Some(content_range) = response.headers().get(header::CONTENT_RANGE) {
-                let content_range_str = content_range.to_str().unwrap_or("");
-
-                // Parse Content-Range header (format: "bytes start-end/total")
-                if let Some(range_part) = content_range_str.strip_prefix("bytes ") {
-                    if let Some(slash_pos) = range_part.find('/') {
-                        let range_values = &range_part[..slash_pos];
-                        if let Some(dash_pos) = range_values.find('-') {
-                            let start_str = &range_values[..dash_pos];
-                            let end_str = &range_values[dash_pos + 1..];
-
-                            if let (Ok(actual_start), Ok(actual_end)) =
-                                (start_str.parse::<u64>(), end_str.parse::<u64>())
-                            {
-                                let expected_end = offset + length - 1;
-                                if actual_start != offset || actual_end != expected_end {
-                                    return Err(RemoteFileError::Other(format!(
-                                        "Server returned incorrect range: expected {}-{}, got {}-{}",
-                                        offset, expected_end, actual_start, actual_end
-                                    )));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            // Note: We don't error if Content-Range header is missing as some servers
-            // may return 206 without it, and the test expects this to work
-        }
-
-        let bytes = response.bytes().await.map_err(|e| {
-            if e.is_timeout() {
-                RemoteFileError::Timeout
-            } else {
-                RemoteFileError::HttpError(e)
-            }
-        })?;
-
-        Ok(bytes)
     }
 
     fn is_supported(&self, url: &Url) -> bool {
@@ -258,6 +254,7 @@ impl RemoteFileHandler for HttpFileHandler {
         let stream = ReaderStream::new(data);
         let body = Body::wrap_stream(stream);
 
+        // Use the provided URL for upload to allow different authentication
         let mut request = self.client.put(url.as_str()).body(body);
 
         request = request.header("Content-Length", size.to_string());
@@ -270,19 +267,12 @@ impl RemoteFileHandler for HttpFileHandler {
             request = request.basic_auth(url.username(), Some(password));
         }
 
-        let response = request.send().await.map_err(|e| {
-            if e.is_timeout() {
-                RemoteFileError::Timeout
-            } else {
-                RemoteFileError::HttpError(e)
-            }
-        })?;
+        let response = request.send().await.map_err(Self::map_request_error)?;
 
-        if !response.status().is_success() {
-            return Err(Self::status_to_error(response.status()));
+        match response.status() {
+            status if status.is_success() => Ok(()),
+            status => Err(Self::status_to_error(status)),
         }
-
-        Ok(())
     }
 }
 
@@ -291,7 +281,7 @@ mod tests {
     use super::*;
     use mockito::Server;
 
-    fn create_test_handler() -> HttpFileHandler {
+    fn create_test_handler(url: &Url) -> HttpFileHandler {
         let config = RemoteFileConfig {
             max_file_size: 1024 * 1024,
             connection_timeout: 5,
@@ -299,13 +289,15 @@ mod tests {
             follow_redirects: true,
             max_redirects: 3,
             user_agent: "Test-Agent".to_string(),
+            chunk_size: 8192,
         };
-        HttpFileHandler::new(config).unwrap()
+        HttpFileHandler::new(config, url).unwrap()
     }
 
     #[tokio::test]
     async fn test_is_supported() {
-        let handler = create_test_handler();
+        let url = Url::parse("http://example.com/file.txt").unwrap();
+        let handler = create_test_handler(&url);
 
         assert!(handler.is_supported(&Url::parse("http://example.com/file.txt").unwrap()));
         assert!(handler.is_supported(&Url::parse("https://example.com/file.txt").unwrap()));
@@ -314,8 +306,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_fetch_metadata_success() {
-        let handler = create_test_handler();
+    async fn test_get_file_size_success() {
         let mut server = Server::new_async().await;
         let _m = server
             .mock("HEAD", "/test.txt")
@@ -326,17 +317,14 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
-        let result = handler.fetch_metadata(&url).await;
+        let handler = create_test_handler(&url);
+        let result = handler.get_file_size(&url).await;
         assert!(result.is_ok());
-
-        if let Ok((_, content_type)) = result {
-            assert_eq!(content_type, Some("text/plain".to_string()));
-        }
+        assert_eq!(result.unwrap(), 1024);
     }
 
     #[tokio::test]
-    async fn test_fetch_metadata_not_found() {
-        let handler = create_test_handler();
+    async fn test_get_file_size_not_found() {
         let mut server = Server::new_async().await;
         let _m = server
             .mock("HEAD", "/missing.txt")
@@ -345,14 +333,14 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/missing.txt", server.url())).unwrap();
-        let result = handler.fetch_metadata(&url).await;
+        let handler = create_test_handler(&url);
+        let result = handler.get_file_size(&url).await;
 
         assert!(matches!(result, Err(RemoteFileError::NotFound)));
     }
 
     #[tokio::test]
-    async fn test_fetch_metadata_forbidden() {
-        let handler = create_test_handler();
+    async fn test_get_file_size_forbidden() {
         let mut server = Server::new_async().await;
         let _m = server
             .mock("HEAD", "/forbidden.txt")
@@ -361,14 +349,14 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/forbidden.txt", server.url())).unwrap();
-        let result = handler.fetch_metadata(&url).await;
+        let handler = create_test_handler(&url);
+        let result = handler.get_file_size(&url).await;
 
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
 
     #[tokio::test]
-    async fn test_fetch_metadata_file_too_large() {
-        let handler = create_test_handler();
+    async fn test_get_file_size_file_too_large() {
         let mut server = Server::new_async().await;
         let _m = server
             .mock("HEAD", "/large.txt")
@@ -378,14 +366,15 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/large.txt", server.url())).unwrap();
-        let result = handler.fetch_metadata(&url).await;
+        let handler = create_test_handler(&url);
+        let result = handler.get_file_size(&url).await;
 
         assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 2097152);
     }
 
     #[tokio::test]
     async fn test_download_success() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let content = b"Hello, World!";
         let _m = server
@@ -396,14 +385,14 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
-        let data = handler.download(&url).await.unwrap();
+        let handler = create_test_handler(&url);
+        let data = handler.download().await.unwrap();
 
         assert_eq!(data, content);
     }
 
     #[tokio::test]
     async fn test_download_chunk_success() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let content = b"Hello";
         let _m = server
@@ -415,6 +404,7 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
         let chunk = handler.download_chunk(&url, 6, 5).await.unwrap();
 
         assert_eq!(chunk.as_ref(), content);
@@ -422,7 +412,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_success() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server
             .mock("PUT", "/upload.txt")
@@ -435,6 +424,7 @@ mod tests {
         let data = b"Hello, World!";
         let reader = Box::new(std::io::Cursor::new(data));
         let url = Url::parse(&format!("{}/upload.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
 
         handler
             .upload_file(&url, reader, 13, Some("text/plain".to_string()))
@@ -444,7 +434,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_without_content_type() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server
             .mock("PUT", "/upload2.txt")
@@ -456,13 +445,13 @@ mod tests {
         let data = b"test";
         let reader = Box::new(std::io::Cursor::new(data));
         let url = Url::parse(&format!("{}/upload2.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
 
         handler.upload_file(&url, reader, 4, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_upload_file_with_basic_auth() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server
             .mock("PUT", "/secure-upload.txt")
@@ -479,13 +468,13 @@ mod tests {
             server.host_with_port()
         ))
         .unwrap();
+        let handler = create_test_handler(&url);
 
         handler.upload_file(&url, reader, 6, None).await.unwrap();
     }
 
     #[tokio::test]
     async fn test_upload_file_forbidden() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server
             .mock("PUT", "/forbidden-upload.txt")
@@ -496,6 +485,7 @@ mod tests {
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
         let url = Url::parse(&format!("{}/forbidden-upload.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
 
         let result = handler.upload_file(&url, reader, 4, None).await;
 
@@ -504,12 +494,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_unsupported_protocol() {
-        let handler = create_test_handler();
+        let http_url = Url::parse("http://example.com/file.txt").unwrap();
+        let handler = create_test_handler(&http_url);
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
 
-        let url = Url::parse("ftp://example.com/file.txt").unwrap();
-        let result = handler.upload_file(&url, reader, 4, None).await;
+        let ftp_url = Url::parse("ftp://example.com/file.txt").unwrap();
+        let result = handler.upload_file(&ftp_url, reader, 4, None).await;
 
         assert!(matches!(
             result,
@@ -519,7 +510,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_server_error() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server
             .mock("PUT", "/error-upload.txt")
@@ -530,6 +520,7 @@ mod tests {
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
         let url = Url::parse(&format!("{}/error-upload.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
 
         let result = handler.upload_file(&url, reader, 4, None).await;
 
@@ -538,14 +529,13 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_timeout() {
+        let url = Url::parse("http://10.255.255.1/timeout-upload.txt").unwrap();
         let config = RemoteFileConfig {
             connection_timeout: 1,
             read_timeout: 1,
             ..RemoteFileConfig::default()
         };
-        let handler = HttpFileHandler::new(config).unwrap();
-
-        let url = Url::parse("http://10.255.255.1/timeout-upload.txt").unwrap();
+        let handler = HttpFileHandler::new(config, &url).unwrap();
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
@@ -557,7 +547,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_stream_file_success() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let content = b"Streaming content";
         let _m = server
@@ -568,6 +557,7 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/stream.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
         let mut reader = handler.stream_file(&url).await.unwrap();
 
         let mut buffer = Vec::new();
@@ -580,7 +570,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_follow_redirects() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
 
         let _m1 = server
@@ -605,19 +594,14 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/redirect1", server.url())).unwrap();
-        let data = handler.download(&url).await.unwrap();
+        let handler = create_test_handler(&url);
+        let data = handler.download().await.unwrap();
 
         assert_eq!(data, b"Final content");
     }
 
     #[tokio::test]
     async fn test_too_many_redirects() {
-        let config = RemoteFileConfig {
-            max_redirects: 2,
-            ..RemoteFileConfig::default()
-        };
-        let handler = HttpFileHandler::new(config).unwrap();
-
         let mut server = Server::new_async().await;
         let _m1 = server
             .mock("GET", "/redirect1")
@@ -641,14 +625,18 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/redirect1", server.url())).unwrap();
-        let result = handler.download(&url).await;
+        let config = RemoteFileConfig {
+            max_redirects: 2,
+            ..RemoteFileConfig::default()
+        };
+        let handler = HttpFileHandler::new(config, &url).unwrap();
+        let result = handler.download().await;
 
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn test_no_content_length_header() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server
             .mock("HEAD", "/no-length.txt")
@@ -658,14 +646,18 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/no-length.txt", server.url())).unwrap();
-        let result = handler.fetch_metadata(&url).await;
+        let handler = create_test_handler(&url);
+        let result = handler.get_file_size(&url).await;
 
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(matches!(result, Err(RemoteFileError::Other(_))));
+        if let Err(RemoteFileError::Other(msg)) = result {
+            assert!(msg.contains("Content-Length header missing"));
+        }
     }
 
     #[tokio::test]
     async fn test_download_chunk_server_no_range_support() {
-        let handler = create_test_handler();
         let full_content = b"This is the full content of the file";
 
         let mut server = Server::new_async().await;
@@ -678,6 +670,7 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/no-range.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
         let chunk = handler.download_chunk(&url, 5, 5).await.unwrap();
 
         assert_eq!(chunk.as_ref(), full_content);
@@ -685,13 +678,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_timeout_error() {
-        let config = RemoteFileConfig {
-            connection_timeout: 1,
-            read_timeout: 1,
-            ..RemoteFileConfig::default()
-        };
-        let handler = HttpFileHandler::new(config).unwrap();
-
         let mut server = Server::new_async().await;
         let _m = server
             .mock("GET", "/slow.txt")
@@ -704,14 +690,19 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/slow.txt", server.url())).unwrap();
-        let result = handler.download(&url).await;
+        let config = RemoteFileConfig {
+            connection_timeout: 1,
+            read_timeout: 1,
+            ..RemoteFileConfig::default()
+        };
+        let handler = HttpFileHandler::new(config, &url).unwrap();
+        let result = handler.download().await;
 
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
 
     #[tokio::test]
     async fn test_unauthorized_error() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server
             .mock("GET", "/auth-required.txt")
@@ -720,14 +711,14 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/auth-required.txt", server.url())).unwrap();
-        let result = handler.download(&url).await;
+        let handler = create_test_handler(&url);
+        let result = handler.download().await;
 
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
 
     #[tokio::test]
     async fn test_download_chunk_with_content_range_validation() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let content = b"Hello";
         let _m = server
@@ -740,6 +731,7 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
         let chunk = handler.download_chunk(&url, 6, 5).await.unwrap();
 
         assert_eq!(chunk.as_ref(), content);
@@ -747,7 +739,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_chunk_incorrect_range_validation() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let content = b"Hello";
         let _m = server
@@ -760,6 +751,7 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
         let result = handler.download_chunk(&url, 6, 5).await;
 
         assert!(matches!(result, Err(RemoteFileError::Other(_))));
@@ -770,7 +762,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_internal_server_error() {
-        let handler = create_test_handler();
         let mut server = Server::new_async().await;
         let _m = server
             .mock("GET", "/error.txt")
@@ -779,7 +770,8 @@ mod tests {
             .await;
 
         let url = Url::parse(&format!("{}/error.txt", server.url())).unwrap();
-        let result = handler.download(&url).await;
+        let handler = create_test_handler(&url);
+        let result = handler.download().await;
 
         assert!(matches!(result, Err(RemoteFileError::Other(_))));
         if let Err(RemoteFileError::Other(msg)) = result {

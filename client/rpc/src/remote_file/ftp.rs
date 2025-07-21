@@ -1,6 +1,6 @@
-use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 use async_trait::async_trait;
 use bytes::Bytes;
+use futures_util::io::{AsyncReadExt, AsyncWriteExt};
 use std::io::Cursor;
 use std::time::Duration;
 use suppaftp::types::FileType;
@@ -10,18 +10,33 @@ use tokio::io::AsyncRead;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 use url::Url;
 
+use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
+
 #[derive(Clone)]
 pub struct FtpFileHandler {
     config: RemoteFileConfig,
+    host: String,
+    port: u16,
+    username: Option<String>,
+    password: Option<String>,
+    path: String,
 }
 
 impl FtpFileHandler {
-    pub fn new(config: RemoteFileConfig) -> Self {
-        Self { config }
+    pub fn new(config: RemoteFileConfig, url: &Url) -> Result<Self, RemoteFileError> {
+        let (host, port, username, password, path) = Self::parse_url(url)?;
+        Ok(Self {
+            config,
+            host,
+            port,
+            username,
+            password,
+            path,
+        })
     }
 
-    pub fn default() -> Self {
-        Self::new(RemoteFileConfig::default())
+    pub fn default(url: &Url) -> Result<Self, RemoteFileError> {
+        Self::new(RemoteFileConfig::default(), url)
     }
 
     fn parse_url(
@@ -52,10 +67,8 @@ impl FtpFileHandler {
         Ok((host, port, username, password, path))
     }
 
-    async fn connect(&self, url: &Url) -> Result<AsyncFtpStream, RemoteFileError> {
-        let (host, port, username, password, _) = Self::parse_url(url)?;
-
-        let addr = format!("{}:{}", host, port);
+    async fn connect(&self) -> Result<AsyncFtpStream, RemoteFileError> {
+        let addr = format!("{}:{}", self.host, self.port);
 
         let connect_future = AsyncFtpStream::connect(&addr);
         let mut stream = tokio::time::timeout(
@@ -66,9 +79,9 @@ impl FtpFileHandler {
         .map_err(|_| RemoteFileError::Timeout)?
         .map_err(|e| RemoteFileError::FtpError(e))?;
 
-        let (user, pass) = match (username, password) {
-            (Some(u), Some(p)) => (u, p),
-            (Some(u), None) => (u, String::new()),
+        let (user, pass) = match (&self.username, &self.password) {
+            (Some(u), Some(p)) => (u.clone(), p.clone()),
+            (Some(u), None) => (u.clone(), String::new()),
             _ => ("anonymous".to_string(), String::new()),
         };
 
@@ -100,12 +113,11 @@ impl FtpFileHandler {
         }
     }
 
-    pub async fn download(&self, url: &Url) -> Result<Vec<u8>, RemoteFileError> {
-        let (_, _, _, _, path) = Self::parse_url(url)?;
-        let mut stream = self.connect(url).await?;
+    pub async fn download(&self) -> Result<Vec<u8>, RemoteFileError> {
+        let mut stream = self.connect().await?;
 
         let size = stream
-            .size(&path)
+            .size(&self.path)
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
@@ -118,7 +130,7 @@ impl FtpFileHandler {
 
         let data = tokio::time::timeout(
             Duration::from_secs(self.config.read_timeout),
-            stream.retr(&path, |mut reader| {
+            stream.retr(&self.path, |mut reader| {
                 Box::pin(async move {
                     use futures_util::io::AsyncReadExt;
                     let mut buffer = Vec::new();
@@ -141,15 +153,14 @@ impl FtpFileHandler {
         Ok(data)
     }
 
-    pub async fn upload(&self, url: &Url, data: &[u8]) -> Result<(), RemoteFileError> {
-        let (_, _, _, _, path) = Self::parse_url(url)?;
-        let mut stream = self.connect(url).await?;
+    pub async fn upload(&self, data: &[u8]) -> Result<(), RemoteFileError> {
+        let mut stream = self.connect().await?;
 
         let cursor = Cursor::new(data);
         let mut compat_cursor = cursor.compat();
 
         stream
-            .put_file(&path, &mut compat_cursor)
+            .put_file(&self.path, &mut compat_cursor)
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
@@ -161,12 +172,11 @@ impl FtpFileHandler {
 
 #[async_trait]
 impl RemoteFileHandler for FtpFileHandler {
-    async fn fetch_metadata(&self, url: &Url) -> Result<(u64, Option<String>), RemoteFileError> {
-        let (_, _, _, _, path) = Self::parse_url(url)?;
-        let mut stream = self.connect(url).await?;
+    async fn get_file_size(&self, _url: &Url) -> Result<u64, RemoteFileError> {
+        let mut stream = self.connect().await?;
 
         let size = stream
-            .size(&path)
+            .size(&self.path)
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
@@ -179,16 +189,16 @@ impl RemoteFileHandler for FtpFileHandler {
 
         let _ = stream.quit().await;
 
-        Ok((size as u64, None))
+        Ok(size as u64)
     }
 
     async fn stream_file(
         &self,
-        url: &Url,
+        _url: &Url,
     ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
         // For now, we'll download the entire file and wrap it in a cursor
         // TODO: Implement true streaming when suppaftp provides better async streaming support
-        let data = self.download(url).await?;
+        let data = self.download().await?;
         let cursor = Cursor::new(data);
 
         Ok(Box::new(cursor) as Box<dyn AsyncRead + Send + Unpin>)
@@ -196,12 +206,11 @@ impl RemoteFileHandler for FtpFileHandler {
 
     async fn download_chunk(
         &self,
-        url: &Url,
+        _url: &Url,
         offset: u64,
         length: u64,
     ) -> Result<Bytes, RemoteFileError> {
-        let (_, _, _, _, path) = Self::parse_url(url)?;
-        let mut stream = self.connect(url).await?;
+        let mut stream = self.connect().await?;
 
         // Use REST command to set the starting position
         if offset > 0 {
@@ -213,9 +222,8 @@ impl RemoteFileHandler for FtpFileHandler {
 
         // Download the data starting from the offset
         let result = stream
-            .retr(&path, |mut reader| {
+            .retr(&self.path, |mut reader| {
                 Box::pin(async move {
-                    use futures_util::io::AsyncReadExt;
                     let mut buffer = vec![0u8; length as usize];
                     let bytes_read = reader.read(&mut buffer).await.map_err(|e| {
                         FtpError::UnexpectedResponse(Response::new(
@@ -267,17 +275,16 @@ impl RemoteFileHandler for FtpFileHandler {
             )));
         }
 
-        let (_, _, _, _, path) = Self::parse_url(url)?;
-        let mut stream = self.connect(url).await?;
+        let mut stream = self.connect().await?;
 
         // Use put_with_stream for streaming upload
         let mut upload_stream = stream
-            .put_with_stream(&path)
+            .put_with_stream(&self.path)
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
         // Stream data in chunks
-        let mut buffer = vec![0u8; 8192]; // 8KB chunks
+        let mut buffer = vec![0u8; self.config.chunk_size];
         loop {
             let n = tokio::io::AsyncReadExt::read(&mut data, &mut buffer)
                 .await
@@ -287,7 +294,6 @@ impl RemoteFileHandler for FtpFileHandler {
                 break;
             }
 
-            use futures_util::io::AsyncWriteExt;
             upload_stream
                 .write_all(&buffer[..n])
                 .await
@@ -310,30 +316,10 @@ impl RemoteFileHandler for FtpFileHandler {
 mod tests {
     use super::*;
 
-    // Current Testing Limitations:
-    //
-    // The FTP handler is tightly coupled to suppaftp::AsyncFtpStream, which makes
-    // unit testing challenging without an actual FTP server. The current tests only
-    // cover:
-    // - URL parsing logic
-    // - Protocol support checks
-    // - Error handling for invalid inputs
-    // - Size limit validation
-    //
-    // What we CANNOT test without a real/mock FTP server:
-    // - Actual file downloads/uploads
-    // - REST command for partial downloads
-    // - Streaming functionality
-    // - Connection timeouts
-    // - Authentication failures
-    // - Network errors
-    //
-    // To properly test the FTP handler, we would need one of:
-    // 1. A mock FTP server library (not currently available in Rust ecosystem)
-    // 2. Docker-based integration tests with a real FTP server
-    // 3. Refactoring to use dependency injection for the FTP client
+    // Unit tests for FTP handler focusing on testable logic without network access.
+    // Integration tests requiring an actual FTP server are not included here.
 
-    fn create_test_handler() -> FtpFileHandler {
+    fn create_test_handler(url: &Url) -> Result<FtpFileHandler, RemoteFileError> {
         let config = RemoteFileConfig {
             max_file_size: 1024 * 1024,
             connection_timeout: 5,
@@ -341,13 +327,15 @@ mod tests {
             follow_redirects: false,
             max_redirects: 0,
             user_agent: "Test-Agent".to_string(),
+            chunk_size: 8192,
         };
-        FtpFileHandler::new(config)
+        FtpFileHandler::new(config, url)
     }
 
     #[test]
     fn test_is_supported() {
-        let handler = create_test_handler();
+        let url = Url::parse("ftp://example.com/file.txt").unwrap();
+        let handler = create_test_handler(&url).unwrap();
 
         assert!(handler.is_supported(&Url::parse("ftp://example.com/file.txt").unwrap()));
         assert!(handler.is_supported(&Url::parse("ftps://example.com/file.txt").unwrap()));
@@ -358,52 +346,52 @@ mod tests {
     #[test]
     fn test_parse_url_anonymous() {
         let url = Url::parse("ftp://example.com/path/to/file.txt").unwrap();
-        let (host, port, username, password, path) = FtpFileHandler::parse_url(&url).unwrap();
+        let handler = create_test_handler(&url).unwrap();
 
-        assert_eq!(host, "example.com");
-        assert_eq!(port, 21);
-        assert_eq!(username, None);
-        assert_eq!(password, None);
-        assert_eq!(path, "/path/to/file.txt");
+        assert_eq!(handler.host, "example.com");
+        assert_eq!(handler.port, 21);
+        assert_eq!(handler.username, None);
+        assert_eq!(handler.password, None);
+        assert_eq!(handler.path, "/path/to/file.txt");
     }
 
     #[test]
     fn test_parse_url_with_auth() {
         let url = Url::parse("ftp://user:pass@example.com:2121/file.txt").unwrap();
-        let (host, port, username, password, path) = FtpFileHandler::parse_url(&url).unwrap();
+        let handler = create_test_handler(&url).unwrap();
 
-        assert_eq!(host, "example.com");
-        assert_eq!(port, 2121);
-        assert_eq!(username, Some("user".to_string()));
-        assert_eq!(password, Some("pass".to_string()));
-        assert_eq!(path, "/file.txt");
+        assert_eq!(handler.host, "example.com");
+        assert_eq!(handler.port, 2121);
+        assert_eq!(handler.username, Some("user".to_string()));
+        assert_eq!(handler.password, Some("pass".to_string()));
+        assert_eq!(handler.path, "/file.txt");
     }
 
     #[test]
     fn test_parse_url_with_username_only() {
         let url = Url::parse("ftp://user@example.com/file.txt").unwrap();
-        let (host, port, username, password, path) = FtpFileHandler::parse_url(&url).unwrap();
+        let handler = create_test_handler(&url).unwrap();
 
-        assert_eq!(host, "example.com");
-        assert_eq!(port, 21);
-        assert_eq!(username, Some("user".to_string()));
-        assert_eq!(password, None);
-        assert_eq!(path, "/file.txt");
+        assert_eq!(handler.host, "example.com");
+        assert_eq!(handler.port, 21);
+        assert_eq!(handler.username, Some("user".to_string()));
+        assert_eq!(handler.password, None);
+        assert_eq!(handler.path, "/file.txt");
     }
 
     #[test]
     fn test_parse_url_edge_cases() {
         // Test with localhost
         let url = Url::parse("ftp://localhost/file.txt").unwrap();
-        let (host, _, _, _, path) = FtpFileHandler::parse_url(&url).unwrap();
-        assert_eq!(host, "localhost");
-        assert_eq!(path, "/file.txt");
+        let handler = create_test_handler(&url).unwrap();
+        assert_eq!(handler.host, "localhost");
+        assert_eq!(handler.path, "/file.txt");
 
         // Test with IP address
         let url = Url::parse("ftp://192.168.1.1:2121/file.txt").unwrap();
-        let (host, port, _, _, _) = FtpFileHandler::parse_url(&url).unwrap();
-        assert_eq!(host, "192.168.1.1");
-        assert_eq!(port, 2121);
+        let handler = create_test_handler(&url).unwrap();
+        assert_eq!(handler.host, "192.168.1.1");
+        assert_eq!(handler.port, 2121);
     }
 
     #[test]
@@ -421,14 +409,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_invalid_protocol() {
-        let handler = create_test_handler();
-        let url = Url::parse("http://example.com/upload.txt").unwrap();
+        let ftp_url = Url::parse("ftp://example.com/upload.txt").unwrap();
+        let handler = create_test_handler(&ftp_url).unwrap();
+        let http_url = Url::parse("http://example.com/upload.txt").unwrap();
         let data = b"test";
         let cursor = Cursor::new(data);
         let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
 
         let result = handler
-            .upload_file(&url, boxed_reader, data.len() as u64, None)
+            .upload_file(&http_url, boxed_reader, data.len() as u64, None)
             .await;
 
         assert!(matches!(
@@ -439,12 +428,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_size_limit() {
+        let url = Url::parse("ftp://example.com/upload.txt").unwrap();
         let config = RemoteFileConfig {
             max_file_size: 10,
             ..RemoteFileConfig::default()
         };
-        let handler = FtpFileHandler::new(config);
-        let url = Url::parse("ftp://example.com/upload.txt").unwrap();
+        let handler = FtpFileHandler::new(config, &url).unwrap();
         let data = b"This is larger than 10 bytes";
         let cursor = Cursor::new(data);
         let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
