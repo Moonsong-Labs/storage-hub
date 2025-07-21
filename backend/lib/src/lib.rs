@@ -13,7 +13,9 @@ pub use api::create_app;
 pub use config::Config;
 pub use error::{Error, Result};
 
+// WIP: Tests commented out until PostgreSQL mock implementation is complete
 #[cfg(test)]
+#[allow(dead_code)]
 mod tests {
     use super::*;
     use axum::http::StatusCode;
@@ -22,7 +24,8 @@ mod tests {
     use services::Services;
     use std::sync::Arc;
 
-    use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
+    // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
+    // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
     use crate::data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient};
     
 
@@ -45,10 +48,13 @@ mod tests {
         let boxed_storage = BoxedStorageWrapper::new(memory_storage);
         let storage: Arc<dyn data::storage::BoxedStorage> = Arc::new(boxed_storage);
         
-        // Create test postgres client
-        let mock_conn = MockDbConnection::new();
-        let db_conn = Arc::new(AnyDbConnection::Mock(mock_conn));
-        let postgres: Arc<dyn data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(db_conn));
+        // WIP: Mock PostgreSQL connection commented out until diesel traits are fully implemented
+        // let mock_conn = MockDbConnection::new();
+        // let db_conn = Arc::new(AnyDbConnection::Mock(mock_conn));
+        // let postgres: Arc<dyn data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(db_conn));
+        
+        // For now, we'll panic in tests that need postgres
+        panic!("Test requires PostgreSQL mock implementation - currently WIP");
         
         // Create test RPC client
         let mock_rpc_conn = MockConnection::new();

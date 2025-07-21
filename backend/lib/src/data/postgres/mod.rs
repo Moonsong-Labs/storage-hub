@@ -8,8 +8,9 @@ pub mod connection;
 pub mod pg_connection;
 // pub mod queries; // TODO: Fix compilation errors in queries module
 
-#[cfg(feature = "mocks")]
-pub mod mock_connection;
+// WIP: Mock connection implementation - commented out until diesel traits are fully implemented
+// #[cfg(feature = "mocks")]
+// pub mod mock_connection;
 
 // Main client
 pub use client::{PostgresClient, PostgresError};
@@ -18,9 +19,9 @@ pub use client::{PostgresClient, PostgresError};
 pub use connection::{DbConnection, DbConnectionError, DbConfig, ConnectionProvider, AnyDbConnection};
 pub use pg_connection::PgConnection;
 
-// Mock types (only with mocks feature)
-#[cfg(feature = "mocks")]
-pub use mock_connection::{MockDbConnection, MockErrorConfig, MockTestData};
+// WIP: Mock types - commented out until diesel traits are fully implemented
+// #[cfg(feature = "mocks")]
+// pub use mock_connection::{MockDbConnection, MockErrorConfig, MockTestData};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

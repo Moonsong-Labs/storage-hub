@@ -24,9 +24,10 @@ use std::sync::Arc;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
+// WIP: Mock imports - postgres mocks commented out until diesel traits are fully implemented
 #[cfg(feature = "mocks")]
 use sh_backend_lib::data::{
-    postgres::{MockPostgresClient, MockDbConnection},
+    // postgres::{MockPostgresClient, MockDbConnection},
     rpc::{MockConnection, ErrorMode},
 };
 
@@ -135,15 +136,16 @@ async fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
 async fn create_postgres_client(
     config: &Config,
 ) -> Result<Arc<dyn PostgresClientTrait>, Box<dyn std::error::Error>> {
-    #[cfg(feature = "mocks")]
-    {
-        if config.database.mock_mode {
-            info!("Using mock PostgreSQL connection (mock_mode enabled)");
-            let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
-            let client = PostgresClient::new(Arc::new(mock_conn));
-            return Ok(Arc::new(client));
-        }
-    }
+    // WIP: Mock mode handling - commented out until diesel traits are fully implemented
+    // #[cfg(feature = "mocks")]
+    // {
+    //     if config.database.mock_mode {
+    //         info!("Using mock PostgreSQL connection (mock_mode enabled)");
+    //         let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
+    //         let client = PostgresClient::new(Arc::new(mock_conn));
+    //         return Ok(Arc::new(client));
+    //     }
+    // }
 
     // Try to create real PostgreSQL connection
     let db_config = DbConfig::new(&config.database.url);
@@ -161,13 +163,14 @@ async fn create_postgres_client(
                 Err(e) => {
                     error!("Failed to connect to PostgreSQL: {}", e);
                     
-                    #[cfg(feature = "mocks")]
-                    {
-                        info!("Falling back to mock PostgreSQL connection");
-                        let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
-                        let client = PostgresClient::new(Arc::new(mock_conn));
-                        return Ok(Arc::new(client));
-                    }
+                    // WIP: Mock fallback - commented out until diesel traits are fully implemented
+                    // #[cfg(feature = "mocks")]
+                    // {
+                    //     info!("Falling back to mock PostgreSQL connection");
+                    //     let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
+                    //     let client = PostgresClient::new(Arc::new(mock_conn));
+                    //     return Ok(Arc::new(client));
+                    // }
                     
                     #[cfg(not(feature = "mocks"))]
                     {
@@ -179,13 +182,14 @@ async fn create_postgres_client(
         Err(e) => {
             error!("Failed to create PostgreSQL connection: {}", e);
             
-            #[cfg(feature = "mocks")]
-            {
-                info!("Falling back to mock PostgreSQL connection");
-                let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
-                let client = PostgresClient::new(Arc::new(mock_conn));
-                return Ok(Arc::new(client));
-            }
+            // WIP: Mock fallback - commented out until diesel traits are fully implemented
+            // #[cfg(feature = "mocks")]
+            // {
+            //     info!("Falling back to mock PostgreSQL connection");
+            //     let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
+            //     let client = PostgresClient::new(Arc::new(mock_conn));
+            //     return Ok(Arc::new(client));
+            // }
             
             #[cfg(not(feature = "mocks"))]
             {
