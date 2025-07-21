@@ -178,9 +178,11 @@ impl MockConnection {
 
     /// Check if we should simulate an error based on current mode
     async fn check_error(&self) -> RpcResult<()> {
-        let mut call_count = self.call_count.lock().unwrap();
-        *call_count += 1;
-        let current_count = *call_count;
+        let current_count = {
+            let mut call_count = self.call_count.lock().unwrap();
+            *call_count += 1;
+            *call_count
+        };
         
         let error_mode = self.error_mode.lock().unwrap().clone();
         
@@ -221,11 +223,12 @@ impl RpcConnection for MockConnection {
         R: DeserializeOwned,
     {
         // Check if connected
-        let connected = self.connected.lock().unwrap();
-        if !*connected {
-            return Err(RpcConnectionError::ConnectionClosed);
+        {
+            let connected = self.connected.lock().unwrap();
+            if !*connected {
+                return Err(RpcConnectionError::ConnectionClosed);
+            }
         }
-        drop(connected);
 
         // Simulate network latency if configured
         if let Some(latency) = self.latency_ms {
@@ -236,14 +239,16 @@ impl RpcConnection for MockConnection {
         self.check_error().await?;
 
         // Get response for method
-        let responses = self.responses.lock().unwrap();
-        let response = responses
-            .get(method)
-            .cloned()
-            .unwrap_or_else(|| {
-                // Return a generic null response for unknown methods
-                serde_json::json!(null)
-            });
+        let response = {
+            let responses = self.responses.lock().unwrap();
+            responses
+                .get(method)
+                .cloned()
+                .unwrap_or_else(|| {
+                    // Return a generic null response for unknown methods
+                    serde_json::json!(null)
+                })
+        };
 
         // Deserialize the response
         serde_json::from_value(response)

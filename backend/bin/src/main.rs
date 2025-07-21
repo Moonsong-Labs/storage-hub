@@ -10,11 +10,11 @@ use sh_backend_lib::{
     data::{
         postgres::{
             PostgresClient, PostgresClientTrait, 
-            DbConnection, DbConfig, PgConnection,
+            DbConnection, DbConfig, PgConnection, AnyDbConnection,
         },
         rpc::{
             StorageHubRpcClient, StorageHubRpcTrait,
-            RpcConnection, RpcConfig, WsConnection,
+            RpcConnection, RpcConfig, WsConnection, AnyRpcConnection,
         },
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
@@ -139,7 +139,7 @@ async fn create_postgres_client(
     {
         if config.database.mock_mode {
             info!("Using mock PostgreSQL connection (mock_mode enabled)");
-            let mock_conn = MockDbConnection::new();
+            let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
             let client = PostgresClient::new(Arc::new(mock_conn));
             return Ok(Arc::new(client));
         }
@@ -149,8 +149,8 @@ async fn create_postgres_client(
     let db_config = DbConfig::new(&config.database.url);
     match PgConnection::new(db_config).await {
         Ok(pg_conn) => {
-            let conn: Arc<dyn DbConnection<Connection = diesel_async::AsyncPgConnection>> = Arc::new(pg_conn);
-            let client = PostgresClient::new(conn);
+            let conn = AnyDbConnection::Real(pg_conn);
+            let client = PostgresClient::new(Arc::new(conn));
             
             // Test the connection
             match client.test_connection().await {
@@ -164,7 +164,7 @@ async fn create_postgres_client(
                     #[cfg(feature = "mocks")]
                     {
                         info!("Falling back to mock PostgreSQL connection");
-                        let mock_conn = MockDbConnection::new();
+                        let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
                         let client = PostgresClient::new(Arc::new(mock_conn));
                         return Ok(Arc::new(client));
                     }
@@ -182,7 +182,7 @@ async fn create_postgres_client(
             #[cfg(feature = "mocks")]
             {
                 info!("Falling back to mock PostgreSQL connection");
-                let mock_conn = MockDbConnection::new();
+                let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
                 let client = PostgresClient::new(Arc::new(mock_conn));
                 return Ok(Arc::new(client));
             }
@@ -207,9 +207,11 @@ async fn create_rpc_client(
     {
         if config.storage_hub.mock_mode {
             info!("Using mock RPC connection (mock_mode enabled)");
-            let mock_conn = MockConnection::builder()
-                .with_error_mode(ErrorMode::Never)
-                .build();
+            let mock_conn = AnyRpcConnection::Mock(
+                MockConnection::builder()
+                    .with_error_mode(ErrorMode::Never)
+                    .build()
+            );
             let client = StorageHubRpcClient::new(Arc::new(mock_conn));
             return Ok(Arc::new(client));
         }
@@ -223,8 +225,8 @@ async fn create_rpc_client(
         .await 
     {
         Ok(ws_conn) => {
-            let conn: Arc<dyn RpcConnection> = Arc::new(ws_conn);
-            let client = StorageHubRpcClient::new(conn);
+            let conn = AnyRpcConnection::Real(ws_conn);
+            let client = StorageHubRpcClient::new(Arc::new(conn));
             info!("Connected to StorageHub RPC at {}", config.storage_hub.rpc_url);
             Ok(Arc::new(client))
         }
@@ -234,9 +236,11 @@ async fn create_rpc_client(
             #[cfg(feature = "mocks")]
             {
                 info!("Falling back to mock RPC connection");
-                let mock_conn = MockConnection::builder()
-                    .with_error_mode(ErrorMode::Never)
-                    .build();
+                let mock_conn = AnyRpcConnection::Mock(
+                    MockConnection::builder()
+                        .with_error_mode(ErrorMode::Never)
+                        .build()
+                );
                 let client = StorageHubRpcClient::new(Arc::new(mock_conn));
                 return Ok(Arc::new(client));
             }

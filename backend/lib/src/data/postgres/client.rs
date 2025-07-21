@@ -3,7 +3,7 @@
 //! This module provides a client wrapper around diesel-async connections
 //! for querying the existing StorageHub indexer database in a read-only manner.
 
-use super::connection::{DbConnection, DbConnectionError};
+use super::connection::{AnyDbConnection, DbConnection, DbConnectionError};
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -30,7 +30,7 @@ pub enum PostgresError {
 #[derive(Clone)]
 pub struct PostgresClient {
     /// Database connection abstraction
-    conn: Arc<dyn DbConnection<Connection = diesel_async::AsyncPgConnection>>,
+    conn: Arc<AnyDbConnection>,
 }
 
 impl PostgresClient {
@@ -50,7 +50,7 @@ impl PostgresClient {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn new(conn: Arc<dyn DbConnection<Connection = diesel_async::AsyncPgConnection>>) -> Self {
+    pub fn new(conn: Arc<AnyDbConnection>) -> Self {
         Self { conn }
     }
 

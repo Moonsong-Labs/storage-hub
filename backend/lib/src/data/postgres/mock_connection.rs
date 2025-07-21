@@ -8,13 +8,12 @@ use super::connection::{DbConnection, DbConnectionError};
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use diesel::{
-    backend::Backend,
     connection::{LoadConnection, TransactionManager},
     query_builder::{AsQuery, QueryFragment, QueryId},
     result::{ConnectionResult, Error as DieselError, QueryResult},
     RunQueryDsl,
 };
-use diesel_async::{AsyncConnection, AsyncPgConnection, SimpleAsyncConnection};
+use diesel_async::{AsyncConnection, SimpleAsyncConnection};
 use shc_indexer_db::models::{Bucket, File, Msp};
 use std::{
     collections::HashMap,
@@ -247,9 +246,17 @@ impl<Conn: diesel::Connection> TransactionManager<Conn> for MockTransactionManag
     fn transaction_manager_status_mut(conn: &mut Conn) -> &mut diesel::connection::TransactionManagerStatus {
         // Return a static reference for the mock
         unsafe {
-            static mut STATUS: diesel::connection::TransactionManagerStatus = 
-                diesel::connection::TransactionManagerStatus::Valid(diesel::connection::AnsiTransactionManager);
-            &mut STATUS
+            use std::mem::MaybeUninit;
+            static mut STATUS: MaybeUninit<diesel::connection::TransactionManagerStatus> = MaybeUninit::uninit();
+            static ONCE: std::sync::Once = std::sync::Once::new();
+            
+            ONCE.call_once(|| {
+                STATUS.write(diesel::connection::TransactionManagerStatus::Valid(
+                    diesel::connection::AnsiTransactionManager::default()
+                ));
+            });
+            
+            STATUS.assume_init_mut()
         }
     }
 }

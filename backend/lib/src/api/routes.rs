@@ -29,19 +29,21 @@ mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use crate::data::storage::{BoxedStorageWrapper, InMemoryStorage};
-    use crate::data::postgres::{MockDbConnection, PostgresClient};
-    use crate::data::rpc::{MockConnection, StorageHubRpcClient};
+    use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
+    use crate::data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient};
     use std::sync::Arc;
 
     fn create_test_app() -> Router {
         let memory_storage = InMemoryStorage::new();
         let boxed_storage = BoxedStorageWrapper::new(memory_storage);
         let storage: Arc<dyn crate::data::storage::BoxedStorage> = Arc::new(boxed_storage);
-        let mock_conn = Arc::new(MockDbConnection::new());
-        let postgres: Arc<dyn crate::data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(mock_conn));
+        let mock_conn = MockDbConnection::new();
+        let db_conn = Arc::new(AnyDbConnection::Mock(mock_conn));
+        let postgres: Arc<dyn crate::data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(db_conn));
         
-        let mock_rpc_conn = Arc::new(MockConnection::new());
-        let rpc: Arc<dyn crate::data::rpc::StorageHubRpcTrait> = Arc::new(StorageHubRpcClient::new(mock_rpc_conn));
+        let mock_rpc_conn = MockConnection::new();
+        let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_rpc_conn));
+        let rpc: Arc<dyn crate::data::rpc::StorageHubRpcTrait> = Arc::new(StorageHubRpcClient::new(rpc_conn));
         
         let services = Services::new(storage, postgres, rpc);
         routes(services)

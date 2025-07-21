@@ -5,8 +5,9 @@
 
 use async_trait::async_trait;
 use diesel::result::Error as DieselError;
+use diesel::result::ConnectionResult;
 use diesel::QueryResult;
-use diesel_async::AsyncConnection;
+use diesel_async::{AsyncConnection, SimpleAsyncConnection};
 use std::fmt::Debug;
 
 /// Trait representing a database connection abstraction
@@ -173,4 +174,238 @@ pub trait ConnectionProvider: Send + Sync {
 
     /// Get the database connection
     fn get_db_connection(&self) -> &Self::DbConn;
+}
+
+// Import concrete types for the enum
+use super::pg_connection::PgConnection;
+#[cfg(feature = "mocks")]
+use super::mock_connection::MockDbConnection;
+
+/// Enum wrapper for different database connection implementations
+///
+/// This enum allows using concrete types instead of trait objects,
+/// solving trait object safety issues while maintaining flexibility
+/// between real and mock connections.
+#[derive(Debug)]
+pub enum AnyDbConnection {
+    /// Real PostgreSQL connection
+    Real(PgConnection),
+    
+    /// Mock connection for testing
+    #[cfg(feature = "mocks")]
+    Mock(MockDbConnection),
+}
+
+#[async_trait]
+impl DbConnection for AnyDbConnection {
+    type Connection = AnyAsyncConnection;
+
+    async fn get_connection(&self) -> Result<Self::Connection, DbConnectionError> {
+        match self {
+            AnyDbConnection::Real(conn) => {
+                conn.get_connection().await.map(AnyAsyncConnection::Real)
+            }
+            #[cfg(feature = "mocks")]
+            AnyDbConnection::Mock(conn) => {
+                conn.get_connection().await.map(AnyAsyncConnection::Mock)
+            }
+        }
+    }
+
+    async fn test_connection(&self) -> Result<(), DbConnectionError> {
+        match self {
+            AnyDbConnection::Real(conn) => conn.test_connection().await,
+            #[cfg(feature = "mocks")]
+            AnyDbConnection::Mock(conn) => conn.test_connection().await,
+        }
+    }
+
+    async fn transaction<F, R, E>(&self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&mut Self::Connection) -> Result<R, E> + Send,
+        R: Send,
+        E: From<DbConnectionError> + From<DieselError> + Send,
+    {
+        match self {
+            AnyDbConnection::Real(conn) => conn.transaction(f).await,
+            #[cfg(feature = "mocks")]
+            AnyDbConnection::Mock(conn) => conn.transaction(f).await,
+        }
+    }
+
+    async fn is_healthy(&self) -> bool {
+        match self {
+            AnyDbConnection::Real(conn) => conn.is_healthy().await,
+            #[cfg(feature = "mocks")]
+            AnyDbConnection::Mock(conn) => conn.is_healthy().await,
+        }
+    }
+}
+
+/// Enum wrapper for different async connection types
+///
+/// This enum is needed because the DbConnection trait requires
+/// an associated Connection type that implements AsyncConnection.
+#[derive(Debug)]
+pub enum AnyAsyncConnection {
+    /// Real async PostgreSQL connection
+    Real(diesel_async::AsyncPgConnection),
+    
+    /// Mock async connection
+    #[cfg(feature = "mocks")]
+    Mock(super::mock_connection::MockAsyncConnection),
+}
+
+// Implement SimpleAsyncConnection for AnyAsyncConnection
+#[async_trait]
+impl SimpleAsyncConnection for AnyAsyncConnection {
+    async fn batch_execute(&mut self, query: &str) -> QueryResult<()> {
+        match self {
+            AnyAsyncConnection::Real(conn) => conn.batch_execute(query).await,
+            #[cfg(feature = "mocks")]
+            AnyAsyncConnection::Mock(conn) => conn.batch_execute(query).await,
+        }
+    }
+}
+
+// We need to implement AsyncConnection for AnyAsyncConnection
+// This requires delegating all methods to the underlying implementation
+#[async_trait]
+impl AsyncConnection for AnyAsyncConnection {
+    type Backend = diesel::pg::Pg;
+    type TransactionManager = AnyScopedTransactionManager;
+
+    async fn establish(_database_url: &str) -> ConnectionResult<Self> {
+        Err(DieselError::DatabaseError(
+            diesel::result::DatabaseErrorKind::UnableToSendCommand,
+            Box::new("Cannot establish connection through AnyAsyncConnection".to_string()),
+        ))
+    }
+
+    async fn transaction<F, R, E>(&mut self, f: F) -> Result<R, E>
+    where
+        F: FnOnce(&mut Self) -> Result<R, E> + Send,
+        R: Send,
+        E: From<DieselError> + Send,
+    {
+        // We need to handle the transaction within the context of the enum
+        AnyScopedTransactionManager::begin_transaction(self).await?;
+        
+        match f(self) {
+            Ok(result) => {
+                AnyScopedTransactionManager::commit_transaction(self).await?;
+                Ok(result)
+            }
+            Err(e) => {
+                AnyScopedTransactionManager::rollback_transaction(self).await?;
+                Err(e)
+            }
+        }
+    }
+
+    async fn begin_test_transaction(&mut self) -> QueryResult<()> {
+        match self {
+            AnyAsyncConnection::Real(conn) => conn.begin_test_transaction().await,
+            #[cfg(feature = "mocks")]
+            AnyAsyncConnection::Mock(conn) => conn.begin_test_transaction().await,
+        }
+    }
+
+    async fn test_transaction<F, R, E>(&mut self, f: F) -> R
+    where
+        F: FnOnce(&mut Self) -> Result<R, E> + Send,
+        R: Send,
+        E: From<DieselError> + Send + std::fmt::Debug,
+    {
+        self.begin_test_transaction().await.expect("Failed to start test transaction");
+        let result = f(self);
+        // Rollback test transaction
+        AnyScopedTransactionManager::rollback_transaction(self).await.expect("Failed to rollback test transaction");
+        result.expect("Test transaction failed")
+    }
+}
+
+/// Transaction manager for AnyAsyncConnection
+pub struct AnyScopedTransactionManager;
+
+impl diesel::connection::TransactionManager<AnyAsyncConnection> for AnyScopedTransactionManager {
+    type TransactionStateData = ();
+
+    fn begin_transaction(conn: &mut AnyAsyncConnection) -> QueryResult<()> {
+        match conn {
+            AnyAsyncConnection::Real(c) => {
+                <diesel_async::AsyncPgConnection as diesel::connection::Connection>::TransactionManager::begin_transaction(c)
+            }
+            #[cfg(feature = "mocks")]
+            AnyAsyncConnection::Mock(c) => {
+                <super::mock_connection::MockAsyncConnection as diesel::connection::Connection>::TransactionManager::begin_transaction(c)
+            }
+        }
+    }
+
+    fn rollback_transaction(conn: &mut AnyAsyncConnection) -> QueryResult<()> {
+        match conn {
+            AnyAsyncConnection::Real(c) => {
+                <diesel_async::AsyncPgConnection as diesel::connection::Connection>::TransactionManager::rollback_transaction(c)
+            }
+            #[cfg(feature = "mocks")]
+            AnyAsyncConnection::Mock(c) => {
+                <super::mock_connection::MockAsyncConnection as diesel::connection::Connection>::TransactionManager::rollback_transaction(c)
+            }
+        }
+    }
+
+    fn commit_transaction(conn: &mut AnyAsyncConnection) -> QueryResult<()> {
+        match conn {
+            AnyAsyncConnection::Real(c) => {
+                <diesel_async::AsyncPgConnection as diesel::connection::Connection>::TransactionManager::commit_transaction(c)
+            }
+            #[cfg(feature = "mocks")]
+            AnyAsyncConnection::Mock(c) => {
+                <super::mock_connection::MockAsyncConnection as diesel::connection::Connection>::TransactionManager::commit_transaction(c)
+            }
+        }
+    }
+}
+
+// Implement async TransactionManager for AnyScopedTransactionManager
+#[async_trait]
+impl diesel_async::TransactionManager<AnyAsyncConnection> for AnyScopedTransactionManager {
+    type TransactionStateData = ();
+
+    async fn begin_transaction(conn: &mut AnyAsyncConnection) -> QueryResult<()> {
+        match conn {
+            AnyAsyncConnection::Real(c) => {
+                <diesel_async::AsyncPgConnection as diesel_async::AsyncConnection>::TransactionManager::begin_transaction(c).await
+            }
+            #[cfg(feature = "mocks")]
+            AnyAsyncConnection::Mock(c) => {
+                <super::mock_connection::MockAsyncConnection as diesel_async::AsyncConnection>::TransactionManager::begin_transaction(c).await
+            }
+        }
+    }
+
+    async fn rollback_transaction(conn: &mut AnyAsyncConnection) -> QueryResult<()> {
+        match conn {
+            AnyAsyncConnection::Real(c) => {
+                <diesel_async::AsyncPgConnection as diesel_async::AsyncConnection>::TransactionManager::rollback_transaction(c).await
+            }
+            #[cfg(feature = "mocks")]
+            AnyAsyncConnection::Mock(c) => {
+                <super::mock_connection::MockAsyncConnection as diesel_async::AsyncConnection>::TransactionManager::rollback_transaction(c).await
+            }
+        }
+    }
+
+    async fn commit_transaction(conn: &mut AnyAsyncConnection) -> QueryResult<()> {
+        match conn {
+            AnyAsyncConnection::Real(c) => {
+                <diesel_async::AsyncPgConnection as diesel_async::AsyncConnection>::TransactionManager::commit_transaction(c).await
+            }
+            #[cfg(feature = "mocks")]
+            AnyAsyncConnection::Mock(c) => {
+                <super::mock_connection::MockAsyncConnection as diesel_async::AsyncConnection>::TransactionManager::commit_transaction(c).await
+            }
+        }
+    }
 }

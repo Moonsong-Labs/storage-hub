@@ -87,7 +87,7 @@ pub trait StorageHubRpcTrait: Send + Sync {
 pub use client::StorageHubRpcClient;
 
 // Connection types
-pub use connection::{RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcConfig, RpcResult, IntoRpcError};
+pub use connection::{RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcConfig, RpcResult, IntoRpcError, AnyRpcConnection};
 pub use ws_connection::{WsConnection, WsConnectionBuilder};
 
 // Mock types (only with mocks feature)

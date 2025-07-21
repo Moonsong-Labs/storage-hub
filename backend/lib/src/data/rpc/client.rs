@@ -11,17 +11,17 @@ use std::sync::Arc;
 
 use super::{
     FileMetadata, BucketInfo, ProviderInfo, TransactionReceipt,
-    StorageHubRpcTrait, RpcConnection,
+    StorageHubRpcTrait, RpcConnection, AnyRpcConnection,
 };
 
 /// StorageHub RPC client that uses an RpcConnection
 pub struct StorageHubRpcClient {
-    connection: Arc<dyn RpcConnection>,
+    connection: Arc<AnyRpcConnection>,
 }
 
 impl StorageHubRpcClient {
     /// Create a new StorageHubRpcClient with the given connection
-    pub fn new(connection: Arc<dyn RpcConnection>) -> Self {
+    pub fn new(connection: Arc<AnyRpcConnection>) -> Self {
         Self { connection }
     }
 }
@@ -124,26 +124,25 @@ impl StorageHubRpcTrait for StorageHubRpcClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::rpc::{MockConnectionBuilder, ErrorMode};
+    use crate::data::rpc::{AnyRpcConnection, MockConnectionBuilder, ErrorMode, RpcConnectionBuilder};
     
     #[tokio::test]
     async fn test_get_file_metadata() {
         // Create mock connection
-        let mut builder = MockConnectionBuilder::new();
-        builder.add_response(
-            "storagehub_getFileMetadata",
-            json!([[1, 2, 3]]),
-            json!({
-                "owner": [4, 5, 6],
-                "bucket_id": [7, 8, 9],
-                "location": [10, 11, 12],
-                "fingerprint": [13, 14, 15],
-                "size": 1024,
-                "peer_ids": [[16, 17], [18, 19]]
-            }),
-        );
+        let builder = MockConnectionBuilder::new()
+            .with_response(
+                "storagehub_getFileMetadata",
+                json!({
+                    "owner": [4, 5, 6],
+                    "bucket_id": [7, 8, 9],
+                    "location": [10, 11, 12],
+                    "fingerprint": [13, 14, 15],
+                    "size": 1024,
+                    "peer_ids": [[16, 17], [18, 19]]
+                }),
+            );
         
-        let connection = Arc::new(builder.build().await.unwrap());
+        let connection = Arc::new(AnyRpcConnection::Mock(builder.build().await.unwrap()));
         let client = StorageHubRpcClient::new(connection);
         
         // Test the method
@@ -157,14 +156,13 @@ mod tests {
     
     #[tokio::test]
     async fn test_get_block_number() {
-        let mut builder = MockConnectionBuilder::new();
-        builder.add_response(
-            "chain_getBlockNumber",
-            json!([]),
-            json!(12345),
-        );
+        let builder = MockConnectionBuilder::new()
+            .with_response(
+                "chain_getBlockNumber",
+                json!(12345),
+            );
         
-        let connection = Arc::new(builder.build().await.unwrap());
+        let connection = Arc::new(AnyRpcConnection::Mock(builder.build().await.unwrap()));
         let client = StorageHubRpcClient::new(connection);
         
         let block_number = client.get_block_number().await.unwrap();
@@ -173,33 +171,24 @@ mod tests {
     
     #[tokio::test]
     async fn test_submit_storage_request() {
-        let mut builder = MockConnectionBuilder::new();
+        let builder = MockConnectionBuilder::new()
+            // Mock the submission response
+            .with_response(
+                "author_submitStorageRequest",
+                json!("0x1234567890abcdef"),
+            )
+            // Mock the receipt response
+            .with_response(
+                "storagehub_getTransactionReceipt",
+                json!({
+                    "block_hash": [11, 12, 13],
+                    "block_number": 100,
+                    "extrinsic_index": 5,
+                    "success": true
+                }),
+            );
         
-        // Mock the submission response
-        builder.add_response(
-            "author_submitStorageRequest",
-            json!({
-                "location": [1, 2, 3],
-                "fingerprint": [4, 5, 6],
-                "size": 2048,
-                "peer_ids": [[7, 8], [9, 10]]
-            }),
-            json!("0x1234567890abcdef"),
-        );
-        
-        // Mock the receipt response
-        builder.add_response(
-            "storagehub_getTransactionReceipt",
-            json!(["0x1234567890abcdef"]),
-            json!({
-                "block_hash": [11, 12, 13],
-                "block_number": 100,
-                "extrinsic_index": 5,
-                "success": true
-            }),
-        );
-        
-        let connection = Arc::new(builder.build().await.unwrap());
+        let connection = Arc::new(AnyRpcConnection::Mock(builder.build().await.unwrap()));
         let client = StorageHubRpcClient::new(connection);
         
         let receipt = client.submit_storage_request(
@@ -215,10 +204,10 @@ mod tests {
     
     #[tokio::test]
     async fn test_error_handling() {
-        let mut builder = MockConnectionBuilder::new();
-        builder.set_error_mode(ErrorMode::AllErrors);
+        let builder = MockConnectionBuilder::new()
+            .with_error_mode(ErrorMode::EveryNthCall(1)); // Error on every call
         
-        let connection = Arc::new(builder.build().await.unwrap());
+        let connection = Arc::new(AnyRpcConnection::Mock(builder.build().await.unwrap()));
         let client = StorageHubRpcClient::new(connection);
         
         // Test that errors are properly propagated

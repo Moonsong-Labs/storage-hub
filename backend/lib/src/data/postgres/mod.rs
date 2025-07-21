@@ -15,7 +15,7 @@ pub mod mock_connection;
 pub use client::{PostgresClient, PostgresError};
 
 // Connection types
-pub use connection::{DbConnection, DbConnectionError, DbConfig, ConnectionProvider};
+pub use connection::{DbConnection, DbConnectionError, DbConfig, ConnectionProvider, AnyDbConnection};
 pub use pg_connection::PgConnection;
 
 // Mock types (only with mocks feature)
