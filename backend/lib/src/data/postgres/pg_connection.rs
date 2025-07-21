@@ -6,7 +6,7 @@
 use super::connection::{DbConfig, DbConnection, DbConnectionError};
 use async_trait::async_trait;
 use diesel_async::{
-    pooled_connection::{bb8::Pool, AsyncDieselConnectionManager, PoolError},
+    pooled_connection::{bb8, AsyncDieselConnectionManager, PoolError},
     AsyncPgConnection,
 };
 use std::fmt::Debug;
@@ -17,7 +17,7 @@ use std::time::Duration;
 /// This struct wraps a bb8 connection pool with AsyncPgConnection instances,
 /// providing efficient connection management for production use.
 pub struct PgConnection {
-    pool: Pool<AsyncDieselConnectionManager<AsyncPgConnection>>,
+    pool: bb8::Pool<AsyncPgConnection>,
 }
 
 impl PgConnection {
@@ -33,7 +33,7 @@ impl PgConnection {
         let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(&config.database_url);
 
         // Configure the pool builder
-        let mut builder = Pool::builder();
+        let mut builder = bb8::Pool::builder();
 
         // Apply configuration options
         if let Some(max_connections) = config.max_connections {

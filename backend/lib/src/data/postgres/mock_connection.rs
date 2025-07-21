@@ -229,7 +229,7 @@ impl AsyncConnection for MockAsyncConnection {
 // Mock transaction manager
 pub struct MockTransactionManager;
 
-impl<Conn> TransactionManager<Conn> for MockTransactionManager {
+impl<Conn: diesel::Connection> TransactionManager<Conn> for MockTransactionManager {
     type TransactionStateData = ();
 
     fn begin_transaction(conn: &mut Conn) -> QueryResult<()> {
@@ -244,11 +244,12 @@ impl<Conn> TransactionManager<Conn> for MockTransactionManager {
         Ok(())
     }
 
-    fn transaction_manager_state(conn: &mut Conn) -> &mut Self::TransactionStateData {
+    fn transaction_manager_status_mut(conn: &mut Conn) -> &mut diesel::connection::TransactionManagerStatus {
         // Return a static reference for the mock
         unsafe {
-            static mut STATE: () = ();
-            &mut STATE
+            static mut STATUS: diesel::connection::TransactionManagerStatus = 
+                diesel::connection::TransactionManagerStatus::Valid(diesel::connection::AnsiTransactionManager);
+            &mut STATUS
         }
     }
 }
