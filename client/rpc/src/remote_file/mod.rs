@@ -67,16 +67,14 @@ impl From<std::io::Error> for RemoteFileError {
 
 #[async_trait]
 pub trait RemoteFileHandler: Send + Sync {
-    async fn get_file_size(&self, url: &Url) -> Result<u64, RemoteFileError>;
+    async fn get_file_size(&self) -> Result<u64, RemoteFileError>;
 
     async fn stream_file(
         &self,
-        url: &Url,
     ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError>;
 
     async fn download_chunk(
         &self,
-        url: &Url,
         offset: u64,
         length: u64,
     ) -> Result<Bytes, RemoteFileError>;
@@ -85,7 +83,6 @@ pub trait RemoteFileHandler: Send + Sync {
 
     async fn upload_file(
         &self,
-        url: &Url,
         data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
         size: u64,
         content_type: Option<String>,

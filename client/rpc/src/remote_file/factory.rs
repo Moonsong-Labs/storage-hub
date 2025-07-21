@@ -14,7 +14,7 @@ impl RemoteFileHandlerFactory {
         config: RemoteFileConfig,
     ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
         match url.scheme() {
-            "" | "file" => LocalFileHandler::new(url)
+            "" | "file" => LocalFileHandler::new(url, config)
                 .map(|h| (Arc::new(h) as Arc<dyn RemoteFileHandler>, url.clone())),
 
             "http" | "https" => HttpFileHandler::new(config, url)

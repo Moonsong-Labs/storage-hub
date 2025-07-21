@@ -172,7 +172,7 @@ impl FtpFileHandler {
 
 #[async_trait]
 impl RemoteFileHandler for FtpFileHandler {
-    async fn get_file_size(&self, _url: &Url) -> Result<u64, RemoteFileError> {
+    async fn get_file_size(&self) -> Result<u64, RemoteFileError> {
         let mut stream = self.connect().await?;
 
         let size = stream
@@ -194,7 +194,6 @@ impl RemoteFileHandler for FtpFileHandler {
 
     async fn stream_file(
         &self,
-        _url: &Url,
     ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
         // For now, we'll download the entire file and wrap it in a cursor
         // TODO: Implement true streaming when suppaftp provides better async streaming support
@@ -206,7 +205,6 @@ impl RemoteFileHandler for FtpFileHandler {
 
     async fn download_chunk(
         &self,
-        _url: &Url,
         offset: u64,
         length: u64,
     ) -> Result<Bytes, RemoteFileError> {
@@ -257,16 +255,10 @@ impl RemoteFileHandler for FtpFileHandler {
 
     async fn upload_file(
         &self,
-        url: &Url,
         mut data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
         size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        if !self.is_supported(url) {
-            return Err(RemoteFileError::UnsupportedProtocol(
-                url.scheme().to_string(),
-            ));
-        }
 
         if size as u64 > self.config.max_file_size {
             return Err(RemoteFileError::Other(format!(
@@ -408,25 +400,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_upload_file_invalid_protocol() {
-        let ftp_url = Url::parse("ftp://example.com/upload.txt").unwrap();
-        let handler = create_test_handler(&ftp_url).unwrap();
-        let http_url = Url::parse("http://example.com/upload.txt").unwrap();
-        let data = b"test";
-        let cursor = Cursor::new(data);
-        let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
-
-        let result = handler
-            .upload_file(&http_url, boxed_reader, data.len() as u64, None)
-            .await;
-
-        assert!(matches!(
-            result,
-            Err(RemoteFileError::UnsupportedProtocol(_))
-        ));
-    }
-
-    #[tokio::test]
     async fn test_upload_file_size_limit() {
         let url = Url::parse("ftp://example.com/upload.txt").unwrap();
         let config = RemoteFileConfig {
@@ -439,7 +412,7 @@ mod tests {
         let boxed_reader: Box<dyn AsyncRead + Send + Unpin> = Box::new(cursor);
 
         let result = handler
-            .upload_file(&url, boxed_reader, data.len() as u64, None)
+            .upload_file(boxed_reader, data.len() as u64, None)
             .await;
 
         assert!(result.is_err());

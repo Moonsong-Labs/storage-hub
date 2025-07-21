@@ -589,7 +589,7 @@ mod external_service_tests {
         let url = Url::parse(&format!("{}/bytes/100", server.url())).unwrap();
         let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
         assert_eq!(url, returned_url);
-        let mut stream = handler.stream_file(&url).await.unwrap();
+        let mut stream = handler.stream_file().await.unwrap();
         let mut data = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data)
             .await
@@ -618,7 +618,7 @@ mod external_service_tests {
         let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
         assert_eq!(url, returned_url);
 
-        let result = handler.get_file_size(&url).await;
+        let result = handler.get_file_size().await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 2097152);
     }
@@ -654,7 +654,7 @@ mod external_service_tests {
         let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
         assert_eq!(url, returned_url);
 
-        let mut stream = handler.stream_file(&url).await.unwrap();
+        let mut stream = handler.stream_file().await.unwrap();
         let mut data = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data)
             .await
@@ -679,7 +679,7 @@ mod external_service_tests {
         let (handler_no_auth, returned_url) =
             RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
         assert_eq!(url_no_auth, returned_url);
-        let result = handler_no_auth.get_file_size(&url_no_auth).await;
+        let result = handler_no_auth.get_file_size().await;
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
 
@@ -694,7 +694,7 @@ mod external_service_tests {
         let url = Url::parse("http://10.255.255.1/timeout-test").unwrap();
         let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
         assert_eq!(url, returned_url);
-        let result = handler.stream_file(&url).await;
+        let result = handler.stream_file().await;
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
 }
@@ -786,7 +786,7 @@ mod handler_trait_tests {
         };
 
         let url = Url::parse("mock://example.com/file.txt").unwrap();
-        let size = handler.get_file_size(&url).await.unwrap();
+        let size = handler.get_file_size().await.unwrap();
 
         assert_eq!(size, 12);
     }
@@ -800,7 +800,7 @@ mod handler_trait_tests {
         };
 
         let url = Url::parse("mock://example.com/file.txt").unwrap();
-        let mut stream = handler.stream_file(&url).await.unwrap();
+        let mut stream = handler.stream_file().await.unwrap();
 
         let mut buffer = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut buffer)
@@ -820,9 +820,9 @@ mod handler_trait_tests {
 
         let url = Url::parse("mock://example.com/file.txt").unwrap();
 
-        let chunk = handler.download_chunk(&url, 5, 5).await.unwrap();
+        let chunk = handler.download_chunk(5, 5).await.unwrap();
         assert_eq!(chunk.as_ref(), b"56789");
-        let chunk = handler.download_chunk(&url, 10, 10).await.unwrap();
+        let chunk = handler.download_chunk(10, 10).await.unwrap();
         assert_eq!(chunk.as_ref(), b"abcdef");
     }
 
@@ -838,7 +838,7 @@ mod handler_trait_tests {
 
         assert!(!handler.is_supported(&url));
 
-        let result = handler.get_file_size(&url).await;
+        let result = handler.get_file_size().await;
         assert!(matches!(
             result,
             Err(RemoteFileError::UnsupportedProtocol(_))

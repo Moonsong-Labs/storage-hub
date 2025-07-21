@@ -336,7 +336,7 @@ where
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
         let file_size = handler
-            .get_file_size(&url)
+            .get_file_size()
             .await
             .map_err(remote_file_error_to_rpc_error)?;
 
@@ -345,7 +345,7 @@ where
         }
 
         let mut stream = handler
-            .stream_file(&url)
+            .stream_file()
             .await
             .map_err(remote_file_error_to_rpc_error)?;
 
@@ -538,7 +538,7 @@ where
         let file_size = file_metadata.file_size();
         // Write file data to destination (local or remote).
         handler
-            .upload_file(&url, boxed_reader, file_size, None)
+            .upload_file(boxed_reader, file_size, None)
             .await
             .map_err(remote_file_error_to_rpc_error)?;
 

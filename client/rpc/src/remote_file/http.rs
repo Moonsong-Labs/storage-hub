@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use bytes::Bytes;
-use futures_util::TryStreamExt;
+use futures_util::{StreamExt, TryStreamExt};
 use reqwest::{header, Body, Client, StatusCode};
 use std::time::Duration;
 use tokio::io::AsyncRead;
@@ -166,7 +166,7 @@ impl HttpFileHandler {
 
 #[async_trait]
 impl RemoteFileHandler for HttpFileHandler {
-    async fn get_file_size(&self, _url: &Url) -> Result<u64, RemoteFileError> {
+    async fn get_file_size(&self) -> Result<u64, RemoteFileError> {
         let response = self.client.head(self.base_url.as_str()).send().await.map_err(Self::map_request_error)?;
 
         match response.status() {
@@ -185,7 +185,6 @@ impl RemoteFileHandler for HttpFileHandler {
 
     async fn stream_file(
         &self,
-        _url: &Url,
     ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
         let response = self.client.get(self.base_url.as_str()).send().await.map_err(Self::map_request_error)?;
 
@@ -201,11 +200,19 @@ impl RemoteFileHandler for HttpFileHandler {
                 }
 
                 let stream = response.bytes_stream();
+                // Use the chunk_size from config to buffer the stream
+                let stream = stream.map_ok(|chunk| {
+                    // The stream is already chunked by reqwest, but we can ensure
+                    // consistent chunk sizes if needed
+                    chunk
+                });
                 let reader = StreamReader::new(
                     stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
                 );
+                // Wrap the reader in a buffered reader with configured chunk size
+                let buffered_reader = tokio::io::BufReader::with_capacity(self.config.chunk_size, reader);
 
-                Ok(Box::new(reader) as Box<dyn AsyncRead + Send + Unpin>)
+                Ok(Box::new(buffered_reader) as Box<dyn AsyncRead + Send + Unpin>)
             }
             status => Err(Self::status_to_error(status)),
         }
@@ -213,7 +220,6 @@ impl RemoteFileHandler for HttpFileHandler {
 
     async fn download_chunk(
         &self,
-        _url: &Url,
         offset: u64,
         length: u64,
     ) -> Result<Bytes, RemoteFileError> {
@@ -240,22 +246,21 @@ impl RemoteFileHandler for HttpFileHandler {
 
     async fn upload_file(
         &self,
-        url: &Url,
         data: Box<dyn AsyncRead + Send + Unpin>,
         size: u64,
         content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        if !self.is_supported(url) {
+        if !self.is_supported(&self.base_url) {
             return Err(RemoteFileError::UnsupportedProtocol(
-                url.scheme().to_string(),
+                self.base_url.scheme().to_string(),
             ));
         }
 
         let stream = ReaderStream::new(data);
         let body = Body::wrap_stream(stream);
 
-        // Use the provided URL for upload to allow different authentication
-        let mut request = self.client.put(url.as_str()).body(body);
+        // Upload to the configured base URL
+        let mut request = self.client.put(self.base_url.as_str()).body(body);
 
         request = request.header("Content-Length", size.to_string());
 
@@ -263,8 +268,8 @@ impl RemoteFileHandler for HttpFileHandler {
             request = request.header("Content-Type", ct);
         }
 
-        if let Some(password) = url.password() {
-            request = request.basic_auth(url.username(), Some(password));
+        if let Some(password) = self.base_url.password() {
+            request = request.basic_auth(self.base_url.username(), Some(password));
         }
 
         let response = request.send().await.map_err(Self::map_request_error)?;
@@ -318,7 +323,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let result = handler.get_file_size(&url).await;
+        let result = handler.get_file_size().await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 1024);
     }
@@ -334,7 +339,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/missing.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let result = handler.get_file_size(&url).await;
+        let result = handler.get_file_size().await;
 
         assert!(matches!(result, Err(RemoteFileError::NotFound)));
     }
@@ -350,7 +355,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/forbidden.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let result = handler.get_file_size(&url).await;
+        let result = handler.get_file_size().await;
 
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
@@ -367,7 +372,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/large.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let result = handler.get_file_size(&url).await;
+        let result = handler.get_file_size().await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 2097152);
@@ -405,7 +410,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let chunk = handler.download_chunk(&url, 6, 5).await.unwrap();
+        let chunk = handler.download_chunk(6, 5).await.unwrap();
 
         assert_eq!(chunk.as_ref(), content);
     }
@@ -427,7 +432,7 @@ mod tests {
         let handler = create_test_handler(&url);
 
         handler
-            .upload_file(&url, reader, 13, Some("text/plain".to_string()))
+            .upload_file(reader, 13, Some("text/plain".to_string()))
             .await
             .unwrap();
     }
@@ -447,7 +452,7 @@ mod tests {
         let url = Url::parse(&format!("{}/upload2.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
 
-        handler.upload_file(&url, reader, 4, None).await.unwrap();
+        handler.upload_file(reader, 4, None).await.unwrap();
     }
 
     #[tokio::test]
@@ -470,7 +475,7 @@ mod tests {
         .unwrap();
         let handler = create_test_handler(&url);
 
-        handler.upload_file(&url, reader, 6, None).await.unwrap();
+        handler.upload_file(reader, 6, None).await.unwrap();
     }
 
     #[tokio::test]
@@ -487,25 +492,9 @@ mod tests {
         let url = Url::parse(&format!("{}/forbidden-upload.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
 
-        let result = handler.upload_file(&url, reader, 4, None).await;
+        let result = handler.upload_file(reader, 4, None).await;
 
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
-    }
-
-    #[tokio::test]
-    async fn test_upload_file_unsupported_protocol() {
-        let http_url = Url::parse("http://example.com/file.txt").unwrap();
-        let handler = create_test_handler(&http_url);
-        let data = b"data";
-        let reader = Box::new(std::io::Cursor::new(data));
-
-        let ftp_url = Url::parse("ftp://example.com/file.txt").unwrap();
-        let result = handler.upload_file(&ftp_url, reader, 4, None).await;
-
-        assert!(matches!(
-            result,
-            Err(RemoteFileError::UnsupportedProtocol(_))
-        ));
     }
 
     #[tokio::test]
@@ -522,7 +511,7 @@ mod tests {
         let url = Url::parse(&format!("{}/error-upload.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
 
-        let result = handler.upload_file(&url, reader, 4, None).await;
+        let result = handler.upload_file(reader, 4, None).await;
 
         assert!(matches!(result, Err(RemoteFileError::Other(_))));
     }
@@ -540,7 +529,7 @@ mod tests {
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
 
-        let result = handler.upload_file(&url, reader, 4, None).await;
+        let result = handler.upload_file(reader, 4, None).await;
 
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
@@ -558,7 +547,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/stream.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let mut reader = handler.stream_file(&url).await.unwrap();
+        let mut reader = handler.stream_file().await.unwrap();
 
         let mut buffer = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut reader, &mut buffer)
@@ -647,7 +636,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/no-length.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let result = handler.get_file_size(&url).await;
+        let result = handler.get_file_size().await;
 
         assert!(result.is_err());
         assert!(matches!(result, Err(RemoteFileError::Other(_))));
@@ -671,7 +660,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/no-range.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let chunk = handler.download_chunk(&url, 5, 5).await.unwrap();
+        let chunk = handler.download_chunk(5, 5).await.unwrap();
 
         assert_eq!(chunk.as_ref(), full_content);
     }
@@ -732,7 +721,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let chunk = handler.download_chunk(&url, 6, 5).await.unwrap();
+        let chunk = handler.download_chunk(6, 5).await.unwrap();
 
         assert_eq!(chunk.as_ref(), content);
     }
@@ -752,7 +741,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let result = handler.download_chunk(&url, 6, 5).await;
+        let result = handler.download_chunk(6, 5).await;
 
         assert!(matches!(result, Err(RemoteFileError::Other(_))));
         if let Err(RemoteFileError::Other(msg)) = result {
