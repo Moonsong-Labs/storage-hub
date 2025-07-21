@@ -199,17 +199,19 @@ pub enum AnyDbConnection {
 
 #[async_trait]
 impl DbConnection for AnyDbConnection {
-    type Connection = AnyAsyncConnection;
+    // WIP: Using concrete type until mock support is added
+    type Connection = diesel_async::AsyncPgConnection;
 
     async fn get_connection(&self) -> Result<Self::Connection, DbConnectionError> {
         match self {
             AnyDbConnection::Real(conn) => {
-                conn.get_connection().await.map(AnyAsyncConnection::Real)
+                conn.get_connection().await
             }
             // WIP: Mock connection handling - commented out until diesel traits are fully implemented
             // #[cfg(feature = "mocks")]
             // AnyDbConnection::Mock(conn) => {
-            //     conn.get_connection().await.map(AnyAsyncConnection::Mock)
+            //     // Would need to return a mock connection that implements AsyncConnection
+            //     unimplemented!("Mock connections not yet supported")
             // }
         }
     }
@@ -247,6 +249,9 @@ impl DbConnection for AnyDbConnection {
     }
 }
 
+// WIP: AnyAsyncConnection enum commented out until mock support is added
+// We're using diesel_async::AsyncPgConnection directly for now
+/*
 /// Enum wrapper for different async connection types
 ///
 /// This enum is needed because the DbConnection trait requires
@@ -260,7 +265,10 @@ pub enum AnyAsyncConnection {
     // #[cfg(feature = "mocks")]
     // Mock(super::mock_connection::MockAsyncConnection),
 }
+*/
 
+// WIP: All AnyAsyncConnection implementations commented out until mock support is added
+/*
 // Implement SimpleAsyncConnection for AnyAsyncConnection
 #[async_trait]
 impl SimpleAsyncConnection for AnyAsyncConnection {
@@ -421,4 +429,7 @@ impl diesel_async::TransactionManager<AnyAsyncConnection> for AnyScopedTransacti
             // }
         }
     }
+}        }
+    }
 }
+*/
