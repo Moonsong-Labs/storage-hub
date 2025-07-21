@@ -199,7 +199,7 @@ pub enum AnyDbConnection {
 
 #[async_trait]
 impl DbConnection for AnyDbConnection {
-    // WIP: Using concrete type until mock support is added
+    // WIP: For now, we use the concrete type directly since mock support is incomplete
     type Connection = diesel_async::AsyncPgConnection;
 
     async fn get_connection(&self) -> Result<Self::Connection, DbConnectionError> {
@@ -249,9 +249,6 @@ impl DbConnection for AnyDbConnection {
     }
 }
 
-// WIP: AnyAsyncConnection enum commented out until mock support is added
-// We're using diesel_async::AsyncPgConnection directly for now
-/*
 /// Enum wrapper for different async connection types
 ///
 /// This enum is needed because the DbConnection trait requires
@@ -265,10 +262,7 @@ pub enum AnyAsyncConnection {
     // #[cfg(feature = "mocks")]
     // Mock(super::mock_connection::MockAsyncConnection),
 }
-*/
 
-// WIP: All AnyAsyncConnection implementations commented out until mock support is added
-/*
 // Implement SimpleAsyncConnection for AnyAsyncConnection
 #[async_trait]
 impl SimpleAsyncConnection for AnyAsyncConnection {
@@ -288,6 +282,12 @@ impl SimpleAsyncConnection for AnyAsyncConnection {
 impl AsyncConnection for AnyAsyncConnection {
     type Backend = diesel::pg::Pg;
     type TransactionManager = AnyScopedTransactionManager;
+    
+    // Delegate to AsyncPgConnection's associated types
+    type ExecuteFuture<'conn, 'query> = <diesel_async::AsyncPgConnection as AsyncConnection>::ExecuteFuture<'conn, 'query>;
+    type LoadFuture<'conn, 'query> = <diesel_async::AsyncPgConnection as AsyncConnection>::LoadFuture<'conn, 'query>;
+    type Stream<'conn, 'query> = <diesel_async::AsyncPgConnection as AsyncConnection>::Stream<'conn, 'query>;
+    type Row<'conn, 'query> = <diesel_async::AsyncPgConnection as AsyncConnection>::Row<'conn, 'query>;
 
     async fn establish(_database_url: &str) -> ConnectionResult<Self> {
         Err(DieselError::DatabaseError(
@@ -338,6 +338,43 @@ impl AsyncConnection for AnyAsyncConnection {
         AnyScopedTransactionManager::rollback_transaction(self).await.expect("Failed to rollback test transaction");
         result.expect("Test transaction failed")
     }
+    
+    fn load<'conn, 'query, T>(&'conn mut self, source: T) -> Self::LoadFuture<'conn, 'query>
+    where
+        T: diesel::query_builder::AsQuery + Send,
+        T::Query: diesel::query_builder::QueryFragment<Self::Backend> + diesel::query_builder::QueryId + Send + 'query,
+    {
+        match self {
+            AnyAsyncConnection::Real(conn) => conn.load(source),
+        }
+    }
+    
+    fn execute_returning_count<'conn, 'query, T>(&'conn mut self, source: T) -> Self::ExecuteFuture<'conn, 'query>
+    where
+        T: diesel::query_builder::QueryFragment<Self::Backend> + diesel::query_builder::QueryId + Send + 'query,
+    {
+        match self {
+            AnyAsyncConnection::Real(conn) => conn.execute_returning_count(source),
+        }
+    }
+    
+    fn transaction_state(&mut self) -> &mut diesel::connection::AnsiTransactionManager {
+        match self {
+            AnyAsyncConnection::Real(conn) => conn.transaction_state(),
+        }
+    }
+    
+    fn instrumentation(&mut self) -> &mut dyn diesel::connection::Instrumentation {
+        match self {
+            AnyAsyncConnection::Real(conn) => conn.instrumentation(),
+        }
+    }
+    
+    fn set_instrumentation(&mut self, instrumentation: impl diesel::connection::Instrumentation) {
+        match self {
+            AnyAsyncConnection::Real(conn) => conn.set_instrumentation(instrumentation),
+        }
+    }
 }
 
 /// Transaction manager for AnyAsyncConnection
@@ -382,6 +419,14 @@ impl diesel::connection::TransactionManager<AnyAsyncConnection> for AnyScopedTra
             // AnyAsyncConnection::Mock(c) => {
             //     <super::mock_connection::MockAsyncConnection as diesel::connection::Connection>::TransactionManager::commit_transaction(c)
             // }
+        }
+    }
+    
+    fn transaction_manager_status_mut(conn: &mut AnyAsyncConnection) -> &mut diesel::connection::TransactionManagerStatus {
+        match conn {
+            AnyAsyncConnection::Real(c) => {
+                <diesel_async::AsyncPgConnection as diesel::connection::Connection>::TransactionManager::transaction_manager_status_mut(c)
+            }
         }
     }
 }
@@ -429,7 +474,12 @@ impl diesel_async::TransactionManager<AnyAsyncConnection> for AnyScopedTransacti
             // }
         }
     }
-}        }
+    
+    fn transaction_manager_status_mut(conn: &mut AnyAsyncConnection) -> &mut diesel::connection::TransactionManagerStatus {
+        match conn {
+            AnyAsyncConnection::Real(c) => {
+                <diesel_async::AsyncPgConnection as diesel_async::AsyncConnection>::TransactionManager::transaction_manager_status_mut(c)
+            }
+        }
     }
 }
-*/
