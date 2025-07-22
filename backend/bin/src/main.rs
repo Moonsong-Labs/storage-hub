@@ -191,7 +191,7 @@ async fn create_postgres_client(
     match PgConnection::new(db_config).await {
         Ok(pg_conn) => {
             let conn = AnyDbConnection::Real(pg_conn);
-            let client = PostgresClient::new(Arc::new(conn));
+            let client = PostgresClient::new(Arc::new(conn)).await;
 
             // Test the connection
             match client.test_connection().await {
