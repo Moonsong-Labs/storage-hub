@@ -13958,6 +13958,7 @@ name = "sh-backend"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "clap",
  "serde",
  "sh-backend-lib",
  "tokio",
@@ -13979,6 +13980,7 @@ dependencies = [
  "diesel-async",
  "hex",
  "jsonrpsee 0.24.9",
+ "parking_lot 0.12.3",
  "serde",
  "serde_json",
  "shc-indexer-db",

@@ -4,28 +4,23 @@
 //! to retrieve data from the StorageHub indexer database.
 
 use super::{PostgresClient, PostgresError};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-use shc_indexer_db::models::{BackupStorageProvider, File, MainStorageProvider, PaymentStream};
-use shc_indexer_db::schema::{
-    backup_storage_providers, files, main_storage_providers, payment_streams,
-};
+use shc_indexer_db::models::{Bsp, File, Msp, PaymentStream};
 
 impl PostgresClient {
     /// Get all active backup storage providers (BSPs)
     ///
     /// # Returns
     /// A vector of active BSPs from the indexer database
-    pub async fn get_active_bsps(&self) -> Result<Vec<BackupStorageProvider>, PostgresError> {
-        todo!("Add to shc-indexer-db: SELECT * FROM backup_storage_providers WHERE status = 'Active'")
+    pub async fn get_active_bsps(&self) -> Result<Vec<Bsp>, PostgresError> {
+        todo!("Add to shc-indexer-db: SELECT * FROM bsp WHERE status = 'Active'")
     }
 
     /// Get all active main storage providers (MSPs)
     ///
     /// # Returns
     /// A vector of active MSPs from the indexer database
-    pub async fn get_active_msps(&self) -> Result<Vec<MainStorageProvider>, PostgresError> {
-        todo!("Add to shc-indexer-db: SELECT * FROM main_storage_providers WHERE status = 'Active'")
+    pub async fn get_active_msps(&self) -> Result<Vec<Msp>, PostgresError> {
+        todo!("Add to shc-indexer-db: SELECT * FROM msp WHERE status = 'Active'")
     }
 
     /// Get a file by its ID
@@ -35,7 +30,7 @@ impl PostgresClient {
     ///
     /// # Returns
     /// The file metadata if found
-    pub async fn get_file_by_id(&self, file_id: &str) -> Result<Option<File>, PostgresError> {
+    pub async fn get_file_by_id(&self, _file_id: &str) -> Result<Option<File>, PostgresError> {
         todo!("Add to shc-indexer-db: SELECT * FROM files WHERE file_id = $1")
     }
 
@@ -46,7 +41,7 @@ impl PostgresClient {
     ///
     /// # Returns
     /// A vector of files owned by the user
-    pub async fn get_files_by_user(&self, user_id: &str) -> Result<Vec<File>, PostgresError> {
+    pub async fn get_files_by_user(&self, _user_id: &str) -> Result<Vec<File>, PostgresError> {
         todo!("Add to shc-indexer-db: SELECT * FROM files WHERE owner = $1 ORDER BY created_at DESC")
     }
 
@@ -59,7 +54,7 @@ impl PostgresClient {
     /// A vector of payment streams associated with the user
     pub async fn get_payment_streams_for_user(
         &self,
-        user_id: &str,
+        _user_id: &str,
     ) -> Result<Vec<PaymentStream>, PostgresError> {
         todo!("Add to shc-indexer-db: SELECT * FROM payment_streams WHERE user_account = $1 ORDER BY created_at DESC")
     }
@@ -73,7 +68,7 @@ impl PostgresClient {
     /// A vector of active payment streams for the provider
     pub async fn get_active_payment_streams_for_provider(
         &self,
-        provider_id: &str,
+        _provider_id: &str,
     ) -> Result<Vec<PaymentStream>, PostgresError> {
         todo!("Add to shc-indexer-db: SELECT * FROM payment_streams WHERE provider_account = $1 AND status = 'Active' ORDER BY created_at DESC")
     }
@@ -87,7 +82,7 @@ impl PostgresClient {
     /// The total storage in bytes used by the user
     pub async fn get_total_storage_used_by_user(
         &self,
-        user_id: &str,
+        _user_id: &str,
     ) -> Result<i64, PostgresError> {
         todo!("Add to shc-indexer-db: SELECT COALESCE(SUM(size), 0) FROM files WHERE owner = $1")
     }
@@ -97,7 +92,7 @@ impl PostgresClient {
     /// # Returns
     /// The number of active backup storage providers
     pub async fn count_active_bsps(&self) -> Result<i64, PostgresError> {
-        todo!("Add to shc-indexer-db: SELECT COUNT(*) FROM backup_storage_providers WHERE status = 'Active'")
+        todo!("Add to shc-indexer-db: SELECT COUNT(*) FROM bsp WHERE status = 'Active'")
     }
 
     /// Count active MSPs
@@ -105,7 +100,7 @@ impl PostgresClient {
     /// # Returns
     /// The number of active main storage providers
     pub async fn count_active_msps(&self) -> Result<i64, PostgresError> {
-        todo!("Add to shc-indexer-db: SELECT COUNT(*) FROM main_storage_providers WHERE status = 'Active'")
+        todo!("Add to shc-indexer-db: SELECT COUNT(*) FROM msp WHERE status = 'Active'")
     }
 }
 

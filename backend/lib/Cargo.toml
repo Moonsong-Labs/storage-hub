@@ -35,8 +35,8 @@ chrono = { workspace = true }
 # Concurrency
 parking_lot = { workspace = true }
 
-# Optional dependencies
-jsonrpsee = { workspace = true, optional = true, features = ["ws-client"] }
+# RPC
+jsonrpsee = { workspace = true, features = ["ws-client"] }
 
 [dev-dependencies]
 axum-test = "15"

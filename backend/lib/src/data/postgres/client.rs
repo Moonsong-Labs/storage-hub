@@ -48,7 +48,7 @@ impl PostgresClient {
     /// # }
     /// ```
     pub async fn new(conn: Arc<AnyDbConnection>) -> Self {
-        Ok(Self { conn })
+        Self { conn }
     }
 
     /// Test the database connection
