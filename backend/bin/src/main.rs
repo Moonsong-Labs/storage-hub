@@ -157,18 +157,12 @@ async fn create_postgres_client(
                 }
                 Err(e) => {
                     error!("Failed to connect to PostgreSQL: {}", e);
-
-                    // WIP: Mock fallback - commented out until diesel traits are fully implemented
-                    // For now, just return the error
                     Err(Box::new(e))
                 }
             }
         }
         Err(e) => {
             error!("Failed to create PostgreSQL connection: {}", e);
-
-            // WIP: Mock fallback - commented out until diesel traits are fully implemented
-            // For now, just return the error
             Err(e.into())
         }
     }
