@@ -24,11 +24,7 @@ pub struct PgConnection {
 impl PgConnection {
     /// Create a new PostgreSQL connection pool
     ///
-    /// # Arguments
     /// * `config` - Database configuration containing connection parameters
-    ///
-    /// # Returns
-    /// A new PgConnection instance or an error if pool creation fails
     pub async fn new(config: DbConfig) -> Result<Self, DbConnectionError> {
         // Create the connection manager
         let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(&config.database_url);

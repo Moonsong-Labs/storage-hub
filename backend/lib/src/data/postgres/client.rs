@@ -34,19 +34,7 @@ pub struct PostgresClient {
 }
 
 impl PostgresClient {
-    /// Create a new PostgreSQL client with the given conection
-    ///
-    /// # Example
-    /// ```no_run
-    /// # use sh_backend_lib::data::postgres::{PostgresClient, PgConnection, DbConfig, AnyDbConnection};
-    /// # use std::sync::Arc;
-    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-    /// let config = DbConfig::new("postgres://user:pass@localhost/storagehub");
-    /// let pg_conn = PgConnection::new(config).await?;
-    /// let client = PostgresClient::new(Arc::new(AnyDbConnection::Real(pg_conn)));
-    /// # Ok(())
-    /// # }
-    /// ```
+    /// Create a new PostgreSQL client with the given connection
     pub async fn new(conn: Arc<AnyDbConnection>) -> Self {
         Self { conn }
     }
