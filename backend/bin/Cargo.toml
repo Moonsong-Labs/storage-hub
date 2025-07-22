@@ -16,6 +16,7 @@ tokio = { workspace = true, features = ["full"] }
 axum = "0.7"
 toml = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+anyhow = { workspace = true }
 
 # Logging
 tracing = "0.1"

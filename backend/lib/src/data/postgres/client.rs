@@ -48,7 +48,7 @@ impl PostgresClient {
     /// # }
     /// ```
     pub async fn new(conn: Arc<AnyDbConnection>) -> Self {
-        Ok(Self { conn })
+        Self { conn }
     }
 
     /// Test the database connection
@@ -373,7 +373,7 @@ mod tests {
         let pg_conn = PgConnection::new(config)
             .await
             .expect("Failed to create connection");
-        let client = PostgresClient::new(Arc::new(AnyDbConnection::Real(pg_conn)));
+        let client = PostgresClient::new(Arc::new(AnyDbConnection::Real(pg_conn))).await;
         let result = client.test_connection().await;
         assert!(result.is_ok());
     }

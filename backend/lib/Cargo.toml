@@ -32,11 +32,11 @@ diesel-async = { workspace = true }
 hex = { workspace = true }
 chrono = { workspace = true }
 
+# RPC
+jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
+
 # Concurrency
 parking_lot = { workspace = true }
-
-# Optional dependencies
-jsonrpsee = { workspace = true, optional = true, features = ["ws-client"] }
 
 [dev-dependencies]
 axum-test = "15"
