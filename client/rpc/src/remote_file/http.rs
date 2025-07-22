@@ -183,7 +183,6 @@ impl RemoteFileHandler for HttpFileHandler {
             .await
             .map_err(Self::map_request_error)?;
 
-
         match response.status() {
             status if status.is_success() => {
                 let content_length = response.content_length().ok_or_else(|| {
@@ -333,7 +332,7 @@ mod tests {
     #[ignore = "Mockito has issues with HEAD requests and content-length headers"]
     async fn test_get_file_size_success() {
         let mut server = Server::new_async().await;
-        
+
         let _m = server
             .mock("HEAD", "/test.txt")
             .with_status(200)

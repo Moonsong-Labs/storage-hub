@@ -730,18 +730,12 @@ mod handler_trait_tests {
             Ok(self.file_size)
         }
 
-        async fn stream_file(
-            &self,
-        ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
+        async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
             let cursor = Cursor::new(self.file_content.clone());
             Ok(Box::new(cursor))
         }
 
-        async fn download_chunk(
-            &self,
-            offset: u64,
-            length: u64,
-        ) -> Result<Bytes, RemoteFileError> {
+        async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
             let end = std::cmp::min(offset + length, self.file_content.len() as u64) as usize;
             let start = offset as usize;
             Ok(Bytes::from(self.file_content[start..end].to_vec()))
@@ -813,7 +807,7 @@ mod handler_trait_tests {
     #[tokio::test]
     async fn test_mock_handler_unsupported() {
         let handler = MockHandler {
-            supported_scheme: "mock".to_string(),  
+            supported_scheme: "mock".to_string(),
             file_content: vec![],
             file_size: 0,
         };

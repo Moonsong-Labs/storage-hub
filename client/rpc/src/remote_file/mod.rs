@@ -8,28 +8,28 @@ use url::Url;
 pub enum RemoteFileError {
     #[error("Invalid URL: {0}")]
     InvalidUrl(String),
-    
+
     #[error("Protocol '{0}' is not supported")]
     UnsupportedProtocol(String),
-    
+
     #[error("HTTP error: {0}")]
     HttpError(#[from] reqwest::Error),
-    
+
     #[error("FTP error: {0}")]
     FtpError(#[from] suppaftp::FtpError),
-    
+
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),
-    
+
     #[error("File not found")]
     NotFound,
-    
+
     #[error("Access denied")]
     AccessDenied,
-    
+
     #[error("Operation timed out")]
     Timeout,
-    
+
     #[error("{0}")]
     Other(String),
 }
@@ -38,15 +38,9 @@ pub enum RemoteFileError {
 pub trait RemoteFileHandler: Send + Sync {
     async fn get_file_size(&self) -> Result<u64, RemoteFileError>;
 
-    async fn stream_file(
-        &self,
-    ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError>;
+    async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError>;
 
-    async fn download_chunk(
-        &self,
-        offset: u64,
-        length: u64,
-    ) -> Result<Bytes, RemoteFileError>;
+    async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError>;
 
     fn is_supported(&self, url: &Url) -> bool;
 
