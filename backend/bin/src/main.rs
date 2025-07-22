@@ -208,10 +208,14 @@ async fn create_rpc_client(
 
             #[cfg(feature = "mocks")]
             {
-                info!("Falling back to mock RPC connection");
-                let mock_conn = AnyRpcConnection::Mock(MockConnection::new());
-                let client = StorageHubRpcClient::new(Arc::new(mock_conn));
-                Ok(Arc::new(client))
+                if config.storage_hub.mock_mode {
+                    info!("Using mock RPC connection (mock_mode enabled)");
+                    let mock_conn = AnyRpcConnection::Mock(MockConnection::new());
+                    let client = StorageHubRpcClient::new(Arc::new(mock_conn));
+                    Ok(Arc::new(client))
+                } else {
+                    Err(e.into())
+                }
             }
 
             #[cfg(not(feature = "mocks"))]
