@@ -4,6 +4,7 @@
 //! This binary initializes the service with configuration, sets up storage and database
 //! connections, and starts the HTTP server.
 
+use anyhow::{Context, Result};
 use clap::Parser;
 use sh_backend_lib::{
     api::create_app,
@@ -64,7 +65,7 @@ async fn main() {
     info!("Starting StorageHub Backend");
 
     // Load configuration
-    let config = match load_config().await {
+    let config = match load_config() {
         Ok(cfg) => cfg,
         Err(e) => {
             error!("Failed to load configuration: {}", e);
@@ -129,23 +130,41 @@ async fn main() {
 }
 
 /// Load configuration from file with fallback to defaults
-async fn load_config() -> Result<Config, Box<dyn std::error::Error>> {
-    const CONFIG_PATH: &str = "backend_config.toml";
-
-    // Try to load from file first
-    match Config::from_file(CONFIG_PATH) {
-        Ok(config) => {
-            info!("Configuration loaded from {}", CONFIG_PATH);
-            Ok(config)
+fn load_config() -> Result<Config> {
+    let args = Args::parse();
+    
+    // Load base config
+    let mut config = if args.config == "backend_config.toml" {
+        // Default path behavior - use defaults if file doesn't exist
+        match Config::from_file(&args.config) {
+            Ok(config) => config,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                tracing::info!("Config file not found, using defaults");
+                Config::default()
+            }
+            Err(e) => return Err(anyhow::anyhow!("Failed to read config file: {}", e)),
         }
-        Err(e) => {
-            info!(
-                "Could not load config from {} ({}), using defaults",
-                CONFIG_PATH, e
-            );
-            Ok(Config::default())
-        }
+    } else {
+        // Explicit path - error if file doesn't exist
+        Config::from_file(&args.config)
+            .with_context(|| format!("Failed to read config file: {}", args.config))?
+    };
+    
+    // Apply CLI overrides
+    if let Some(host) = args.host {
+        config.host = host;
     }
+    if let Some(port) = args.port {
+        config.port = port;
+    }
+    if let Some(database_url) = args.database_url {
+        config.database.url = database_url;
+    }
+    if let Some(rpc_url) = args.rpc_url {
+        config.storage_hub.rpc_url = rpc_url;
+    }
+    
+    Ok(config)
 }
 
 /// Create PostgreSQL client based on configuration
