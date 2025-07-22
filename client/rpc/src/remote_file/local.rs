@@ -148,6 +148,8 @@ mod tests {
     use std::io::Write;
     use tempfile::NamedTempFile;
 
+    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
+
     #[tokio::test]
     async fn test_local_file_size() {
         let mut temp_file = NamedTempFile::new().unwrap();
@@ -156,7 +158,7 @@ mod tests {
         temp_file.flush().unwrap();
 
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let size = handler.get_file_size().await.unwrap();
         assert_eq!(size, test_content.len() as u64);
@@ -170,7 +172,7 @@ mod tests {
         temp_file.flush().unwrap();
 
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let mut stream = handler.stream_file().await.unwrap();
         let mut buffer = Vec::new();
@@ -187,7 +189,7 @@ mod tests {
         temp_file.flush().unwrap();
 
         let url = Url::parse(&format!("file://{}", temp_file.path().display())).unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let chunk = handler.download_chunk(7, 10).await.unwrap();
         assert_eq!(&chunk[..], &test_content[7..17]);
@@ -196,7 +198,7 @@ mod tests {
     #[tokio::test]
     async fn test_file_not_found() {
         let url = Url::parse("file:///non/existent/file.txt").unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let result = handler.get_file_size().await;
         assert!(matches!(result, Err(RemoteFileError::IoError(_))));
@@ -205,7 +207,7 @@ mod tests {
     #[tokio::test]
     async fn test_url_schemes() {
         let file_url = Url::parse("file:///path/to/file.txt").unwrap();
-        let handler = LocalFileHandler::new(&file_url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&file_url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
         assert!(handler.is_supported(&file_url));
 
         // Test that regular paths can be converted to URLs
@@ -222,7 +224,7 @@ mod tests {
         let file_path = temp_dir.path().join("uploaded_file.txt");
         let file_url = format!("file://{}", file_path.display());
         let url = Url::parse(&file_url).unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let test_content = b"Hello, uploaded file!";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
@@ -241,7 +243,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("uploaded_file2.txt");
         let url = Url::from_file_path(&file_path).unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let test_content = b"Plain path upload test";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
@@ -265,7 +267,7 @@ mod tests {
         let file_path = temp_dir.path().join("nested/dirs/uploaded_file.txt");
         let url = Url::from_file_path(&file_path).unwrap();
         // Create handler with target path
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let test_content = b"Nested directory test";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
@@ -287,7 +289,7 @@ mod tests {
         temp_file.flush().unwrap();
 
         let url = Url::from_file_path(temp_file.path()).unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let test_content = b"New content";
         let data: Box<dyn AsyncRead + Send + Unpin> = Box::new(std::io::Cursor::new(test_content));
@@ -306,7 +308,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("large_file.bin");
         let url = Url::from_file_path(&file_path).unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         let large_content = vec![0xAB; 1024 * 1024];
         let data: Box<dyn AsyncRead + Send + Unpin> =
@@ -334,7 +336,7 @@ mod tests {
         let temp_dir = tempfile::tempdir().unwrap();
         let file_path = temp_dir.path().join("no_permission.txt");
         let url = Url::from_file_path(&file_path).unwrap();
-        let handler = LocalFileHandler::new(&url, RemoteFileConfig::default()).unwrap();
+        let handler = LocalFileHandler::new(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE)).unwrap();
 
         tokio::fs::set_permissions(temp_dir.path(), std::fs::Permissions::from_mode(0o555))
             .await

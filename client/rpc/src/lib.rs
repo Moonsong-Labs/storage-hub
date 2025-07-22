@@ -18,6 +18,9 @@ use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
+
+// Default max file size: 10GB
+const DEFAULT_MAX_FILE_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -328,7 +331,7 @@ where
         check_if_safe(ext)?;
 
         // Create file handler for local or remote file.
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(DEFAULT_MAX_FILE_SIZE);
         let (handler, _url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
@@ -496,7 +499,7 @@ where
         }
 
         // Create file handler for writing to local or remote destination.
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(DEFAULT_MAX_FILE_SIZE);
         let (handler, _url) =
             RemoteFileHandlerFactory::create_from_string_for_write(&file_path, config)
                 .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;

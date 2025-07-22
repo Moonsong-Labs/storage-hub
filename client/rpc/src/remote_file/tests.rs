@@ -8,8 +8,10 @@ mod factory_tests {
     use super::*;
     use percent_encoding;
 
+    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
+
     fn default_config() -> RemoteFileConfig {
-        RemoteFileConfig::default()
+        RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
     }
 
     #[test]
@@ -354,7 +356,7 @@ mod factory_tests {
         // Empty string is handled specially in create() method
         let result = RemoteFileHandlerFactory::create(
             &Url::parse("file:///test").unwrap(),
-            RemoteFileConfig::default(),
+            RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
         );
         assert!(result.is_ok());
 
@@ -378,9 +380,11 @@ mod factory_tests {
 mod url_parsing_tests {
     use super::*;
 
+    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
+
     #[test]
     fn test_url_with_authentication() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let url_str = "ftp://user:pass@example.com/file.txt";
         let (handler, returned_url) =
@@ -392,7 +396,7 @@ mod url_parsing_tests {
 
     #[test]
     fn test_url_with_port() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let urls_with_ports = vec![
             "http://example.com:8080/file.txt",
@@ -411,7 +415,7 @@ mod url_parsing_tests {
 
     #[test]
     fn test_url_with_query_parameters() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let url_str = "https://example.com/file.txt?version=1.0&token=abc123";
         let (handler, returned_url) =
@@ -423,7 +427,7 @@ mod url_parsing_tests {
 
     #[test]
     fn test_url_with_fragment() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let url_str = "https://example.com/file.txt#section1";
         let (handler, returned_url) =
@@ -435,7 +439,7 @@ mod url_parsing_tests {
 
     #[test]
     fn test_url_encoding() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let url_str = "https://example.com/path%20with%20spaces/file%20name.txt";
         let (handler, returned_url) =
@@ -480,6 +484,8 @@ mod error_handling_tests {
 mod config_tests {
     use super::*;
 
+    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
+
     #[test]
     fn test_config_defaults() {
         let config = RemoteFileConfig::default();
@@ -519,9 +525,11 @@ mod integration_tests {
     use super::*;
     use tokio;
 
+    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
+
     #[tokio::test]
     async fn test_handler_lifecycle() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
         let url_str = "https://httpbin.org/bytes/100";
         let url = Url::parse(url_str).unwrap();
 
@@ -533,7 +541,7 @@ mod integration_tests {
 
     #[tokio::test]
     async fn test_multiple_handlers_concurrent() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let urls = vec![
             "http://example.com/file1.txt",
@@ -571,9 +579,11 @@ mod external_service_tests {
     use super::*;
     use mockito::Server;
 
+    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
+
     #[tokio::test]
     async fn test_http_download_with_mock_server() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let mut server = Server::new_async().await;
         let test_data = vec![42u8; 100];
@@ -604,7 +614,7 @@ mod external_service_tests {
     async fn test_http_download_large_file_mock() {
         let config = RemoteFileConfig {
             max_file_size: 1024 * 1024,
-            ..RemoteFileConfig::default()
+            ..RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
         };
         let mut server = Server::new_async().await;
         let _m = server
@@ -629,7 +639,7 @@ mod external_service_tests {
         let config = RemoteFileConfig {
             follow_redirects: true,
             max_redirects: 5,
-            ..RemoteFileConfig::default()
+            ..RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
         };
         let mut server = Server::new_async().await;
 
@@ -666,7 +676,7 @@ mod external_service_tests {
 
     #[tokio::test]
     async fn test_http_authentication_mock() {
-        let config = RemoteFileConfig::default();
+        let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let mut server = Server::new_async().await;
         let _m_head = server
@@ -689,7 +699,7 @@ mod external_service_tests {
         let config = RemoteFileConfig {
             connection_timeout: 1,
             read_timeout: 1,
-            ..RemoteFileConfig::default()
+            ..RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
         };
 
         let url = Url::parse("http://10.255.255.1/timeout-test").unwrap();

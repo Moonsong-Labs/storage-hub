@@ -27,6 +27,7 @@ bytes = "1.5"
 mime_guess = "2.0"
 futures = "0.3"
 futures-util = "0.3"
+thiserror = "1.0"
 
 # Substrate
 sp-api = { workspace = true }

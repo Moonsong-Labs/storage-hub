@@ -14496,6 +14496,7 @@ dependencies = [
  "sp-trie 38.0.0",
  "suppaftp",
  "tempfile",
+ "thiserror 1.0.69",
  "tokio",
  "tokio-util",
  "url",

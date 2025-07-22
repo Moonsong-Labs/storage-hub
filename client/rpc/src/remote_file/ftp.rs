@@ -35,8 +35,8 @@ impl FtpFileHandler {
         })
     }
 
-    pub fn default(url: &Url) -> Result<Self, RemoteFileError> {
-        Self::new(RemoteFileConfig::default(), url)
+    pub fn default(url: &Url, max_file_size: u64) -> Result<Self, RemoteFileError> {
+        Self::new(RemoteFileConfig::new(max_file_size), url)
     }
 
     fn parse_url(
@@ -301,6 +301,8 @@ impl RemoteFileHandler for FtpFileHandler {
 mod tests {
     use super::*;
 
+    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
+
     // Unit tests for FTP handler focusing on testable logic without network access.
     // Integration tests requiring an actual FTP server are not included here.
 
@@ -397,7 +399,7 @@ mod tests {
         let url = Url::parse("ftp://example.com/upload.txt").unwrap();
         let config = RemoteFileConfig {
             max_file_size: 10,
-            ..RemoteFileConfig::default()
+            ..RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
         };
         let handler = FtpFileHandler::new(config, &url).unwrap();
         let data = b"This is larger than 10 bytes";

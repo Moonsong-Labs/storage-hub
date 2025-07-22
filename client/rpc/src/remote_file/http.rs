@@ -36,8 +36,8 @@ impl HttpFileHandler {
         })
     }
 
-    pub fn default(url: &Url) -> Result<Self, RemoteFileError> {
-        Self::new(RemoteFileConfig::default(), url)
+    pub fn default(url: &Url, max_file_size: u64) -> Result<Self, RemoteFileError> {
+        Self::new(RemoteFileConfig::new(max_file_size), url)
     }
 
     fn status_to_error(status: StatusCode) -> RemoteFileError {
@@ -303,6 +303,8 @@ mod tests {
     use super::*;
     use mockito::Server;
 
+    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
+
     fn create_test_handler(url: &Url) -> HttpFileHandler {
         let config = RemoteFileConfig {
             max_file_size: 1024 * 1024,
@@ -541,7 +543,7 @@ mod tests {
         let config = RemoteFileConfig {
             connection_timeout: 1,
             read_timeout: 1,
-            ..RemoteFileConfig::default()
+            ..RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
         };
         let handler = HttpFileHandler::new(config, &url).unwrap();
 
@@ -635,7 +637,7 @@ mod tests {
         let url = Url::parse(&format!("{}/redirect1", server.url())).unwrap();
         let config = RemoteFileConfig {
             max_redirects: 2,
-            ..RemoteFileConfig::default()
+            ..RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
         };
         let handler = HttpFileHandler::new(config, &url).unwrap();
         let result = handler.download().await;
@@ -702,7 +704,7 @@ mod tests {
         let config = RemoteFileConfig {
             connection_timeout: 1,
             read_timeout: 1,
-            ..RemoteFileConfig::default()
+            ..RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
         };
         let handler = HttpFileHandler::new(config, &url).unwrap();
         let result = handler.download().await;
