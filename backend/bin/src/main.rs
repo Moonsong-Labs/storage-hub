@@ -4,6 +4,7 @@
 //! This binary initializes the service with configuration, sets up storage and database
 //! connections, and starts the HTTP server.
 
+use clap::Parser;
 use sh_backend_lib::{
     api::create_app,
     config::Config,
@@ -17,6 +18,31 @@ use sh_backend_lib::{
 use std::sync::Arc;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
+#[derive(Parser, Debug)]
+#[command(name = "sh-backend")]
+#[command(about = "StorageHub Backend Service", long_about = None)]
+struct Args {
+    /// Config file path
+    #[arg(short, long, default_value = "backend_config.toml")]
+    config: String,
+    
+    /// Override server host
+    #[arg(long)]
+    host: Option<String>,
+    
+    /// Override server port
+    #[arg(short, long)]
+    port: Option<u16>,
+    
+    /// Override database URL
+    #[arg(long)]
+    database_url: Option<String>,
+    
+    /// Override RPC URL
+    #[arg(long)]
+    rpc_url: Option<String>,
+}
 
 // WIP: Mock imports - postgres mocks commented out until diesel traits are fully implemented
 #[cfg(feature = "mocks")]
