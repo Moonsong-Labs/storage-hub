@@ -1160,13 +1160,8 @@ where
     /// 4. Computing the file key from provided metadata and verifying it matches the signed message
     /// 5. Ensuring the operation type is Delete
     ///
-    /// The signature verification prevents malicious file deletion requests and ensures
-    /// only the legitimate file owner can request deletion. The computed file key validation
-    /// ensures the metadata provided matches the file being deleted.
-    ///
     /// Note: This function only validates the deletion request but does not perform the actual
     /// file deletion. It serves as a preliminary check before the deletion process can proceed.
-    /// TODO: we probably want to hold a user deposit to prevent users to spam the network
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
         signed_message: FileDeletionMessage<T>,
