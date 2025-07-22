@@ -4,7 +4,7 @@
 //! using jsonrpsee for communication with StorageHub nodes.
 
 use super::connection::{
-    RpcConfig, RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult,
+    IntoRpcError, RpcConfig, RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult,
 };
 use async_trait::async_trait;
 use jsonrpsee::{
