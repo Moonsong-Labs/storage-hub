@@ -438,7 +438,4 @@ mod tests {
         let converted = FtpFileHandler::ftp_error_to_remote_error(error);
         assert!(matches!(converted, RemoteFileError::FtpError(_)));
     }
-
-    // Integration tests would go here, but they require an actual FTP server
-    // For unit tests, we focus on testing the logic that doesn't require network access
 }
