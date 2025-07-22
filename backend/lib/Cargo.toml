@@ -30,16 +30,17 @@ diesel-async = { workspace = true }
 
 # Utilities
 hex = { workspace = true }
+chrono = { workspace = true }
 
 # Concurrency
 parking_lot = { workspace = true }
 
 # Optional dependencies
-jsonrpsee = { workspace = true, optional = true }
+jsonrpsee = { workspace = true, optional = true, features = ["ws-client"] }
 
 [dev-dependencies]
 axum-test = "15"
 
 [features]
-default = []
-mocks = ["dep:jsonrpsee"]
+default = ["mocks"]
+mocks = []

@@ -1,0 +1,17 @@
+[package]
+name = "backend-examples"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[example]]
+name = "using_mocks"
+path = "using_mocks.rs"
+
+[dependencies]
+sh-backend-lib = { path = "../lib", features = ["mocks"] }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+shc-indexer-db = { path = "../../client/indexer-db" }
+chrono = "0.4"

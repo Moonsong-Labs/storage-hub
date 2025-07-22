@@ -13,13 +13,13 @@ use crate::services::Services;
 /// Creates the axum application with all routes and middleware
 pub fn create_app(services: Services) -> Router {
     let router = routes::routes(services);
-    
+
     // Add CORS layer for permissive access
     let cors = CorsLayer::new()
         .allow_origin(tower_http::cors::Any)
         .allow_methods([Method::GET, Method::POST, Method::PUT, Method::DELETE])
         .allow_headers([CONTENT_TYPE])
         .allow_credentials(false);
-    
+
     router.layer(cors)
 }

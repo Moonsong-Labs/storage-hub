@@ -23,3 +23,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # CLI
 clap = { workspace = true }
+
+[features]
+default = ["mocks"]
+mocks = ["sh-backend-lib/mocks"]

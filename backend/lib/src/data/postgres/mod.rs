@@ -4,9 +4,26 @@
 //! allowing the backend to query blockchain-indexed data.
 
 pub mod client;
+pub mod connection;
+pub mod pg_connection;
 // pub mod queries; // TODO: Fix compilation errors in queries module
 
-pub use client::PostgresClient;
+// WIP: Mock connection implementation - commented out until diesel traits are fully implemented
+// #[cfg(feature = "mocks")]
+// pub mod mock_connection;
+
+// Main client
+pub use client::{PostgresClient, PostgresError};
+
+// Connection types
+pub use connection::{
+    AnyDbConnection, ConnectionProvider, DbConfig, DbConnection, DbConnectionError,
+};
+pub use pg_connection::PgConnection;
+
+// WIP: Mock types - commented out until diesel traits are fully implemented
+// #[cfg(feature = "mocks")]
+// pub use mock_connection::{MockDbConnection, MockErrorConfig, MockTestData};
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -61,11 +78,7 @@ pub trait PostgresClientTrait: Send + Sync {
     async fn create_file(&self, file: File) -> Result<File>;
 
     /// Update file storage step
-    async fn update_file_step(
-        &self,
-        file_key: &[u8],
-        step: FileStorageRequestStep,
-    ) -> Result<()>;
+    async fn update_file_step(&self, file_key: &[u8], step: FileStorageRequestStep) -> Result<()>;
 
     /// Delete a file record
     async fn delete_file(&self, file_key: &[u8]) -> Result<()>;
