@@ -5,8 +5,9 @@
 
 use super::traits::Storage;
 use async_trait::async_trait;
+use parking_lot::RwLock;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use thiserror::Error;
 
 /// Errors that can occur during in-memory storage operations
