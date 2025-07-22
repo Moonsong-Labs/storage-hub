@@ -12,7 +12,7 @@ use jsonrpsee::{
     types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
     Extensions,
 };
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use sc_rpc_api::check_if_safe;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
@@ -340,10 +340,6 @@ where
             .await
             .map_err(remote_file_error_to_rpc_error)?;
 
-        if file_size == 0 {
-            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
-        }
-
         let mut stream = handler
             .stream_file()
             .await
@@ -387,6 +383,11 @@ where
                     )));
                 }
             }
+        }
+
+        // Check if any chunks were actually written
+        if chunk_id == 0 {
+            warn!(target: LOG_TARGET, "No chunks were written for file: {}. The file appears to be empty.", file_path);
         }
 
         // Generate the necessary metadata so we can insert file into the File Storage.
