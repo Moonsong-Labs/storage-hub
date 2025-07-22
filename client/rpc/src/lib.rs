@@ -22,7 +22,7 @@ use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
 // Default max file size: 10GB
 const DEFAULT_MAX_FILE_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
-use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage};
+use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -332,13 +332,18 @@ where
 
         // Create file handler for local or remote file.
         let config = RemoteFileConfig::new(DEFAULT_MAX_FILE_SIZE);
-        let (handler, _url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
+        let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
         let file_size = handler
             .get_file_size()
             .await
             .map_err(remote_file_error_to_rpc_error)?;
+
+        // For local files, check if the file is empty
+        if (url.scheme() == "" || url.scheme() == "file") && file_size == 0 {
+            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
+        }
 
         let mut stream = handler
             .stream_file()

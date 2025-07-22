@@ -484,8 +484,6 @@ mod error_handling_tests {
 mod config_tests {
     use super::*;
 
-    const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
-
     #[test]
     fn test_config_defaults() {
         let config = RemoteFileConfig::default();
