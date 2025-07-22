@@ -13,9 +13,8 @@ use thiserror::Error;
 /// Errors that can occur during in-memory storage operations
 #[derive(Debug, Error)]
 pub enum InMemoryStorageError {
-    /// Lock poisoned error
-    #[error("Lock poisoned: {0}")]
-    LockPoisoned(String),
+    // Currently no errors are possible with parking_lot RwLock
+    // This enum is kept for future extensibility
 }
 
 /// In-memory storage implementation using Arc<RwLock<HashMap>>
@@ -47,10 +46,7 @@ impl Storage for InMemoryStorage {
     type Error = InMemoryStorageError;
 
     async fn increment_counter(&self, key: &str, amount: i64) -> Result<i64, Self::Error> {
-        let mut counters = self
-            .counters
-            .write()
-            .map_err(|e| InMemoryStorageError::LockPoisoned(e.to_string()))?;
+        let mut counters = self.counters.write();
 
         let value = counters.entry(key.to_string()).or_insert(0);
         *value = value.saturating_add(amount);
@@ -58,10 +54,7 @@ impl Storage for InMemoryStorage {
     }
 
     async fn decrement_counter(&self, key: &str, amount: i64) -> Result<i64, Self::Error> {
-        let mut counters = self
-            .counters
-            .write()
-            .map_err(|e| InMemoryStorageError::LockPoisoned(e.to_string()))?;
+        let mut counters = self.counters.write();
 
         let value = counters.entry(key.to_string()).or_insert(0);
         *value = value.saturating_sub(amount);
@@ -69,29 +62,20 @@ impl Storage for InMemoryStorage {
     }
 
     async fn get_counter(&self, key: &str) -> Result<i64, Self::Error> {
-        let counters = self
-            .counters
-            .read()
-            .map_err(|e| InMemoryStorageError::LockPoisoned(e.to_string()))?;
+        let counters = self.counters.read();
 
         Ok(counters.get(key).copied().unwrap_or(0))
     }
 
     async fn set_counter(&self, key: &str, value: i64) -> Result<i64, Self::Error> {
-        let mut counters = self
-            .counters
-            .write()
-            .map_err(|e| InMemoryStorageError::LockPoisoned(e.to_string()))?;
+        let mut counters = self.counters.write();
 
         let previous = counters.insert(key.to_string(), value);
         Ok(previous.unwrap_or(0))
     }
 
     async fn delete_counter(&self, key: &str) -> Result<i64, Self::Error> {
-        let mut counters = self
-            .counters
-            .write()
-            .map_err(|e| InMemoryStorageError::LockPoisoned(e.to_string()))?;
+        let mut counters = self.counters.write();
 
         Ok(counters.remove(key).unwrap_or(0))
     }
