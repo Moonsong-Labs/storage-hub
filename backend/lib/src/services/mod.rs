@@ -3,10 +3,10 @@
 pub mod counter;
 pub mod health;
 
-use std::sync::Arc;
-use crate::data::storage::BoxedStorage;
 use crate::data::postgres::PostgresClientTrait;
 use crate::data::rpc::StorageHubRpcTrait;
+use crate::data::storage::BoxedStorage;
+use std::sync::Arc;
 
 /// Container for all backend services
 #[derive(Clone)]
@@ -30,6 +30,11 @@ impl Services {
         rpc: Arc<dyn StorageHubRpcTrait>,
     ) -> Self {
         let counter = Arc::new(counter::CounterService::new(storage.clone()));
-        Self { counter, storage, postgres, rpc }
+        Self {
+            counter,
+            storage,
+            postgres,
+            rpc,
+        }
     }
 }

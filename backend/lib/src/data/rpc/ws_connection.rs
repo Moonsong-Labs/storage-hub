@@ -8,8 +8,8 @@ use super::connection::{
 };
 use async_trait::async_trait;
 use jsonrpsee::{
-    ws_client::{WsClient, WsClientBuilder},
     core::client::ClientT,
+    ws_client::{WsClient, WsClientBuilder},
 };
 use serde::{de::DeserializeOwned, Serialize};
 use std::sync::Arc;
@@ -18,10 +18,18 @@ use tokio::sync::RwLock;
 
 /// WebSocket RPC connection implementation
 pub struct WsConnection {
-    /// The underlying jsonrpsee WebSocket client
-    client: Arc<RwLock<Option<WsClient>>>,
+    /// The underlying jsonrpsee WebSocket client wrapped in Arc for sharing
+    client: Arc<RwLock<Option<Arc<WsClient>>>>,
     /// Configuration for the connection
     config: RpcConfig,
+}
+
+impl std::fmt::Debug for WsConnection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WsConnection")
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 impl WsConnection {
@@ -29,7 +37,7 @@ impl WsConnection {
     pub async fn new(config: RpcConfig) -> RpcResult<Self> {
         let client = Self::build_client(&config).await?;
         Ok(Self {
-            client: Arc::new(RwLock::new(Some(client))),
+            client: Arc::new(RwLock::new(Some(Arc::new(client)))),
             config,
         })
     }
@@ -37,42 +45,41 @@ impl WsConnection {
     /// Build a new WebSocket client with the given configuration
     async fn build_client(config: &RpcConfig) -> RpcResult<WsClient> {
         let mut builder = WsClientBuilder::default();
-        
+
         // Configure request timeout
         if let Some(timeout_secs) = config.timeout_secs {
             builder = builder.request_timeout(Duration::from_secs(timeout_secs));
         }
-        
+
         // Configure max concurrent requests
         if let Some(max_concurrent) = config.max_concurrent_requests {
             builder = builder.max_concurrent_requests(max_concurrent);
         }
-        
+
         // Build and connect the client
-        builder
-            .build(&config.url)
-            .await
-            .map_err(|e| RpcConnectionError::Transport(format!("Failed to connect to {}: {}", config.url, e)))
+        builder.build(&config.url).await.map_err(|e| {
+            RpcConnectionError::Transport(format!("Failed to connect to {}: {}", config.url, e))
+        })
     }
 
     /// Attempt to reconnect if the connection is closed
     async fn ensure_connected(&self) -> RpcResult<()> {
         let mut client_guard = self.client.write().await;
-        
+
         // Check if we need to reconnect
         if client_guard.is_none() {
             // Attempt to reconnect
             let new_client = Self::build_client(&self.config).await?;
-            *client_guard = Some(new_client);
+            *client_guard = Some(Arc::new(new_client));
         }
-        
+
         Ok(())
     }
 
     /// Get a reference to the client, ensuring it's connected
-    async fn get_client(&self) -> RpcResult<WsClient> {
+    async fn get_client(&self) -> RpcResult<Arc<WsClient>> {
         self.ensure_connected().await?;
-        
+
         let client_guard = self.client.read().await;
         client_guard
             .as_ref()
@@ -89,23 +96,27 @@ impl RpcConnection for WsConnection {
         R: DeserializeOwned,
     {
         let client = self.get_client().await?;
-        
-        client
-            .request(method, vec![params])
+
+        // Use rpc_params! macro to properly format parameters
+        let result = client
+            .request(method, jsonrpsee::rpc_params![params])
             .await
-            .map_err(|e| e.into_rpc_error())
+            .map_err(|e| e.into_rpc_error())?;
+
+        Ok(result)
     }
 
     async fn is_connected(&self) -> bool {
         let client_guard = self.client.read().await;
-        
+
         if let Some(client) = client_guard.as_ref() {
             // Try a simple ping-like operation to check connection health
             // We'll use system_health as it's a common RPC method
-            match client.request::<_, serde_json::Value>("system_health", vec![()]).await {
-                Ok(_) => true,
-                Err(_) => false,
-            }
+            // Use rpc_params! macro for empty params
+            client
+                .request::<serde_json::Value, _>("system_health", jsonrpsee::rpc_params![])
+                .await
+                .is_ok()
         } else {
             false
         }
@@ -113,12 +124,12 @@ impl RpcConnection for WsConnection {
 
     async fn close(&self) -> RpcResult<()> {
         let mut client_guard = self.client.write().await;
-        
+
         // Drop the client to close the connection
         if let Some(_client) = client_guard.take() {
             // Client is dropped here, closing the connection
         }
-        
+
         Ok(())
     }
 }
@@ -131,8 +142,10 @@ pub struct WsConnectionBuilder {
 impl WsConnectionBuilder {
     /// Create a new WebSocket connection builder
     pub fn new(url: impl Into<String>) -> Self {
-        let mut config = RpcConfig::default();
-        config.url = url.into();
+        let config = RpcConfig {
+            url: url.into(),
+            ..Default::default()
+        };
         Self { config }
     }
 
@@ -174,7 +187,7 @@ mod tests {
             .timeout_secs(60)
             .max_concurrent_requests(200)
             .verify_tls(false);
-        
+
         assert_eq!(builder.config.url, "ws://localhost:9944");
         assert_eq!(builder.config.timeout_secs, Some(60));
         assert_eq!(builder.config.max_concurrent_requests, Some(200));

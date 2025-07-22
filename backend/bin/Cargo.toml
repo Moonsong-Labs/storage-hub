@@ -15,3 +15,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 axum = "0.7"
 toml = "0.8"
 serde = { version = "1.0", features = ["derive"] }
+
+[features]
+default = ["mocks"]
+mocks = ["sh-backend-lib/mocks"]

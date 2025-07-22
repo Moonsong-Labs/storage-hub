@@ -3,9 +3,7 @@
 //! This module provides a mock RPC connection that can be configured
 //! with predefined responses and error scenarios for testing purposes.
 
-use super::connection::{
-    RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult,
-};
+use super::connection::{RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult};
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
@@ -42,14 +40,14 @@ pub struct MockConnection {
     /// Call counter for FailAfterNCalls mode
     call_count: Arc<Mutex<usize>>,
     /// Optional delay to simulate network latency
-    latency_ms: Option<u64>,
+    latency_ms: Arc<Mutex<Option<u64>>>,
 }
 
 impl MockConnection {
     /// Create a new mock connection with default responses
     pub fn new() -> Self {
         let mut responses = HashMap::new();
-        
+
         // Add default responses for common StorageHub methods
         responses.insert(
             "system_health".to_string(),
@@ -59,12 +57,12 @@ impl MockConnection {
                 "shouldHavePeers": true
             }),
         );
-        
+
         responses.insert(
             "chain_getBlockHash".to_string(),
             serde_json::json!("0xdeadbeef"),
         );
-        
+
         responses.insert(
             "chain_getHeader".to_string(),
             serde_json::json!({
@@ -74,12 +72,9 @@ impl MockConnection {
                 "extrinsicsRoot": "0x789abc"
             }),
         );
-        
-        responses.insert(
-            "state_getStorage".to_string(),
-            serde_json::json!(null),
-        );
-        
+
+        responses.insert("state_getStorage".to_string(), serde_json::json!(null));
+
         // Add default file metadata response
         responses.insert(
             "storagehub_getFileMetadata".to_string(),
@@ -92,7 +87,7 @@ impl MockConnection {
                 "peer_ids": [[130, 131], [132, 133]]
             }),
         );
-        
+
         // Add default bucket info response
         responses.insert(
             "storagehub_getBucketInfo".to_string(),
@@ -103,7 +98,7 @@ impl MockConnection {
                 "user_peer_ids": [[90, 91, 92], [93, 94, 95]]
             }),
         );
-        
+
         // Add default provider info response
         responses.insert(
             "storagehub_getProviderInfo".to_string(),
@@ -114,7 +109,7 @@ impl MockConnection {
                 "data_used": 100000
             }),
         );
-        
+
         // Add transaction submission response
         responses.insert(
             "storagehub_submitStorageRequest".to_string(),
@@ -125,19 +120,22 @@ impl MockConnection {
                 "success": true
             }),
         );
-        
+
         // Add storage request status response
         responses.insert(
             "storagehub_getStorageRequestStatus".to_string(),
             serde_json::json!("confirmed"),
         );
 
+        // Don't add default responses for methods that might be tested for errors
+        // The test_error_handling test expects no response to be set
+
         Self {
             responses: Arc::new(Mutex::new(responses)),
             error_mode: Arc::new(Mutex::new(ErrorMode::None)),
             connected: Arc::new(Mutex::new(true)),
             call_count: Arc::new(Mutex::new(0)),
-            latency_ms: None,
+            latency_ms: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -151,7 +149,7 @@ impl MockConnection {
     pub fn set_error_mode(&self, mode: ErrorMode) {
         let mut error_mode = self.error_mode.lock().unwrap();
         *error_mode = mode;
-        
+
         // Reset call count when changing error mode
         let mut call_count = self.call_count.lock().unwrap();
         *call_count = 0;
@@ -159,9 +157,8 @@ impl MockConnection {
 
     /// Set network latency simulation
     pub fn set_latency_ms(&self, latency: u64) {
-        // Cast self to mutable to set latency
-        let self_mut = unsafe { &mut *(self as *const Self as *mut Self) };
-        self_mut.latency_ms = Some(latency);
+        let mut latency_guard = self.latency_ms.lock().unwrap();
+        *latency_guard = Some(latency);
     }
 
     /// Simulate disconnection
@@ -183,15 +180,16 @@ impl MockConnection {
             *call_count += 1;
             *call_count
         };
-        
+
         let error_mode = self.error_mode.lock().unwrap().clone();
-        
+
         match error_mode {
             ErrorMode::None => Ok(()),
             ErrorMode::Timeout => {
                 // Simulate timeout by sleeping then returning error
-                if let Some(latency) = self.latency_ms {
-                    sleep(Duration::from_millis(latency * 10)).await;
+                let latency = *self.latency_ms.lock().unwrap();
+                if let Some(latency_ms) = latency {
+                    sleep(Duration::from_millis(latency_ms * 10)).await;
                 }
                 Err(RpcConnectionError::Timeout)
             }
@@ -200,7 +198,9 @@ impl MockConnection {
             ErrorMode::RpcError(msg) => Err(RpcConnectionError::Rpc(msg)),
             ErrorMode::FailAfterNCalls(n) => {
                 if current_count > n {
-                    Err(RpcConnectionError::Rpc("Simulated failure after N calls".to_string()))
+                    Err(RpcConnectionError::Rpc(
+                        "Simulated failure after N calls".to_string(),
+                    ))
                 } else {
                     Ok(())
                 }
@@ -231,8 +231,9 @@ impl RpcConnection for MockConnection {
         }
 
         // Simulate network latency if configured
-        if let Some(latency) = self.latency_ms {
-            sleep(Duration::from_millis(latency)).await;
+        let latency = *self.latency_ms.lock().unwrap();
+        if let Some(latency_ms) = latency {
+            sleep(Duration::from_millis(latency_ms)).await;
         }
 
         // Check for simulated errors
@@ -244,15 +245,13 @@ impl RpcConnection for MockConnection {
             responses
                 .get(method)
                 .cloned()
-                .unwrap_or_else(|| {
-                    // Return a generic null response for unknown methods
-                    serde_json::json!(null)
-                })
+                .unwrap_or(serde_json::json!(null))
         };
 
         // Deserialize the response
-        serde_json::from_value(response)
-            .map_err(|e| RpcConnectionError::Serialization(format!("Failed to deserialize response: {}", e)))
+        serde_json::from_value(response).map_err(|e| {
+            RpcConnectionError::Serialization(format!("Failed to deserialize response: {}", e))
+        })
     }
 
     async fn is_connected(&self) -> bool {
@@ -326,15 +325,15 @@ mod tests {
     #[tokio::test]
     async fn test_mock_connection_basic() {
         let conn = MockConnection::new();
-        
+
         // Test system health call
         let health: Value = conn.call("system_health", ()).await.unwrap();
         assert_eq!(health["peers"], 5);
         assert_eq!(health["isSyncing"], false);
-        
+
         // Test connection status
         assert!(conn.is_connected().await);
-        
+
         // Test close
         conn.close().await.unwrap();
         assert!(!conn.is_connected().await);
@@ -344,7 +343,7 @@ mod tests {
     async fn test_mock_connection_custom_response() {
         let conn = MockConnection::new();
         conn.set_response("custom_method", serde_json::json!({"result": "custom"}));
-        
+
         let response: Value = conn.call("custom_method", ()).await.unwrap();
         assert_eq!(response["result"], "custom");
     }
@@ -356,21 +355,21 @@ mod tests {
         conn.set_error_mode(ErrorMode::Timeout);
         let result: Result<Value, _> = conn.call("any_method", ()).await;
         assert!(matches!(result, Err(RpcConnectionError::Timeout)));
-        
+
         // Test connection closed error
         let conn = MockConnection::new();
         conn.set_error_mode(ErrorMode::ConnectionClosed);
         let result: Result<Value, _> = conn.call("any_method", ()).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
-        
+
         // Test fail after N calls
         let conn = MockConnection::new();
         conn.set_error_mode(ErrorMode::FailAfterNCalls(2));
-        
+
         // First two calls should succeed
         let _: Value = conn.call("system_health", ()).await.unwrap();
         let _: Value = conn.call("system_health", ()).await.unwrap();
-        
+
         // Third call should fail
         let result: Result<Value, _> = conn.call("system_health", ()).await;
         assert!(matches!(result, Err(RpcConnectionError::Rpc(_))));
@@ -385,7 +384,7 @@ mod tests {
             .build()
             .await
             .unwrap();
-        
+
         let response: i32 = conn.call("test", ()).await.unwrap();
         assert_eq!(response, 42);
     }
@@ -393,24 +392,23 @@ mod tests {
     #[tokio::test]
     async fn test_mock_connection_disconnect_reconnect() {
         let conn = MockConnection::new();
-        
+
         // Initially connected
         assert!(conn.is_connected().await);
-        
+
         // Disconnect
         conn.disconnect();
         assert!(!conn.is_connected().await);
-        
+
         // Try to call - should fail
         let result: Result<Value, _> = conn.call("any_method", ()).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
-        
+
         // Reconnect
         conn.reconnect();
         assert!(conn.is_connected().await);
-        
+
         // Call should work now
         let _: Value = conn.call("system_health", ()).await.unwrap();
     }
 }
-

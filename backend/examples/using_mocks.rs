@@ -6,11 +6,11 @@
 use sh_backend_lib::{
     api::create_app,
     config::Config,
+    data::postgres::MockPostgresClient,
     data::{
         postgres::PostgresClientTrait,
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
-    data::postgres::MockPostgresClient,
     services::Services,
 };
 use std::sync::Arc;
@@ -59,7 +59,7 @@ async fn main() {
 
     // Test the mock client
     println!("\nTesting mock PostgreSQL client:");
-    
+
     // Test connection
     match postgres_client.test_connection().await {
         Ok(_) => println!("  ✓ Connection test passed"),
@@ -82,7 +82,11 @@ async fn main() {
     let user_account = vec![50, 51, 52, 53];
     match postgres_client.get_files_by_user(&user_account, None).await {
         Ok(files) => {
-            println!("  ✓ Found {} files for user {:?}", files.len(), user_account);
+            println!(
+                "  ✓ Found {} files for user {:?}",
+                files.len(),
+                user_account
+            );
         }
         Err(e) => println!("  ✗ Failed to get user files: {}", e),
     }
@@ -98,6 +102,6 @@ async fn main() {
     println!("\nMock backend is ready!");
     println!("In a real scenario, you would start the server with:");
     println!("  axum::serve(listener, app).await");
-    
+
     println!("\nExample completed successfully!");
 }

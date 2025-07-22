@@ -14,23 +14,23 @@ pub enum RpcConnectionError {
     /// Network or transport-related errors
     #[error("Transport error: {0}")]
     Transport(String),
-    
+
     /// JSON-RPC protocol errors
     #[error("RPC error: {0}")]
     Rpc(String),
-    
+
     /// Serialization/deserialization errors
     #[error("Serialization error: {0}")]
     Serialization(String),
-    
+
     /// Request timeout errors
     #[error("Request timeout")]
     Timeout,
-    
+
     /// Connection closed or unavailable
     #[error("Connection closed")]
     ConnectionClosed,
-    
+
     /// Other errors
     #[error("Other error: {0}")]
     Other(String),
@@ -58,7 +58,7 @@ pub trait RpcConnection: Send + Sync {
     where
         P: Serialize + Send + Sync,
         R: DeserializeOwned;
-    
+
     /// Execute a JSON-RPC method call without parameters
     ///
     /// # Arguments
@@ -68,18 +68,18 @@ pub trait RpcConnection: Send + Sync {
     /// The deserialized result of the RPC call
     async fn call_no_params<R>(&self, method: &str) -> RpcResult<R>
     where
-        R: DeserializeOwned
+        R: DeserializeOwned,
     {
         // Default implementation using empty tuple as params
         self.call::<_, R>(method, ()).await
     }
-    
+
     /// Check if the connection is currently active
     ///
     /// # Returns
     /// `true` if the connection is active and ready for use
     async fn is_connected(&self) -> bool;
-    
+
     /// Close the connection gracefully
     ///
     /// This method should clean up any resources associated with
@@ -96,7 +96,7 @@ pub trait RpcConnection: Send + Sync {
 pub trait RpcConnectionBuilder: Send + Sync {
     /// The type of connection this builder creates
     type Connection: RpcConnection;
-    
+
     /// Build and establish the RPC connection
     ///
     /// # Returns
@@ -109,13 +109,13 @@ pub trait RpcConnectionBuilder: Send + Sync {
 pub struct RpcConfig {
     /// The RPC endpoint URL
     pub url: String,
-    
+
     /// Request timeout in seconds
     pub timeout_secs: Option<u64>,
-    
+
     /// Maximum number of concurrent requests
     pub max_concurrent_requests: Option<usize>,
-    
+
     /// Whether to verify TLS certificates (for HTTPS/WSS)
     pub verify_tls: bool,
 }
@@ -143,20 +143,29 @@ pub trait IntoRpcError {
 // Implement IntoRpcError for jsonrpsee errors
 impl IntoRpcError for jsonrpsee::core::client::Error {
     fn into_rpc_error(self) -> RpcConnectionError {
-        
+        use jsonrpsee::core::client::Error;
+
         match self {
-            Self::Call(e) => RpcConnectionError::Rpc(e.to_string()),
-            Self::Transport(e) => RpcConnectionError::Transport(e.to_string()),
-            Self::RestartNeeded(_) => RpcConnectionError::ConnectionClosed,
-            Self::ParseError(e) => RpcConnectionError::Serialization(e.to_string()),
-            Self::InvalidSubscriptionId => RpcConnectionError::Rpc("Invalid subscription ID".to_string()),
-            Self::InvalidRequestId(e) => RpcConnectionError::Rpc(format!("Invalid request ID: {}", e)),
-            Self::RequestTimeout => RpcConnectionError::Timeout,
-            Self::MaxSlotsExceeded => RpcConnectionError::Rpc("Max concurrent requests exceeded".to_string()),
-            Self::AlreadySubscribed(e) => RpcConnectionError::Rpc(format!("Already subscribed: {}", e)),
-            Self::HttpNotImplemented => RpcConnectionError::Other("HTTP not implemented".to_string()),
-            Self::EmptyBatchRequest => RpcConnectionError::Rpc("Empty batch request".to_string()),
-            Self::RegisterMethod(e) => RpcConnectionError::Rpc(format!("Failed to register method: {}", e)),
+            Error::Call(e) => RpcConnectionError::Rpc(e.to_string()),
+            Error::Transport(e) => RpcConnectionError::Transport(e.to_string()),
+            Error::RestartNeeded(_) => RpcConnectionError::ConnectionClosed,
+            Error::ParseError(e) => RpcConnectionError::Serialization(e.to_string()),
+            Error::InvalidSubscriptionId => {
+                RpcConnectionError::Rpc("Invalid subscription ID".to_string())
+            }
+            Error::InvalidRequestId(e) => {
+                RpcConnectionError::Rpc(format!("Invalid request ID: {}", e))
+            }
+            Error::RequestTimeout => RpcConnectionError::Timeout,
+            Error::HttpNotImplemented => {
+                RpcConnectionError::Other("HTTP not implemented".to_string())
+            }
+            Error::EmptyBatchRequest(_) => {
+                RpcConnectionError::Rpc("Empty batch request".to_string())
+            }
+            Error::RegisterMethod(e) => {
+                RpcConnectionError::Rpc(format!("Failed to register method: {}", e))
+            }
             other => RpcConnectionError::Other(other.to_string()),
         }
     }
@@ -165,7 +174,7 @@ impl IntoRpcError for jsonrpsee::core::client::Error {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_rpc_config_default() {
         let config = RpcConfig::default();
@@ -174,7 +183,7 @@ mod tests {
         assert_eq!(config.max_concurrent_requests, Some(100));
         assert!(config.verify_tls);
     }
-    
+
     #[test]
     fn test_rpc_connection_error_display() {
         let errors = vec![
@@ -185,7 +194,7 @@ mod tests {
             RpcConnectionError::ConnectionClosed,
             RpcConnectionError::Other("Unknown error".to_string()),
         ];
-        
+
         for error in errors {
             // Just ensure Display is implemented
             let _ = format!("{}", error);
@@ -194,9 +203,9 @@ mod tests {
 }
 
 // Import concrete types for the enum
-use super::ws_connection::WsConnection;
 #[cfg(feature = "mocks")]
 use super::mock_connection::MockConnection;
+use super::ws_connection::WsConnection;
 
 /// Enum wrapper for different RPC connection implementations
 ///
@@ -206,7 +215,7 @@ use super::mock_connection::MockConnection;
 pub enum AnyRpcConnection {
     /// Real WebSocket connection
     Real(WsConnection),
-    
+
     /// Mock connection for testing
     #[cfg(feature = "mocks")]
     Mock(MockConnection),
@@ -235,10 +244,10 @@ impl RpcConnection for AnyRpcConnection {
             AnyRpcConnection::Mock(conn) => conn.call(method, params).await,
         }
     }
-    
+
     async fn call_no_params<R>(&self, method: &str) -> RpcResult<R>
     where
-        R: DeserializeOwned
+        R: DeserializeOwned,
     {
         match self {
             AnyRpcConnection::Real(conn) => conn.call_no_params(method).await,
@@ -246,7 +255,7 @@ impl RpcConnection for AnyRpcConnection {
             AnyRpcConnection::Mock(conn) => conn.call_no_params(method).await,
         }
     }
-    
+
     async fn is_connected(&self) -> bool {
         match self {
             AnyRpcConnection::Real(conn) => conn.is_connected().await,
@@ -254,7 +263,7 @@ impl RpcConnection for AnyRpcConnection {
             AnyRpcConnection::Mock(conn) => conn.is_connected().await,
         }
     }
-    
+
     async fn close(&self) -> RpcResult<()> {
         match self {
             AnyRpcConnection::Real(conn) => conn.close().await,

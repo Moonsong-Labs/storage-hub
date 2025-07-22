@@ -16,7 +16,9 @@ pub mod pg_connection;
 pub use client::{PostgresClient, PostgresError};
 
 // Connection types
-pub use connection::{DbConnection, DbConnectionError, DbConfig, ConnectionProvider, AnyDbConnection};
+pub use connection::{
+    AnyDbConnection, ConnectionProvider, DbConfig, DbConnection, DbConnectionError,
+};
 pub use pg_connection::PgConnection;
 
 // WIP: Mock types - commented out until diesel traits are fully implemented
@@ -76,11 +78,7 @@ pub trait PostgresClientTrait: Send + Sync {
     async fn create_file(&self, file: File) -> Result<File>;
 
     /// Update file storage step
-    async fn update_file_step(
-        &self,
-        file_key: &[u8],
-        step: FileStorageRequestStep,
-    ) -> Result<()>;
+    async fn update_file_step(&self, file_key: &[u8], step: FileStorageRequestStep) -> Result<()>;
 
     /// Delete a file record
     async fn delete_file(&self, file_key: &[u8]) -> Result<()>;
