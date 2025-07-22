@@ -45,11 +45,9 @@ impl FtpFileHandler {
         let host = url
             .host_str()
             .ok_or_else(|| RemoteFileError::InvalidUrl("Missing host".to_string()))?;
-
         if host.is_empty() {
             return Err(RemoteFileError::InvalidUrl("Missing host".to_string()));
         }
-
         let host = host.to_string();
 
         let port = url.port().unwrap_or(21);
@@ -212,7 +210,7 @@ impl RemoteFileHandler for FtpFileHandler {
                 .map_err(Self::ftp_error_to_remote_error)?;
         }
 
-        // Download the data starting from the offset
+        // Download the data starting from the offset, if any
         let result = stream
             .retr(&self.path, |mut reader| {
                 Box::pin(async move {
