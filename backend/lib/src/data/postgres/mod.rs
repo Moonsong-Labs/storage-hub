@@ -6,7 +6,7 @@
 pub mod client;
 pub mod connection;
 pub mod pg_connection;
-// pub mod queries; // TODO: Fix compilation errors in queries module
+pub mod queries;
 
 // WIP: Mock connection implementation - commented out until diesel traits are fully implemented
 // #[cfg(feature = "mocks")]
