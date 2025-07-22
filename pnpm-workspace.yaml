@@ -1,4 +1,5 @@
 packages:
-  - test
-  - api-augment
-  - types-bundle
+  - "api-augment"
+  - "types-bundle"
+  - "test"
+  - "sdk"

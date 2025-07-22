@@ -1,0 +1,85 @@
+name: sdk-ci
+
+on:
+  push:
+    paths:
+      - "sdk/**"
+  pull_request:
+    paths:
+      - "sdk/**"
+
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Node & pnpm setup
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: pnpm
+
+      # Rust toolchain with wasm target
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          target: wasm32-unknown-unknown
+          override: true
+
+      # Cache wasm-pack binary
+      - name: Cache wasm-pack
+        uses: actions/cache@v3
+        with:
+          path: ~/.cargo/bin/wasm-pack
+          key: wasm-pack-v0.12.1
+
+      - name: Install wasm-pack
+        run: |
+          if ! command -v wasm-pack >/dev/null; then
+            cargo install wasm-pack --locked
+          fi
+
+      # Install dependencies
+      - name: Install dependencies
+        run: pnpm install
+
+      # Lint & format check
+      - name: Lint
+        run: pnpm lint
+
+      - name: Prettier check
+        run: pnpm run format:check
+
+      # TypeScript type-check
+      - name: Type check
+        run: pnpm typecheck
+
+      # Unit tests core
+      - name: Run tests
+        run: pnpm test:core -- --run
+
+      # Unit tests client
+      - name: Run tests
+        run: pnpm test:client -- --run
+
+      # Coverage check (fails if coverage <80%)
+      - name: Coverage
+        run: pnpm run coverage -- --run
+
+# TODO: Bundle size guard
+#   - name: Size limit
+#     run: pnpm size 

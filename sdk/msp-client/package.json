@@ -1,0 +1,28 @@
+{
+    "name": "@storagehub-sdk/msp-client",
+    "version": "0.1.0",
+    "description": "High-level façade around @storagehub-sdk/core for easy StorageHub integration",
+    "type": "module",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "scripts": {
+        "build": "node ../scripts/build.js",
+        "dev": "node ../scripts/build.js --watch",
+        "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
+        "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
+        "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
+        "test": "vitest",
+        "typecheck": "tsc --noEmit",
+        "coverage": "vitest run --coverage"
+    },
+    "dependencies": {
+        "@storagehub-sdk/core": "workspace:*"
+    },
+    "engines": {
+        "node": ">=23"
+    }
+}
