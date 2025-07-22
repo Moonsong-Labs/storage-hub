@@ -130,7 +130,6 @@ impl FtpFileHandler {
             Duration::from_secs(self.config.read_timeout),
             stream.retr(&self.path, |mut reader| {
                 Box::pin(async move {
-                    use futures_util::io::AsyncReadExt;
                     let mut buffer = Vec::new();
                     reader.read_to_end(&mut buffer).await.map_err(|e| {
                         FtpError::UnexpectedResponse(Response::new(
