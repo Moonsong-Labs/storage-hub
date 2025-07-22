@@ -1,4 +1,3 @@
-use crate::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 
@@ -44,11 +43,9 @@ impl Default for Config {
 }
 
 impl Config {
-    pub fn from_file(path: &str) -> Result<Self> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| Error::Config(format!("Failed to read config: {}", e)))?;
-        let config: Config = toml::from_str(&content)
-            .map_err(|e| Error::Config(format!("Failed to parse config: {}", e)))?;
-        Ok(config)
+    pub fn from_file(path: &str) -> std::io::Result<Self> {
+        let contents = std::fs::read_to_string(path)?;
+        toml::from_str(&contents)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     }
 }
