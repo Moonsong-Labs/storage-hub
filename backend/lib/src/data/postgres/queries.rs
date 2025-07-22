@@ -4,42 +4,23 @@
 //! to retrieve data from the StorageHub indexer database.
 
 use super::{PostgresClient, PostgresError};
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-use shc_indexer_db::models::{BackupStorageProvider, File, MainStorageProvider, PaymentStream};
-use shc_indexer_db::schema::{
-    backup_storage_providers, files, main_storage_providers, payment_streams,
-};
+use shc_indexer_db::models::{Bsp, File, Msp, PaymentStream};
 
 impl PostgresClient {
     /// Get all active backup storage providers (BSPs)
     ///
     /// # Returns
     /// A vector of active BSPs from the indexer database
-    pub async fn get_active_bsps(&self) -> Result<Vec<BackupStorageProvider>, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let bsps = backup_storage_providers::table
-            .filter(backup_storage_providers::status.eq("Active"))
-            .load::<BackupStorageProvider>(&mut conn)
-            .await?;
-
-        Ok(bsps)
+    pub async fn get_active_bsps(&self) -> Result<Vec<Bsp>, PostgresError> {
+        todo!("Add to shc-indexer-db: SELECT * FROM bsp WHERE status = 'Active'")
     }
 
     /// Get all active main storage providers (MSPs)
     ///
     /// # Returns
     /// A vector of active MSPs from the indexer database
-    pub async fn get_active_msps(&self) -> Result<Vec<MainStorageProvider>, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let msps = main_storage_providers::table
-            .filter(main_storage_providers::status.eq("Active"))
-            .load::<MainStorageProvider>(&mut conn)
-            .await?;
-
-        Ok(msps)
+    pub async fn get_active_msps(&self) -> Result<Vec<Msp>, PostgresError> {
+        todo!("Add to shc-indexer-db: SELECT * FROM msp WHERE status = 'Active'")
     }
 
     /// Get a file by its ID
@@ -49,16 +30,8 @@ impl PostgresClient {
     ///
     /// # Returns
     /// The file metadata if found
-    pub async fn get_file_by_id(&self, file_id: &str) -> Result<Option<File>, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let file = files::table
-            .filter(files::file_id.eq(file_id))
-            .first::<File>(&mut conn)
-            .await
-            .optional()?;
-
-        Ok(file)
+    pub async fn get_file_by_id(&self, _file_id: &str) -> Result<Option<File>, PostgresError> {
+        todo!("Add to shc-indexer-db: SELECT * FROM files WHERE file_id = $1")
     }
 
     /// Get all files for a specific user
@@ -68,16 +41,8 @@ impl PostgresClient {
     ///
     /// # Returns
     /// A vector of files owned by the user
-    pub async fn get_files_by_user(&self, user_id: &str) -> Result<Vec<File>, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let files = files::table
-            .filter(files::owner.eq(user_id))
-            .order(files::created_at.desc())
-            .load::<File>(&mut conn)
-            .await?;
-
-        Ok(files)
+    pub async fn get_files_by_user(&self, _user_id: &str) -> Result<Vec<File>, PostgresError> {
+        todo!("Add to shc-indexer-db: SELECT * FROM files WHERE owner = $1 ORDER BY created_at DESC")
     }
 
     /// Get payment streams for a specific user
@@ -89,17 +54,9 @@ impl PostgresClient {
     /// A vector of payment streams associated with the user
     pub async fn get_payment_streams_for_user(
         &self,
-        user_id: &str,
+        _user_id: &str,
     ) -> Result<Vec<PaymentStream>, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let streams = payment_streams::table
-            .filter(payment_streams::user_account.eq(user_id))
-            .order(payment_streams::created_at.desc())
-            .load::<PaymentStream>(&mut conn)
-            .await?;
-
-        Ok(streams)
+        todo!("Add to shc-indexer-db: SELECT * FROM payment_streams WHERE user_account = $1 ORDER BY created_at DESC")
     }
 
     /// Get active payment streams for a provider
@@ -111,18 +68,9 @@ impl PostgresClient {
     /// A vector of active payment streams for the provider
     pub async fn get_active_payment_streams_for_provider(
         &self,
-        provider_id: &str,
+        _provider_id: &str,
     ) -> Result<Vec<PaymentStream>, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let streams = payment_streams::table
-            .filter(payment_streams::provider_account.eq(provider_id))
-            .filter(payment_streams::status.eq("Active"))
-            .order(payment_streams::created_at.desc())
-            .load::<PaymentStream>(&mut conn)
-            .await?;
-
-        Ok(streams)
+        todo!("Add to shc-indexer-db: SELECT * FROM payment_streams WHERE provider_account = $1 AND status = 'Active' ORDER BY created_at DESC")
     }
 
     /// Get total storage used by a user
@@ -134,17 +82,9 @@ impl PostgresClient {
     /// The total storage in bytes used by the user
     pub async fn get_total_storage_used_by_user(
         &self,
-        user_id: &str,
+        _user_id: &str,
     ) -> Result<i64, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let total: Option<i64> = files::table
-            .filter(files::owner.eq(user_id))
-            .select(diesel::dsl::sum(files::size))
-            .first(&mut conn)
-            .await?;
-
-        Ok(total.unwrap_or(0))
+        todo!("Add to shc-indexer-db: SELECT COALESCE(SUM(size), 0) FROM files WHERE owner = $1")
     }
 
     /// Count active BSPs
@@ -152,15 +92,7 @@ impl PostgresClient {
     /// # Returns
     /// The number of active backup storage providers
     pub async fn count_active_bsps(&self) -> Result<i64, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let count = backup_storage_providers::table
-            .filter(backup_storage_providers::status.eq("Active"))
-            .count()
-            .get_result(&mut conn)
-            .await?;
-
-        Ok(count)
+        todo!("Add to shc-indexer-db: SELECT COUNT(*) FROM bsp WHERE status = 'Active'")
     }
 
     /// Count active MSPs
@@ -168,15 +100,7 @@ impl PostgresClient {
     /// # Returns
     /// The number of active main storage providers
     pub async fn count_active_msps(&self) -> Result<i64, PostgresError> {
-        let mut conn = self.get_connection().await?;
-
-        let count = main_storage_providers::table
-            .filter(main_storage_providers::status.eq("Active"))
-            .count()
-            .get_result(&mut conn)
-            .await?;
-
-        Ok(count)
+        todo!("Add to shc-indexer-db: SELECT COUNT(*) FROM msp WHERE status = 'Active'")
     }
 }
 

@@ -201,18 +201,12 @@ async fn create_postgres_client(
                 }
                 Err(e) => {
                     error!("Failed to connect to PostgreSQL: {}", e);
-
-                    // WIP: Mock fallback - commented out until diesel traits are fully implemented
-                    // For now, just return the error
                     Err(Box::new(e))
                 }
             }
         }
         Err(e) => {
             error!("Failed to create PostgreSQL connection: {}", e);
-
-            // WIP: Mock fallback - commented out until diesel traits are fully implemented
-            // For now, just return the error
             Err(e.into())
         }
     }
@@ -258,10 +252,14 @@ async fn create_rpc_client(
 
             #[cfg(feature = "mocks")]
             {
-                info!("Falling back to mock RPC connection");
-                let mock_conn = AnyRpcConnection::Mock(MockConnection::new());
-                let client = StorageHubRpcClient::new(Arc::new(mock_conn));
-                Ok(Arc::new(client))
+                if config.storage_hub.mock_mode {
+                    info!("Using mock RPC connection (mock_mode enabled)");
+                    let mock_conn = AnyRpcConnection::Mock(MockConnection::new());
+                    let client = StorageHubRpcClient::new(Arc::new(mock_conn));
+                    Ok(Arc::new(client))
+                } else {
+                    Err(e.into())
+                }
             }
 
             #[cfg(not(feature = "mocks"))]
