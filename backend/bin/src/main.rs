@@ -28,8 +28,7 @@ use sh_backend_lib::data::{
 #[tokio::main]
 async fn main() {
     // Initialize tracing/logging
-    let filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info,sh_backend=debug,sh_backend_lib=debug"));
+    let filter = EnvFilter::from_default_env();
 
     tracing_subscriber::registry()
         .with(filter)
