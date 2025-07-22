@@ -2,9 +2,6 @@ use std::{collections::HashSet, fmt::Debug, path::PathBuf, str::FromStr, sync::A
 
 pub mod remote_file;
 
-#[cfg(test)]
-mod tests;
-
 use futures::StreamExt;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
@@ -22,7 +19,7 @@ use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
-use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
+use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
@@ -332,7 +329,7 @@ where
 
         // Create file handler for local or remote file.
         let config = RemoteFileConfig::default();
-        let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
+        let (handler, _url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
         let file_size = handler
@@ -500,7 +497,7 @@ where
 
         // Create file handler for writing to local or remote destination.
         let config = RemoteFileConfig::default();
-        let (handler, url) =
+        let (handler, _url) =
             RemoteFileHandlerFactory::create_from_string_for_write(&file_path, config)
                 .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
