@@ -34,21 +34,6 @@ impl RemoteFileHandlerFactory {
         url_str: &str,
         config: RemoteFileConfig,
     ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
-        Self::create_from_string_with_mode(url_str, config, false)
-    }
-
-    pub fn create_from_string_for_write(
-        url_str: &str,
-        config: RemoteFileConfig,
-    ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
-        Self::create_from_string_with_mode(url_str, config, true)
-    }
-
-    fn create_from_string_with_mode(
-        url_str: &str,
-        config: RemoteFileConfig,
-        _for_write: bool,
-    ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
         let url = match Url::parse(url_str) {
             Ok(url) => url,
             Err(_) => {

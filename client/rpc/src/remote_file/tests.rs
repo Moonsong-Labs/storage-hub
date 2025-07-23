@@ -153,7 +153,7 @@ mod factory_tests {
         // Test that non-existent parent directory is allowed for write operations
         // (the handler will create directories as needed)
         let path_with_nonexistent_parent = "/non/existent/directory/file.txt";
-        let result = RemoteFileHandlerFactory::create_from_string_for_write(
+        let result = RemoteFileHandlerFactory::create_from_string(
             path_with_nonexistent_parent,
             config.clone(),
         );
