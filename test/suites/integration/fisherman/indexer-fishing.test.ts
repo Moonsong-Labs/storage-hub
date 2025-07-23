@@ -6,7 +6,7 @@ import {
   shUser,
   bspKey,
   sleep,
-  waitFor,
+  waitFor
 } from "../../../util";
 
 describeMspNet(
@@ -16,7 +16,7 @@ describeMspNet(
     indexer: true,
     fisherman: true,
     userIndexerMode: "full",
-    fishermanIndexerMode: "fishing",
+    fishermanIndexerMode: "fishing"
   },
   ({ before, it, createUserApi, createBspApi, createSqlClient }) => {
     let userApi: EnrichedBspApi;
@@ -32,7 +32,7 @@ describeMspNet(
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
         containerName: "docker-sh-user-1",
-        timeout: 10000,
+        timeout: 10000
       });
 
       // Initialize blockchain state using direct RPC call for first block
@@ -54,8 +54,7 @@ describeMspNet(
       // Create bucket and get bucket ID
       const newBucketEvent = await userApi.createBucket(bucketName);
       const newBucketEventData =
-        userApi.events.fileSystem.NewBucket.is(newBucketEvent) &&
-        newBucketEvent.data;
+        userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
       if (!newBucketEventData) {
         throw new Error("NewBucket event data not found");
@@ -65,7 +64,7 @@ describeMspNet(
 
       // Load file first
       const {
-        file_metadata: { location, fingerprint, file_size },
+        file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
@@ -84,18 +83,14 @@ describeMspNet(
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
             { Basic: null }
-          ),
+          )
         ],
-        signer: shUser,
+        signer: shUser
       });
 
       // Get the file key from the event
-      const { event } = await userApi.assert.eventPresent(
-        "fileSystem",
-        "NewStorageRequest"
-      );
-      const eventData =
-        userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      const eventData = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
       assert(eventData, "NewStorageRequest event data not found");
       const fileKey = eventData.fileKey;
 
@@ -125,8 +120,7 @@ describeMspNet(
 
       const newBucketEvent = await userApi.createBucket(bucketName);
       const newBucketEventData =
-        userApi.events.fileSystem.NewBucket.is(newBucketEvent) &&
-        newBucketEvent.data;
+        userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
       assert(newBucketEventData, "Event doesn't match Type");
 
@@ -134,7 +128,7 @@ describeMspNet(
 
       // Load file first
       const {
-        file_metadata: { location, fingerprint, file_size },
+        file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
@@ -153,18 +147,14 @@ describeMspNet(
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
             { Basic: null }
-          ),
+          )
         ],
-        signer: shUser,
+        signer: shUser
       });
 
       // Get the file key from the event
-      const { event } = await userApi.assert.eventPresent(
-        "fileSystem",
-        "NewStorageRequest"
-      );
-      const eventData =
-        userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      const eventData = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
       assert(eventData, "NewStorageRequest event data not found");
       const fileKey = eventData.fileKey;
 
@@ -172,7 +162,7 @@ describeMspNet(
       await userApi.assert.extrinsicPresent({
         module: "fileSystem",
         method: "bspVolunteer",
-        checkTxPool: true,
+        checkTxPool: true
       });
 
       // Seal block with volunteer transaction
@@ -187,15 +177,13 @@ describeMspNet(
       // Wait for BSP to receive and store the file
       await waitFor({
         lambda: async () =>
-          (
-            await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)
-          ).isFileFound,
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
       // Wait for BSP to confirm storage
       await userApi.wait.bspStored({
         expectedExts: 1,
-        sealBlock: false,
+        sealBlock: false
       });
 
       // Seal block with confirm TX
@@ -218,7 +206,7 @@ describeMspNet(
             SELECT * FROM file WHERE file_key = ${fileKey}
           `;
           return files.length > 0;
-        },
+        }
       });
 
       // Verify BSP-file association is indexed
@@ -240,22 +228,14 @@ describeMspNet(
       const mspId = userApi.shConsts.DUMMY_MSP_ID;
 
       // Get value proposition for MSP
-      const valueProps =
-        await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
-          mspId
-        );
+      const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const bucketTx = userApi.tx.fileSystem.createBucket(
-        mspId,
-        bucketName,
-        true,
-        valuePropId
-      );
+      const bucketTx = userApi.tx.fileSystem.createBucket(mspId, bucketName, true, valuePropId);
 
       const { events } = await userApi.block.seal({
         calls: [bucketTx],
-        signer: shUser,
+        signer: shUser
       });
 
       // Get bucket ID from the NewBucket event
@@ -271,7 +251,7 @@ describeMspNet(
 
       // Load file first
       const {
-        file_metadata: { location, fingerprint, file_size },
+        file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
@@ -290,27 +270,21 @@ describeMspNet(
             mspId,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
             { Basic: null }
-          ),
+          )
         ],
-        signer: shUser,
+        signer: shUser
       });
 
       // Get the file key from the event
-      const { event } = await userApi.assert.eventPresent(
-        "fileSystem",
-        "NewStorageRequest"
-      );
-      const eventData =
-        userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      const eventData = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
       assert(eventData, "NewStorageRequest event data not found");
       const fileKey = eventData.fileKey;
 
       // Wait for MSP to receive the file
       await waitFor({
         lambda: async () =>
-          (
-            await userApi.rpc.storagehubclient.isFileInFileStorage(fileKey)
-          ).isFileFound,
+          (await userApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
       // Wait for MSP to respond
@@ -325,9 +299,8 @@ describeMspNet(
           "MspAcceptedStorageRequest"
         );
         const dataBlob =
-          userApi.events.fileSystem.MspAcceptedStorageRequest.is(
-            mspAcceptedEvent
-          ) && mspAcceptedEvent.data;
+          userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedEvent) &&
+          mspAcceptedEvent.data;
         if (dataBlob) {
           acceptedFileKey = dataBlob.fileKey.toString();
         }
@@ -339,9 +312,8 @@ describeMspNet(
             "StorageRequestFulfilled"
           );
           const dataBlob =
-            userApi.events.fileSystem.StorageRequestFulfilled.is(
-              fulfilledEvent
-            ) && fulfilledEvent.data;
+            userApi.events.fileSystem.StorageRequestFulfilled.is(fulfilledEvent) &&
+            fulfilledEvent.data;
           if (dataBlob) {
             acceptedFileKey = dataBlob.fileKey.toString();
           }
@@ -367,7 +339,7 @@ describeMspNet(
             SELECT * FROM file WHERE file_key = ${fileKey}
           `;
           return files.length > 0;
-        },
+        }
       });
 
       // Verify MSP-file association is indexed
@@ -388,8 +360,7 @@ describeMspNet(
 
       const newBucketEvent = await userApi.createBucket(bucketName);
       const newBucketEventData =
-        userApi.events.fileSystem.NewBucket.is(newBucketEvent) &&
-        newBucketEvent.data;
+        userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
       if (!newBucketEventData) {
         throw new Error("NewBucket event data not found");
@@ -399,7 +370,7 @@ describeMspNet(
 
       // Load file first
       const {
-        file_metadata: { location, fingerprint, file_size },
+        file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
@@ -418,25 +389,21 @@ describeMspNet(
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
             { Basic: null }
-          ),
+          )
         ],
-        signer: shUser,
+        signer: shUser
       });
 
       // Get the file key from the event
-      const { event } = await userApi.assert.eventPresent(
-        "fileSystem",
-        "NewStorageRequest"
-      );
-      const eventData =
-        userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      const eventData = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
       assert(eventData, "NewStorageRequest event data not found");
       const fileKey = eventData.fileKey;
 
       // Revoke storage request
       await userApi.block.seal({
         calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
-        signer: shUser,
+        signer: shUser
       });
 
       // Wait for indexing to process the revocation
@@ -460,8 +427,7 @@ describeMspNet(
 
       const newBucketEvent = await userApi.createBucket(bucketName);
       const newBucketEventData =
-        userApi.events.fileSystem.NewBucket.is(newBucketEvent) &&
-        newBucketEvent.data;
+        userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
       if (!newBucketEventData) {
         throw new Error("NewBucket event data not found");
@@ -471,7 +437,7 @@ describeMspNet(
 
       // Load file first
       const {
-        file_metadata: { location, fingerprint, file_size },
+        file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
@@ -490,18 +456,14 @@ describeMspNet(
             userApi.shConsts.DUMMY_MSP_ID,
             [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
             { Basic: null }
-          ),
+          )
         ],
-        signer: shUser,
+        signer: shUser
       });
 
       // Get the file key from the event
-      const { event } = await userApi.assert.eventPresent(
-        "fileSystem",
-        "NewStorageRequest"
-      );
-      const eventData =
-        userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
+      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
+      const eventData = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
       assert(eventData, "NewStorageRequest event data not found");
       const fileKey = eventData.fileKey;
 
@@ -511,9 +473,7 @@ describeMspNet(
       // Wait for BSP to receive and store the file
       await waitFor({
         lambda: async () =>
-          (
-            await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)
-          ).isFileFound,
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
       // Wait for BSP to confirm storage
@@ -522,15 +482,15 @@ describeMspNet(
       // Wait for file to be in forest
       await waitFor({
         lambda: async () => {
-          const isFileInForest =
-            await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
+          const isFileInForest = await bspApi.rpc.storagehubclient.isFileInForest(null, fileKey);
           return isFileInForest.isTrue;
-        },
+        }
       });
 
       // BSP requests to stop storing
-      const inclusionForestProof =
-        await bspApi.rpc.storagehubclient.generateForestProof(null, [fileKey]);
+      const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+        fileKey
+      ]);
 
       await userApi.block.seal({
         calls: [
@@ -543,16 +503,13 @@ describeMspNet(
             file_size,
             false,
             inclusionForestProof.toString()
-          ),
+          )
         ],
-        signer: bspKey,
+        signer: bspKey
       });
 
       // Check for BspRequestedToStopStoring event
-      await userApi.assert.eventPresent(
-        "fileSystem",
-        "BspRequestedToStopStoring"
-      );
+      await userApi.assert.eventPresent("fileSystem", "BspRequestedToStopStoring");
 
       // Wait for cooldown period
       const currentBlock = await userApi.rpc.chain.getBlock();
@@ -560,8 +517,8 @@ describeMspNet(
       const minWaitForStopStoring = (
         await userApi.query.parameters.parameters({
           RuntimeConfig: {
-            MinWaitForStopStoring: null,
-          },
+            MinWaitForStopStoring: null
+          }
         })
       )
         .unwrap()
@@ -570,24 +527,19 @@ describeMspNet(
       await userApi.block.skipTo(cooldown);
 
       // Confirm stop storing
-      const newInclusionForestProof =
-        await bspApi.rpc.storagehubclient.generateForestProof(null, [fileKey]);
+      const newInclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
+        fileKey
+      ]);
 
       await userApi.block.seal({
         calls: [
-          userApi.tx.fileSystem.bspConfirmStopStoring(
-            fileKey,
-            newInclusionForestProof.toString()
-          ),
+          userApi.tx.fileSystem.bspConfirmStopStoring(fileKey, newInclusionForestProof.toString())
         ],
-        signer: bspKey,
+        signer: bspKey
       });
 
       // Check for BspConfirmStoppedStoring event
-      await userApi.assert.eventPresent(
-        "fileSystem",
-        "BspConfirmStoppedStoring"
-      );
+      await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
 
       // Wait for indexing
       await userApi.block.seal();
@@ -610,8 +562,7 @@ describeMspNet(
       // Create bucket and get the bucket ID directly
       const newBucketEvent = await userApi.createBucket(bucketName);
       const newBucketEventData =
-        userApi.events.fileSystem.NewBucket.is(newBucketEvent) &&
-        newBucketEvent.data;
+        userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
       if (!newBucketEventData) {
         throw new Error("NewBucket event data not found");
@@ -632,7 +583,7 @@ describeMspNet(
       // Delete bucket using the bucket ID from creation
       await userApi.block.seal({
         calls: [userApi.tx.fileSystem.deleteBucket(bucketId)],
-        signer: shUser,
+        signer: shUser
       });
 
       // Wait for deletion to be indexed
@@ -674,10 +625,7 @@ describeMspNet(
       const stateAfter = await sql`
         SELECT last_processed_block FROM service_state WHERE id = 1
       `;
-      assert(
-        stateAfter[0]?.last_processed_block > blockBefore,
-        "Indexer should process blocks"
-      );
+      assert(stateAfter[0]?.last_processed_block > blockBefore, "Indexer should process blocks");
 
       // Verify BSP capacity remains unchanged (no capacity events were indexed)
       const bspAfter = await sql`
@@ -698,8 +646,7 @@ describeMspNet(
 
       const newBucketEvent = await userApi.createBucket(bucketName);
       const newBucketEventData =
-        userApi.events.fileSystem.NewBucket.is(newBucketEvent) &&
-        newBucketEvent.data;
+        userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
 
       if (!newBucketEventData) {
         throw new Error("NewBucket event data not found");
@@ -708,11 +655,7 @@ describeMspNet(
       const bucketId = newBucketEventData.bucketId;
 
       // Use newStorageRequest helper which handles the full flow including file loading
-      const fileMetadata = await userApi.file.newStorageRequest(
-        source,
-        destination,
-        bucketId
-      );
+      const fileMetadata = await userApi.file.newStorageRequest(source, destination, bucketId);
       const fileKey = fileMetadata.fileKey;
 
       // Wait for BSP to volunteer (it auto-volunteers because file matches BSP ID)
@@ -724,15 +667,13 @@ describeMspNet(
       // Wait for BSP to receive and store the file
       await waitFor({
         lambda: async () =>
-          (
-            await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)
-          ).isFileFound,
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
       // Wait for BSP to confirm storage
       await userApi.wait.bspStored({
         expectedExts: 1,
-        sealBlock: false,
+        sealBlock: false
       });
 
       // Seal block with confirm TX
@@ -743,14 +684,7 @@ describeMspNet(
       await userApi.block.seal();
 
       // Essential tables that should be populated in fishing mode
-      const essentialTables = [
-        "file",
-        "bucket",
-        "bsp",
-        "msp",
-        "bsp_file",
-        "msp_file",
-      ];
+      const essentialTables = ["file", "bucket", "bsp", "msp", "bsp_file", "msp_file"];
 
       // Non-essential tables that should be minimal/empty in fishing mode
       const nonEssentialTables = ["paymentstream", "peer_id", "file_peer_id"];
@@ -768,10 +702,7 @@ describeMspNet(
         // Special handling for paymentstream which might have initial data from network setup
         // Payment streams might exist from network initialization,
         // but no new ones should be created in fishing mode
-        assert(
-          result[0].count >= 0,
-          `Non-essential table ${table} should be accessible`
-        );
+        assert(result[0].count >= 0, `Non-essential table ${table} should be accessible`);
       }
     });
   }

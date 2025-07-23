@@ -50,7 +50,7 @@ describeMspNet(
       // Check logs to verify fishing mode is active on the fisherman node
       await fishermanApi.docker.waitForLog({
         containerName: ShConsts.NODE_INFOS.fisherman.containerName,
-        searchString: "IndexerService starting up in Fishing (file tracking only) mode!",
+        searchString: "IndexerService starting up in Fishing mode!",
         timeout: 10000
       });
     });

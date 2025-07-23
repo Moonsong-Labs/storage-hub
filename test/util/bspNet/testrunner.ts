@@ -98,7 +98,8 @@ export async function describeBspNet<
         it,
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
-        createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        createApi: (endpoint: `ws://${string}` | `wss://${string}`) =>
+          BspNetTestApi.create(endpoint),
         bspNetConfig,
         before,
         after,
@@ -162,7 +163,9 @@ export async function describeMspNet<
         msp1ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
         msp2ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`);
         if (fullNetConfig.fisherman) {
-          fishermanApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`);
+          fishermanApiPromise = BspNetTestApi.create(
+            `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`
+          );
         }
       });
 
@@ -195,14 +198,14 @@ export async function describeMspNet<
         }
       });
 
-      const context = {
+      const context: FullNetContext = {
         it,
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
         createMsp1Api: () => msp1ApiPromise,
         createMsp2Api: () => msp2ApiPromise,
-        createFishermanApi: fishermanApiPromise ? () => fishermanApiPromise : undefined,
-        createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        createApi: (endpoint: `ws://${string}` | `wss://${string}`) =>
+          BspNetTestApi.create(endpoint),
         createSqlClient: () => createSqlClient(),
         bspNetConfig: fullNetConfig,
         before,
@@ -210,7 +213,17 @@ export async function describeMspNet<
         afterEach,
         beforeEach,
         getLaunchResponse: () => responseListenerPromise
-      } satisfies FullNetContext;
+      };
+
+      // Add createFishermanApi conditionally - check at runtime, not at definition time
+      if (fullNetConfig.fisherman) {
+        context.createFishermanApi = () => {
+          if (!fishermanApiPromise) {
+            throw new Error("Fisherman API promise not initialized - this should not happen");
+          }
+          return fishermanApiPromise;
+        };
+      }
 
       tests(context);
     });
