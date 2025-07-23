@@ -1,0 +1,39 @@
+[package]
+name = "shc-fisherman-service"
+version = "0.1.0"
+edition = "2021"
+authors = ["StorageHub Team"]
+description = "Fisherman monitoring service for StorageHub parachain"
+
+[dependencies]
+# Actor framework dependencies
+shc-actors-framework = { path = "../actors-framework" }
+shc-actors-derive = { path = "../actors-derive" }
+shc-common = { path = "../common" }
+shc-indexer-db = { path = "../indexer-db" }
+
+# Async and futures
+async-trait = "0.1"
+futures = "0.3"
+tokio = { version = "1.0", features = ["full"] }
+
+# Logging and error handling
+log = "0.4"
+thiserror = "1.0"
+
+# Substrate dependencies
+sp-api = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sc-client-api = { workspace = true }
+sc-utils = { workspace = true }
+
+# Database dependencies
+diesel = { workspace = true }
+diesel-async = { workspace = true }
+
+# Local runtime dependency
+storage-hub-runtime = { path = "../../runtime" }
+
+# Blockchain interaction dependencies  
+pallet-storage-providers-runtime-api = { path = "../../pallets/providers/runtime-api" }

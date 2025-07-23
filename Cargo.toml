@@ -24,6 +24,7 @@ members = [
 	"client/common",
 	"client/file-manager",
 	"client/file-transfer-service",
+	"client/fisherman-service",
 	"client/forest-manager",
 	"client/indexer-db",
 	"client/indexer-service",
