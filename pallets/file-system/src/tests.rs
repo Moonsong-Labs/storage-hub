@@ -3,7 +3,7 @@ use crate::{
     mock::*,
     types::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
-        FileDeletionMessage, FileKeyWithProof, FileLocation, FileOperation,
+        FileOperationMessage, FileKeyWithProof, FileLocation, FileOperation,
         MoveBucketRequestMetadata, PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit,
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
         StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
@@ -11567,7 +11567,7 @@ mod file_deletion_signature_tests {
             .unwrap();
 
             // 2. Construct the message
-            let signed_message = FileDeletionMessage::<Test> {
+            let signed_message = FileOperationMessage::<Test> {
                 file_key,
                 operation: FileOperation::Delete,
             };
@@ -11632,7 +11632,7 @@ mod file_deletion_signature_tests {
             .unwrap();
 
             // 2. Construct the message
-            let signed_message = FileDeletionMessage::<Test> {
+            let signed_message = FileOperationMessage::<Test> {
                 file_key,
                 operation: FileOperation::Delete,
             };
@@ -11691,7 +11691,7 @@ mod file_deletion_signature_tests {
             .unwrap();
 
             // 2. Construct the message
-            let signed_message = FileDeletionMessage::<Test> {
+            let signed_message = FileOperationMessage::<Test> {
                 file_key,
                 operation: FileOperation::Delete,
             };
@@ -11757,7 +11757,7 @@ mod file_deletion_signature_tests {
             .unwrap();
 
             // 2. Construct the message
-            let signed_message = FileDeletionMessage::<Test> {
+            let signed_message = FileOperationMessage::<Test> {
                 file_key,
                 operation: FileOperation::Delete,
             };

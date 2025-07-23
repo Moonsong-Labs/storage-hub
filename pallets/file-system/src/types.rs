@@ -524,28 +524,29 @@ pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;
 pub type TickNumber<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber;
 
-/// Enum representing different file operations that can be signed.
+/// Enum representing the different file operations that can be used.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 pub enum FileOperation {
     /// Delete operation for a file.
     Delete,
 }
 
-/// Signed message structure for file operations.
+/// File operation intention. This, when signed by the file owner,
+/// allows an actor to execute the operation on the file owner's behalf.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
-pub struct FileDeletionMessage<T: Config> {
-    /// The file key to be deleted.
+pub struct FileOperationMessage<T: Config> {
+    /// The file key to act upon.
     pub file_key: MerkleHash<T>,
-    /// The operation to be performed.
+    /// The operation to be performed on the file.
     pub operation: FileOperation,
 }
 
-impl<T: Config> Debug for FileDeletionMessage<T> {
+impl<T: Config> Debug for FileOperationMessage<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "FileDeletionMessage(file_key: {:?}, operation: {:?})",
+            "FileOperationMessage(file_key: {:?}, operation: {:?})",
             self.file_key, self.operation
         )
     }

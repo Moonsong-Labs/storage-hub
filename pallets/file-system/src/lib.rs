@@ -747,7 +747,7 @@ pub mod pallet {
         },
         /// Notifies that a file deletion has been requested with a signed message.
         RequestFileDeletion {
-            signed_message: FileDeletionMessage<T>,
+            signed_message: FileOperationMessage<T>,
             signature: T::OffchainSignature,
         },
     }
@@ -1413,7 +1413,7 @@ pub mod pallet {
         #[pallet::weight(Weight::zero())]
         pub fn request_delete_file(
             origin: OriginFor<T>,
-            signed_message: FileDeletionMessage<T>,
+            signed_message: FileOperationMessage<T>,
             signature: T::OffchainSignature,
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
