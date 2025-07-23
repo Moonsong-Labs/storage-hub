@@ -14569,6 +14569,7 @@ dependencies = [
  "shc-fisherman-service",
  "shc-forest-manager",
  "shc-indexer-db",
+ "shc-indexer-service",
  "shc-rpc",
  "shp-constants",
  "shp-file-metadata",
