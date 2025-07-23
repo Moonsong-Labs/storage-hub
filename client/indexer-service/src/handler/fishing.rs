@@ -1,0 +1,155 @@
+//! Fishing mode event handlers for the indexer service.
+//!
+//! This module implements the fishing mode which indexes only file creation/deletion
+//! events and BSP-file associations needed for fisherman monitoring. This mode is
+//! automatically selected when running a fisherman-only node to minimize database
+//! load while maintaining file availability tracking.
+
+use anyhow::Result;
+use log::trace;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_indexer_db::DbConnection;
+use storage_hub_runtime::{Hash as H256, RuntimeEvent};
+
+use super::IndexerService;
+
+use pallet_file_system;
+use pallet_storage_providers;
+
+const LOG_TARGET: &str = "indexer-service::fishing_handlers";
+
+impl<RuntimeApi> IndexerService<RuntimeApi>
+where
+    RuntimeApi: StorageEnableRuntimeApi,
+    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+{
+    pub(super) async fn index_event_fishing<'a, 'b: 'a>(
+        &'b self,
+        conn: &mut DbConnection<'a>,
+        event: &RuntimeEvent,
+        block_hash: H256,
+    ) -> Result<(), diesel::result::Error> {
+        match event {
+            RuntimeEvent::FileSystem(fs_event) => match fs_event {
+                pallet_file_system::Event::NewStorageRequest { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing NewStorageRequest event");
+                    self.index_file_system_event(conn, fs_event).await?
+                }
+                pallet_file_system::Event::StorageRequestRevoked { .. }
+                | pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing file deletion event");
+                    self.index_file_system_event(conn, fs_event).await?
+                }
+                pallet_file_system::Event::BspConfirmedStoring { .. }
+                | pallet_file_system::Event::BspConfirmStoppedStoring { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing BSP-file association event");
+                    self.index_file_system_event(conn, fs_event).await?
+                }
+                pallet_file_system::Event::NewBucket { .. }
+                | pallet_file_system::Event::BucketDeleted { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing bucket event");
+                    self.index_file_system_event(conn, fs_event).await?
+                }
+                pallet_file_system::Event::MspAcceptedStorageRequest { .. }
+                | pallet_file_system::Event::StorageRequestFulfilled { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing MSP-file association event");
+                    self.index_file_system_event(conn, fs_event).await?
+                }
+                pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. }
+                | pallet_file_system::Event::MspStoppedStoringBucket { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing MSP bucket removal event");
+                    self.index_file_system_event(conn, fs_event).await?
+                }
+                pallet_file_system::Event::MoveBucketAccepted { .. }
+                | pallet_file_system::Event::BucketPrivacyUpdated { .. }
+                | pallet_file_system::Event::StorageRequestExpired { .. }
+                | pallet_file_system::Event::MoveBucketRequested { .. }
+                | pallet_file_system::Event::NewCollectionAndAssociation { .. }
+                | pallet_file_system::Event::AcceptedBspVolunteer { .. }
+                | pallet_file_system::Event::StorageRequestRejected { .. }
+                | pallet_file_system::Event::BspRequestedToStopStoring { .. }
+                | pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. }
+                | pallet_file_system::Event::FailedToQueuePriorityChallenge { .. }
+                | pallet_file_system::Event::FileDeletionRequest { .. }
+                | pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
+                    ..
+                }
+                | pallet_file_system::Event::BspChallengeCycleInitialised { .. }
+                | pallet_file_system::Event::MoveBucketRequestExpired { .. }
+                | pallet_file_system::Event::MoveBucketRejected { .. }
+                | pallet_file_system::Event::FailedToGetMspOfBucket { .. }
+                | pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. }
+                | pallet_file_system::Event::UsedCapacityShouldBeZero { .. }
+                | pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit {
+                    ..
+                }
+                | pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. }
+                | pallet_file_system::Event::__Ignore(_, _) => {
+                    trace!(target: LOG_TARGET, "Ignoring non-essential FileSystem event in fishing mode");
+                }
+            },
+            RuntimeEvent::Providers(provider_event) => match provider_event {
+                pallet_storage_providers::Event::BspSignUpSuccess { .. }
+                | pallet_storage_providers::Event::BspSignOffSuccess { .. }
+                | pallet_storage_providers::Event::BspDeleted { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing BSP provider event");
+                    self.index_providers_event(conn, provider_event, block_hash)
+                        .await?
+                }
+                pallet_storage_providers::Event::MspSignUpSuccess { .. }
+                | pallet_storage_providers::Event::MspSignOffSuccess { .. }
+                | pallet_storage_providers::Event::MspDeleted { .. } => {
+                    trace!(target: LOG_TARGET, "Indexing MSP provider event");
+                    self.index_providers_event(conn, provider_event, block_hash)
+                        .await?
+                }
+                pallet_storage_providers::Event::BspRequestSignUpSuccess { .. }
+                | pallet_storage_providers::Event::MspRequestSignUpSuccess { .. }
+                | pallet_storage_providers::Event::SignUpRequestCanceled { .. }
+                | pallet_storage_providers::Event::CapacityChanged { .. }
+                | pallet_storage_providers::Event::BucketRootChanged { .. }
+                | pallet_storage_providers::Event::Slashed { .. }
+                | pallet_storage_providers::Event::AwaitingTopUp { .. }
+                | pallet_storage_providers::Event::TopUpFulfilled { .. }
+                | pallet_storage_providers::Event::ValuePropAdded { .. }
+                | pallet_storage_providers::Event::ValuePropUnavailable { .. }
+                | pallet_storage_providers::Event::MultiAddressAdded { .. }
+                | pallet_storage_providers::Event::MultiAddressRemoved { .. }
+                | pallet_storage_providers::Event::ProviderInsolvent { .. }
+                | pallet_storage_providers::Event::BucketsOfInsolventMsp { .. }
+                | pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
+                    ..
+                }
+                | pallet_storage_providers::Event::FailedToSlashInsolventProvider { .. }
+                | pallet_storage_providers::Event::FailedToStopAllCyclesForInsolventBsp {
+                    ..
+                }
+                | pallet_storage_providers::Event::FailedToInsertProviderTopUpExpiration {
+                    ..
+                }
+                | pallet_storage_providers::Event::__Ignore(_, _) => {
+                    trace!(target: LOG_TARGET, "Ignoring non-essential provider event in fishing mode");
+                }
+            },
+            // Explicitly list all other runtime events to ensure compilation errors on new events
+            RuntimeEvent::System(_) => {}
+            RuntimeEvent::ParachainSystem(_) => {}
+            RuntimeEvent::Balances(_) => {}
+            RuntimeEvent::TransactionPayment(_) => {}
+            RuntimeEvent::Sudo(_) => {}
+            RuntimeEvent::CollatorSelection(_) => {}
+            RuntimeEvent::Session(_) => {}
+            RuntimeEvent::XcmpQueue(_) => {}
+            RuntimeEvent::PolkadotXcm(_) => {}
+            RuntimeEvent::CumulusXcm(_) => {}
+            RuntimeEvent::MessageQueue(_) => {}
+            RuntimeEvent::Nfts(_) => {}
+            RuntimeEvent::Parameters(_) => {}
+            RuntimeEvent::BucketNfts(_) => {}
+            RuntimeEvent::PaymentStreams(_) => {}
+            RuntimeEvent::ProofsDealer(_) => {}
+            RuntimeEvent::Randomness(_) => {}
+        }
+        Ok(())
+    }
+}
