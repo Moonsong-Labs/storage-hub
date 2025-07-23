@@ -1156,15 +1156,15 @@ where
     /// This function validates a signed file deletion request by:
     /// 1. Checking that the requester is not insolvent
     /// 2. Verifying the requester owns the bucket containing the file
-    /// 3. Validating the signature against the encoded message
-    /// 4. Computing the file key from provided metadata and verifying it matches the signed message
+    /// 3. Validating the signature against the encoded intention
+    /// 4. Computing the file key from provided metadata and verifying it matches the signed intention
     /// 5. Ensuring the operation type is Delete
     ///
     /// Note: This function only validates the deletion request but does not perform the actual
     /// file deletion. It serves as a preliminary step before the deletion process can proceed.
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
-        signed_delete_intention: FileOperationIntention<T>,
+        signed_intention: FileOperationIntention<T>,
         signature: T::OffchainSignature,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
@@ -1186,10 +1186,10 @@ where
             Error::<T>::NotBucketOwner
         );
 
-        // Encode the message for signature verification
-        let message_encoded = signed_delete_intention.encode();
+        // Encode the intention for signature verification
+        let signed_intention_encoded = signed_intention.encode();
 
-        let is_valid = signature.verify(&message_encoded[..], &who);
+        let is_valid = signature.verify(&signed_intention_encoded[..], &who);
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Compute file key from the provided metadata
@@ -1197,15 +1197,15 @@ where
             Self::compute_file_key(who.clone(), bucket_id, location.clone(), size, fingerprint)
                 .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
-        // Verify that the file_key in the signed message matches the computed one
+        // Verify that the file_key in the signed intention matches the computed one
         ensure!(
-            signed_delete_intention.file_key == computed_file_key,
+            signed_intention.file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
         );
 
         // Verify that the operation is Delete
         ensure!(
-            signed_delete_intention.operation == FileOperation::Delete,
+            signed_intention.operation == FileOperation::Delete,
             Error::<T>::InvalidFileKeyMetadata
         );
 

@@ -1405,16 +1405,16 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Request deletion of a file using a signed message.
+        /// Request deletion of a file using a signed delete intention.
         ///
-        /// The origin must be signed and the signature must be valid for the given message.
-        /// The message must contain the file key and the delete operation.
+        /// The origin must be signed and the signature must be valid for the given delete intention.
+        /// The delete intention must contain the file key and the delete operation.
         /// File metadata is provided separately for ownership verification.
         #[pallet::call_index(16)]
         #[pallet::weight(Weight::zero())]
         pub fn request_delete_file(
             origin: OriginFor<T>,
-            signed_delete_intention: FileOperationIntention<T>,
+            signed_intention: FileOperationIntention<T>,
             signature: T::OffchainSignature,
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
@@ -1425,7 +1425,7 @@ pub mod pallet {
 
             Self::do_request_delete_file(
                 who.clone(),
-                signed_delete_intention.clone(),
+                signed_intention.clone(),
                 signature.clone(),
                 bucket_id,
                 location,
@@ -1435,7 +1435,7 @@ pub mod pallet {
 
             // Emit the event
             Self::deposit_event(Event::FileDeletionRequested {
-                signed_delete_intention,
+                signed_delete_intention: signed_intention,
                 signature,
             });
 
