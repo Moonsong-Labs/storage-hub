@@ -4,6 +4,7 @@
 use futures::{Stream, StreamExt};
 use log::{error, info};
 use shc_blockchain_service::capacity_manager::CapacityConfig;
+use shc_fisherman_service::spawn_fisherman_service;
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
 use std::{cell::RefCell, env, path::PathBuf, sync::Arc, time::Duration};
@@ -441,9 +442,19 @@ where
         }
     }
 
+    // Start fisherman service if enabled
     if fisherman_config.fisherman {
-        info!("🐟 Fisherman service enabled");
-        // TODO: Start fisherman service here
+        info!("🎣 Starting Fisherman monitoring service...");
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
+        spawn_fisherman_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+        info!("🎣 Fisherman service started successfully");
     }
 
     let signing_dev_key = config
@@ -885,9 +896,19 @@ where
         }
     }
 
+    // Start fisherman service if enabled
     if fisherman_config.fisherman {
-        info!("🐟 Fisherman service enabled");
-        // TODO: Start fisherman service here
+        info!("🎣 Starting Fisherman monitoring service...");
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
+        spawn_fisherman_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+        info!("🎣 Fisherman service started successfully");
     }
 
     let signing_dev_key = config
@@ -1139,9 +1160,19 @@ where
         }
     }
 
+    // Start fisherman service if enabled
     if fisherman_config.fisherman {
-        info!("🐟 Fisherman service enabled");
-        // TODO: Start fisherman service here
+        info!("🎣 Starting Fisherman monitoring service...");
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
+        spawn_fisherman_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+        info!("🎣 Fisherman service started successfully");
     }
 
     // If we are a provider we update the network configuration with the file transfer protocol.
@@ -1435,9 +1466,19 @@ where
         }
     }
 
+    // Start fisherman service if enabled
     if fisherman_config.fisherman {
-        info!("🐟 Fisherman service enabled");
-        // TODO: Start fisherman service here
+        info!("🎣 Starting Fisherman monitoring service...");
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
+        spawn_fisherman_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+        info!("🎣 Fisherman service started successfully");
     }
 
     // If we are a provider we update the network configuration with the file transfer protocol.
