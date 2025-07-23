@@ -41,7 +41,7 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
-        FileLocation, FileOperation, FileOperationMessage, Fingerprint, ForestProof, MerkleHash,
+        FileLocation, FileOperation, FileOperationIntention, Fingerprint, ForestProof, MerkleHash,
         MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
         ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
         StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
@@ -1164,7 +1164,7 @@ where
     /// file deletion. It serves as a preliminary step before the deletion process can proceed.
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
-        signed_message: FileOperationMessage<T>,
+        signed_delete_intention: FileOperationIntention<T>,
         signature: T::OffchainSignature,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
@@ -1187,7 +1187,7 @@ where
         );
 
         // Encode the message for signature verification
-        let message_encoded = signed_message.encode();
+        let message_encoded = signed_delete_intention.encode();
 
         let is_valid = signature.verify(&message_encoded[..], &who);
         ensure!(is_valid, Error::<T>::InvalidSignature);
@@ -1199,13 +1199,13 @@ where
 
         // Verify that the file_key in the signed message matches the computed one
         ensure!(
-            signed_message.file_key == computed_file_key,
+            signed_delete_intention.file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
         );
 
         // Verify that the operation is Delete
         ensure!(
-            signed_message.operation == FileOperation::Delete,
+            signed_delete_intention.operation == FileOperation::Delete,
             Error::<T>::InvalidFileKeyMetadata
         );
 

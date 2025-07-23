@@ -3,7 +3,7 @@ use crate::{
     mock::*,
     types::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
-        FileKeyWithProof, FileLocation, FileOperation, FileOperationMessage,
+        FileKeyWithProof, FileLocation, FileOperation, FileOperationIntention,
         MoveBucketRequestMetadata, PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit,
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
         StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
@@ -11567,20 +11567,20 @@ mod file_deletion_signature_tests {
             .unwrap();
 
             // 2. Construct the message
-            let signed_message = FileOperationMessage::<Test> {
+            let signed_delete_intention = FileOperationIntention::<Test> {
                 file_key,
                 operation: FileOperation::Delete,
             };
 
             // 3. Sign the message
-            let message_encoded = signed_message.encode();
+            let message_encoded = signed_delete_intention.encode();
             let signature_bytes = alice_pair.sign(&message_encoded);
             let signature = MultiSignature::Sr25519(signature_bytes);
 
             // 4. Call the extrinsic
             assert_ok!(FileSystem::request_delete_file(
                 alice_origin,
-                signed_message.clone(),
+                signed_delete_intention.clone(),
                 signature.clone(),
                 bucket_id,
                 location,
@@ -11590,8 +11590,8 @@ mod file_deletion_signature_tests {
 
             // 5. Verify the event was emitted
             System::assert_last_event(
-                Event::RequestFileDeletion {
-                    signed_message,
+                Event::FileDeletionRequested {
+                    signed_delete_intention,
                     signature,
                 }
                 .into(),
@@ -11632,7 +11632,7 @@ mod file_deletion_signature_tests {
             .unwrap();
 
             // 2. Construct the message
-            let signed_message = FileOperationMessage::<Test> {
+            let signed_message = FileOperationIntention::<Test> {
                 file_key,
                 operation: FileOperation::Delete,
             };
@@ -11691,7 +11691,7 @@ mod file_deletion_signature_tests {
             .unwrap();
 
             // 2. Construct the message
-            let signed_message = FileOperationMessage::<Test> {
+            let signed_message = FileOperationIntention::<Test> {
                 file_key,
                 operation: FileOperation::Delete,
             };
@@ -11757,7 +11757,7 @@ mod file_deletion_signature_tests {
             .unwrap();
 
             // 2. Construct the message
-            let signed_message = FileOperationMessage::<Test> {
+            let signed_message = FileOperationIntention::<Test> {
                 file_key,
                 operation: FileOperation::Delete,
             };

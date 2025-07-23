@@ -745,9 +745,10 @@ pub mod pallet {
             amount_to_transfer: BalanceOf<T>,
             error: DispatchError,
         },
-        /// Notifies that a file deletion has been requested with a signed message.
-        RequestFileDeletion {
-            signed_message: FileOperationMessage<T>,
+        /// Notifies that a file deletion has been requested.
+        /// Contains a signed intention that allows any actor to execute the actual deletion.
+        FileDeletionRequested {
+            signed_delete_intention: FileOperationIntention<T>,
             signature: T::OffchainSignature,
         },
     }
@@ -1413,7 +1414,7 @@ pub mod pallet {
         #[pallet::weight(Weight::zero())]
         pub fn request_delete_file(
             origin: OriginFor<T>,
-            signed_message: FileOperationMessage<T>,
+            signed_delete_intention: FileOperationIntention<T>,
             signature: T::OffchainSignature,
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
@@ -1424,7 +1425,7 @@ pub mod pallet {
 
             Self::do_request_delete_file(
                 who.clone(),
-                signed_message.clone(),
+                signed_delete_intention.clone(),
                 signature.clone(),
                 bucket_id,
                 location,
@@ -1433,8 +1434,8 @@ pub mod pallet {
             )?;
 
             // Emit the event
-            Self::deposit_event(Event::RequestFileDeletion {
-                signed_message,
+            Self::deposit_event(Event::FileDeletionRequested {
+                signed_delete_intention,
                 signature,
             });
 

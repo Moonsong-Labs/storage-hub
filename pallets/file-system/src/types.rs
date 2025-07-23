@@ -431,18 +431,18 @@ pub enum FileOperation {
 /// allows an actor to execute the operation on the file owner's behalf.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
-pub struct FileOperationMessage<T: Config> {
+pub struct FileOperationIntention<T: Config> {
     /// The file key to act upon.
     pub file_key: MerkleHash<T>,
     /// The operation to be performed on the file.
     pub operation: FileOperation,
 }
 
-impl<T: Config> Debug for FileOperationMessage<T> {
+impl<T: Config> Debug for FileOperationIntention<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "FileOperationMessage(file_key: {:?}, operation: {:?})",
+            "FileOperationIntention(file_key: {:?}, operation: {:?})",
             self.file_key, self.operation
         )
     }
