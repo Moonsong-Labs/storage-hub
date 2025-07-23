@@ -446,6 +446,15 @@ pub struct IndexerConfigurations {
     pub database_url: Option<String>,
 }
 
+#[derive(Debug, Parser, Clone)]
+pub struct FishermanConfigurations {
+    /// Whether to enable the fisherman service.
+    ///
+    /// By default, the fisherman service is disabled.
+    #[arg(long, default_value = "false")]
+    pub fisherman: bool,
+}
+
 /// Block authoring scheme to be used by the dev service.
 #[derive(Debug, Copy, Clone, Deserialize)]
 pub enum Sealing {
@@ -534,6 +543,10 @@ pub struct Cli {
     /// Indexer configurations
     #[command(flatten)]
     pub indexer_config: IndexerConfigurations,
+
+    /// Fisherman configurations
+    #[command(flatten)]
+    pub fisherman_config: FishermanConfigurations,
 }
 
 #[derive(Debug, Parser)]
