@@ -1692,8 +1692,8 @@ export default {
         amountToTransfer: "u128",
         error: "SpRuntimeDispatchError"
       },
-      RequestFileDeletion: {
-        signedMessage: "PalletFileSystemFileDeletionMessage",
+      FileDeletionRequested: {
+        signedDeleteIntention: "PalletFileSystemFileOperationIntention",
         signature: "SpRuntimeMultiSignature"
       }
     }
@@ -1720,9 +1720,9 @@ export default {
     }
   },
   /**
-   * Lookup157: pallet_file_system::types::FileDeletionMessage<T>
+   * Lookup157: pallet_file_system::types::FileOperationIntention<T>
    **/
-  PalletFileSystemFileDeletionMessage: {
+  PalletFileSystemFileOperationIntention: {
     fileKey: "H256",
     operation: "PalletFileSystemFileOperation"
   },
@@ -3811,7 +3811,7 @@ export default {
         _alias: {
           size_: "size"
         },
-        signedMessage: "PalletFileSystemFileDeletionMessage",
+        signedDeleteIntention: "PalletFileSystemFileOperationIntention",
         signature: "SpRuntimeMultiSignature",
         bucketId: "H256",
         location: "Bytes",

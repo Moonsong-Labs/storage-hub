@@ -74,9 +74,9 @@ import type {
   PalletFileSystemEitherAccountIdOrMspId,
   PalletFileSystemError,
   PalletFileSystemEvent,
-  PalletFileSystemFileDeletionMessage,
   PalletFileSystemFileKeyWithProof,
   PalletFileSystemFileOperation,
+  PalletFileSystemFileOperationIntention,
   PalletFileSystemHoldReason,
   PalletFileSystemMoveBucketRequestMetadata,
   PalletFileSystemPendingFileDeletionRequest,
@@ -382,9 +382,9 @@ declare module "@polkadot/types/types/registry" {
     PalletFileSystemEitherAccountIdOrMspId: PalletFileSystemEitherAccountIdOrMspId;
     PalletFileSystemError: PalletFileSystemError;
     PalletFileSystemEvent: PalletFileSystemEvent;
-    PalletFileSystemFileDeletionMessage: PalletFileSystemFileDeletionMessage;
     PalletFileSystemFileKeyWithProof: PalletFileSystemFileKeyWithProof;
     PalletFileSystemFileOperation: PalletFileSystemFileOperation;
+    PalletFileSystemFileOperationIntention: PalletFileSystemFileOperationIntention;
     PalletFileSystemHoldReason: PalletFileSystemHoldReason;
     PalletFileSystemMoveBucketRequestMetadata: PalletFileSystemMoveBucketRequestMetadata;
     PalletFileSystemPendingFileDeletionRequest: PalletFileSystemPendingFileDeletionRequest;

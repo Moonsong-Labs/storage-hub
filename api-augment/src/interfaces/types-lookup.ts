@@ -2215,9 +2215,9 @@ declare module "@polkadot/types/lookup" {
       readonly amountToTransfer: u128;
       readonly error: SpRuntimeDispatchError;
     } & Struct;
-    readonly isRequestFileDeletion: boolean;
-    readonly asRequestFileDeletion: {
-      readonly signedMessage: PalletFileSystemFileDeletionMessage;
+    readonly isFileDeletionRequested: boolean;
+    readonly asFileDeletionRequested: {
+      readonly signedDeleteIntention: PalletFileSystemFileOperationIntention;
       readonly signature: SpRuntimeMultiSignature;
     } & Struct;
     readonly type:
@@ -2252,7 +2252,7 @@ declare module "@polkadot/types/lookup" {
       | "UsedCapacityShouldBeZero"
       | "FailedToReleaseStorageRequestCreationDeposit"
       | "FailedToTransferDepositFundsToBsp"
-      | "RequestFileDeletion";
+      | "FileDeletionRequested";
   }
 
   /** @name PalletFileSystemRejectedStorageRequestReason (154) */
@@ -2279,8 +2279,8 @@ declare module "@polkadot/types/lookup" {
     readonly type: "AccountId" | "MspId";
   }
 
-  /** @name PalletFileSystemFileDeletionMessage (157) */
-  interface PalletFileSystemFileDeletionMessage extends Struct {
+  /** @name PalletFileSystemFileOperationIntention (157) */
+  interface PalletFileSystemFileOperationIntention extends Struct {
     readonly fileKey: H256;
     readonly operation: PalletFileSystemFileOperation;
   }
@@ -4813,7 +4813,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isRequestDeleteFile: boolean;
     readonly asRequestDeleteFile: {
-      readonly signedMessage: PalletFileSystemFileDeletionMessage;
+      readonly signedDeleteIntention: PalletFileSystemFileOperationIntention;
       readonly signature: SpRuntimeMultiSignature;
       readonly bucketId: H256;
       readonly location: Bytes;

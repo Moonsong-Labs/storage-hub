@@ -1663,8 +1663,8 @@ declare const _default: {
         amountToTransfer: string;
         error: string;
       };
-      RequestFileDeletion: {
-        signedMessage: string;
+      FileDeletionRequested: {
+        signedDeleteIntention: string;
         signature: string;
       };
     };
@@ -1685,9 +1685,9 @@ declare const _default: {
     };
   };
   /**
-   * Lookup157: pallet_file_system::types::FileDeletionMessage<T>
+   * Lookup157: pallet_file_system::types::FileOperationIntention<T>
    **/
-  PalletFileSystemFileDeletionMessage: {
+  PalletFileSystemFileOperationIntention: {
     fileKey: string;
     operation: string;
   };
@@ -3705,7 +3705,7 @@ declare const _default: {
         _alias: {
           size_: string;
         };
-        signedMessage: string;
+        signedDeleteIntention: string;
         signature: string;
         bucketId: string;
         location: string;
