@@ -3,7 +3,7 @@ use crate::{
     mock::*,
     types::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
-        FileOperationMessage, FileKeyWithProof, FileLocation, FileOperation,
+        FileKeyWithProof, FileLocation, FileOperation, FileOperationMessage,
         MoveBucketRequestMetadata, PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit,
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
         StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,

@@ -40,9 +40,9 @@ use crate::{
     pallet,
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileOperationMessage,
-        FileKeyHasher, FileKeyWithProof, FileLocation, FileOperation, Fingerprint, ForestProof,
-        MerkleHash, MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
+        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
+        FileLocation, FileOperation, FileOperationMessage, Fingerprint, ForestProof, MerkleHash,
+        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
         ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
         StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
@@ -1161,7 +1161,7 @@ where
     /// 5. Ensuring the operation type is Delete
     ///
     /// Note: This function only validates the deletion request but does not perform the actual
-    /// file deletion. It serves as a preliminary check before the deletion process can proceed.
+    /// file deletion. It serves as a preliminary step before the deletion process can proceed.
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
         signed_message: FileOperationMessage<T>,
