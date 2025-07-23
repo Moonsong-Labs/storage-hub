@@ -2,7 +2,6 @@ use super::{
     ftp::FtpFileHandler, http::HttpFileHandler, local::LocalFileHandler, RemoteFileConfig,
     RemoteFileError, RemoteFileHandler,
 };
-use std::path::PathBuf;
 use std::sync::Arc;
 use url::Url;
 
@@ -12,19 +11,19 @@ impl RemoteFileHandlerFactory {
     pub fn create(
         url: &Url,
         config: RemoteFileConfig,
-    ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
+    ) -> Result<Arc<dyn RemoteFileHandler>, RemoteFileError> {
         match url.scheme() {
             "" | "file" => LocalFileHandler::new(url, config)
-                .map(|h| (Arc::new(h) as Arc<dyn RemoteFileHandler>, url.clone())),
+                .map(|h| Arc::new(h) as Arc<dyn RemoteFileHandler>),
 
             "http" | "https" => HttpFileHandler::new(config, url)
-                .map(|h| (Arc::new(h) as Arc<dyn RemoteFileHandler>, url.clone()))
+                .map(|h| Arc::new(h) as Arc<dyn RemoteFileHandler>)
                 .map_err(|e| {
                     RemoteFileError::Other(format!("Failed to create HTTP handler: {}", e))
                 }),
 
             "ftp" | "ftps" => FtpFileHandler::new(config, url)
-                .map(|h| (Arc::new(h) as Arc<dyn RemoteFileHandler>, url.clone())),
+                .map(|h| Arc::new(h) as Arc<dyn RemoteFileHandler>),
 
             scheme => Err(RemoteFileError::UnsupportedProtocol(scheme.to_string())),
         }
@@ -63,7 +62,8 @@ impl RemoteFileHandlerFactory {
             }
         };
 
-        Self::create(&url, config)
+        let handler = Self::create(&url, config)?;
+        Ok((handler, url))
     }
 
     pub fn supported_protocols() -> &'static [&'static str] {

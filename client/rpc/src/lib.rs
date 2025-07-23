@@ -506,9 +506,8 @@ where
 
         // Create file handler for writing to local or remote destination.
         let config = RemoteFileConfig::new(DEFAULT_MAX_FILE_SIZE);
-        let (handler, _url) =
-            RemoteFileHandlerFactory::create_from_string(&file_path, config)
-                .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
+        let (handler, _url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
+            .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
         let mut chunks = Vec::new();
         for chunk_idx in 0..total_chunks {

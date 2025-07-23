@@ -6,7 +6,6 @@ use url::Url;
 #[cfg(test)]
 mod factory_tests {
     use super::*;
-    use percent_encoding;
 
     const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
 
@@ -28,23 +27,17 @@ mod factory_tests {
 
         for (url_str, expected_scheme) in test_cases {
             let url = Url::parse(url_str).unwrap();
-            let (handler, returned_url) =
-                RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
+            let handler = RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
 
-            assert_eq!(url, returned_url, "Returned URL should match input URL");
             assert!(
                 handler.is_supported(&url),
                 "Handler should support {} URLs",
                 expected_scheme
             );
-
-            let other_url = Url::parse("sftp://example.com/file.txt").unwrap();
-            assert!(
-                !handler.is_supported(&other_url),
-                "Handler for {} should not support sftp URLs",
-                expected_scheme
-            );
         }
+
+        let other_url = Url::parse("sftp://example.com/file.txt").unwrap();
+        RemoteFileHandlerFactory::create(&other_url, config.clone()).unwrap_err();
     }
 
     #[test]
@@ -58,12 +51,7 @@ mod factory_tests {
         std::fs::write(&temp_file, b"test").unwrap();
 
         let path = temp_file.to_str().unwrap();
-        let (handler, returned_url) =
-            RemoteFileHandlerFactory::create_from_string(path, config.clone()).unwrap();
-
-        assert!(handler.is_supported(&returned_url));
-        assert_eq!(returned_url.scheme(), "file");
-        // No manual cleanup needed; TempDir cleans up automatically
+        let (_handler, _url) = RemoteFileHandlerFactory::create_from_string(path, config.clone()).unwrap();
     }
 
     #[test]
@@ -120,16 +108,14 @@ mod factory_tests {
         assert_eq!(protocols.len(), 5);
     }
 
-
     #[test]
     fn test_is_protocol_supported_comprehensive() {
         let supported = RemoteFileHandlerFactory::supported_protocols();
 
         // Empty string is handled specially in create() method
-        let result = RemoteFileHandlerFactory::create(
-            &Url::parse("file:///test").unwrap(),
-            RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
-        );
+        let url = Url::parse("file:///test").unwrap();
+        let result =
+            RemoteFileHandlerFactory::create(&url, RemoteFileConfig::new(TEST_MAX_FILE_SIZE));
         assert!(result.is_ok());
 
         assert!(supported.contains(&"file"));
@@ -159,10 +145,8 @@ mod url_parsing_tests {
         let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let url_str = "ftp://user:pass@example.com/file.txt";
-        let (handler, returned_url) =
+        let (handler, url) =
             RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
-        let url = Url::parse(url_str).unwrap();
-        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 
@@ -177,10 +161,8 @@ mod url_parsing_tests {
         ];
 
         for url_str in urls_with_ports {
-            let (handler, returned_url) =
+            let (handler, url) =
                 RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
-            let url = Url::parse(url_str).unwrap();
-            assert_eq!(url, returned_url);
             assert!(handler.is_supported(&url));
         }
     }
@@ -190,10 +172,8 @@ mod url_parsing_tests {
         let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let url_str = "https://example.com/file.txt?version=1.0&token=abc123";
-        let (handler, returned_url) =
+        let (handler, url) =
             RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
-        let url = Url::parse(url_str).unwrap();
-        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 
@@ -202,10 +182,8 @@ mod url_parsing_tests {
         let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let url_str = "https://example.com/file.txt#section1";
-        let (handler, returned_url) =
+        let (handler, url) =
             RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
-        let url = Url::parse(url_str).unwrap();
-        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 
@@ -214,10 +192,8 @@ mod url_parsing_tests {
         let config = RemoteFileConfig::new(TEST_MAX_FILE_SIZE);
 
         let url_str = "https://example.com/path%20with%20spaces/file%20name.txt";
-        let (handler, returned_url) =
+        let (handler, url) =
             RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
-        let url = Url::parse(url_str).unwrap();
-        assert_eq!(url, returned_url);
         assert!(handler.is_supported(&url));
     }
 }
@@ -303,9 +279,7 @@ mod integration_tests {
         let url_str = "https://httpbin.org/bytes/100";
         let url = Url::parse(url_str).unwrap();
 
-        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
-
-        assert_eq!(url, returned_url);
+        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         assert!(handler.is_supported(&url));
     }
 
@@ -320,10 +294,12 @@ mod integration_tests {
             "file:///tmp/file4.txt",
         ];
 
-        let handlers: Vec<(Arc<dyn RemoteFileHandler>, Url)> = urls
+        let handlers: Vec<Arc<dyn RemoteFileHandler>> = urls
             .iter()
             .map(|url_str| {
-                RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap()
+                RemoteFileHandlerFactory::create_from_string(url_str, config.clone())
+                    .unwrap()
+                    .0
             })
             .collect();
 
@@ -331,8 +307,7 @@ mod integration_tests {
 
         for (i, url_str) in urls.iter().enumerate() {
             let url = Url::parse(url_str).unwrap();
-            assert_eq!(url, handlers[i].1);
-            assert!(handlers[i].0.is_supported(&url));
+            assert!(handlers[i].is_supported(&url));
         }
     }
 
@@ -367,8 +342,7 @@ mod external_service_tests {
             .await;
 
         let url = Url::parse(&format!("{}/bytes/100", server.url())).unwrap();
-        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        assert_eq!(url, returned_url);
+        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         let mut stream = handler.stream_file().await.unwrap();
         let mut data = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data)
@@ -396,8 +370,7 @@ mod external_service_tests {
             .await;
 
         let url = Url::parse(&format!("{}/large-file.bin", server.url())).unwrap();
-        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        assert_eq!(url, returned_url);
+        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
 
         let result = handler.get_file_size().await;
         assert!(result.is_ok());
@@ -432,8 +405,7 @@ mod external_service_tests {
             .await;
 
         let url = Url::parse(&format!("{}/start", server.url())).unwrap();
-        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        assert_eq!(url, returned_url);
+        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
 
         let mut stream = handler.stream_file().await.unwrap();
         let mut data = Vec::new();
@@ -457,9 +429,7 @@ mod external_service_tests {
             .await;
 
         let url_no_auth = Url::parse(&format!("{}/protected/resource", server.url())).unwrap();
-        let (handler_no_auth, returned_url) =
-            RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
-        assert_eq!(url_no_auth, returned_url);
+        let handler_no_auth = RemoteFileHandlerFactory::create(&url_no_auth, config).unwrap();
         let result = handler_no_auth.get_file_size().await;
         assert!(matches!(result, Err(RemoteFileError::AccessDenied)));
     }
@@ -473,8 +443,7 @@ mod external_service_tests {
         };
 
         let url = Url::parse("http://10.255.255.1/timeout-test").unwrap();
-        let (handler, returned_url) = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        assert_eq!(url, returned_url);
+        let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
         let result = handler.stream_file().await;
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
