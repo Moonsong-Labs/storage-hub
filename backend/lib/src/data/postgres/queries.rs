@@ -107,13 +107,17 @@ impl PostgresClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::data::postgres::{AnyDbConnection, DbConfig, PgConnection};
+    use std::sync::Arc;
 
     #[tokio::test]
     #[ignore] // Requires actual database
     async fn test_get_active_bsps() {
-        let client = PostgresClient::new("postgres://localhost/storagehub")
+        let config = DbConfig::new("postgres://localhost/storagehub");
+        let pg_conn = PgConnection::new(config)
             .await
-            .unwrap();
+            .expect("Failed to create connection");
+        let client = PostgresClient::new(Arc::new(AnyDbConnection::Real(pg_conn))).await;
 
         let result = client.get_active_bsps().await;
         assert!(result.is_ok());
@@ -122,9 +126,11 @@ mod tests {
     #[tokio::test]
     #[ignore] // Requires actual database
     async fn test_get_file_by_id() {
-        let client = PostgresClient::new("postgres://localhost/storagehub")
+        let config = DbConfig::new("postgres://localhost/storagehub");
+        let pg_conn = PgConnection::new(config)
             .await
-            .unwrap();
+            .expect("Failed to create connection");
+        let client = PostgresClient::new(Arc::new(AnyDbConnection::Real(pg_conn))).await;
 
         let result = client.get_file_by_id("test-file-id").await;
         assert!(result.is_ok());
