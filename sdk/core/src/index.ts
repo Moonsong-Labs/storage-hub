@@ -1,3 +1,2 @@
-export { add } from './wasm';
-
-// TODO: re-export crypto, filemanager, storage utilities once implemented
+export { FileTrie, FileMetadata } from '@storagehub/wasm';
+export { FileManager } from './file-manager';
