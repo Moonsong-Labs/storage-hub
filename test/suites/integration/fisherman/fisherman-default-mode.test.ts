@@ -16,7 +16,7 @@ describeMspNet(
     fishermanIndexerMode: "fishing"
   },
   ({ before, it, createFishermanApi, createSqlClient, createUserApi }) => {
-    let fishermanApi: EnrichedBspApi;
+    let fishermanApi: EnrichedBspApi | undefined;
     let userApi: EnrichedBspApi;
     let sql: SqlClient;
 
@@ -33,6 +33,7 @@ describeMspNet(
       });
 
       fishermanApi = await createFishermanApi();
+      assert(fishermanApi, "Fisherman API should be created successfully");
       sql = createSqlClient();
 
       // Initialize blockchain state using direct RPC call for first block
@@ -48,7 +49,7 @@ describeMspNet(
 
     it("fisherman node automatically enables indexer in fishing mode", async () => {
       // Check logs to verify fishing mode is active on the fisherman node
-      await fishermanApi.docker.waitForLog({
+      await fishermanApi!.docker.waitForLog({
         containerName: ShConsts.NODE_INFOS.fisherman.containerName,
         searchString: "IndexerService starting up in Fishing mode!",
         timeout: 10000
@@ -57,7 +58,7 @@ describeMspNet(
 
     it("fisherman node connects to postgres database", async () => {
       // Wait for fisherman indexer to start
-      await fishermanApi.docker.waitForLog({
+      await fishermanApi!.docker.waitForLog({
         containerName: ShConsts.NODE_INFOS.fisherman.containerName,
         searchString: "IndexerService starting up",
         timeout: 10000
@@ -70,14 +71,14 @@ describeMspNet(
 
     it("fisherman node syncs with network", async () => {
       // Verify fisherman node is syncing blocks
-      await fishermanApi.docker.waitForLog({
+      await fishermanApi!.docker.waitForLog({
         containerName: ShConsts.NODE_INFOS.fisherman.containerName,
         searchString: "💤 Idle",
         timeout: 30000
       });
 
       // Verify fisherman node is at a reasonable block height
-      const header = await fishermanApi.rpc.chain.getHeader();
+      const header = await fishermanApi!.rpc.chain.getHeader();
       assert(header.number.toNumber() > 0, "Fisherman node should be syncing blocks");
 
       // Create some activity for the indexer to process
