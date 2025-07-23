@@ -154,6 +154,9 @@ export class NetworkLauncher {
       composeYaml.services["sh-user"].command.push(
         "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
       );
+      if (this.config.userIndexerMode) {
+        composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.userIndexerMode}`);
+      }
       if (this.type === "fullnet") {
         composeYaml.services["sh-msp-1"].command.push(
           "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
@@ -161,6 +164,14 @@ export class NetworkLauncher {
         composeYaml.services["sh-msp-2"].command.push(
           "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
         );
+      }
+    }
+
+    // Add fisherman node if enabled
+    if (this.config.fisherman && this.type === "fullnet") {
+      // Fisherman node is already in the docker-compose template, just need to enable it
+      if (this.config.fishermanIndexerMode && this.config.fishermanIndexerMode !== "fishing") {
+        composeYaml.services["sh-fisherman"].command.push(`--indexer-mode=${this.config.fishermanIndexerMode}`);
       }
     }
 
@@ -286,7 +297,7 @@ export class NetworkLauncher {
       }
     }
 
-    if (this.config.indexer) {
+    if (this.config.indexer || this.config.fisherman) {
       await compose.upOne("sh-postgres", {
         cwd: cwd,
         config: tmpFile,
@@ -294,6 +305,20 @@ export class NetworkLauncher {
       });
 
       await this.runMigrations();
+    }
+
+    // Start fisherman node if enabled
+    if (this.config.fisherman && this.type === "fullnet") {
+      await compose.upOne("sh-fisherman", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose,
+        env: {
+          ...process.env,
+          BSP_IP: bspIp,
+          BSP_PEER_ID: bspPeerId
+        }
+      });
     }
 
     await compose.upOne("sh-user", {
@@ -316,7 +341,7 @@ export class NetworkLauncher {
   }
 
   private async runMigrations() {
-    assert(this.config.indexer, "Indexer must be enabled to run migrations");
+    assert(this.config.indexer || this.config.fisherman, "Indexer or fisherman must be enabled to run migrations");
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
     assert(
@@ -852,6 +877,27 @@ export type NetLaunchConfig = {
    * This will also launch the environment with an attached postgres db
    */
   indexer?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode for the user node when indexer is enabled.
+   * 'full' - indexes all events (default)
+   * 'lite' - indexes only essential events
+   * 'fishing' - indexes only events relevant to fisherman monitoring (file tracking)
+   */
+  userIndexerMode?: "full" | "lite" | "fishing";
+
+  /**
+   * If true, runs a dedicated fisherman node with indexer service.
+   */
+  fisherman?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode for the fisherman node when fisherman is enabled.
+   * 'full' - indexes all events (default)
+   * 'lite' - indexes only essential events
+   * 'fishing' - indexes only events relevant to fisherman monitoring (file tracking)
+   */
+  fishermanIndexerMode?: "full" | "lite" | "fishing";
 
   /**
    * Optional parameter to define what toxics to apply to the network.

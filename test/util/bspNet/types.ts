@@ -154,11 +154,25 @@ export type BspNetConfig = {
   indexer?: boolean;
 
   /**
-   * Optional parameter to set the indexer mode when indexer is enabled.
+   * Optional parameter to set the indexer mode for the user node when indexer is enabled.
    * 'full' - indexes all events (default)
    * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
+   * 'fishing' - indexes only events relevant to fisherman monitoring (file tracking)
    */
-  indexerMode?: "full" | "lite";
+  userIndexerMode?: "full" | "lite" | "fishing";
+
+  /**
+   * If true, runs a dedicated fisherman node with indexer service.
+   */
+  fisherman?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode for the fisherman node when fisherman is enabled.
+   * 'full' - indexes all events (default)
+   * 'lite' - indexes only essential events
+   * 'fishing' - indexes only events relevant to fisherman monitoring (file tracking)
+   */
+  fishermanIndexerMode?: "full" | "lite" | "fishing";
 };
 
 /**
@@ -250,6 +264,12 @@ export type FullNetContext = {
    * @returns A promise that resolves to an enriched api instance for MSP operations.
    */
   createMsp2Api: () => ReturnType<typeof BspNetTestApi.create> | undefined;
+
+  /**
+   * Creates and returns a connected API instance for the fisherman node (if enabled).
+   * @returns A promise that resolves to an enriched api instance for fisherman operations, or undefined if not enabled.
+   */
+  createFishermanApi?: () => ReturnType<typeof BspNetTestApi.create> | undefined;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
@@ -345,11 +365,25 @@ export type TestOptions = {
   /** If true, runs launched userNode has attached indexer service enabled. */
   indexer?: boolean;
   /**
-   * Optional parameter to set the indexer mode when indexer is enabled.
+   * Optional parameter to set the indexer mode for the user node when indexer is enabled.
    * 'full' - indexes all events (default)
    * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
+   * 'fishing' - indexes only events relevant to fisherman monitoring (file tracking)
    */
-  indexerMode?: "full" | "lite";
+  userIndexerMode?: "full" | "lite" | "fishing";
+
+  /**
+   * If true, runs a dedicated fisherman node with indexer service.
+   */
+  fisherman?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode for the fisherman node when fisherman is enabled.
+   * 'full' - indexes all events (default)
+   * 'lite' - indexes only essential events
+   * 'fishing' - indexes only events relevant to fisherman monitoring (file tracking)
+   */
+  fishermanIndexerMode?: "full" | "lite" | "fishing";
 };
 
 /**
