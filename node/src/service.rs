@@ -209,6 +209,69 @@ pub fn new_partial(
     })
 }
 
+async fn configure_and_spawn_indexer_fisherman(
+    indexer_config: &IndexerConfigurations,
+    fisherman_config: &FishermanConfigurations,
+    task_manager: &TaskManager,
+    client: Arc<ParachainClient>,
+    maybe_db_pool: Option<DbPool>,
+) -> Result<(), sc_service::Error> {
+    // Determine the indexer mode based on configuration
+    let should_start_indexer = indexer_config.indexer || fisherman_config.fisherman;
+
+    // Check for invalid configuration: fisherman with lite mode
+    if fisherman_config.fisherman
+        && indexer_config.indexer_mode == shc_indexer_service::IndexerMode::Lite
+    {
+        return Err(sc_service::Error::Other(
+            "Fisherman service cannot run with 'lite' indexer mode. Please use either 'full' or 'fishing' mode."
+                .to_string(),
+        ));
+    }
+
+    let final_indexer_mode = if !indexer_config.indexer && fisherman_config.fisherman {
+        // If only fisherman is set (indexer not explicitly set), default to fishing mode
+        shc_indexer_service::IndexerMode::Fishing
+    } else {
+        // Otherwise use the configured mode (or default to full if indexer is set)
+        indexer_config.indexer_mode
+    };
+
+    if should_start_indexer {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
+        spawn_indexer_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+            final_indexer_mode,
+        )
+        .await;
+
+        if fisherman_config.fisherman && !indexer_config.indexer {
+            info!("📊 Indexer automatically enabled for fisherman dependency");
+        }
+    }
+
+    // Start fisherman service if enabled
+    if fisherman_config.fisherman {
+        info!("🎣 Starting Fisherman monitoring service...");
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
+        spawn_fisherman_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.expect(
+                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+        info!("🎣 Fisherman service started successfully");
+    }
+
+    Ok(())
+}
+
 async fn init_sh_builder<R, S>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
@@ -404,58 +467,7 @@ where
         None
     };
 
-    // Determine the indexer mode based on configuration
-    let should_start_indexer = indexer_config.indexer || fisherman_config.fisherman;
-
-    // Check for invalid configuration: fisherman with lite mode
-    if fisherman_config.fisherman
-        && indexer_config.indexer_mode == shc_indexer_service::IndexerMode::Lite
-    {
-        return Err(sc_service::Error::Other(
-            "Fisherman service cannot run with 'lite' indexer mode. Please use either 'full' or 'fishing' mode."
-                .to_string(),
-        ));
-    }
-
-    let final_indexer_mode = if !indexer_config.indexer && fisherman_config.fisherman {
-        // If only fisherman is set (indexer not explicitly set), default to fishing mode
-        shc_indexer_service::IndexerMode::Fishing
-    } else {
-        // Otherwise use the configured mode (or default to full if indexer is set)
-        indexer_config.indexer_mode
-    };
-
-    if should_start_indexer {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-            final_indexer_mode,
-        )
-        .await;
-
-        if fisherman_config.fisherman && !indexer_config.indexer {
-            info!("📊 Indexer automatically enabled for fisherman dependency");
-        }
-    }
-
-    // Start fisherman service if enabled
-    if fisherman_config.fisherman {
-        info!("🎣 Starting Fisherman monitoring service...");
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
-        spawn_fisherman_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-        )
-        .await;
-        info!("🎣 Fisherman service started successfully");
-    }
+    configure_and_spawn_indexer_fisherman(&indexer_config, &fisherman_config, &task_manager, client.clone(), maybe_db_pool.clone()).await?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -858,58 +870,7 @@ where
         None
     };
 
-    // Determine the indexer mode based on configuration
-    let should_start_indexer = indexer_config.indexer || fisherman_config.fisherman;
-
-    // Check for invalid configuration: fisherman with lite mode
-    if fisherman_config.fisherman
-        && indexer_config.indexer_mode == shc_indexer_service::IndexerMode::Lite
-    {
-        return Err(sc_service::Error::Other(
-            "Fisherman service cannot run with 'lite' indexer mode. Please use either 'full' or 'fishing' mode."
-                .to_string(),
-        ));
-    }
-
-    let final_indexer_mode = if !indexer_config.indexer && fisherman_config.fisherman {
-        // If only fisherman is set (indexer not explicitly set), default to fishing mode
-        shc_indexer_service::IndexerMode::Fishing
-    } else {
-        // Otherwise use the configured mode (or default to full if indexer is set)
-        indexer_config.indexer_mode
-    };
-
-    if should_start_indexer {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-            final_indexer_mode,
-        )
-        .await;
-
-        if fisherman_config.fisherman && !indexer_config.indexer {
-            info!("📊 Indexer automatically enabled for fisherman dependency");
-        }
-    }
-
-    // Start fisherman service if enabled
-    if fisherman_config.fisherman {
-        info!("🎣 Starting Fisherman monitoring service...");
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
-        spawn_fisherman_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-        )
-        .await;
-        info!("🎣 Fisherman service started successfully");
-    }
+    configure_and_spawn_indexer_fisherman(&indexer_config, &fisherman_config, &task_manager, client.clone(), maybe_db_pool.clone()).await?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -1122,58 +1083,7 @@ where
         None
     };
 
-    // Determine the indexer mode based on configuration
-    let should_start_indexer = indexer_config.indexer || fisherman_config.fisherman;
-
-    // Check for invalid configuration: fisherman with lite mode
-    if fisherman_config.fisherman
-        && indexer_config.indexer_mode == shc_indexer_service::IndexerMode::Lite
-    {
-        return Err(sc_service::Error::Other(
-            "Fisherman service cannot run with 'lite' indexer mode. Please use either 'full' or 'fishing' mode."
-                .to_string(),
-        ));
-    }
-
-    let final_indexer_mode = if !indexer_config.indexer && fisherman_config.fisherman {
-        // If only fisherman is set (indexer not explicitly set), default to fishing mode
-        shc_indexer_service::IndexerMode::Fishing
-    } else {
-        // Otherwise use the configured mode (or default to full if indexer is set)
-        indexer_config.indexer_mode
-    };
-
-    if should_start_indexer {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-            final_indexer_mode,
-        )
-        .await;
-
-        if fisherman_config.fisherman && !indexer_config.indexer {
-            info!("📊 Indexer automatically enabled for fisherman dependency");
-        }
-    }
-
-    // Start fisherman service if enabled
-    if fisherman_config.fisherman {
-        info!("🎣 Starting Fisherman monitoring service...");
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
-        spawn_fisherman_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-        )
-        .await;
-        info!("🎣 Fisherman service started successfully");
-    }
+    configure_and_spawn_indexer_fisherman(&indexer_config, &fisherman_config, &task_manager, client.clone(), maybe_db_pool.clone()).await?;
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
@@ -1428,58 +1338,7 @@ where
         None
     };
 
-    // Determine the indexer mode based on configuration
-    let should_start_indexer = indexer_config.indexer || fisherman_config.fisherman;
-
-    // Check for invalid configuration: fisherman with lite mode
-    if fisherman_config.fisherman
-        && indexer_config.indexer_mode == shc_indexer_service::IndexerMode::Lite
-    {
-        return Err(sc_service::Error::Other(
-            "Fisherman service cannot run with 'lite' indexer mode. Please use either 'full' or 'fishing' mode."
-                .to_string(),
-        ));
-    }
-
-    let final_indexer_mode = if !indexer_config.indexer && fisherman_config.fisherman {
-        // If only fisherman is set (indexer not explicitly set), default to fishing mode
-        shc_indexer_service::IndexerMode::Fishing
-    } else {
-        // Otherwise use the configured mode (or default to full if indexer is set)
-        indexer_config.indexer_mode
-    };
-
-    if should_start_indexer {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-            final_indexer_mode,
-        )
-        .await;
-
-        if fisherman_config.fisherman && !indexer_config.indexer {
-            info!("📊 Indexer automatically enabled for fisherman dependency");
-        }
-    }
-
-    // Start fisherman service if enabled
-    if fisherman_config.fisherman {
-        info!("🎣 Starting Fisherman monitoring service...");
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
-        spawn_fisherman_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-        )
-        .await;
-        info!("🎣 Fisherman service started successfully");
-    }
+    configure_and_spawn_indexer_fisherman(&indexer_config, &fisherman_config, &task_manager, client.clone(), maybe_db_pool.clone()).await?;
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
