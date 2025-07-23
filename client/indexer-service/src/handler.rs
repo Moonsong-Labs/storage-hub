@@ -341,14 +341,12 @@ where
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
                 File::delete(conn, file_key.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest {
-                msp_id,
-                file_key,
-                ..
-            } => {
-                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+            pallet_file_system::Event::MspAcceptedStorageRequest { file_key } => {
                 let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
-                MspFile::create(conn, msp.id, file.id).await?;
+                let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
+                if let Some(msp_id) = bucket.msp_id {
+                    MspFile::create(conn, msp_id, file.id).await?;
+                }
             }
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
