@@ -155,7 +155,9 @@ export class NetworkLauncher {
         "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
       );
       if (this.config.userIndexerMode) {
-        composeYaml.services["sh-user"].command.push(`--indexer-mode=${this.config.userIndexerMode}`);
+        composeYaml.services["sh-user"].command.push(
+          `--indexer-mode=${this.config.userIndexerMode}`
+        );
       }
       if (this.type === "fullnet") {
         composeYaml.services["sh-msp-1"].command.push(
@@ -170,8 +172,10 @@ export class NetworkLauncher {
     // Add fisherman node if enabled
     if (this.config.fisherman && this.type === "fullnet") {
       // Fisherman node is already in the docker-compose template, just need to enable it
-      if (this.config.fishermanIndexerMode && this.config.fishermanIndexerMode !== "fishing") {
-        composeYaml.services["sh-fisherman"].command.push(`--indexer-mode=${this.config.fishermanIndexerMode}`);
+      if (this.config.fishermanIndexerMode) {
+        composeYaml.services["sh-fisherman"].command.push(
+          `--indexer-mode=${this.config.fishermanIndexerMode}`
+        );
       }
     }
 
@@ -341,7 +345,10 @@ export class NetworkLauncher {
   }
 
   private async runMigrations() {
-    assert(this.config.indexer || this.config.fisherman, "Indexer or fisherman must be enabled to run migrations");
+    assert(
+      this.config.indexer || this.config.fisherman,
+      "Indexer or fisherman must be enabled to run migrations"
+    );
 
     const dieselCheck = spawnSync("diesel", ["--version"], { stdio: "ignore" });
     assert(
