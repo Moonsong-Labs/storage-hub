@@ -78,6 +78,13 @@ diesel::table! {
 }
 
 diesel::table! {
+    msp_file (msp_id, file_id) {
+        msp_id -> Int8,
+        file_id -> Int8,
+    }
+}
+
+diesel::table! {
     msp_multiaddress (msp_id, multiaddress_id) {
         msp_id -> Int8,
         multiaddress_id -> Int8,
@@ -128,6 +135,8 @@ diesel::joinable!(bsp_multiaddress -> multiaddress (multiaddress_id));
 diesel::joinable!(bucket -> msp (msp_id));
 diesel::joinable!(file_peer_id -> file (file_id));
 diesel::joinable!(file_peer_id -> peer_id (peer_id));
+diesel::joinable!(msp_file -> file (file_id));
+diesel::joinable!(msp_file -> msp (msp_id));
 diesel::joinable!(msp_multiaddress -> msp (msp_id));
 diesel::joinable!(msp_multiaddress -> multiaddress (multiaddress_id));
 
@@ -139,6 +148,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     file,
     file_peer_id,
     msp,
+    msp_file,
     msp_multiaddress,
     multiaddress,
     paymentstream,

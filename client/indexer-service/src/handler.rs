@@ -21,6 +21,7 @@ use sp_core::H256;
 use sp_runtime::traits::Header;
 use storage_hub_runtime::RuntimeEvent;
 
+mod fishing;
 mod lite;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
@@ -147,6 +148,7 @@ where
         match self.indexer_mode {
             crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
             crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+            crate::IndexerMode::Fishing => self.index_event_fishing(conn, event, block_hash).await,
         }
     }
 
@@ -263,11 +265,12 @@ where
             }
             pallet_file_system::Event::BspConfirmStoppedStoring {
                 bsp_id,
-                file_key: _,
+                file_key,
                 new_root,
             } => {
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
+                BspFile::delete(conn, file_key.as_ref(), bsp_id.to_string()).await?;
             }
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
@@ -338,7 +341,15 @@ where
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
                 File::delete(conn, file_key.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest { .. } => {}
+            pallet_file_system::Event::MspAcceptedStorageRequest {
+                msp_id,
+                file_key,
+                ..
+            } => {
+                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+                let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                MspFile::create(conn, msp.id, file.id).await?;
+            }
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
