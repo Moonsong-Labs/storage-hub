@@ -41,7 +41,7 @@ pub enum FishermanServiceError {
 ///
 /// This service monitors the StorageHub blockchain for file deletion requests,
 /// constructs proofs of inclusion from Bucket/BSP forests, and submits these proofs
-/// to enable storage providers to safely delete file keys from their Merkle forests.
+/// to the StorageHub protocol to permisionlessly mutate (delete the file key) the merkle forest on chain.
 pub struct FishermanService<RuntimeApi> {
     /// Substrate client for blockchain interaction
     client: Arc<ParachainClient<RuntimeApi>>,
@@ -124,7 +124,7 @@ where
 ///
 /// This runs the main monitoring logic of the fisherman service,
 /// watching for file deletion requests and processing them by
-/// constructing and submitting proofs of inclusion.
+/// starting [`ProcessFileDeletionRequest`] tasks.
 pub struct FishermanServiceEventLoop<RuntimeApi> {
     service: FishermanService<RuntimeApi>,
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand>,
@@ -158,7 +158,6 @@ where
             import_notification_stream.map(MergedEventLoopMessage::BlockImportNotification),
         );
 
-        // Main monitoring loop
         loop {
             tokio::select! {
                 // Process merged stream
