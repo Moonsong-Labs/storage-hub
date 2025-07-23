@@ -5,7 +5,7 @@ use std::io::prelude::*;
 use std::path::Path;
 use toml;
 
-use shc_client::builder::IndexerOptions;
+use shc_client::builder::{FishermanOptions, IndexerOptions};
 
 use crate::command::ProviderOptions;
 
@@ -13,6 +13,7 @@ use crate::command::ProviderOptions;
 pub struct Config {
     pub provider: ProviderOptions,
     pub indexer: Option<IndexerOptions>,
+    pub fisherman: Option<FishermanOptions>,
 }
 
 pub fn read_config(path: &str) -> Option<Config> {

@@ -1,11 +1,11 @@
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
+use shc_blockchain_service::events::FileDeletionRequest;
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_fisherman_service::events::ProcessFileDeletionRequest;
 
 use crate::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, ShNodeType},
+    types::{FishermanForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "fisherman-process-file-deletion-task";
@@ -13,7 +13,7 @@ const LOG_TARGET: &str = "fisherman-process-file-deletion-task";
 pub struct FishermanProcessFileDeletionTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT::FSH: FishermanForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
@@ -23,7 +23,7 @@ where
 impl<NT, RuntimeApi> Clone for FishermanProcessFileDeletionTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT::FSH: FishermanForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
@@ -37,7 +37,7 @@ where
 impl<NT, RuntimeApi> FishermanProcessFileDeletionTask<NT, RuntimeApi>
 where
     NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT::FSH: FishermanForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
@@ -48,19 +48,19 @@ where
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<ProcessFileDeletionRequest>
+impl<NT, RuntimeApi> EventHandler<FileDeletionRequest>
     for FishermanProcessFileDeletionTask<NT, RuntimeApi>
 where
     NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT::FSH: FishermanForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
-    async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for file key: {:?}",
-            event.signed_file_operation_intention.file_key,
+            event.file_key,
         );
 
         // TODO: Implement file deletion request handling (non-exhaustive):

@@ -279,6 +279,7 @@ pub fn run() -> Result<()> {
         None => {
             let mut provider_options = None;
             let mut indexer_options = None;
+            let mut fisherman_options = None;
             let runner = cli.create_runner(&cli.run.normalize())?;
 
             // If we have a provider config file
@@ -287,6 +288,7 @@ pub fn run() -> Result<()> {
                 if let Some(c) = config {
                     provider_options = Some(c.provider);
                     indexer_options = c.indexer;
+                    fisherman_options = c.fisherman;
                 };
             };
 
@@ -297,13 +299,23 @@ pub fn run() -> Result<()> {
 
             // Convert IndexerOptions to IndexerConfigurations if available
             let indexer_config = if let Some(opts) = indexer_options {
-                crate::cli::IndexerConfigurations {
-                    indexer: opts.indexer,
+                // Presence of indexer section means it's enabled
+                Some(crate::cli::IndexerConfigurations {
                     database_url: opts.database_url,
                     indexer_mode: Default::default(),
-                }
+                })
             } else {
                 cli.indexer_config
+            };
+
+            // Convert FishermanOptions to FishermanConfigurations if available
+            let fisherman_config = if let Some(opts) = fisherman_options {
+                // Presence of fisherman section means it's enabled
+                Some(crate::cli::FishermanConfigurations {
+                    database_url: opts.database_url,
+                })
+            } else {
+                cli.fisherman_config
             };
 
             runner.run_node_until_exit(|config| async move {
@@ -333,6 +345,7 @@ pub fn run() -> Result<()> {
 								config,
 								provider_options,
 								indexer_config,
+								fisherman_config.clone(),
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -355,6 +368,7 @@ pub fn run() -> Result<()> {
 								collator_options,
 								provider_options,
 								indexer_config,
+								fisherman_config.clone(),
 								id,
 								hwbench,
 							)
@@ -369,6 +383,7 @@ pub fn run() -> Result<()> {
 								config,
 								provider_options,
 								indexer_config,
+								fisherman_config.clone(),
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -391,6 +406,7 @@ pub fn run() -> Result<()> {
 								collator_options,
 								provider_options,
 								indexer_config,
+								fisherman_config.clone(),
 								id,
 								hwbench,
 							)
