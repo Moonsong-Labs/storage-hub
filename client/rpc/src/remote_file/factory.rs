@@ -52,51 +52,17 @@ impl RemoteFileHandlerFactory {
                         )));
                     }
 
-                    // Accept any non-URL string as a local path (absolute, relative, or bare file names)
-
-                    // Validate local file permissions before creating the URL
-                    let path = PathBuf::from(url_str);
-
-                    // Check if the file exists and is readable OR if we can create it
-                    if path.exists() {
-                        // Check if we can read the existing file
-                        std::fs::File::open(&path).map_err(|e| {
-                            // Preserve original IO errors to maintain OS error messages
-                            RemoteFileError::IoError(e)
-                        })?;
-                    } else {
-                        // Check if we can create the file (test write permissions on parent directory)
-                        let parent = match path.parent() {
-                            Some(p) if !p.as_os_str().is_empty() => p,
-                            _ => std::path::Path::new("."),
-                        };
-                        // Only validate parent directory permissions if it exists
-                        if parent.exists() {
-                            let metadata = std::fs::metadata(parent)
-                                .map_err(|e| RemoteFileError::IoError(e))?;
-                            if metadata.permissions().readonly() {
-                                return Err(RemoteFileError::AccessDenied);
-                            }
-                        }
-                    }
-
-                    // Always use absolute paths for file:// URLs
-                    let abs_path = if path.is_absolute() {
-                        path
-                    } else {
-                        std::env::current_dir()
-                            .map_err(|e| RemoteFileError::IoError(e))?
-                            .join(&path)
-                    };
-                    Url::from_file_path(&abs_path).map_err(|_| {
+                    // Accept any non-URL string as a local path and create a simple file URL
+                    // The LocalFileHandler will handle path resolution and validation
+                    Url::parse(&format!("file://{}", url_str)).map_err(|_| {
                         RemoteFileError::InvalidUrl(format!(
-                            "Could not convert '{}' to file URL",
-                            abs_path.display()
+                            "Unable to convert given URL to a valid file URL"
                         ))
                     })?
                 }
             }
         };
+
         Self::create(&url, config)
     }
 
