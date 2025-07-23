@@ -129,6 +129,7 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(bsp_file -> bsp (bsp_id));
 diesel::joinable!(bsp_file -> file (file_id));
 diesel::joinable!(bsp_multiaddress -> bsp (bsp_id));
 diesel::joinable!(bsp_multiaddress -> multiaddress (multiaddress_id));

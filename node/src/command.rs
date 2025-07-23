@@ -352,6 +352,7 @@ pub fn run() -> Result<()> {
 								collator_options,
 								provider_options,
 								indexer_config,
+								cli.fisherman_config.clone(),
 								id,
 								hwbench,
 							)
@@ -389,6 +390,7 @@ pub fn run() -> Result<()> {
 								collator_options,
 								provider_options,
 								indexer_config,
+								cli.fisherman_config.clone(),
 								id,
 								hwbench,
 							)

@@ -265,11 +265,12 @@ where
             }
             pallet_file_system::Event::BspConfirmStoppedStoring {
                 bsp_id,
-                file_key: _,
+                file_key,
                 new_root,
             } => {
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
+                BspFile::delete(conn, file_key.as_ref(), bsp_id.to_string()).await?;
             }
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,

@@ -154,11 +154,19 @@ export type BspNetConfig = {
   indexer?: boolean;
 
   /**
-   * Optional parameter to set the indexer mode when indexer is enabled.
-   * 'full' - indexes all events (default)
-   * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
+   * Optional parameter to set the indexer mode for the user node when indexer is enabled.
    */
-  indexerMode?: "full" | "lite";
+  userIndexerMode?: "full" | "lite" | "fishing";
+
+  /**
+   * If true, runs a dedicated fisherman node with indexer service.
+   */
+  fisherman?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode for the fisherman node when fisherman is enabled.
+   */
+  fishermanIndexerMode?: "full" | "lite" | "fishing";
 };
 
 /**
@@ -182,6 +190,12 @@ export type BspNetContext = {
    * @returns A promise that resolves to an enriched api instance for BSP operations.
    */
   createBspApi: () => ReturnType<typeof BspNetTestApi.create>;
+
+  /**
+   * Creates and returns a connected API instance for a Fisherman node.
+   * @returns A promise that resolves to an enriched api instance for Fisherman operations.
+   */
+  createFishermanApi?: () => ReturnType<typeof BspNetTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
@@ -215,6 +229,11 @@ export type BspNetContext = {
    * @return The result of creating the network, which may include network details or initialization data.
    */
   getLaunchResponse: () => ReturnType<typeof NetworkLauncher.create>;
+  /**
+   * Creates and returns a connected sql client instance for the indexer db.
+   * @returns A sql client instance for interacting with the indexer db.
+   */
+  createSqlClient: () => SqlClient;
 };
 
 /**
@@ -250,6 +269,12 @@ export type FullNetContext = {
    * @returns A promise that resolves to an enriched api instance for MSP operations.
    */
   createMsp2Api: () => ReturnType<typeof BspNetTestApi.create> | undefined;
+
+  /**
+   * Creates and returns a connected API instance for a Fisherman node.
+   * @returns A promise that resolves to an enriched api instance for Fisherman operations.
+   */
+  createFishermanApi?: () => ReturnType<typeof BspNetTestApi.create>;
 
   /**
    * Creates and returns a connected API instance for a BSP node.
@@ -344,12 +369,12 @@ export type TestOptions = {
   extrinsicRetryTimeout?: number;
   /** If true, runs launched userNode has attached indexer service enabled. */
   indexer?: boolean;
-  /**
-   * Optional parameter to set the indexer mode when indexer is enabled.
-   * 'full' - indexes all events (default)
-   * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
-   */
-  indexerMode?: "full" | "lite";
+  /** Optional parameter to set the indexer mode for the user node when indexer is enabled. */
+  userIndexerMode?: "full" | "lite" | "fishing";
+  /** If true, runs a dedicated fisherman node with indexer service. */
+  fisherman?: boolean;
+  /** Optional parameter to set the indexer mode for the fisherman node when fisherman is enabled. */
+  fishermanIndexerMode?: "full" | "lite" | "fishing";
 };
 
 /**

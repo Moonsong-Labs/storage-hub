@@ -50,7 +50,8 @@ where
                     trace!(target: LOG_TARGET, "Indexing bucket event");
                     self.index_file_system_event(conn, fs_event).await?
                 }
-                pallet_file_system::Event::MspAcceptedStorageRequest { .. } => {
+                pallet_file_system::Event::MspAcceptedStorageRequest { .. }
+                | pallet_file_system::Event::StorageRequestFulfilled { .. } => {
                     trace!(target: LOG_TARGET, "Indexing MSP-file association event");
                     self.index_file_system_event(conn, fs_event).await?
                 }
@@ -61,7 +62,6 @@ where
                 }
                 pallet_file_system::Event::MoveBucketAccepted { .. }
                 | pallet_file_system::Event::BucketPrivacyUpdated { .. }
-                | pallet_file_system::Event::StorageRequestFulfilled { .. }
                 | pallet_file_system::Event::StorageRequestExpired { .. }
                 | pallet_file_system::Event::MoveBucketRequested { .. }
                 | pallet_file_system::Event::NewCollectionAndAssociation { .. }

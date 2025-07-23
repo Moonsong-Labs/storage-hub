@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events";
 import { after, before, describe, it, afterEach, beforeEach } from "node:test";
+import assert from "node:assert";
 import { cleardownTest } from "./helpers";
 import { BspNetTestApi, type EnrichedBspApi } from "./test-api";
 import type { BspNetContext, FullNetContext, TestOptions } from "./types";
@@ -48,12 +49,17 @@ export async function describeBspNet<
     bspNetConfig.capacity = options.capacity;
     bspNetConfig.bspStartingWeight = options.bspStartingWeight;
     bspNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
+    bspNetConfig.indexer = options.indexer;
+    bspNetConfig.userIndexerMode = options.userIndexerMode;
+    bspNetConfig.fisherman = options.fisherman;
+    bspNetConfig.fishermanIndexerMode = options.fishermanIndexerMode;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
     describeFunc(`BSPNet: ${title} (${bspNetConfig.rocksdb ? "RocksDB" : "MemoryDB"})`, () => {
       let userApiPromise: Promise<EnrichedBspApi>;
       let bspApiPromise: Promise<EnrichedBspApi>;
+      let fishermanApiPromise: Promise<EnrichedBspApi> | undefined;
       let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
@@ -72,11 +78,22 @@ export async function describeBspNet<
 
         userApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.user.port}`);
         bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
+
+        if (bspNetConfig.fisherman) {
+          fishermanApiPromise = BspNetTestApi.create(
+            `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`
+          );
+        }
       });
 
       after(async () => {
+        const apis = [await userApiPromise, await bspApiPromise];
+        if (fishermanApiPromise) {
+          apis.push(await fishermanApiPromise);
+        }
+
         await cleardownTest({
-          api: [await userApiPromise, await bspApiPromise],
+          api: apis,
           keepNetworkAlive: options?.keepAlive
         });
 
@@ -94,18 +111,32 @@ export async function describeBspNet<
         }
       });
 
-      const context = {
+      const context: BspNetContext = {
         it,
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
         createApi: (endpoint) => BspNetTestApi.create(endpoint),
+        createSqlClient: () => {
+          assert(bspNetConfig.indexer, "SQL client requires indexer to be enabled");
+          return createSqlClient();
+        },
         bspNetConfig,
         before,
         after,
         afterEach,
         beforeEach,
         getLaunchResponse: () => responseListenerPromise
-      } satisfies BspNetContext;
+      };
+
+      // Add createFishermanApi conditionally - check at runtime, not at definition time
+      if (bspNetConfig.fisherman) {
+        context.createFishermanApi = () => {
+          if (!fishermanApiPromise) {
+            throw new Error("Fisherman API promise not initialized - this should not happen");
+          }
+          return fishermanApiPromise;
+        };
+      }
 
       tests(context);
     });
@@ -130,7 +161,9 @@ export async function describeMspNet<
     fullNetConfig.bspStartingWeight = options.bspStartingWeight;
     fullNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
     fullNetConfig.indexer = options.indexer;
-    fullNetConfig.indexerMode = options.indexerMode;
+    fullNetConfig.userIndexerMode = options.userIndexerMode;
+    fullNetConfig.fisherman = options.fisherman;
+    fullNetConfig.fishermanIndexerMode = options.fishermanIndexerMode;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 
@@ -139,6 +172,7 @@ export async function describeMspNet<
       let bspApiPromise: Promise<EnrichedBspApi>;
       let msp1ApiPromise: Promise<EnrichedBspApi>;
       let msp2ApiPromise: Promise<EnrichedBspApi>;
+      let fishermanApiPromise: Promise<EnrichedBspApi> | undefined;
       let responseListenerPromise: ReturnType<typeof NetworkLauncher.create>;
 
       before(async () => {
@@ -158,16 +192,28 @@ export async function describeMspNet<
         bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
         msp1ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
         msp2ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`);
+
+        if (fullNetConfig.fisherman) {
+          fishermanApiPromise = BspNetTestApi.create(
+            `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`
+          );
+        }
       });
 
       after(async () => {
+        const apis = [
+          await userApiPromise,
+          await bspApiPromise,
+          await msp1ApiPromise,
+          await msp2ApiPromise
+        ];
+
+        if (fishermanApiPromise) {
+          apis.push(await fishermanApiPromise);
+        }
+
         await cleardownTest({
-          api: [
-            await userApiPromise,
-            await bspApiPromise,
-            await msp1ApiPromise,
-            await msp2ApiPromise
-          ],
+          api: apis,
           keepNetworkAlive: options?.keepAlive
         });
 
@@ -185,7 +231,7 @@ export async function describeMspNet<
         }
       });
 
-      const context = {
+      const context: FullNetContext = {
         it,
         createUserApi: () => userApiPromise,
         createBspApi: () => bspApiPromise,
@@ -199,7 +245,17 @@ export async function describeMspNet<
         afterEach,
         beforeEach,
         getLaunchResponse: () => responseListenerPromise
-      } satisfies FullNetContext;
+      };
+
+      // Add createFishermanApi conditionally - check at runtime, not at definition time
+      if (fullNetConfig.fisherman) {
+        context.createFishermanApi = () => {
+          if (!fishermanApiPromise) {
+            throw new Error("Fisherman API promise not initialized - this should not happen");
+          }
+          return fishermanApiPromise;
+        };
+      }
 
       tests(context);
     });

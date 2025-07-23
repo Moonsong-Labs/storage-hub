@@ -97,9 +97,11 @@ export const cleardownTest = async (cleardownOptions: {
   try {
     if (Array.isArray(cleardownOptions.api)) {
       for (const api of cleardownOptions.api) {
-        await api.disconnect();
+        if (api) {
+          await api.disconnect();
+        }
       }
-    } else {
+    } else if (cleardownOptions.api) {
       await cleardownOptions.api.disconnect();
     }
   } catch (e) {

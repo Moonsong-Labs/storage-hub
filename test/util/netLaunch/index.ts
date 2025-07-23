@@ -1,20 +1,23 @@
-import path from "node:path";
-import fs from "node:fs";
-import tmp from "tmp";
-import * as compose from "docker-compose";
-import yaml from "yaml";
 import assert from "node:assert";
+import { spawn, spawnSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import * as compose from "docker-compose";
+import tmp from "tmp";
+import yaml from "yaml";
 import {
-  addBsp,
   BspNetTestApi,
-  forceSignupBsp,
-  getContainerIp,
-  getContainerPeerId,
-  ShConsts,
   type EnrichedBspApi,
   type FileMetadata,
-  type ToxicInfo
+  ShConsts,
+  type ToxicInfo,
+  addBsp,
+  forceSignupBsp,
+  getContainerIp,
+  getContainerPeerId
 } from "../bspNet";
+import { DUMMY_MSP_ID } from "../bspNet/consts";
+import { MILLIUNIT, UNIT } from "../constants";
 import {
   alice,
   bspDownKey,
@@ -29,10 +32,7 @@ import {
   mspTwoKey,
   shUser
 } from "../pjsKeyring";
-import { MILLIUNIT, UNIT } from "../constants";
 import { sleep } from "../timer";
-import { spawn, spawnSync } from "node:child_process";
-import { DUMMY_MSP_ID } from "../bspNet/consts";
 
 export type ShEntity = {
   port: number;
@@ -149,19 +149,44 @@ export class NetworkLauncher {
       );
     }
 
+    // All provider nodes need database URL for fisherman service
+    const databaseUrl =
+      "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub";
+
+    // Add database URL to all provider nodes
+    composeYaml.services["sh-bsp"].command.push(databaseUrl);
+    composeYaml.services["sh-user"].command.push(databaseUrl);
+
+    if (this.type === "fullnet") {
+      composeYaml.services["sh-msp-1"].command.push(databaseUrl);
+      composeYaml.services["sh-msp-2"].command.push(databaseUrl);
+    }
+
     if (this.config.indexer) {
       composeYaml.services["sh-user"].command.push("--indexer");
-      composeYaml.services["sh-user"].command.push(
-        "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
-      );
-      if (this.type === "fullnet") {
-        composeYaml.services["sh-msp-1"].command.push(
-          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
-        );
-        composeYaml.services["sh-msp-2"].command.push(
-          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+
+      // Add indexer mode to user node
+      if (this.config.userIndexerMode) {
+        composeYaml.services["sh-user"].command.push(
+          `--indexer-mode=${this.config.userIndexerMode}`
         );
       }
+    }
+
+    // Configure fisherman node if enabled
+    if (this.config.fisherman && composeYaml.services["sh-fisherman"]) {
+      // The fisherman node should already have --indexer and --database-url from the compose template
+      // Add the indexer mode if specified
+      if (this.config.fishermanIndexerMode) {
+        composeYaml.services["sh-fisherman"].command.push(
+          `--indexer-mode=${this.config.fishermanIndexerMode}`
+        );
+      }
+    }
+
+    if (this.type === "fullnet") {
+      composeYaml.services["sh-msp-1"].command.push("--indexer");
+      composeYaml.services["sh-msp-2"].command.push("--indexer");
     }
 
     const cwd = path.resolve(process.cwd(), "..", "docker");
@@ -200,9 +225,13 @@ export class NetworkLauncher {
       doubleQuotedAsJSON: true,
       flowCollectionPadding: true
     });
+
     fs.mkdirSync(path.join(cwd, "tmp"), { recursive: true });
+
     const tmpFile = tmp.fileSync({ postfix: ".yml" });
+
     fs.writeFileSync(tmpFile.name, updatedCompose);
+
     return tmpFile.name;
   }
 
@@ -286,13 +315,14 @@ export class NetworkLauncher {
       }
     }
 
-    if (this.config.indexer) {
-      await compose.upOne("sh-postgres", {
-        cwd: cwd,
-        config: tmpFile,
-        log: verbose
-      });
+    // Always start postgres since all provider nodes need it for fisherman service
+    await compose.upOne("sh-postgres", {
+      cwd: cwd,
+      config: tmpFile,
+      log: verbose
+    });
 
+    if (this.config.indexer) {
       await this.runMigrations();
     }
 
@@ -304,6 +334,38 @@ export class NetworkLauncher {
         ...process.env,
         BSP_IP: bspIp,
         BSP_PEER_ID: bspPeerId
+      }
+    });
+
+    // Start fisherman node if fisherman is enabled
+    if (this.config.fisherman) {
+      await compose.upOne("sh-fisherman", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose,
+        env: {
+          ...process.env,
+          BSP_IP: bspIp,
+          BSP_PEER_ID: bspPeerId
+        }
+      });
+    }
+
+    return this;
+  }
+
+  public async startFisherman(verbose = false) {
+    const cwd = path.resolve(process.cwd(), "..", "docker");
+    const tmpFile = this.remapComposeYaml();
+
+    await compose.upOne("sh-fisherman", {
+      cwd: cwd,
+      config: tmpFile,
+      log: verbose,
+      env: {
+        ...process.env,
+        BSP_IP: process.env.BSP_IP,
+        BSP_PEER_ID: process.env.BSP_PEER_ID
       }
     });
 
@@ -371,7 +433,7 @@ export class NetworkLauncher {
   }
 
   public async getApi(serviceName = "sh-user") {
-    return BspNetTestApi.create(`ws://127.0.0.1:${await this.getPort(serviceName)}`);
+    return BspNetTestApi.create(`ws://127.0.0.1:${this.getPort(serviceName)}`);
   }
 
   public async setupBsp(api: EnrichedBspApi, who: string, multiaddress: string, bspId?: string) {
@@ -852,6 +914,21 @@ export type NetLaunchConfig = {
    * This will also launch the environment with an attached postgres db
    */
   indexer?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode for the user node when indexer is enabled.
+   */
+  userIndexerMode?: "full" | "lite" | "fishing";
+
+  /**
+   * If true, runs a dedicated fisherman node with indexer service.
+   */
+  fisherman?: boolean;
+
+  /**
+   * Optional parameter to set the indexer mode for the fisherman node when fisherman is enabled.
+   */
+  fishermanIndexerMode?: "full" | "lite" | "fishing";
 
   /**
    * Optional parameter to define what toxics to apply to the network.

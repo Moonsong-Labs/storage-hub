@@ -18,12 +18,14 @@ impl MspFile {
         conn: &mut DbConnection<'a>,
         msp_id: i64,
         file_id: i64,
-    ) -> Result<Self, diesel::result::Error> {
+    ) -> Result<(), diesel::result::Error> {
         diesel::insert_into(msp_file::table)
             .values((msp_file::msp_id.eq(msp_id), msp_file::file_id.eq(file_id)))
+            .on_conflict_do_nothing()
             .returning(MspFile::as_select())
             .get_result(conn)
-            .await
+            .await?;
+        Ok(())
     }
 
     pub async fn delete<'a>(
