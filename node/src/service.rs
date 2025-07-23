@@ -467,7 +467,14 @@ where
         None
     };
 
-    configure_and_spawn_indexer_fisherman(&indexer_config, &fisherman_config, &task_manager, client.clone(), maybe_db_pool.clone()).await?;
+    configure_and_spawn_indexer_fisherman(
+        &indexer_config,
+        &fisherman_config,
+        &task_manager,
+        client.clone(),
+        maybe_db_pool.clone(),
+    )
+    .await?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -870,7 +877,14 @@ where
         None
     };
 
-    configure_and_spawn_indexer_fisherman(&indexer_config, &fisherman_config, &task_manager, client.clone(), maybe_db_pool.clone()).await?;
+    configure_and_spawn_indexer_fisherman(
+        &indexer_config,
+        &fisherman_config,
+        &task_manager,
+        client.clone(),
+        maybe_db_pool.clone(),
+    )
+    .await?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -1083,7 +1097,14 @@ where
         None
     };
 
-    configure_and_spawn_indexer_fisherman(&indexer_config, &fisherman_config, &task_manager, client.clone(), maybe_db_pool.clone()).await?;
+    configure_and_spawn_indexer_fisherman(
+        &indexer_config,
+        &fisherman_config,
+        &task_manager,
+        client.clone(),
+        maybe_db_pool.clone(),
+    )
+    .await?;
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
@@ -1338,7 +1359,14 @@ where
         None
     };
 
-    configure_and_spawn_indexer_fisherman(&indexer_config, &fisherman_config, &task_manager, client.clone(), maybe_db_pool.clone()).await?;
+    configure_and_spawn_indexer_fisherman(
+        &indexer_config,
+        &fisherman_config,
+        &task_manager,
+        client.clone(),
+        maybe_db_pool.clone(),
+    )
+    .await?;
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
