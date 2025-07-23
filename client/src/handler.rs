@@ -381,11 +381,11 @@ where
     }
 }
 
-impl<RuntimeApi> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi>
+impl<Runtime> StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime>
 where
     (FishermanRole, NoStorageLayer): ShNodeType + 'static,
     <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntime,
+    Runtime: StorageEnableRuntime,
 {
     fn start_fisherman_tasks(&self) {
         log::info!("🎣 Starting Fisherman tasks");

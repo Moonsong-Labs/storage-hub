@@ -595,14 +595,14 @@ where
     }
 }
 
-impl<RuntimeApi> Buildable<(FishermanRole, NoStorageLayer), RuntimeApi>
-    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
+impl<Runtime> Buildable<(FishermanRole, NoStorageLayer), Runtime>
+    for StorageHubBuilder<FishermanRole, NoStorageLayer, Runtime>
 where
     (FishermanRole, NoStorageLayer): ShNodeType,
     <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntime,
+    Runtime: StorageEnableRuntime,
 {
-    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime> {
         // TODO: Split StorageHubHandler into separate handlers or configurations to avoid unnecessary setting fields
         StorageHubHandler::new(
             self.task_spawner
