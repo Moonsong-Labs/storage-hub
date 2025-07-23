@@ -257,12 +257,15 @@ pub mod pallet {
         /// Converter from the StorageDataUnit type to the Balance type.
         type StorageDataUnitToBalance: Convert<StorageDataUnit<Self>, BalanceOf<Self>>;
 
-        type OffchainSignature: Verify<Signer = Self::OffchainPublic> + Parameter;
+        /// Off-Chain signature type.
+        ///
+        /// Can verify whether an `Self::OffchainPublicKey` created a signature.
+        type OffchainSignature: Verify<Signer = Self::OffchainPublicKey> + Parameter;
 
         /// Off-Chain public key.
         ///
         /// Must identify as an on-chain `Self::AccountId`.
-        type OffchainPublic: IdentifyAccount<AccountId = Self::AccountId>;
+        type OffchainPublicKey: IdentifyAccount<AccountId = Self::AccountId>;
 
         /// The treasury account of the runtime, where a fraction of each payment goes.
         #[pallet::constant]

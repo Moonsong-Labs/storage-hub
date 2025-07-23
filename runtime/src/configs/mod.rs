@@ -883,7 +883,7 @@ impl pallet_file_system::Config for Runtime {
     type TickRangeToMaximumThreshold =
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
     type OffchainSignature = Signature;
-    type OffchainPublic = <Signature as Verify>::Signer;
+    type OffchainPublicKey = <Signature as Verify>::Signer;
 }
 
 impl MostlyStablePriceIndexUpdaterConfig for Runtime {
