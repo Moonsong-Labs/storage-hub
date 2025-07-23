@@ -4,6 +4,7 @@
 use futures::{Stream, StreamExt};
 use log::{error, info};
 use shc_blockchain_service::capacity_manager::CapacityConfig;
+use shc_fisherman_service::spawn_fisherman_service;
 use shc_indexer_db::DbPool;
 use shc_indexer_service::spawn_indexer_service;
 use std::{cell::RefCell, env, path::PathBuf, sync::Arc, time::Duration};
@@ -70,7 +71,7 @@ use sp_keystore::{Keystore, KeystorePtr};
 use substrate_prometheus_endpoint::Registry;
 
 use crate::{
-    cli::{self, IndexerConfigurations, ProviderType, StorageLayer},
+    cli::{self, FishermanConfigurations, IndexerConfigurations, ProviderType, StorageLayer},
     command::ProviderOptions,
 };
 
@@ -208,6 +209,69 @@ pub fn new_partial(
     })
 }
 
+async fn configure_and_spawn_indexer_fisherman(
+    indexer_config: &IndexerConfigurations,
+    fisherman_config: &FishermanConfigurations,
+    task_manager: &TaskManager,
+    client: Arc<ParachainClient>,
+    maybe_db_pool: Option<DbPool>,
+) -> Result<(), sc_service::Error> {
+    // Determine the indexer mode based on configuration
+    let should_start_indexer = indexer_config.indexer || fisherman_config.fisherman;
+
+    // Check for invalid configuration: fisherman with lite mode
+    if fisherman_config.fisherman
+        && indexer_config.indexer_mode == shc_indexer_service::IndexerMode::Lite
+    {
+        return Err(sc_service::Error::Other(
+            "Fisherman service cannot run with 'lite' indexer mode. Please use either 'full' or 'fishing' mode."
+                .to_string(),
+        ));
+    }
+
+    let final_indexer_mode = if !indexer_config.indexer && fisherman_config.fisherman {
+        // If only fisherman is set (indexer not explicitly set), default to fishing mode
+        shc_indexer_service::IndexerMode::Fishing
+    } else {
+        // Otherwise use the configured mode (or default to full if indexer is set)
+        indexer_config.indexer_mode
+    };
+
+    if should_start_indexer {
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
+        spawn_indexer_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.clone().expect(
+                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+            final_indexer_mode,
+        )
+        .await;
+
+        if fisherman_config.fisherman && !indexer_config.indexer {
+            info!("📊 Indexer automatically enabled for fisherman dependency");
+        }
+    }
+
+    // Start fisherman service if enabled
+    if fisherman_config.fisherman {
+        info!("🎣 Starting Fisherman monitoring service...");
+        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
+        spawn_fisherman_service(
+            &task_spawner,
+            client.clone(),
+            maybe_db_pool.expect(
+                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
+            ),
+        )
+        .await;
+        info!("🎣 Fisherman service started successfully");
+    }
+
+    Ok(())
+}
+
 async fn init_sh_builder<R, S>(
     provider_options: &Option<ProviderOptions>,
     task_manager: &TaskManager,
@@ -343,6 +407,7 @@ async fn start_dev_impl<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_config: IndexerConfigurations,
+    fisherman_config: FishermanConfigurations,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -370,6 +435,7 @@ where
             config,
             provider_options,
             indexer_config,
+            fisherman_config,
             hwbench,
         )
         .await;
@@ -401,18 +467,14 @@ where
         None
     };
 
-    if indexer_config.indexer {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-            indexer_config.indexer_mode,
-        )
-        .await;
-    }
+    configure_and_spawn_indexer_fisherman(
+        &indexer_config,
+        &fisherman_config,
+        &task_manager,
+        client.clone(),
+        maybe_db_pool.clone(),
+    )
+    .await?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -778,6 +840,7 @@ async fn start_dev_in_maintenance_mode<R, S, Network>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_config: IndexerConfigurations,
+    fisherman_config: FishermanConfigurations,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<TaskManager>
 where
@@ -814,18 +877,14 @@ where
         None
     };
 
-    if indexer_config.indexer {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-            indexer_config.indexer_mode,
-        )
-        .await;
-    }
+    configure_and_spawn_indexer_fisherman(
+        &indexer_config,
+        &fisherman_config,
+        &task_manager,
+        client.clone(),
+        maybe_db_pool.clone(),
+    )
+    .await?;
 
     let signing_dev_key = config
         .dev_key_seed
@@ -973,6 +1032,7 @@ async fn start_node_impl<R, S, Network>(
     collator_options: CollatorOptions,
     provider_options: Option<ProviderOptions>,
     indexer_config: IndexerConfigurations,
+    fisherman_config: FishermanConfigurations,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
@@ -998,6 +1058,7 @@ where
             collator_options,
             provider_options,
             indexer_config,
+            fisherman_config,
             para_id,
             hwbench,
         )
@@ -1036,18 +1097,14 @@ where
         None
     };
 
-    if indexer_config.indexer {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-            indexer_config.indexer_mode,
-        )
-        .await;
-    }
+    configure_and_spawn_indexer_fisherman(
+        &indexer_config,
+        &fisherman_config,
+        &task_manager,
+        client.clone(),
+        maybe_db_pool.clone(),
+    )
+    .await?;
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
@@ -1256,6 +1313,7 @@ async fn start_node_in_maintenance_mode<R, S, Network>(
     collator_options: CollatorOptions,
     provider_options: Option<ProviderOptions>,
     indexer_config: IndexerConfigurations,
+    fisherman_config: FishermanConfigurations,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)>
@@ -1301,18 +1359,14 @@ where
         None
     };
 
-    if indexer_config.indexer {
-        let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.clone().expect(
-                "Indexer is enabled but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-            indexer_config.indexer_mode,
-        )
-        .await;
-    }
+    configure_and_spawn_indexer_fisherman(
+        &indexer_config,
+        &fisherman_config,
+        &task_manager,
+        client.clone(),
+        maybe_db_pool.clone(),
+    )
+    .await?;
 
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
@@ -1543,6 +1597,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
     config: Configuration,
     provider_options: Option<ProviderOptions>,
     indexer_options: IndexerConfigurations,
+    fisherman_config: FishermanConfigurations,
     hwbench: Option<sc_sysinfo::HwBench>,
     para_id: ParaId,
     sealing: cli::Sealing,
@@ -1557,6 +1612,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1568,6 +1624,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1579,6 +1636,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1590,6 +1648,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1601,6 +1660,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
                     config,
                     Some(provider_options),
                     indexer_options,
+                    fisherman_config,
                     hwbench,
                     para_id,
                     sealing,
@@ -1614,6 +1674,7 @@ pub async fn start_dev_node<Network: NetworkBackend<OpaqueBlock, BlockHash>>(
             config,
             None,
             indexer_options,
+            fisherman_config,
             hwbench,
             para_id,
             sealing,
@@ -1628,6 +1689,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
     collator_options: CollatorOptions,
     provider_options: Option<ProviderOptions>,
     indexer_config: IndexerConfigurations,
+    fisherman_config: FishermanConfigurations,
     para_id: ParaId,
     hwbench: Option<sc_sysinfo::HwBench>,
 ) -> sc_service::error::Result<(TaskManager, Arc<ParachainClient>)> {
@@ -1643,6 +1705,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     collator_options,
                     Some(provider_options),
                     indexer_config,
+                    fisherman_config,
                     para_id,
                     hwbench,
                 )
@@ -1655,6 +1718,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     collator_options,
                     Some(provider_options),
                     indexer_config,
+                    fisherman_config,
                     para_id,
                     hwbench,
                 )
@@ -1667,6 +1731,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     collator_options,
                     Some(provider_options),
                     indexer_config,
+                    fisherman_config,
                     para_id,
                     hwbench,
                 )
@@ -1679,6 +1744,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     collator_options,
                     Some(provider_options),
                     indexer_config,
+                    fisherman_config,
                     para_id,
                     hwbench,
                 )
@@ -1691,6 +1757,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
                     collator_options,
                     Some(provider_options),
                     indexer_config,
+                    fisherman_config,
                     para_id,
                     hwbench,
                 )
@@ -1705,6 +1772,7 @@ pub async fn start_parachain_node<Network: NetworkBackend<OpaqueBlock, BlockHash
             collator_options,
             None,
             indexer_config,
+            fisherman_config,
             para_id,
             hwbench,
         )
