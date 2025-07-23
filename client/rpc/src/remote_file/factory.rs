@@ -22,8 +22,9 @@ impl RemoteFileHandlerFactory {
                     RemoteFileError::Other(format!("Failed to create HTTP handler: {}", e))
                 }),
 
-            "ftp" | "ftps" => FtpFileHandler::new(config, url)
-                .map(|h| Arc::new(h) as Arc<dyn RemoteFileHandler>),
+            "ftp" | "ftps" => {
+                FtpFileHandler::new(config, url).map(|h| Arc::new(h) as Arc<dyn RemoteFileHandler>)
+            }
 
             scheme => Err(RemoteFileError::UnsupportedProtocol(scheme.to_string())),
         }
