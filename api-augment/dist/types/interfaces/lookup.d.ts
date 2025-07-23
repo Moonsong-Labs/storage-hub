@@ -3705,7 +3705,7 @@ declare const _default: {
         _alias: {
           size_: string;
         };
-        signedDeleteIntention: string;
+        signedIntention: string;
         signature: string;
         bucketId: string;
         location: string;

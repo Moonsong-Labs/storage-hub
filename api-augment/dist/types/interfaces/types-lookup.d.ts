@@ -4589,7 +4589,7 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isRequestDeleteFile: boolean;
     readonly asRequestDeleteFile: {
-      readonly signedDeleteIntention: PalletFileSystemFileOperationIntention;
+      readonly signedIntention: PalletFileSystemFileOperationIntention;
       readonly signature: SpRuntimeMultiSignature;
       readonly bucketId: H256;
       readonly location: Bytes;

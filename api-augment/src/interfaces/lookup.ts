@@ -3813,7 +3813,7 @@ export default {
         _alias: {
           size_: "size"
         },
-        signedDeleteIntention: "PalletFileSystemFileOperationIntention",
+        signedIntention: "PalletFileSystemFileOperationIntention",
         signature: "SpRuntimeMultiSignature",
         bucketId: "H256",
         location: "Bytes",
