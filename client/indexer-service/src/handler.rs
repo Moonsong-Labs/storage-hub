@@ -21,6 +21,7 @@ use sp_core::H256;
 use sp_runtime::traits::Header;
 use storage_hub_runtime::RuntimeEvent;
 
+mod fishing;
 mod lite;
 
 pub(crate) const LOG_TARGET: &str = "indexer-service";
@@ -139,6 +140,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         match self.indexer_mode {
             crate::IndexerMode::Full => self.index_event(conn, event, block_hash).await,
             crate::IndexerMode::Lite => self.index_event_lite(conn, event, block_hash).await,
+            crate::IndexerMode::Fishing => self.index_event_fishing(conn, event, block_hash).await,
         }
     }
 
@@ -230,12 +232,34 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .await?;
             }
             pallet_file_system::Event::MoveBucketAccepted {
-                old_msp_id: _,
+                old_msp_id,
                 new_msp_id,
                 bucket_id,
                 value_prop_id: _,
             } => {
+                let old_msp = if let Some(id) = old_msp_id {
+                    Some(Msp::get_by_onchain_msp_id(conn, id.to_string()).await?)
+                } else {
+                    None
+                };
                 let new_msp = Msp::get_by_onchain_msp_id(conn, new_msp_id.to_string()).await?;
+
+                // Handle MSP-file associations based on whether old_msp exists
+                if let Some(old_msp) = old_msp {
+                    // Update existing associations from old to new MSP
+                    MspFile::update_msp_for_bucket(
+                        conn,
+                        bucket_id.as_ref(),
+                        old_msp.id,
+                        new_msp.id,
+                    )
+                    .await?;
+                } else {
+                    // Create new associations for all files in the bucket
+                    MspFile::create_for_bucket(conn, bucket_id.as_ref(), new_msp.id).await?;
+                }
+
+                // Update bucket's MSP reference
                 Bucket::update_msp(conn, bucket_id.as_ref().to_vec(), new_msp.id).await?;
             }
             pallet_file_system::Event::BucketPrivacyUpdated {
@@ -255,11 +279,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             }
             pallet_file_system::Event::BspConfirmStoppedStoring {
                 bsp_id,
-                file_key: _,
+                file_key,
                 new_root,
             } => {
                 Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
                     .await?;
+                BspFile::delete_for_bsp(conn, file_key.as_ref(), bsp_id.to_string()).await?;
             }
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
@@ -323,19 +348,31 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 File::update_step(
                     conn,
                     file_key.as_ref().to_vec(),
-                    FileStorageRequestStep::Stored,
+                    FileStorageRequestStep::Expired,
                 )
                 .await?;
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
                 File::delete(conn, file_key.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest { .. } => {}
+            pallet_file_system::Event::MspAcceptedStorageRequest { file_key } => {
+                let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
+                let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
+                if let Some(msp_id) = bucket.msp_id {
+                    MspFile::create(conn, msp_id, file.id).await?;
+                }
+            }
             pallet_file_system::Event::StorageRequestRejected { .. } => {}
             pallet_file_system::Event::BspRequestedToStopStoring { .. } => {}
             pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. } => {}
-            pallet_file_system::Event::MspStopStoringBucketInsolventUser { .. } => {
-                // TODO: Index this
+            pallet_file_system::Event::MspStopStoringBucketInsolventUser {
+                msp_id,
+                owner: _,
+                bucket_id,
+            } => {
+                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
+                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
             }
             pallet_file_system::Event::SpStopStoringInsolventUser {
                 sp_id,
@@ -346,7 +383,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             } => {
                 // We are now only deleting for BSP as BSP are associating with files
                 // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
-                BspFile::delete(conn, file_key, sp_id.to_string()).await?;
+                BspFile::delete_for_bsp(conn, file_key, sp_id.to_string()).await?;
             }
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
             pallet_file_system::Event::FileDeletionRequest { .. } => {}
@@ -354,7 +391,15 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::BspChallengeCycleInitialised { .. } => {}
             pallet_file_system::Event::MoveBucketRequestExpired { .. } => {}
             pallet_file_system::Event::MoveBucketRejected { .. } => {}
-            pallet_file_system::Event::MspStoppedStoringBucket { .. } => {}
+            pallet_file_system::Event::MspStoppedStoringBucket {
+                msp_id,
+                owner: _,
+                bucket_id,
+            } => {
+                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+                MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
+                Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
+            }
             pallet_file_system::Event::BucketDeleted {
                 who: _,
                 bucket_id,
@@ -362,7 +407,19 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             } => {
                 Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::FileDeletionRequested { .. } => {}
+            pallet_file_system::Event::FileDeletionRequested {
+                signed_delete_intention,
+                signature: _,
+            } => {
+                // Mark file for deletion
+                let file_key = &signed_delete_intention.file_key;
+                File::update_deletion_status(
+                    conn,
+                    file_key.as_ref(),
+                    FileDeletionStatus::InProgress,
+                )
+                .await?;
+            }
             pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
             pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
@@ -374,8 +431,55 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
-            pallet_file_system::Event::MspFileDeletionCompleted { .. } => {}
-            pallet_file_system::Event::BspFileDeletionCompleted { .. } => {}
+            pallet_file_system::Event::MspFileDeletionCompleted {
+                user: _,
+                file_key,
+                file_size: _,
+                bucket_id,
+                msp_id,
+                old_root: _,
+                new_root,
+            } => {
+                // Delete MSP-file association
+                MspFile::delete(conn, file_key.as_ref(), msp_id.to_string()).await?;
+
+                // Check if file should be deleted (no more associations)
+                let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+
+                if deleted {
+                    log::trace!("Deleted orphaned file after MSP deletion: {:?}", file_key);
+                }
+
+                // Update bucket merkle root
+                Bucket::update_merkle_root(
+                    conn,
+                    bucket_id.as_ref().to_vec(),
+                    new_root.as_ref().to_vec(),
+                )
+                .await?;
+            }
+            pallet_file_system::Event::BspFileDeletionCompleted {
+                user: _,
+                file_key,
+                file_size: _,
+                bsp_id,
+                old_root: _,
+                new_root,
+            } => {
+                // Delete BSP-file association
+                BspFile::delete_for_bsp(conn, file_key.as_ref(), bsp_id.to_string()).await?;
+
+                // Check if file should be deleted (no more associations)
+                let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
+
+                if deleted {
+                    log::trace!("Deleted orphaned file after BSP deletion: {:?}", file_key);
+                }
+
+                // Update BSP merkle root
+                Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
+                    .await?;
+            }
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())

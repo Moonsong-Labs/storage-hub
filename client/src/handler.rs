@@ -12,10 +12,11 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, FileDeletionRequest, FinalisedBucketMovedAway,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
@@ -40,6 +41,7 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
+        fisherman_process_file_deletion::FishermanProcessFileDeletionTask,
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
@@ -50,8 +52,9 @@ use crate::{
         user_sends_file::UserSendsFileTask,
     },
     types::{
-        BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
-        ShStorageLayer, UserRole,
+        BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
+        MspForestStorageHandlerT, MspProvider, NoStorageLayer, ShNodeType, ShStorageLayer,
+        UserRole,
     },
 };
 
@@ -214,6 +217,17 @@ where
     }
 }
 
+impl<Runtime> RunnableTasks for StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime>
+where
+    (FishermanRole, NoStorageLayer): ShNodeType + 'static,
+    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
+    Runtime: StorageEnableRuntime,
+{
+    async fn run_tasks(&mut self) {
+        self.start_fisherman_tasks();
+    }
+}
+
 impl<S, Runtime> StorageHubHandler<(UserRole, S), Runtime>
 where
     (UserRole, S): ShNodeType + 'static,
@@ -364,5 +378,30 @@ where
                 RemoteUploadRequest => BspUploadFileTask,
             ]
         );
+    }
+}
+
+impl<RuntimeApi> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi>
+where
+    (FishermanRole, NoStorageLayer): ShNodeType + 'static,
+    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntime,
+{
+    fn start_fisherman_tasks(&self) {
+        log::info!("🎣 Starting Fisherman tasks");
+
+        // Subscribe to FileDeletionRequest events from the BlockchainService
+        // The fisherman monitors and processes file deletion requests
+        subscribe_actor_event_map!(
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+            [
+                FileDeletionRequest => FishermanProcessFileDeletionTask,
+            ]
+        );
+
+        log::info!("🎣 Fisherman service started");
     }
 }
