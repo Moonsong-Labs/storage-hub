@@ -1,7 +1,5 @@
 use std::{collections::HashSet, fmt::Debug, path::PathBuf, str::FromStr, sync::Arc};
 
-pub mod remote_file;
-
 use futures::StreamExt;
 use jsonrpsee::{
     core::{async_trait, RpcResult},
@@ -10,26 +8,28 @@ use jsonrpsee::{
     Extensions,
 };
 use log::{debug, error, info, warn};
-use sc_rpc_api::check_if_safe;
-use sp_api::ProvideRuntimeApi;
-use sp_blockchain::HeaderBackend;
 use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
-use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
-
-// Default max file size: 10GB
-const DEFAULT_MAX_FILE_SIZE: u64 = 10 * 1024 * 1024 * 1024;
+use sc_rpc_api::check_if_safe;
 use shc_common::{consts::CURRENT_FOREST_KEY, types::*};
 use shc_file_manager::traits::{ExcludeType, FileDataTrie, FileStorage, FileStorageError};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use sp_api::ProvideRuntimeApi;
+use sp_blockchain::HeaderBackend;
 use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{traits::Block as BlockT, AccountId32, Deserialize, KeyTypeId, Serialize};
 use sp_runtime_interface::pass_by::PassByInner;
 
+pub mod remote_file;
+use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
+
 const LOG_TARGET: &str = "storage-hub-client-rpc";
+
+// Default max file size: 10GB
+const DEFAULT_MAX_FILE_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CheckpointChallenge {
@@ -341,6 +341,7 @@ where
             .map_err(remote_file_error_to_rpc_error)?;
 
         // For local files, check if the file is empty
+        // Remote files we allow the server to give us "0" as file size to support dynamic content
         if (url.scheme() == "" || url.scheme() == "file") && file_size == 0 {
             return Err(into_rpc_error(FileStorageError::FileIsEmpty));
         }
