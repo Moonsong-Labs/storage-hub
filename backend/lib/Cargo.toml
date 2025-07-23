@@ -8,7 +8,7 @@ edition = "2021"
 shc-indexer-db = { path = "../../client/indexer-db" }
 
 # Web framework
-axum = "0.7"
+axum = { workspace = true }
 tower-http = { version = "0.5", features = ["cors"] }
 
 # Async runtime
