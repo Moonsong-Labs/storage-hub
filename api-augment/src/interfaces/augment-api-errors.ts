@@ -291,6 +291,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FixedRatePaymentStreamNotFound: AugmentedError<ApiType>;
       /**
+       * Forest proof verification failed.
+       **/
+      ForestProofVerificationFailed: AugmentedError<ApiType>;
+      /**
        * Failed to get value when just checked it existed.
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
@@ -310,6 +314,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Metadata does not correspond to expected file key.
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;
+      /**
+       * Invalid provider ID provided.
+       **/
+      InvalidProviderID: AugmentedError<ApiType>;
       /**
        * Invalid signature provided for file operation
        **/
@@ -411,6 +419,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Pending stop storing request not found.
        **/
       PendingStopStoringRequestNotFound: AugmentedError<ApiType>;
+      /**
+       * Provider is not storing the file.
+       **/
+      ProviderNotStoringFile: AugmentedError<ApiType>;
       /**
        * Root of the provider not found.
        **/

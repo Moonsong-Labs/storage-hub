@@ -1697,6 +1697,19 @@ export default {
       FileDeletionRequested: {
         signedDeleteIntention: "PalletFileSystemFileOperationIntention",
         signature: "SpRuntimeMultiSignature"
+      },
+      MspFileDeletionCompleted: {
+        user: "AccountId32",
+        fileKey: "H256",
+        fileSize: "u64",
+        bucketId: "H256",
+        mspId: "H256"
+      },
+      BspFileDeletionCompleted: {
+        user: "AccountId32",
+        fileKey: "H256",
+        fileSize: "u64",
+        bspId: "H256"
       }
     }
   },
@@ -3819,6 +3832,20 @@ export default {
         location: "Bytes",
         size_: "u64",
         fingerprint: "H256"
+      },
+      delete_file: {
+        _alias: {
+          size_: "size"
+        },
+        fileOwner: "AccountId32",
+        signedIntention: "PalletFileSystemFileOperationIntention",
+        signature: "SpRuntimeMultiSignature",
+        bucketId: "H256",
+        location: "Bytes",
+        size_: "u64",
+        fingerprint: "H256",
+        providerId: "H256",
+        forestProof: "SpTrieStorageProofCompactProof"
       }
     }
   },
@@ -4843,7 +4870,10 @@ export default {
       "OperationNotAllowedWhileBucketIsNotStoredByMsp",
       "FailedToComputeFileKey",
       "FailedToCreateFileMetadata",
-      "InvalidSignature"
+      "InvalidSignature",
+      "ForestProofVerificationFailed",
+      "ProviderNotStoringFile",
+      "InvalidProviderID"
     ]
   },
   /**
