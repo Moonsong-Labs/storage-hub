@@ -1151,7 +1151,7 @@ where
         Ok((msp_id, bucket_owner))
     }
 
-    /// Processes a file deletion request with signature verification.
+    /// Processes a file deletion request.
     ///
     /// This function validates a signed file deletion request by:
     /// 1. Checking that the requester is not insolvent
@@ -1159,9 +1159,6 @@ where
     /// 3. Validating the signature against the encoded intention
     /// 4. Computing the file key from provided metadata and verifying it matches the signed intention
     /// 5. Ensuring the operation type is Delete
-    ///
-    /// Note: This function only validates the deletion request but does not perform the actual
-    /// file deletion. It serves as a preliminary step before the deletion process can proceed.
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
         signed_intention: FileOperationIntention<T>,
@@ -1212,10 +1209,14 @@ where
         Ok(())
     }
 
-    /// Execute actual file deletion (provider's root update) if proof verifies
+    /// Executes actual file deletion. Any entity that has the owner's signed intention can delete the file on their behalf.
     ///
-    /// This function validates the deletion request against the provided file owner,
-    /// verifies the forest proof, and performs the actual file deletion from the provider's forest.
+    /// This function validates a signed file deletion request and performs the actual deletion by:
+    /// 1. Verifying the intent signer is the owner of the bucket containing the file
+    /// 2. Ensuring the operation type is Delete
+    /// 3. Validating the signature against the encoded intention
+    /// 4. Computing the file key from provided metadata and verifying it matches the signed intention
+    /// 5. Verifying the forest proof and updating the provider's root
     pub(crate) fn do_delete_file(
         file_owner: T::AccountId,
         signed_intention: FileOperationIntention<T>,
@@ -1227,17 +1228,23 @@ where
         provider_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Phase 1: Verify signature against provided file owner
-        let signed_intention_encoded = signed_intention.encode();
-        let is_valid = signature.verify(&signed_intention_encoded[..], &file_owner);
-        ensure!(is_valid, Error::<T>::InvalidSignature);
-
-        // Phase 2: Perform validations 
-        // Check if sender is the owner of the bucket
+        // Check if file owner provided by the entity calling the extrinsic is the owner of the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&file_owner, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
+        
+        // Verify that the operation is Delete
+        ensure!(
+            signed_intention.operation == FileOperation::Delete,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Encode the intention for signature verification
+        let signed_intention_encoded = signed_intention.encode();
+
+        let is_valid = signature.verify(&signed_intention_encoded[..], &file_owner);
+        ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Compute file key from the provided metadata
         let computed_file_key =
@@ -1247,18 +1254,6 @@ where
         // Verify that the file_key in the signed intention matches the computed one
         ensure!(
             signed_intention.file_key == computed_file_key,
-            Error::<T>::InvalidFileKeyMetadata
-        );
-
-        // Check that the user is not currently insolvent
-        ensure!(
-            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
-            Error::<T>::OperationNotAllowedWithInsolventUser
-        );
-
-        // Verify that the operation is Delete
-        ensure!(
-            signed_intention.operation == FileOperation::Delete,
             Error::<T>::InvalidFileKeyMetadata
         );
 
@@ -2691,14 +2686,14 @@ where
         let bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
             .ok_or(Error::<T>::BucketNotFound)?;
 
-        // Verify that the file key IS part of the bucket's forest
+        // Verify if the file key is part of the bucket's forest
         let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_generic_forest_proof(
             &bucket_root,
             &[file_key],
             &forest_proof,
         )?;
 
-        // Ensure that the file key IS part of the bucket's forest
+        // Ensure that the file key is part of the bucket's forest
         ensure!(
             proven_keys.contains(&file_key),
             Error::<T>::ExpectedInclusionProof
