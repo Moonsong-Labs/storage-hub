@@ -15,7 +15,7 @@ use super::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 
 #[derive(Debug, Clone)]
 pub struct LocalFileHandler {
-    file_path: PathBuf,
+    absolute_file_path: PathBuf,
     config: RemoteFileConfig,
 
     file_exists_and_valid: bool,
@@ -23,11 +23,52 @@ pub struct LocalFileHandler {
 }
 
 impl LocalFileHandler {
+    /// Creates a LocalFileHandler from a URL
     pub fn new(url: &Url, config: RemoteFileConfig) -> Result<Self, RemoteFileError> {
         let file_path = Self::url_to_path(url)?;
+        Self::new_from_path_internal(file_path, config)
+    }
+
+    /// Creates a LocalFileHandler from a path string
+    ///
+    /// Handles relative paths by joining with the current working directory
+    pub fn new_from_path(
+        path_str: &str,
+        config: RemoteFileConfig,
+    ) -> Result<Self, RemoteFileError> {
+        // Validate that we have a non-empty string
+        if path_str.is_empty() {
+            return Err(RemoteFileError::InvalidUrl("Empty path".to_string()));
+        }
+
+        let file_path = PathBuf::from(path_str);
+
+        let file_path = if file_path.is_absolute() {
+            file_path
+        } else {
+            // Join with current directory for relative paths
+            std::env::current_dir()
+                .map_err(RemoteFileError::IoError)?
+                .join(file_path)
+        };
+
+        Self::new_from_path_internal(file_path, config)
+    }
+
+    /// Internal constructor that handles the actual initialization
+    ///
+    /// * `path` must be an absolute path
+    fn new_from_path_internal(
+        path: PathBuf,
+        config: RemoteFileConfig,
+    ) -> Result<Self, RemoteFileError> {
+        assert!(
+            path.is_absolute(),
+            "can only instantiate handler for an absolute path"
+        );
 
         // Check file permissions
-        let mut current_path = file_path.as_path();
+        let mut current_path = path.as_path();
         let mut traversed = false;
 
         // Find the first existing path
@@ -39,6 +80,9 @@ impl LocalFileHandler {
             traversed = true;
             current_path = match current_path.parent() {
                 Some(p) if !p.as_os_str().is_empty() => p,
+                // TODO: check if this can actually happen:
+                // 1. None is returned if `current_path` is a root folder (/ or windows prefix)
+                // 2. Some("") is returned if `current_path` is a relative path
                 _ => std::path::Path::new("."),
             };
         };
@@ -65,14 +109,14 @@ impl LocalFileHandler {
             (false, has_write)
         } else {
             // File exists, check if it's a valid file and permissions
-            let metadata = std::fs::metadata(&file_path).map_err(RemoteFileError::IoError)?;
+            let metadata = std::fs::metadata(&path).map_err(RemoteFileError::IoError)?;
             let is_valid_file = metadata.is_file();
 
             // Try to open for reading to verify read permissions
-            std::fs::File::open(&file_path).map_err(RemoteFileError::IoError)?;
+            std::fs::File::open(&path).map_err(RemoteFileError::IoError)?;
 
             // Try to open for writing to check write permissions
-            let has_write = match std::fs::OpenOptions::new().write(true).open(&file_path) {
+            let has_write = match std::fs::OpenOptions::new().write(true).open(&path) {
                 Ok(_) => true,
                 _ => false,
             };
@@ -81,7 +125,7 @@ impl LocalFileHandler {
         };
 
         Ok(Self {
-            file_path,
+            absolute_file_path: path,
             config,
             // Technically we could have a "time of check vs time of use" problem,
             // where we had the right permissions at this point in time but not later
@@ -91,39 +135,42 @@ impl LocalFileHandler {
     }
 
     fn url_to_path(url: &Url) -> Result<PathBuf, RemoteFileError> {
-        let path = match url.scheme() {
-            "" => PathBuf::from(url.path()),
+        match url.scheme() {
+            "" => Ok(PathBuf::from(url.path())),
             "file" => {
                 // Try to convert to file path first
-                url.to_file_path().map_err(|err| {
-                    RemoteFileError::InvalidUrl(format!("Invalid file URL ({url}): {err:?}"))
-                })?
+                url.to_file_path()
+                    .map_err(|_| RemoteFileError::InvalidUrl(format!("Invalid file URL: {url}")))
             }
-            scheme => return Err(RemoteFileError::UnsupportedProtocol(scheme.to_string())),
-        };
-
-        // Convert relative paths to absolute
-        if path.is_absolute() {
-            Ok(path)
-        } else {
-            std::env::current_dir()
-                .map_err(|e| RemoteFileError::IoError(e))
-                .map(|cwd| cwd.join(path))
+            scheme => Err(RemoteFileError::UnsupportedProtocol(scheme.to_string())),
         }
     }
 
-    async fn get_metadata(&self) -> Result<std::fs::Metadata, RemoteFileError> {
-        tokio::fs::metadata(&self.file_path).await.map_err(|e| {
-            // Preserve original IO errors to maintain OS error messages
-            RemoteFileError::IoError(e)
+    /// Returns a canonical URL representation of the file path
+    pub fn get_canonical_url(&self) -> Result<Url, RemoteFileError> {
+        // TODO: this should only be able to fail in windows (bad disk prefix or UNC prefix)
+        Url::from_file_path(&self.absolute_file_path).map_err(|_| {
+            RemoteFileError::InvalidUrl(format!(
+                "Cannot convert path to URL: {}",
+                self.absolute_file_path.display()
+            ))
         })
+    }
+
+    async fn get_metadata(&self) -> Result<std::fs::Metadata, RemoteFileError> {
+        tokio::fs::metadata(&self.absolute_file_path)
+            .await
+            .map_err(|e| {
+                // Preserve original IO errors to maintain OS error messages
+                RemoteFileError::IoError(e)
+            })
     }
 
     fn check_file_valid(&self) -> Result<(), RemoteFileError> {
         if !self.file_exists_and_valid {
             return Err(RemoteFileError::Other(format!(
                 "Path is not a valid file: {}",
-                self.file_path.display()
+                self.absolute_file_path.display()
             )));
         }
         Ok(())
@@ -149,7 +196,8 @@ impl RemoteFileHandler for LocalFileHandler {
     async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
         self.check_file_valid()?;
 
-        let file = File::open(&self.file_path).await?;
+        let file = File::open(&self.absolute_file_path).await?;
+
         // Wrap file in a buffered reader that uses the configured chunk size
         let buffered_reader = tokio::io::BufReader::with_capacity(self.config.chunk_size, file);
         Ok(Box::new(buffered_reader))
@@ -158,8 +206,7 @@ impl RemoteFileHandler for LocalFileHandler {
     async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         self.check_file_valid()?;
 
-        let mut file = File::open(&self.file_path).await?;
-
+        let mut file = File::open(&self.absolute_file_path).await?;
         file.seek(std::io::SeekFrom::Start(offset)).await?;
 
         let mut buffer = vec![0u8; length as usize];
@@ -186,7 +233,7 @@ impl RemoteFileHandler for LocalFileHandler {
     ) -> Result<(), RemoteFileError> {
         self.check_write_permission()?;
 
-        if let Some(parent) = self.file_path.parent() {
+        if let Some(parent) = self.absolute_file_path.parent() {
             // Ensure path exists
             fs::create_dir_all(parent).await.map_err(|e| {
                 if e.kind() == std::io::ErrorKind::PermissionDenied {
@@ -197,7 +244,7 @@ impl RemoteFileHandler for LocalFileHandler {
             })?;
         }
 
-        let mut file = File::create(&self.file_path).await.map_err(|e| {
+        let mut file = File::create(&self.absolute_file_path).await.map_err(|e| {
             if e.kind() == std::io::ErrorKind::PermissionDenied {
                 RemoteFileError::AccessDenied
             } else {
@@ -228,10 +275,12 @@ impl RemoteFileHandler for LocalFileHandler {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
-    use tempfile::NamedTempFile;
+
     use serial_test::serial;
+    use tempfile::NamedTempFile;
+
+    use super::*;
 
     const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
 

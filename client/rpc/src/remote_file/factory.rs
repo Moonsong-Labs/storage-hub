@@ -34,37 +34,28 @@ impl RemoteFileHandlerFactory {
         url_str: &str,
         config: RemoteFileConfig,
     ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
-        let url = match Url::parse(url_str) {
-            Ok(url) => url,
-            Err(_) => {
-                // Try to parse as a local file path
-                {
-                    // Validate that we have a non-empty string
-                    if url_str.is_empty() {
-                        return Err(RemoteFileError::InvalidUrl("Empty path".to_string()));
-                    }
+        // Try to parse as URL
+        if let Ok(url) = Url::parse(url_str) {
+            // It's a valid URL, use the normal create() method
+            let handler = Self::create(&url, config)?;
+            return Ok((handler, url));
+        }
 
-                    // Check if this looks like a malformed URL (contains :// but failed to parse)
-                    if url_str.contains("://") {
-                        return Err(RemoteFileError::InvalidUrl(format!(
-                            "Invalid URL: {}",
-                            url_str
-                        )));
-                    }
+        // Check if this looks like a malformed URL (contains :// but failed to parse)
+        if url_str.contains("://") {
+            return Err(RemoteFileError::InvalidUrl(format!(
+                "Invalid URL: {}",
+                url_str
+            )));
+        }
 
-                    // Accept any non-URL string as a local path and create a simple file URL
-                    // The LocalFileHandler will handle path resolution and validation
-                    Url::parse(&format!("file://{}", url_str)).map_err(|_| {
-                        RemoteFileError::InvalidUrl(format!(
-                            "Unable to convert given URL to a valid file URL"
-                        ))
-                    })?
-                }
-            }
-        };
+        // Treat as local path - use local file handler and get canonical url from it
+        let handler = LocalFileHandler::new_from_path(url_str, config)?;
+        let canonical_url = handler.get_canonical_url()?;
 
-        let handler = Self::create(&url, config)?;
-        Ok((handler, url))
+        let handler = Arc::new(handler) as Arc<dyn RemoteFileHandler>;
+
+        Ok((handler, canonical_url))
     }
 
     pub fn supported_protocols() -> &'static [&'static str] {
@@ -92,11 +83,18 @@ mod tests {
             ("ftp://example.com/file.txt", "ftp"),
             ("ftps://example.com/file.txt", "ftps"),
             ("file:///path/to/file.txt", "file"),
+            // ensure backwards compatibility
+            // scheme will be autodetected
+            ("/foo.txt", "file"),
+            ("foo.txt", "file"),
+            ("./foo.txt", "file"),
+            ("subdir/foo.txt", "file"),
+            ("../foo.txt", "file"),
         ];
 
         for (url_str, expected_scheme) in test_cases {
-            let url = Url::parse(url_str).unwrap();
-            let handler = RemoteFileHandlerFactory::create(&url, config.clone()).unwrap();
+            let (handler, url) =
+                RemoteFileHandlerFactory::create_from_string(url_str, config.clone()).unwrap();
 
             assert!(
                 handler.is_supported(&url),
@@ -104,21 +102,6 @@ mod tests {
                 expected_scheme
             );
         }
-    }
-
-    #[test]
-    fn test_factory_handles_path_without_scheme() {
-        use tempfile::TempDir;
-        let config = default_config();
-
-        // Create a unique temporary directory
-        let temp_dir = TempDir::new().unwrap();
-        let temp_file = temp_dir.path().join("test_file.txt");
-        std::fs::write(&temp_file, b"test").unwrap();
-
-        let path = temp_file.to_str().unwrap();
-        let (_handler, _url) =
-            RemoteFileHandlerFactory::create_from_string(path, config.clone()).unwrap();
     }
 
     #[test]
