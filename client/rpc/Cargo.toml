@@ -53,6 +53,7 @@ std = []
 [dev-dependencies]
 mockito = "1.7"
 percent-encoding = "2"
+serial_test = "2"
 tempfile = "3.0"
 
 [lints]

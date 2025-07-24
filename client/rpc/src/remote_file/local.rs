@@ -231,6 +231,7 @@ mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
+    use serial_test::serial;
 
     const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
 
@@ -515,6 +516,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(cwd)]
     fn test_relative_path_handling() {
         use tempfile::TempDir;
 
@@ -541,6 +543,7 @@ mod tests {
     }
 
     #[test]
+    #[serial(cwd)]
     fn test_bare_path_handling() {
         use tempfile::TempDir;
 
