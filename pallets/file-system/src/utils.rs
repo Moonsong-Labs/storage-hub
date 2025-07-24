@@ -1185,7 +1185,7 @@ where
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&who, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
-        
+
         // Verify that the operation is Delete
         ensure!(
             signed_intention.operation == FileOperation::Delete,
