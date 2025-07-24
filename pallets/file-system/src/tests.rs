@@ -11369,7 +11369,7 @@ mod msp_stop_storing_bucket {
     }
 }
 
-mod file_deletion_signature_tests {
+mod request_file_deletion {
     use super::*;
 
     #[test]
@@ -11685,6 +11685,378 @@ mod file_deletion_signature_tests {
                     fingerprint
                 ),
                 Error::<Test>::OperationNotAllowedWithInsolventUser
+            );
+        });
+    }
+}
+
+mod delete_file_tests {
+    use super::*;
+    use crate::types::{Fingerprint, ForestProof, MerkleHash};
+
+    /// Setup file stored in MSP bucket (reuses existing create_bucket)
+    fn setup_file_in_msp_bucket(
+        owner: &sp_runtime::AccountId32,
+        msp_account: &sp_runtime::AccountId32,
+    ) -> (
+        BucketIdFor<Test>,
+        MerkleHash<Test>,
+        FileLocation<Test>,
+        StorageDataUnit<Test>,
+        Fingerprint<Test>,
+        ProviderIdFor<Test>,
+    ) {
+        let (msp_id, value_prop_id) = add_msp_to_provider_storage(msp_account);
+        let bucket_name =
+            BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+        let (bucket_id, _) = create_bucket(owner, bucket_name, msp_id, value_prop_id, false);
+
+        // Standard file metadata (reusing existing patterns)
+        let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+        let size = 4;
+        let fingerprint = BlakeTwo256::hash(&b"test_content".to_vec());
+        let file_key = FileSystem::compute_file_key(
+            owner.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        )
+        .unwrap();
+
+        (bucket_id, file_key, location, size, fingerprint, msp_id)
+    }
+
+    /// Create standard deletion intention and signature (reuses existing signature pattern)
+    fn create_file_deletion_signature(
+        file_owner: &sp_keyring::sr25519::Keyring,
+        file_key: MerkleHash<Test>,
+    ) -> (FileOperationIntention<Test>, MultiSignature) {
+        let signed_delete_intention = FileOperationIntention::<Test> {
+            file_key,
+            operation: FileOperation::Delete,
+        };
+
+        let signed_delete_intention_encoded = signed_delete_intention.encode();
+        let pair = file_owner.pair();
+        let signature_bytes = pair.sign(&signed_delete_intention_encoded);
+        let signature = MultiSignature::Sr25519(signature_bytes);
+
+        (signed_delete_intention, signature)
+    }
+
+    /// Create standard forest proof (reuses existing CompactProof pattern)
+    fn create_mock_forest_proof() -> ForestProof<Test> {
+        CompactProof {
+            encoded_nodes: vec![
+                H256::default().as_ref().to_vec(), // Non-empty proof to satisfy mock ForestVerifier
+            ],
+        }
+    }
+
+    #[test]
+    fn msp_can_delete_file_with_valid_forest_proof() {
+        new_test_ext().execute_with(|| {
+            // For MSP tests, we need the file to actually be stored in the bucket
+            // Since this is complex to set up with full storage workflow,
+            // let's test that the signature verification and access control work
+            // The forest proof verification will fail since file is not actually stored
+            let alice = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                setup_file_in_msp_bucket(&alice, &msp);
+
+            // Create signature (reusing existing pattern)
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Alice, file_key);
+
+            // Create forest proof (reusing existing pattern)
+            let forest_proof = create_mock_forest_proof();
+
+            // Call delete_file - this should succeed in the mock environment
+            // because the mock ForestVerifier accepts any non-empty proof
+            assert_ok!(FileSystem::delete_file(
+                RuntimeOrigin::signed(alice.clone()), // fisherman can be anyone
+                alice.clone(),                        // file_owner
+                signed_delete_intention,
+                signature,
+                bucket_id,
+                location,
+                size,
+                fingerprint,
+                msp_id,
+                forest_proof,
+            ));
+
+            // Verify event (following existing event verification pattern)
+            System::assert_last_event(
+                Event::MspFileDeletionCompleted {
+                    user: alice,
+                    file_key,
+                    file_size: size,
+                    bucket_id,
+                    msp_id,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn bsp_can_delete_file_with_valid_forest_proof() {
+        new_test_ext().execute_with(|| {
+            let alice = Keyring::Alice.to_account_id();
+            let bsp = Keyring::Bob.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+
+            // Sign up BSP
+            let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+            assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
+            let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+            // Create bucket for Alice (BSPs still need valid buckets for ownership checks)
+            let (bucket_id, file_key, location, size, fingerprint, _) =
+                setup_file_in_msp_bucket(&alice, &msp);
+
+            // Create signature and proof
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Alice, file_key);
+            let forest_proof = create_mock_forest_proof();
+
+            // Call delete_file - this should succeed in the mock environment
+            // because the mock ForestVerifier accepts any non-empty proof
+            assert_ok!(FileSystem::delete_file(
+                RuntimeOrigin::signed(alice.clone()),
+                alice.clone(),
+                signed_delete_intention,
+                signature,
+                bucket_id,
+                location,
+                size,
+                fingerprint,
+                bsp_id,
+                forest_proof,
+            ));
+
+            // Verify BSP event
+            System::assert_last_event(
+                Event::BspFileDeletionCompleted {
+                    user: alice,
+                    file_key,
+                    file_size: size,
+                    bsp_id,
+                }
+                .into(),
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_fails_with_invalid_signature() {
+        new_test_ext().execute_with(|| {
+            let alice = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                setup_file_in_msp_bucket(&alice, &msp);
+
+            // Wrong signer (Bob instead of Alice) - this will create a message signed by Bob
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Bob, file_key);
+
+            // Alice claims to be the file owner but the message was signed by Bob
+            // This should fail with InvalidSignature since signature verification happens early
+            assert_noop!(
+                FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),  // Alice claims to be owner
+                    signed_delete_intention, // But Bob signed the message
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    msp_id,
+                    create_mock_forest_proof(),
+                ),
+                Error::<Test>::InvalidSignature
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_fails_for_insolvent_user() {
+        new_test_ext().execute_with(|| {
+            // Setup with Eve (insolvent user) - reusing existing pattern
+            let eve = Keyring::Eve.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+
+            // Create bucket while Eve is solvent
+            let _guard = set_eve_insolvent(false);
+            let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                setup_file_in_msp_bucket(&eve, &msp);
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Eve, file_key);
+            drop(_guard);
+
+            // Make Eve insolvent
+            let _guard = set_eve_insolvent(true);
+
+            assert_noop!(
+                FileSystem::delete_file(
+                    RuntimeOrigin::signed(eve.clone()),
+                    eve.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    msp_id,
+                    create_mock_forest_proof(),
+                ),
+                Error::<Test>::OperationNotAllowedWithInsolventUser
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_fails_when_not_bucket_owner() {
+        new_test_ext().execute_with(|| {
+            let alice = Keyring::Alice.to_account_id();
+            let bob = Keyring::Bob.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+
+            // Alice owns the bucket and file
+            let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                setup_file_in_msp_bucket(&alice, &msp);
+
+            // Bob tries to delete Alice's file (wrong owner)
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Bob, file_key);
+
+            assert_noop!(
+                FileSystem::delete_file(
+                    RuntimeOrigin::signed(bob.clone()),
+                    bob.clone(), // Wrong file_owner
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    msp_id,
+                    create_mock_forest_proof(),
+                ),
+                Error::<Test>::NotBucketOwner
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_fails_with_invalid_provider_type() {
+        new_test_ext().execute_with(|| {
+            let alice = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, file_key, location, size, fingerprint, _) =
+                setup_file_in_msp_bucket(&alice, &msp);
+
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Alice, file_key);
+
+            // Use non-existent provider ID
+            let invalid_provider_id = H256::from_low_u64_be(99999);
+
+            assert_noop!(
+                FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    invalid_provider_id,
+                    create_mock_forest_proof(),
+                ),
+                Error::<Test>::InvalidProviderID
+            );
+        });
+    }
+
+    #[test]
+    fn delete_file_fails_with_file_key_mismatch() {
+        new_test_ext().execute_with(|| {
+            let alice = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, _, location, size, fingerprint, msp_id) =
+                setup_file_in_msp_bucket(&alice, &msp);
+
+            // Create a different file key for the signed message
+            let wrong_file_key = H256::from_low_u64_be(12345);
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Alice, wrong_file_key);
+
+            assert_noop!(
+                FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    msp_id,
+                    create_mock_forest_proof(),
+                ),
+                Error::<Test>::InvalidFileKeyMetadata
+            );
+        });
+    }
+
+
+    #[test]
+    fn delete_file_works_with_any_caller() {
+        new_test_ext().execute_with(|| {
+            // This test verifies that anyone can call the extrinsic (fisherman functionality)
+            // as long as they provide the correct file_owner and valid signature
+            let alice = Keyring::Alice.to_account_id();
+            let msp = Keyring::Charlie.to_account_id();
+            let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                setup_file_in_msp_bucket(&alice, &msp);
+
+            // Alice signs the deletion message
+            let (signed_delete_intention, signature) =
+                create_file_deletion_signature(&Keyring::Alice, file_key);
+
+            // But Bob (fisherman) calls the extrinsic
+            let bob = Keyring::Bob.to_account_id();
+
+            // This should succeed, confirming that the caller doesn't need to be the file owner
+            assert_ok!(FileSystem::delete_file(
+                RuntimeOrigin::signed(bob), // Different caller (fisherman)
+                alice.clone(),              // But correct file_owner
+                signed_delete_intention,
+                signature,
+                bucket_id,
+                location,
+                size,
+                fingerprint,
+                msp_id,
+                create_mock_forest_proof(),
+            ));
+
+            // Verify event shows Alice as the user
+            System::assert_last_event(
+                Event::MspFileDeletionCompleted {
+                    user: alice,
+                    file_key,
+                    file_size: size,
+                    bucket_id,
+                    msp_id,
+                }
+                .into(),
             );
         });
     }

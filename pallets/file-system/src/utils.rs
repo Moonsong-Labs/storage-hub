@@ -1215,11 +1215,12 @@ where
     /// Executes actual file deletion. Any entity that has the owner's signed intention can delete the file on their behalf.
     ///
     /// This function validates a signed file deletion request and performs the actual deletion by:
-    /// 1. Verifying the intent signer is the owner of the bucket containing the file
-    /// 2. Ensuring the operation type is Delete
-    /// 3. Validating the signature against the encoded intention
-    /// 4. Computing the file key from provided metadata and verifying it matches the signed intention
-    /// 5. Verifying the forest proof and updating the provider's root
+    /// 1. Checking that the file owner is not insolvent
+    /// 2. Verifying the intent signer is the owner of the bucket containing the file
+    /// 3. Ensuring the operation type is Delete
+    /// 4. Validating the signature against the encoded intention
+    /// 5. Computing the file key from provided metadata and verifying it matches the signed intention
+    /// 6. Verifying the forest proof and updating the provider's root
     pub(crate) fn do_delete_file(
         file_owner: T::AccountId,
         signed_intention: FileOperationIntention<T>,
@@ -1231,6 +1232,15 @@ where
         provider_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
+        // Check that the file owner is not currently insolvent.
+        // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
+        // to delete their files and buckets using the available extrinsics or resolve their
+        // insolvency manually.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
         // Check if file owner provided by the entity calling the extrinsic is the owner of the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&file_owner, &bucket_id)?,
