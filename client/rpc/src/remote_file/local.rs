@@ -72,11 +72,7 @@ impl LocalFileHandler {
             std::fs::File::open(&file_path).map_err(RemoteFileError::IoError)?;
 
             // Try to open for writing to check write permissions
-            let has_write = match std::fs::OpenOptions::new()
-                .write(true)
-                .truncate(true)
-                .open(&file_path)
-            {
+            let has_write = match std::fs::OpenOptions::new().write(true).open(&file_path) {
                 Ok(_) => true,
                 _ => false,
             };
