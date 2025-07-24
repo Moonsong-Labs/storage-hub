@@ -159,20 +159,7 @@ describeMspNet(
       const fileKey = eventData.fileKey;
 
       // Wait for BSP to volunteer
-      await userApi.assert.extrinsicPresent({
-        module: "fileSystem",
-        method: "bspVolunteer",
-        checkTxPool: true
-      });
-
-      // Seal block with volunteer transaction
-      await userApi.block.seal();
-
-      // Check for AcceptedBspVolunteer event
-      userApi.assert.fetchEvent(
-        userApi.events.fileSystem.AcceptedBspVolunteer,
-        await userApi.query.system.events()
-      );
+      await userApi.wait.bspVolunteer();
 
       // Wait for BSP to receive and store the file
       await waitFor({
@@ -181,20 +168,13 @@ describeMspNet(
       });
 
       // Wait for BSP to confirm storage
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      // Wait for BSP to confirm storage (without auto-sealing)
       await userApi.wait.bspStored({
         expectedExts: 1,
-        sealBlock: false
+        sealBlock: true,
+        bspAccount: bspAddress
       });
-
-      // Seal block with confirm TX
-      await userApi.block.seal();
-
-      // Check for BspConfirmedStoring event
-      userApi.assert.fetchEvent(
-        userApi.events.fileSystem.BspConfirmedStoring,
-        await userApi.query.system.events()
-      );
-
       // Wait for indexing to catch up
       await userApi.block.seal();
       await userApi.block.seal();
@@ -287,45 +267,26 @@ describeMspNet(
           (await userApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
-      // Wait for MSP to respond
+      // Wait for MSP to accept the storage request
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      // Check for either MspAcceptedStorageRequest or StorageRequestFulfilled event
-      let acceptedFileKey: string | null = null;
-      try {
-        const { event: mspAcceptedEvent } = await userApi.assert.eventPresent(
-          "fileSystem",
-          "MspAcceptedStorageRequest"
-        );
-        const dataBlob =
-          userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedEvent) &&
-          mspAcceptedEvent.data;
-        if (dataBlob) {
-          acceptedFileKey = dataBlob.fileKey.toString();
-        }
-      } catch {
-        // Check for StorageRequestFulfilled instead
-        try {
-          const { event: fulfilledEvent } = await userApi.assert.eventPresent(
-            "fileSystem",
-            "StorageRequestFulfilled"
-          );
-          const dataBlob =
-            userApi.events.fileSystem.StorageRequestFulfilled.is(fulfilledEvent) &&
-            fulfilledEvent.data;
-          if (dataBlob) {
-            acceptedFileKey = dataBlob.fileKey.toString();
-          }
-        } catch {
-          // Neither event found
-        }
-      }
+      // Get the MspAcceptedStorageRequest event
+      const { event: mspAcceptedEvent } = await userApi.assert.eventPresent(
+        "fileSystem",
+        "MspAcceptedStorageRequest"
+      );
+
+      const mspAcceptedEventDataBlob =
+        userApi.events.fileSystem.MspAcceptedStorageRequest.is(mspAcceptedEvent) &&
+        mspAcceptedEvent.data;
 
       assert(
-        acceptedFileKey,
-        "Neither MspAcceptedStorageRequest nor StorageRequestFulfilled events were found"
+        mspAcceptedEventDataBlob,
+        "MspAcceptedStorageRequest event data does not match expected type"
       );
+
+      const acceptedFileKey = mspAcceptedEventDataBlob.fileKey.toString();
       assert.equal(acceptedFileKey, fileKey);
 
       // Wait for indexing to catch up
@@ -477,7 +438,7 @@ describeMspNet(
       });
 
       // Wait for BSP to confirm storage
-      await userApi.wait.bspStored({ expectedExts: 1 });
+      await userApi.wait.bspStored({ timeoutMs: 30000 });
 
       // Wait for file to be in forest
       await waitFor({
