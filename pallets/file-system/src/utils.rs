@@ -1216,21 +1216,10 @@ where
     ///
     /// This function validates the deletion request against the provided file owner,
     /// verifies the forest proof, and performs the actual file deletion from the provider's forest.
-    ///
-    /// # Arguments
-    /// * `file_owner` - The account that originally signed the deletion request
-    /// * `signed_message` - The signed deletion message containing file key and operation
-    /// * `signature` - The signature from the original file owner
-    /// * `bucket_id` - The bucket containing the file
-    /// * `location` - The file location within the bucket
-    /// * `size` - The file size
-    /// * `fingerprint` - The file fingerprint
-    /// * `provider_id` - The provider (MSP/BSP) storing the file
-    /// * `forest_proof` - Proof that the file exists in the provider's forest
     pub(crate) fn do_delete_file(
         file_owner: T::AccountId,
-        signed_message: FileDeletionMessage<T>,
-        signature: MultiSignature,
+        signed_intention: FileOperationIntention<T>,
+        signature: T::OffchainSignature,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
         size: StorageDataUnit<T>,
@@ -1239,9 +1228,8 @@ where
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Phase 1: Verify signature against provided file owner
-        let message_encoded = signed_message.encode();
-        let account_id_32 = Self::account_id_to_account_id32(&file_owner)?;
-        let is_valid = signature.verify(&message_encoded[..], &account_id_32);
+        let signed_intention_encoded = signed_intention.encode();
+        let is_valid = signature.verify(&signed_intention_encoded[..], &file_owner);
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Phase 2: Perform validations 
@@ -1256,9 +1244,9 @@ where
             Self::compute_file_key(file_owner.clone(), bucket_id, location.clone(), size, fingerprint)
                 .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
-        // Verify that the file_key in the signed message matches the computed one
+        // Verify that the file_key in the signed intention matches the computed one
         ensure!(
-            signed_message.file_key == computed_file_key,
+            signed_intention.file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
         );
 
@@ -1270,7 +1258,7 @@ where
 
         // Verify that the operation is Delete
         ensure!(
-            signed_message.operation == FileOperation::Delete,
+            signed_intention.operation == FileOperation::Delete,
             Error::<T>::InvalidFileKeyMetadata
         );
 
@@ -1300,8 +1288,8 @@ where
                     forest_proof,
                 )?;
             }
-            // Something wrong happened
-            (false, false) => {
+            // Entity provided an incorrect provider ID
+            (_, _) => {
                 return Err(Error::<T>::InvalidProviderType.into());
             }
         }

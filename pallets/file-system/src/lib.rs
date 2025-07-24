@@ -1465,31 +1465,16 @@ pub mod pallet {
 
         /// Delete a file from the system with forest proof verification.
         ///
-        /// This extrinsic allows fisherman nodes to execute file deletion based on signed messages
-        /// from the `RequestFileDeletion` event. It requires a valid forest proof showing that the
+        /// This extrinsic allows any actor to execute file deletion based on signed intentions
+        /// from the `FileDeletionRequested` event. It requires a valid forest proof showing that the
         /// file exists in the specified provider's forest before allowing deletion.
-        ///
-        /// The fisherman node provides the file owner account, and the signature is verified against
-        /// this account. 
-        ///
-        /// # Arguments
-        /// * `origin` - The origin of the call (fisherman node)
-        /// * `file_owner` - The account that originally signed the deletion request
-        /// * `signed_message` - The signed deletion message containing file key and operation
-        /// * `signature` - The signature from the original file owner
-        /// * `bucket_id` - The bucket containing the file
-        /// * `location` - The file location within the bucket
-        /// * `size` - The file size
-        /// * `fingerprint` - The file fingerprint
-        /// * `provider_id` - The provider (MSP/BSP) storing the file
-        /// * `forest_proof` - Proof that the file exists in the provider's forest
         #[pallet::call_index(17)]
         #[pallet::weight(Weight::zero())]
         pub fn delete_file(
             origin: OriginFor<T>,
             file_owner: T::AccountId,
-            signed_message: FileDeletionMessage<T>,
-            signature: MultiSignature,
+            signed_intention: FileOperationIntention<T>,
+            signature: T::OffchainSignature,
             bucket_id: BucketIdFor<T>,
             location: FileLocation<T>,
             size: StorageDataUnit<T>,
@@ -1502,8 +1487,8 @@ pub mod pallet {
 
             Self::do_delete_file(
                 file_owner,
-                signed_message.clone(),
-                signature.clone(),
+                signed_intention,
+                signature,
                 bucket_id,
                 location,
                 size,
