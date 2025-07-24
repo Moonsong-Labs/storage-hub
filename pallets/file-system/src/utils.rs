@@ -1185,6 +1185,12 @@ where
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&who, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
+        
+        // Verify that the operation is Delete
+        ensure!(
+            signed_intention.operation == FileOperation::Delete,
+            Error::<T>::InvalidFileKeyMetadata
+        );
 
         // Encode the intention for signature verification
         let signed_intention_encoded = signed_intention.encode();
@@ -1200,12 +1206,6 @@ where
         // Verify that the file_key in the signed intention matches the computed one
         ensure!(
             signed_intention.file_key == computed_file_key,
-            Error::<T>::InvalidFileKeyMetadata
-        );
-
-        // Verify that the operation is Delete
-        ensure!(
-            signed_intention.operation == FileOperation::Delete,
             Error::<T>::InvalidFileKeyMetadata
         );
 
