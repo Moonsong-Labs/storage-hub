@@ -1258,35 +1258,26 @@ where
         );
 
         // Phase 3: Forest proof verification and file deletion
-        match (
-            <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id),
-            <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id),
-        ) {
-            // is_msp == true, is_bsp == false
-            (true, false) => {
-                Self::delete_file_from_msp(
-                    file_owner,
-                    computed_file_key,
-                    size,
-                    bucket_id,
-                    provider_id,
-                    forest_proof,
-                )?;
-            }
-            // is_msp == false, is_bsp == true
-            (false, true) => {
-                Self::delete_file_from_bsp(
-                    file_owner,
-                    computed_file_key,
-                    size,
-                    provider_id,
-                    forest_proof,
-                )?;
-            }
+        if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
+            Self::delete_file_from_msp(
+                file_owner,
+                computed_file_key,
+                size,
+                bucket_id,
+                provider_id,
+                forest_proof,
+            )?;
+        } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
+            Self::delete_file_from_bsp(
+                file_owner,
+                computed_file_key,
+                size,
+                provider_id,
+                forest_proof,
+            )?;
+        } else {
             // Entity provided an incorrect provider ID
-            (_, _) => {
-                return Err(Error::<T>::InvalidProviderType.into());
-            }
+            return Err(Error::<T>::InvalidProviderID.into());
         }
 
         Ok(())

@@ -940,8 +940,8 @@ pub mod pallet {
         ForestProofVerificationFailed,
         /// Provider is not storing the file.
         ProviderNotStoringFile,
-        /// Invalid provider type for this operation.
-        InvalidProviderType,
+        /// Invalid provider ID provided.
+        InvalidProviderID,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
