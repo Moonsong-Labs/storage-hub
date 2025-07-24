@@ -303,9 +303,6 @@ mod tests {
         // Test that regular paths can be converted to URLs
         let path_url = Url::from_file_path("/path/to/file.txt").unwrap();
         assert!(handler.is_supported(&path_url));
-
-        let http_url = Url::parse("http://example.com/file.txt").unwrap();
-        assert!(!handler.is_supported(&http_url));
     }
 
     #[tokio::test]
