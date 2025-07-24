@@ -1159,6 +1159,9 @@ where
     /// 3. Validating the signature against the encoded intention
     /// 4. Computing the file key from provided metadata and verifying it matches the signed intention
     /// 5. Ensuring the operation type is Delete
+    ///
+    /// Note: This function only validates the deletion request but does not perform the actual
+    /// file deletion. It serves as a preliminary step before the deletion process can proceed.
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
         signed_intention: FileOperationIntention<T>,
