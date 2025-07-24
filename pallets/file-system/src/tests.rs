@@ -11868,7 +11868,7 @@ mod delete_file_tests {
             assert_noop!(
                 FileSystem::delete_file(
                     RuntimeOrigin::signed(alice.clone()),
-                    alice.clone(),  // Alice claims to be owner
+                    alice.clone(),           // Alice claims to be owner
                     signed_delete_intention, // But Bob signed the message
                     signature,
                     bucket_id,
@@ -12014,7 +12014,6 @@ mod delete_file_tests {
             );
         });
     }
-
 
     #[test]
     fn delete_file_works_with_any_caller() {
