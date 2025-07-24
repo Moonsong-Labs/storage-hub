@@ -16,7 +16,7 @@ use sp_runtime::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
         Saturating, Verify, Zero,
     },
-    ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError, MultiSignature,
+    ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
 };
 use sp_std::{collections::btree_set::BTreeSet, vec::Vec};
 
@@ -40,9 +40,9 @@ use crate::{
     pallet,
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
-        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileDeletionMessage,
-        FileKeyHasher, FileKeyWithProof, FileLocation, FileOperation, Fingerprint, ForestProof,
-        MerkleHash, MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
+        CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
+        FileLocation, FileOperation, FileOperationIntention, Fingerprint, ForestProof, MerkleHash,
+        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
         ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
         StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
@@ -103,15 +103,6 @@ impl<T> Pallet<T>
 where
     T: pallet::Config,
 {
-    /// Helper function to convert T::AccountId to AccountId32 for signature verification
-    fn account_id_to_account_id32(
-        account_id: &T::AccountId,
-    ) -> Result<sp_core::crypto::AccountId32, Error<T>> {
-        let account_bytes = account_id.encode();
-        sp_core::crypto::AccountId32::try_from(account_bytes.as_slice())
-            .map_err(|_| Error::<T>::InvalidSignature)
-    }
-
     /// This function is used primarily for the runtime API exposed for BSPs to call before they attempt to volunteer for a storage request.
     pub fn is_storage_request_open_to_volunteers(
         file_key: MerkleHash<T>,
@@ -1165,21 +1156,16 @@ where
     /// This function validates a signed file deletion request by:
     /// 1. Checking that the requester is not insolvent
     /// 2. Verifying the requester owns the bucket containing the file
-    /// 3. Validating the signature against the encoded message
-    /// 4. Computing the file key from provided metadata and verifying it matches the signed message
+    /// 3. Validating the signature against the encoded intention
+    /// 4. Computing the file key from provided metadata and verifying it matches the signed intention
     /// 5. Ensuring the operation type is Delete
     ///
-    /// The signature verification prevents malicious file deletion requests and ensures
-    /// only the legitimate file owner can request deletion. The computed file key validation
-    /// ensures the metadata provided matches the file being deleted.
-    ///
     /// Note: This function only validates the deletion request but does not perform the actual
-    /// file deletion. It serves as a preliminary check before the deletion process can proceed.
-    /// TODO: we probably want to hold a user deposit to prevent users to spam the network
+    /// file deletion. It serves as a preliminary step before the deletion process can proceed.
     pub(crate) fn do_request_delete_file(
         who: T::AccountId,
-        signed_message: FileDeletionMessage<T>,
-        signature: MultiSignature,
+        signed_intention: FileOperationIntention<T>,
+        signature: T::OffchainSignature,
         bucket_id: BucketIdFor<T>,
         location: FileLocation<T>,
         size: StorageDataUnit<T>,
@@ -1200,12 +1186,10 @@ where
             Error::<T>::NotBucketOwner
         );
 
-        // Encode the message for signature verification
-        let message_encoded = signed_message.encode();
+        // Encode the intention for signature verification
+        let signed_intention_encoded = signed_intention.encode();
 
-        // Verify the signature (This is not strictly needed to do here, but prevents the fisherman node to do useless work)
-        let account_id_32 = Self::account_id_to_account_id32(&who)?;
-        let is_valid = signature.verify(&message_encoded[..], &account_id_32);
+        let is_valid = signature.verify(&signed_intention_encoded[..], &who);
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Compute file key from the provided metadata
@@ -1213,15 +1197,15 @@ where
             Self::compute_file_key(who.clone(), bucket_id, location.clone(), size, fingerprint)
                 .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
-        // Verify that the file_key in the signed message matches the computed one
+        // Verify that the file_key in the signed intention matches the computed one
         ensure!(
-            signed_message.file_key == computed_file_key,
+            signed_intention.file_key == computed_file_key,
             Error::<T>::InvalidFileKeyMetadata
         );
 
         // Verify that the operation is Delete
         ensure!(
-            signed_message.operation == FileOperation::Delete,
+            signed_intention.operation == FileOperation::Delete,
             Error::<T>::InvalidFileKeyMetadata
         );
 

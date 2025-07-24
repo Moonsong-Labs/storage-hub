@@ -113,7 +113,7 @@ where
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => true,
             pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => true,
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => true,
-            pallet_file_system::Event::RequestFileDeletion { .. } => true,
+            pallet_file_system::Event::FileDeletionRequested { .. } => true,
             pallet_file_system::Event::__Ignore(_, _) => true,
         };
 

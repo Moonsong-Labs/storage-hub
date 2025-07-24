@@ -21,7 +21,7 @@ import type {
   FrameSupportTokensMiscBalanceStatus,
   FrameSystemDispatchEventInfo,
   PalletFileSystemEitherAccountIdOrMspId,
-  PalletFileSystemFileDeletionMessage,
+  PalletFileSystemFileOperationIntention,
   PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
@@ -685,6 +685,21 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
+       * Notifies that a file deletion has been requested.
+       * Contains a signed intention that allows any actor to execute the actual deletion.
+       **/
+      FileDeletionRequested: AugmentedEvent<
+        ApiType,
+        [
+          signedDeleteIntention: PalletFileSystemFileOperationIntention,
+          signature: SpRuntimeMultiSignature
+        ],
+        {
+          signedDeleteIntention: PalletFileSystemFileOperationIntention;
+          signature: SpRuntimeMultiSignature;
+        }
+      >;
+      /**
        * Notifies that a bucket has been moved to a new MSP under a new value proposition.
        **/
       MoveBucketAccepted: AugmentedEvent<
@@ -869,17 +884,6 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256;
           mspId: H256;
           proofOfInclusion: bool;
-        }
-      >;
-      /**
-       * Notifies that a file deletion has been requested with a signed message.
-       **/
-      RequestFileDeletion: AugmentedEvent<
-        ApiType,
-        [signedMessage: PalletFileSystemFileDeletionMessage, signature: SpRuntimeMultiSignature],
-        {
-          signedMessage: PalletFileSystemFileDeletionMessage;
-          signature: SpRuntimeMultiSignature;
         }
       >;
       /**

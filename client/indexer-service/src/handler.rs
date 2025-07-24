@@ -370,7 +370,7 @@ where
             } => {
                 Bucket::delete(conn, bucket_id.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::RequestFileDeletion { .. } => {}
+            pallet_file_system::Event::FileDeletionRequested { .. } => {}
             pallet_file_system::Event::FailedToGetMspOfBucket { .. } => {}
             pallet_file_system::Event::FailedToDecreaseMspUsedCapacity { .. } => {}
             pallet_file_system::Event::UsedCapacityShouldBeZero { .. } => {
