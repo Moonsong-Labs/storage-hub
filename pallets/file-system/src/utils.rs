@@ -29,10 +29,10 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_constants::GIGAUNIT;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitRevealRandomnessInterface, MutateBucketsInterface, MutateProvidersInterface, MutateStorageProvidersInterface,
-    PaymentStreamsInterface, PricePerGigaUnitPerTickInterface, ProofsDealerInterface,
-    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
-    ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
+    CommitRevealRandomnessInterface, MutateBucketsInterface, MutateProvidersInterface,
+    MutateStorageProvidersInterface, PaymentStreamsInterface, PricePerGigaUnitPerTickInterface,
+    ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
+    ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 use sp_std::collections::btree_map::BTreeMap;
 
@@ -1182,7 +1182,7 @@ where
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&who, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
-        
+
         // Verify that the operation is Delete
         ensure!(
             signed_intention.operation == FileOperation::Delete,
@@ -1233,7 +1233,7 @@ where
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&file_owner, &bucket_id)?,
             Error::<T>::NotBucketOwner
         );
-        
+
         // Verify that the operation is Delete
         ensure!(
             signed_intention.operation == FileOperation::Delete,
@@ -1247,9 +1247,14 @@ where
         ensure!(is_valid, Error::<T>::InvalidSignature);
 
         // Compute file key from the provided metadata
-        let computed_file_key =
-            Self::compute_file_key(file_owner.clone(), bucket_id, location.clone(), size, fingerprint)
-                .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
+        let computed_file_key = Self::compute_file_key(
+            file_owner.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        )
+        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
         // Verify that the file_key in the signed intention matches the computed one
         ensure!(
@@ -1282,7 +1287,6 @@ where
 
         Ok(())
     }
-
 
     /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.
     ///
@@ -2699,9 +2703,7 @@ where
         )?;
 
         // Update root of the bucket
-        <T::Providers as MutateBucketsInterface>::change_root_bucket(
-            bucket_id, new_root,
-        )?;
+        <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
 
         // Decrease bucket size
         <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
@@ -2755,7 +2757,8 @@ where
 
         // Decrease capacity used by the BSP
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-            &provider_id, size,
+            &provider_id,
+            size,
         )?;
 
         // Emit the BSP file deletion completed event
@@ -3078,6 +3081,5 @@ mod hooks {
             // Consume the weight used by this function.
             meter.consume(T::WeightInfo::process_expired_move_bucket_request());
         }
-
     }
 }
