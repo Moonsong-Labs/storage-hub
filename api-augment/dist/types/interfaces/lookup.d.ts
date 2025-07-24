@@ -1667,6 +1667,19 @@ declare const _default: {
         signedDeleteIntention: string;
         signature: string;
       };
+      MspFileDeletionCompleted: {
+        user: string;
+        fileKey: string;
+        fileSize: string;
+        bucketId: string;
+        mspId: string;
+      };
+      BspFileDeletionCompleted: {
+        user: string;
+        fileKey: string;
+        fileSize: string;
+        bspId: string;
+      };
     };
   };
   /**
@@ -3711,6 +3724,20 @@ declare const _default: {
         location: string;
         size_: string;
         fingerprint: string;
+      };
+      delete_file: {
+        _alias: {
+          size_: string;
+        };
+        fileOwner: string;
+        signedIntention: string;
+        signature: string;
+        bucketId: string;
+        location: string;
+        size_: string;
+        fingerprint: string;
+        providerId: string;
+        forestProof: string;
       };
     };
   };

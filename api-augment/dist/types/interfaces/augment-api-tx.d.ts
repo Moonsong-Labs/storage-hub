@@ -610,6 +610,62 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256]
       >;
       /**
+       * Delete a file from the system with forest proof verification.
+       *
+       * This extrinsic allows any actor to execute file deletion based on signed intentions
+       * from the `FileDeletionRequested` event. It requires a valid forest proof showing that the
+       * file exists in the specified provider's forest before allowing deletion.
+       **/
+      deleteFile: AugmentedSubmittable<
+        (
+          fileOwner: AccountId32 | string | Uint8Array,
+          signedIntention:
+            | PalletFileSystemFileOperationIntention
+            | {
+                fileKey?: any;
+                operation?: any;
+              }
+            | string
+            | Uint8Array,
+          signature:
+            | SpRuntimeMultiSignature
+            | {
+                Ed25519: any;
+              }
+            | {
+                Sr25519: any;
+              }
+            | {
+                Ecdsa: any;
+              }
+            | string
+            | Uint8Array,
+          bucketId: H256 | string | Uint8Array,
+          location: Bytes | string | Uint8Array,
+          size: u64 | AnyNumber | Uint8Array,
+          fingerprint: H256 | string | Uint8Array,
+          providerId: H256 | string | Uint8Array,
+          forestProof:
+            | SpTrieStorageProofCompactProof
+            | {
+                encodedNodes?: any;
+              }
+            | string
+            | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [
+          AccountId32,
+          PalletFileSystemFileOperationIntention,
+          SpRuntimeMultiSignature,
+          H256,
+          Bytes,
+          u64,
+          H256,
+          H256,
+          SpTrieStorageProofCompactProof
+        ]
+      >;
+      /**
        * Issue a new storage request for a file
        **/
       issueStorageRequest: AugmentedSubmittable<

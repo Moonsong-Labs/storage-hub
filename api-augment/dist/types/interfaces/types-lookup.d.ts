@@ -2131,6 +2131,21 @@ declare module "@polkadot/types/lookup" {
       readonly signedDeleteIntention: PalletFileSystemFileOperationIntention;
       readonly signature: SpRuntimeMultiSignature;
     } & Struct;
+    readonly isMspFileDeletionCompleted: boolean;
+    readonly asMspFileDeletionCompleted: {
+      readonly user: AccountId32;
+      readonly fileKey: H256;
+      readonly fileSize: u64;
+      readonly bucketId: H256;
+      readonly mspId: H256;
+    } & Struct;
+    readonly isBspFileDeletionCompleted: boolean;
+    readonly asBspFileDeletionCompleted: {
+      readonly user: AccountId32;
+      readonly fileKey: H256;
+      readonly fileSize: u64;
+      readonly bspId: H256;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -2163,7 +2178,9 @@ declare module "@polkadot/types/lookup" {
       | "UsedCapacityShouldBeZero"
       | "FailedToReleaseStorageRequestCreationDeposit"
       | "FailedToTransferDepositFundsToBsp"
-      | "FileDeletionRequested";
+      | "FileDeletionRequested"
+      | "MspFileDeletionCompleted"
+      | "BspFileDeletionCompleted";
   }
   /** @name PalletFileSystemRejectedStorageRequestReason (154) */
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
@@ -4596,6 +4613,18 @@ declare module "@polkadot/types/lookup" {
       readonly size_: u64;
       readonly fingerprint: H256;
     } & Struct;
+    readonly isDeleteFile: boolean;
+    readonly asDeleteFile: {
+      readonly fileOwner: AccountId32;
+      readonly signedIntention: PalletFileSystemFileOperationIntention;
+      readonly signature: SpRuntimeMultiSignature;
+      readonly bucketId: H256;
+      readonly location: Bytes;
+      readonly size_: u64;
+      readonly fingerprint: H256;
+      readonly providerId: H256;
+      readonly forestProof: SpTrieStorageProofCompactProof;
+    } & Struct;
     readonly type:
       | "CreateBucket"
       | "RequestMoveBucket"
@@ -4613,7 +4642,8 @@ declare module "@polkadot/types/lookup" {
       | "BspConfirmStopStoring"
       | "StopStoringForInsolventUser"
       | "MspStopStoringBucketForInsolventUser"
-      | "RequestDeleteFile";
+      | "RequestDeleteFile"
+      | "DeleteFile";
   }
   /** @name PalletFileSystemBucketMoveRequestResponse (374) */
   interface PalletFileSystemBucketMoveRequestResponse extends Enum {
@@ -5906,6 +5936,9 @@ declare module "@polkadot/types/lookup" {
     readonly isFailedToComputeFileKey: boolean;
     readonly isFailedToCreateFileMetadata: boolean;
     readonly isInvalidSignature: boolean;
+    readonly isForestProofVerificationFailed: boolean;
+    readonly isProviderNotStoringFile: boolean;
+    readonly isInvalidProviderID: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -5988,7 +6021,10 @@ declare module "@polkadot/types/lookup" {
       | "OperationNotAllowedWhileBucketIsNotStoredByMsp"
       | "FailedToComputeFileKey"
       | "FailedToCreateFileMetadata"
-      | "InvalidSignature";
+      | "InvalidSignature"
+      | "ForestProofVerificationFailed"
+      | "ProviderNotStoringFile"
+      | "InvalidProviderID";
   }
   /** @name PalletProofsDealerProofSubmissionRecord (489) */
   interface PalletProofsDealerProofSubmissionRecord extends Struct {
