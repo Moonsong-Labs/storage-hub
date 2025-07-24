@@ -182,6 +182,22 @@ impl LocalFileHandler {
         }
         Ok(())
     }
+
+    /// Maps IO errors to RemoteFileError, converting PermissionDenied to AccessDenied
+    fn map_io_error(e: std::io::Error) -> RemoteFileError {
+        match e.kind() {
+            std::io::ErrorKind::PermissionDenied => RemoteFileError::AccessDenied,
+            std::io::ErrorKind::Other => {
+                let error_str = e.to_string().to_lowercase();
+                if error_str.contains("space") || error_str.contains("disk full") {
+                    RemoteFileError::Other("Insufficient disk space".to_string())
+                } else {
+                    RemoteFileError::IoError(e)
+                }
+            }
+            _ => RemoteFileError::IoError(e),
+        }
+    }
 }
 
 #[async_trait]
@@ -235,37 +251,18 @@ impl RemoteFileHandler for LocalFileHandler {
 
         if let Some(parent) = self.absolute_file_path.parent() {
             // Ensure path exists
-            fs::create_dir_all(parent).await.map_err(|e| {
-                if e.kind() == std::io::ErrorKind::PermissionDenied {
-                    RemoteFileError::AccessDenied
-                } else {
-                    RemoteFileError::IoError(e)
-                }
-            })?;
+            fs::create_dir_all(parent)
+                .await
+                .map_err(Self::map_io_error)?;
         }
 
-        let mut file = File::create(&self.absolute_file_path).await.map_err(|e| {
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                RemoteFileError::AccessDenied
-            } else {
-                RemoteFileError::IoError(e)
-            }
-        })?;
+        let mut file = File::create(&self.absolute_file_path)
+            .await
+            .map_err(Self::map_io_error)?;
 
-        io::copy(&mut data, &mut file).await.map_err(|e| {
-            if e.kind() == std::io::ErrorKind::PermissionDenied {
-                RemoteFileError::AccessDenied
-            } else if e.kind() == std::io::ErrorKind::Other {
-                let error_str = e.to_string().to_lowercase();
-                if error_str.contains("space") || error_str.contains("disk full") {
-                    RemoteFileError::Other("Insufficient disk space".to_string())
-                } else {
-                    RemoteFileError::IoError(e)
-                }
-            } else {
-                RemoteFileError::IoError(e)
-            }
-        })?;
+        io::copy(&mut data, &mut file)
+            .await
+            .map_err(Self::map_io_error)?;
 
         file.flush().await?;
 
