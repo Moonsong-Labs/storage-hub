@@ -12,7 +12,7 @@ await build({
     minify: true,
     target: ['es2022'],
     platform: 'node',
-    external: ['node:*'],
+    external: ['node:*', '@storagehub/wasm'],
     format: 'esm',
 });
 
