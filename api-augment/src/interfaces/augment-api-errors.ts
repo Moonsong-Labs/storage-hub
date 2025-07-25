@@ -311,6 +311,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InvalidFileKeyMetadata: AugmentedError<ApiType>;
       /**
+       * Invalid signature provided for file operation
+       **/
+      InvalidSignature: AugmentedError<ApiType>;
+      /**
        * Maximum threshold cannot be zero.
        **/
       MaximumThresholdCannotBeZero: AugmentedError<ApiType>;

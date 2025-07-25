@@ -14,7 +14,7 @@ use num_bigint::BigUint;
 use sp_runtime::{
     traits::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
-        Saturating, Zero,
+        Saturating, Verify, Zero,
     },
     ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
 };
@@ -41,10 +41,11 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
-        FileLocation, Fingerprint, ForestProof, MerkleHash, MoveBucketRequestMetadata,
-        MultiAddresses, PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest,
-        ReplicationTarget, ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata,
-        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        FileLocation, FileOperation, FileOperationIntention, Fingerprint, ForestProof, MerkleHash,
+        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
+        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
+        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
+        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
@@ -1148,6 +1149,67 @@ where
         )?;
 
         Ok((msp_id, bucket_owner))
+    }
+
+    /// Processes a file deletion request with signature verification.
+    ///
+    /// This function validates a signed file deletion request by:
+    /// 1. Checking that the requester is not insolvent
+    /// 2. Verifying the requester owns the bucket containing the file
+    /// 3. Validating the signature against the encoded intention
+    /// 4. Computing the file key from provided metadata and verifying it matches the signed intention
+    /// 5. Ensuring the operation type is Delete
+    ///
+    /// Note: This function only validates the deletion request but does not perform the actual
+    /// file deletion. It serves as a preliminary step before the deletion process can proceed.
+    pub(crate) fn do_request_delete_file(
+        who: T::AccountId,
+        signed_intention: FileOperationIntention<T>,
+        signature: T::OffchainSignature,
+        bucket_id: BucketIdFor<T>,
+        location: FileLocation<T>,
+        size: StorageDataUnit<T>,
+        fingerprint: Fingerprint<T>,
+    ) -> DispatchResult {
+        // Check that the user that's sending the deletion request is not currently insolvent.
+        // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
+        // to delete their files and buckets using the available extrinsics or resolve their
+        // insolvency manually.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&who),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
+        // Check if sender is the owner of the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&who, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
+
+        // Verify that the operation is Delete
+        ensure!(
+            signed_intention.operation == FileOperation::Delete,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Encode the intention for signature verification
+        let signed_intention_encoded = signed_intention.encode();
+
+        let is_valid = signature.verify(&signed_intention_encoded[..], &who);
+        ensure!(is_valid, Error::<T>::InvalidSignature);
+
+        // Compute file key from the provided metadata
+        let computed_file_key =
+            Self::compute_file_key(who.clone(), bucket_id, location.clone(), size, fingerprint)
+                .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
+
+        // Verify that the file_key in the signed intention matches the computed one
+        ensure!(
+            signed_intention.file_key == computed_file_key,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
+        Ok(())
     }
 
     /// Accept as many storage requests as possible (best-effort) belonging to the same bucket.

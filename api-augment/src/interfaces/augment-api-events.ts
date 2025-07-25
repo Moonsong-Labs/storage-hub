@@ -27,6 +27,7 @@ import type {
   FrameSupportTokensMiscBalanceStatus,
   FrameSystemDispatchEventInfo,
   PalletFileSystemEitherAccountIdOrMspId,
+  PalletFileSystemFileOperationIntention,
   PalletFileSystemRejectedStorageRequestReason,
   PalletNftsAttributeNamespace,
   PalletNftsPalletAttributes,
@@ -39,6 +40,7 @@ import type {
   PalletStorageProvidersValuePropositionWithId,
   ShpTraitsTrieMutation,
   SpRuntimeDispatchError,
+  SpRuntimeMultiSignature,
   SpWeightsWeightV2Weight,
   StagingXcmV5AssetAssets,
   StagingXcmV5Location,
@@ -544,6 +546,21 @@ declare module "@polkadot/api-base/types/events" {
           bucketId: H256;
           mspId: H256;
           proofOfInclusion: bool;
+        }
+      >;
+      /**
+       * Notifies that a file deletion has been requested.
+       * Contains a signed intention that allows any actor to execute the actual deletion.
+       **/
+      FileDeletionRequested: AugmentedEvent<
+        ApiType,
+        [
+          signedDeleteIntention: PalletFileSystemFileOperationIntention,
+          signature: SpRuntimeMultiSignature
+        ],
+        {
+          signedDeleteIntention: PalletFileSystemFileOperationIntention;
+          signature: SpRuntimeMultiSignature;
         }
       >;
       /**
