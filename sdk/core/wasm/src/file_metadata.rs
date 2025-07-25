@@ -2,6 +2,7 @@ use wasm_bindgen::prelude::*;
 
 use parity_scale_codec::Encode;
 use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
+use shp_file_metadata::FileMetadataError;
 use shp_file_metadata::{FileMetadata as RustFileMetadata, Fingerprint};
 use sp_core::hashing::blake2_256;
 
@@ -27,24 +28,28 @@ impl FileMetadata {
         size: u64,
         fingerprint: &[u8],
     ) -> Result<FileMetadata, JsValue> {
-        // Basic validation to return early, preventing panics deeper inside.
-        if owner.len() != H_LENGTH
-            || bucket_id.len() != H_LENGTH
-            || fingerprint.len() != H_LENGTH
-            || location.is_empty()
-            || size == 0
-        {
-            return Err(JsValue::from_str("Invalid FileMetadata parameters"));
-        }
+        let fp_arr: [u8; H_LENGTH] = fingerprint
+            .try_into()
+            .map_err(|_| JsValue::from_str("fingerprint must be 32 bytes"))?;
 
         let inner = RustFileMetadata::new(
             owner.to_vec(),
             bucket_id.to_vec(),
             location.to_vec(),
             size,
-            Fingerprint::from(<[u8; H_LENGTH]>::try_from(fingerprint).unwrap()),
+            Fingerprint::from(fp_arr),
         )
-        .map_err(|e| JsValue::from_str(&format!("Failed to create FileMetadata: {:?}", e)))?;
+        .map_err(|e| {
+            JsValue::from_str(match e {
+                FileMetadataError::InvalidOwner => "owner must not be an empty array",
+                FileMetadataError::InvalidBucketId => "invalid bucket_id (32-byte hash expected)",
+                FileMetadataError::InvalidLocation => "location must not be empty",
+                FileMetadataError::InvalidFileSize => "size must be greater than 0",
+                FileMetadataError::InvalidFingerprint => {
+                    "invalid fingerprint (32-byte hash expected)"
+                }
+            })
+        })?;
 
         Ok(FileMetadata { inner })
     }
