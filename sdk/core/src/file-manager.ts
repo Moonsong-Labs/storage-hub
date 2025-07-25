@@ -74,8 +74,7 @@ export class FileManager {
       return this.fileKey;
     }
 
-    // Ensure fingerprint is computed
-    const fp = this.fingerprint ?? (await this.getFingerprint());
+    const fp = await this.getFingerprint();
 
     const metadata = new FileMetadata(
       owner.toU8a(),
