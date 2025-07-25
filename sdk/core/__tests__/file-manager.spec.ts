@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
-// @ts-ignore
+import { statSync, createReadStream } from 'node:fs';
+import { Readable } from 'node:stream';
+// @ts-ignore – wasm types emitted after build
 import { FileManager } from '../src/file-manager.ts';
 const EXPECTED_FINGERPRINT_HEX = '0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970';
 
@@ -11,7 +13,11 @@ const TEST_FILE = 'adolphus.jpg'; // same file used in Rust merkle root tests
 
 describe('FileManager fingerprint', () => {
     it('computes fingerprint matching expected root', async () => {
-        const fm = new FileManager(resourcePath(TEST_FILE));
+        const path = resourcePath(TEST_FILE);
+        const fm = new FileManager({
+            size: statSync(path).size,
+            stream: () => Readable.toWeb(createReadStream(path)) as any,
+        });
 
         // Compute fingerprint
         const fingerprint = await fm.getFingerprint();
