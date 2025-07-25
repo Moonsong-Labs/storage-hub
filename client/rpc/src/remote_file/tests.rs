@@ -212,7 +212,7 @@ mod external_service_tests {
 
         let url = Url::parse(&format!("{}/bytes/100", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        let mut stream = handler.stream_file().await.unwrap();
+        let mut stream = handler.download_file().await.unwrap();
         let mut data = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data)
             .await
@@ -276,7 +276,7 @@ mod external_service_tests {
         let url = Url::parse(&format!("{}/start", server.url())).unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
 
-        let mut stream = handler.stream_file().await.unwrap();
+        let mut stream = handler.download_file().await.unwrap();
         let mut data = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut data)
             .await
@@ -313,7 +313,7 @@ mod external_service_tests {
 
         let url = Url::parse("http://10.255.255.1/timeout-test").unwrap();
         let handler = RemoteFileHandlerFactory::create(&url, config).unwrap();
-        let result = handler.stream_file().await;
+        let result = handler.download_file().await;
         assert!(matches!(result, Err(RemoteFileError::Timeout)));
     }
 }
@@ -338,7 +338,9 @@ mod handler_trait_tests {
             Ok(self.file_size)
         }
 
-        async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
+        async fn download_file(
+            &self,
+        ) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
             let cursor = Cursor::new(self.file_content.clone());
             Ok(Box::new(cursor))
         }
@@ -386,7 +388,7 @@ mod handler_trait_tests {
         };
 
         let _url = Url::parse("mock://example.com/file.txt").unwrap();
-        let mut stream = handler.stream_file().await.unwrap();
+        let mut stream = handler.download_file().await.unwrap();
 
         let mut buffer = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut stream, &mut buffer)

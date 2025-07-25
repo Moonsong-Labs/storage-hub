@@ -171,6 +171,26 @@ impl HttpFileHandler {
 
         Ok(bytes.to_vec())
     }
+
+    async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
+        let range = format!("bytes={}-{}", offset, offset + length - 1);
+
+        let response = self
+            .client
+            .get(self.base_url.as_str())
+            .header("Range", range)
+            .send()
+            .await
+            .map_err(Self::map_request_error)?;
+
+        match response.status() {
+            StatusCode::OK => self.handle_full_content(response).await,
+            StatusCode::PARTIAL_CONTENT => {
+                self.handle_partial_content(response, offset, length).await
+            }
+            status => Err(Self::status_to_error(status)),
+        }
+    }
 }
 
 #[async_trait]
@@ -197,7 +217,7 @@ impl RemoteFileHandler for HttpFileHandler {
         }
     }
 
-    async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
+    async fn download_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
         let response = self
             .client
             .get(self.base_url.as_str())
@@ -231,26 +251,6 @@ impl RemoteFileHandler for HttpFileHandler {
                     tokio::io::BufReader::with_capacity(self.config.chunk_size, reader);
 
                 Ok(Box::new(buffered_reader) as Box<dyn AsyncRead + Send + Unpin>)
-            }
-            status => Err(Self::status_to_error(status)),
-        }
-    }
-
-    async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
-        let range = format!("bytes={}-{}", offset, offset + length - 1);
-
-        let response = self
-            .client
-            .get(self.base_url.as_str())
-            .header("Range", range)
-            .send()
-            .await
-            .map_err(Self::map_request_error)?;
-
-        match response.status() {
-            StatusCode::OK => self.handle_full_content(response).await,
-            StatusCode::PARTIAL_CONTENT => {
-                self.handle_partial_content(response, offset, length).await
             }
             status => Err(Self::status_to_error(status)),
         }
@@ -567,7 +567,7 @@ mod tests {
 
         let url = Url::parse(&format!("{}/stream.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
-        let mut reader = handler.stream_file().await.unwrap();
+        let mut reader = handler.download_file().await.unwrap();
 
         let mut buffer = Vec::new();
         tokio::io::AsyncReadExt::read_to_end(&mut reader, &mut buffer)

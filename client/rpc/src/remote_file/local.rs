@@ -223,26 +223,6 @@ impl LocalFileHandler {
             _ => RemoteFileError::IoError(e),
         }
     }
-}
-
-#[async_trait]
-impl RemoteFileHandler for LocalFileHandler {
-    async fn get_file_size(&self) -> Result<u64, RemoteFileError> {
-        self.check_file_valid()?;
-
-        let metadata = self.get_metadata().await?;
-        Ok(metadata.len())
-    }
-
-    async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
-        self.check_file_valid()?;
-
-        let file = File::open(&self.absolute_file_path).await?;
-
-        // Wrap file in a buffered reader that uses the configured chunk size
-        let buffered_reader = tokio::io::BufReader::with_capacity(self.config.chunk_size, file);
-        Ok(Box::new(buffered_reader))
-    }
 
     async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         self.check_file_valid()?;
@@ -260,6 +240,26 @@ impl RemoteFileHandler for LocalFileHandler {
         })?;
 
         Ok(Bytes::from(buffer))
+    }
+}
+
+#[async_trait]
+impl RemoteFileHandler for LocalFileHandler {
+    async fn get_file_size(&self) -> Result<u64, RemoteFileError> {
+        self.check_file_valid()?;
+
+        let metadata = self.get_metadata().await?;
+        Ok(metadata.len())
+    }
+
+    async fn download_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
+        self.check_file_valid()?;
+
+        let file = File::open(&self.absolute_file_path).await?;
+
+        // Wrap file in a buffered reader that uses the configured chunk size
+        let buffered_reader = tokio::io::BufReader::with_capacity(self.config.chunk_size, file);
+        Ok(Box::new(buffered_reader))
     }
 
     fn is_supported(&self, url: &Url) -> bool {
@@ -336,7 +336,7 @@ mod tests {
         )
         .unwrap();
 
-        let mut stream = handler.stream_file().await.unwrap();
+        let mut stream = handler.download_file().await.unwrap();
         let mut buffer = Vec::new();
         stream.read_to_end(&mut buffer).await.unwrap();
 

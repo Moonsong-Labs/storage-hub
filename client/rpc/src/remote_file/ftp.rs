@@ -44,18 +44,17 @@ impl FtpFileHandler {
     ) -> Result<(String, u16, Option<String>, Option<String>, String), RemoteFileError> {
         let host = url
             .host_str()
+            .and_then(|host| if host.is_empty() { None } else { Some(host) })
             .ok_or_else(|| RemoteFileError::InvalidUrl("Missing host".to_string()))?;
-        if host.is_empty() {
-            return Err(RemoteFileError::InvalidUrl("Missing host".to_string()));
-        }
-        let host = host.to_string();
 
+        let host = host.to_string();
         let port = url.port().unwrap_or(21);
 
-        let username = if url.username().is_empty() {
+        let username = url.username().to_string();
+        let username = if username.is_empty() {
             None
         } else {
-            Some(url.username().to_string())
+            Some(username)
         };
 
         let password = url.password().map(|p| p.to_string());
@@ -75,7 +74,7 @@ impl FtpFileHandler {
         )
         .await
         .map_err(|_| RemoteFileError::Timeout)?
-        .map_err(|e| RemoteFileError::FtpError(e))?;
+        .map_err(Self::ftp_error_to_remote_error)?;
 
         let (user, pass) = match (&self.username, &self.password) {
             (Some(u), Some(p)) => (u.clone(), p.clone()),
@@ -83,32 +82,19 @@ impl FtpFileHandler {
             _ => ("anonymous".to_string(), String::new()),
         };
 
-        stream.login(&user, &pass).await.map_err(|e| match e {
-            FtpError::UnexpectedResponse(ref resp) if resp.status == 530.into() => {
-                RemoteFileError::AccessDenied
-            }
-            _ => RemoteFileError::FtpError(e),
-        })?;
+        stream
+            .login(&user, &pass)
+            .await
+            .map_err(Self::ftp_error_to_remote_error)?;
 
         stream.set_mode(suppaftp::Mode::Passive);
 
         stream
             .transfer_type(FileType::Binary)
             .await
-            .map_err(|e| RemoteFileError::FtpError(e))?;
+            .map_err(Self::ftp_error_to_remote_error)?;
 
         Ok(stream)
-    }
-
-    fn ftp_error_to_remote_error(error: FtpError) -> RemoteFileError {
-        match error {
-            FtpError::UnexpectedResponse(ref resp) => match resp.status {
-                s if s == 550.into() => RemoteFileError::NotFound,
-                s if s == 530.into() => RemoteFileError::AccessDenied,
-                _ => RemoteFileError::FtpError(error),
-            },
-            _ => RemoteFileError::FtpError(error),
-        }
     }
 
     pub async fn download(&self) -> Result<Vec<u8>, RemoteFileError> {
@@ -165,40 +151,19 @@ impl FtpFileHandler {
 
         Ok(())
     }
-}
 
-#[async_trait]
-impl RemoteFileHandler for FtpFileHandler {
-    async fn get_file_size(&self) -> Result<u64, RemoteFileError> {
-        let mut stream = self.connect().await?;
-
-        let size = stream
-            .size(&self.path)
-            .await
-            .map_err(Self::ftp_error_to_remote_error)?;
-
-        if size as u64 > self.config.max_file_size {
-            return Err(RemoteFileError::Other(format!(
-                "File size {} exceeds maximum allowed size {}",
-                size, self.config.max_file_size
-            )));
+    fn ftp_error_to_remote_error(error: FtpError) -> RemoteFileError {
+        match error {
+            FtpError::UnexpectedResponse(ref resp) => match resp.status {
+                s if s == 550.into() => RemoteFileError::NotFound,
+                s if s == 530.into() => RemoteFileError::AccessDenied,
+                _ => RemoteFileError::FtpError(error),
+            },
+            _ => RemoteFileError::FtpError(error),
         }
-
-        let _ = stream.quit().await;
-
-        Ok(size as u64)
     }
 
-    async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
-        // For now, we'll download the entire file and wrap it in a cursor
-        // TODO: Implement true streaming when suppaftp provides better async streaming support
-        let data = self.download().await?;
-        let cursor = Cursor::new(data);
-
-        Ok(Box::new(cursor) as Box<dyn AsyncRead + Send + Unpin>)
-    }
-
-    async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
+    pub async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         let mut stream = self.connect().await?;
 
         // Use REST command to set the starting position
@@ -238,6 +203,38 @@ impl RemoteFileHandler for FtpFileHandler {
         let _ = stream.quit().await;
 
         Ok(Bytes::from(result))
+    }
+}
+
+#[async_trait]
+impl RemoteFileHandler for FtpFileHandler {
+    async fn get_file_size(&self) -> Result<u64, RemoteFileError> {
+        let mut stream = self.connect().await?;
+
+        let size = stream
+            .size(&self.path)
+            .await
+            .map_err(Self::ftp_error_to_remote_error)?;
+
+        if size as u64 > self.config.max_file_size {
+            return Err(RemoteFileError::Other(format!(
+                "File size {} exceeds maximum allowed size {}",
+                size, self.config.max_file_size
+            )));
+        }
+
+        let _ = stream.quit().await;
+
+        Ok(size as u64)
+    }
+
+    async fn download_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
+        // For now, we'll download the entire file and wrap it in a cursor
+        // TODO: Implement true streaming when suppaftp provides better async streaming support
+        let data = self.download().await?;
+        let cursor = Cursor::new(data);
+
+        Ok(Box::new(cursor))
     }
 
     fn is_supported(&self, url: &Url) -> bool {

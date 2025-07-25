@@ -7,7 +7,7 @@ use jsonrpsee::{
     types::error::{ErrorObjectOwned as JsonRpseeError, INTERNAL_ERROR_CODE, INTERNAL_ERROR_MSG},
     Extensions,
 };
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use tokio::{fs, io::AsyncReadExt, sync::RwLock};
 
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
@@ -330,24 +330,13 @@ where
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Create file handler for local or remote file.
+        // Create file handler
         let config = RemoteFileConfig::new(DEFAULT_MAX_FILE_SIZE);
         let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
-        let file_size = handler
-            .get_file_size()
-            .await
-            .map_err(remote_file_error_to_rpc_error)?;
-
-        // For local files, check if the file is empty
-        // Remote files we allow the server to give us "0" as file size to support dynamic content
-        if (url.scheme() == "" || url.scheme() == "file") && file_size == 0 {
-            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
-        }
-
         let mut stream = handler
-            .stream_file()
+            .download_file()
             .await
             .map_err(remote_file_error_to_rpc_error)?;
 
@@ -391,13 +380,19 @@ where
             }
         }
 
-        // Check if any chunks were actually written
-        if chunk_id == 0 {
-            warn!(target: LOG_TARGET, "No chunks were written for file: {}. The file appears to be empty.", file_path);
-        }
-
         // Generate the necessary metadata so we can insert file into the File Storage.
         let root = file_data_trie.get_root();
+
+        // For local files, check if the file is empty
+        // Remote files we allow the server to give us "0" as file size to support dynamic content
+        let file_size = handler
+            .get_file_size()
+            .await
+            .map_err(remote_file_error_to_rpc_error)?;
+
+        if (url.scheme() == "" || url.scheme() == "file") && file_size == 0 {
+            return Err(into_rpc_error(FileStorageError::FileIsEmpty));
+        }
 
         // Build StorageHub's [`FileMetadata`]
         let file_metadata = FileMetadata::new(
@@ -509,6 +504,19 @@ where
         let (handler, _url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
+        // TODO: Optimize memory usage for large file transfers
+        // Current implementation loads all chunks into memory before streaming to remote location.
+        // This can cause memory exhaustion for large files.
+        //
+        // Proposed solution: Implement true streaming by:
+        // 1. Create a custom Stream implementation that reads chunks on-demand
+        // 2. Then, pass this stream directly to the remote handler
+        // 3. This would allow chunks to be read from source and written to destination
+        //    without buffering the entire file in memory
+        //
+        // This has the problem of holding onto the file storage read lock, perhaps that's ok?
+        // If it is we would need to shield against slow peers. We already have timeouts but not on the transfer as a whole
+        // We also might need to allow pagination to resume transfer
         let mut chunks = Vec::new();
         for chunk_idx in 0..total_chunks {
             let chunk_id = ChunkId::new(chunk_idx);
@@ -517,29 +525,13 @@ where
                 .map_err(into_rpc_error)?;
             chunks.push(chunk);
         }
-
         drop(read_file_storage);
 
-        // TODO: Optimize memory usage for large file transfers
-        // Current implementation loads all chunks into memory before streaming to remote location.
-        // This can cause memory exhaustion for large files.
-        //
-        // Proposed solution: Implement true streaming by:
-        // 1. Create a custom Stream implementation that reads chunks on-demand
-        // 2. Pass this stream directly to the remote handler
-        // 3. This would allow chunks to be read from source and written to destination
-        //    without buffering the entire file in memory
-        //
-        // Example approach:
-        // - Create ChunkStream that implements Stream<Item = Result<Bytes, Error>>
-        // - Read chunks from file_data_trie as they're pulled by the consumer
-        // - This enables true streaming with constant memory usage
-        let chunks_stream = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
+        let chunks = futures::stream::iter(chunks.into_iter().map(Ok::<_, std::io::Error>));
 
-        let reader = tokio_util::io::StreamReader::new(
-            chunks_stream.map(|result| result.map(bytes::Bytes::from)),
-        );
-        let boxed_reader: Box<dyn tokio::io::AsyncRead + Send + Unpin> = Box::new(reader);
+        let reader =
+            tokio_util::io::StreamReader::new(chunks.map(|result| result.map(bytes::Bytes::from)));
+        let boxed_reader = Box::new(reader) as _;
 
         let file_size = file_metadata.file_size();
         // Write file data to destination (local or remote).

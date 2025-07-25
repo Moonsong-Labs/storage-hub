@@ -1,5 +1,4 @@
 use async_trait::async_trait;
-use bytes::Bytes;
 use thiserror::Error;
 use tokio::io::AsyncRead;
 use url::Url;
@@ -38,12 +37,12 @@ pub enum RemoteFileError {
 pub trait RemoteFileHandler: Send + Sync {
     async fn get_file_size(&self) -> Result<u64, RemoteFileError>;
 
-    async fn stream_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError>;
-
-    async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError>;
+    // TODO: add pagination?
+    async fn download_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError>;
 
     fn is_supported(&self, url: &Url) -> bool;
 
+    // TODO: add pagination?
     async fn upload_file(
         &self,
         data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
