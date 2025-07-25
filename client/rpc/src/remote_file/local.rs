@@ -14,12 +14,17 @@ use url::Url;
 use super::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
 
 #[derive(Debug, Clone)]
+enum FileStatus {
+    NotFound { parent_writable: bool },
+    NotAFile,
+    ValidFile { writable: bool },
+}
+
+#[derive(Debug, Clone)]
 pub struct LocalFileHandler {
     absolute_file_path: PathBuf,
     config: RemoteFileConfig,
-
-    file_exists_and_valid: bool,
-    has_write_permission: bool,
+    file_status: FileStatus,
 }
 
 impl LocalFileHandler {
@@ -87,7 +92,7 @@ impl LocalFileHandler {
             };
         };
 
-        let (file_exists_and_valid, has_write_permission) = if traversed {
+        let file_status = if traversed {
             // File doesn't exist, check write permissions on parent directory
             // by trying to create a temporary file
             let timestamp = SystemTime::now()
@@ -97,7 +102,7 @@ impl LocalFileHandler {
             let temp_name = format!(".storagehub_test_{}_{}", std::process::id(), timestamp);
             let temp_path = existing_path.join(&temp_name);
 
-            let has_write = match std::fs::File::create(&temp_path) {
+            let parent_writable = match std::fs::File::create(&temp_path) {
                 Ok(_) => {
                     // Clean up the test file
                     let _ = std::fs::remove_file(&temp_path);
@@ -106,22 +111,25 @@ impl LocalFileHandler {
                 _ => false,
             };
 
-            (false, has_write)
+            FileStatus::NotFound { parent_writable }
         } else {
             // File exists, check if it's a valid file and permissions
             let metadata = std::fs::metadata(&path).map_err(RemoteFileError::IoError)?;
-            let is_valid_file = metadata.is_file();
 
-            // Try to open for reading to verify read permissions
-            std::fs::File::open(&path).map_err(RemoteFileError::IoError)?;
+            if !metadata.is_file() {
+                FileStatus::NotAFile
+            } else {
+                // Try to open for reading to verify read permissions
+                std::fs::File::open(&path).map_err(RemoteFileError::IoError)?;
 
-            // Try to open for writing to check write permissions
-            let has_write = match std::fs::OpenOptions::new().write(true).open(&path) {
-                Ok(_) => true,
-                _ => false,
-            };
+                // Try to open for writing to check write permissions
+                let writable = match std::fs::OpenOptions::new().write(true).open(&path) {
+                    Ok(_) => true,
+                    _ => false,
+                };
 
-            (is_valid_file, has_write)
+                FileStatus::ValidFile { writable }
+            }
         };
 
         Ok(Self {
@@ -129,8 +137,7 @@ impl LocalFileHandler {
             config,
             // Technically we could have a "time of check vs time of use" problem,
             // where we had the right permissions at this point in time but not later
-            file_exists_and_valid,
-            has_write_permission,
+            file_status,
         })
     }
 
@@ -166,27 +173,45 @@ impl LocalFileHandler {
             })
     }
 
+    /// Check if the configured file is a valid file
+    ///
+    /// Otherwise return an error
     fn check_file_valid(&self) -> Result<(), RemoteFileError> {
-        if !self.file_exists_and_valid {
-            return Err(RemoteFileError::Other(format!(
-                "Path is not a valid file: {}",
+        match &self.file_status {
+            FileStatus::ValidFile { .. } => Ok(()),
+            FileStatus::NotFound { .. } => {
+                // Reconstruct the standard "file not found" error
+                let err =
+                    std::io::Error::new(std::io::ErrorKind::NotFound, "No such file or directory");
+                Err(RemoteFileError::IoError(err))
+            }
+            FileStatus::NotAFile => Err(RemoteFileError::Other(format!(
+                "Path is not a file: {}",
                 self.absolute_file_path.display()
-            )));
+            ))),
         }
-        Ok(())
     }
 
     fn check_write_permission(&self) -> Result<(), RemoteFileError> {
-        if !self.has_write_permission {
-            return Err(RemoteFileError::AccessDenied);
+        match &self.file_status {
+            FileStatus::NotFound {
+                parent_writable: false,
+            }
+            | FileStatus::ValidFile { writable: false } => Err(RemoteFileError::AccessDenied),
+            FileStatus::NotAFile => Err(RemoteFileError::Other(format!(
+                "Path is not a file: {}",
+                self.absolute_file_path.display()
+            ))),
+            FileStatus::NotFound { .. } | FileStatus::ValidFile { .. } => Ok(()),
         }
-        Ok(())
     }
 
     /// Maps IO errors to RemoteFileError, converting PermissionDenied to AccessDenied
     fn map_io_error(e: std::io::Error) -> RemoteFileError {
         match e.kind() {
-            std::io::ErrorKind::PermissionDenied => RemoteFileError::AccessDenied,
+            std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem => {
+                RemoteFileError::AccessDenied
+            }
             std::io::ErrorKind::Other => {
                 let error_str = e.to_string().to_lowercase();
                 if error_str.contains("space") || error_str.contains("disk full") {
@@ -344,7 +369,36 @@ mod tests {
         .unwrap();
 
         let result = handler.get_file_size().await;
-        assert!(matches!(result, Err(RemoteFileError::Other(_))));
+        match result {
+            Err(RemoteFileError::IoError(e)) => {
+                assert_eq!(e.kind(), std::io::ErrorKind::NotFound);
+                assert_eq!(e.to_string(), "No such file or directory");
+            }
+            _ => panic!("Expected IoError with NotFound kind"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_path_is_directory() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
+        // Create handler pointing to a directory instead of a file
+        let handler = LocalFileHandler::new_from_path(
+            temp_dir.path().to_str().unwrap(),
+            RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
+        )
+        .unwrap();
+
+        assert!(matches!(handler.file_status, FileStatus::NotAFile));
+
+        // Try to get file size - should fail with appropriate error
+        let result = handler.get_file_size().await.unwrap_err();
+        match result {
+            RemoteFileError::Other(msg) => {
+                assert!(msg.contains("Path is not a file"));
+            }
+            _ => panic!("Expected Other error for directory path"),
+        }
     }
 
     #[tokio::test]
@@ -521,7 +575,7 @@ mod tests {
             RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
         )
         .expect("Should accept readable file");
-        assert_eq!(handler.file_exists_and_valid, true);
+        assert!(matches!(handler.file_status, FileStatus::ValidFile { .. }));
 
         // Test with non-existent file in writable directory
         let new_file = temp_dir.path().join("new_file.txt");
@@ -530,8 +584,12 @@ mod tests {
             RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
         )
         .expect("Should accept non-existent file in writable directory");
-        assert_eq!(handler.file_exists_and_valid, false);
-        assert_eq!(handler.has_write_permission, true);
+        assert!(matches!(
+            handler.file_status,
+            FileStatus::NotFound {
+                parent_writable: true
+            }
+        ));
 
         // Test that non-existent parent directory is allowed
         let path_with_nonexistent_parent = temp_dir.path().join("non/existent/directory/file.txt");
@@ -540,8 +598,12 @@ mod tests {
             RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
         )
         .expect("Should allow file with non-existent parent directory");
-        assert_eq!(handler.file_exists_and_valid, false);
-        assert_eq!(handler.has_write_permission, true);
+        assert!(matches!(
+            handler.file_status,
+            FileStatus::NotFound {
+                parent_writable: true
+            }
+        ));
     }
 
     #[test]
