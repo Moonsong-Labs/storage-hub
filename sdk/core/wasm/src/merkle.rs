@@ -95,10 +95,6 @@ impl FileTrie {
 
     #[wasm_bindgen]
     pub fn push_chunk(&mut self, bytes: &[u8]) {
-        assert!(
-            bytes.len() <= FILE_CHUNK_SIZE as usize,
-            "chunk larger than 1 KiB"
-        );
         let cid = ChunkId::new(self.next_id);
         self.inner.write_chunk(cid, &bytes.to_vec());
         self.next_id += 1;
