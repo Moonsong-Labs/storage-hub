@@ -16,9 +16,9 @@ use std::collections::hash_map::DefaultHasher;
 //
 //  For the SDK we only need the minimal in-memory Merkle-Patricia trie logic
 //  (`InMemoryFileDataTrie`) to compute Merkle roots client-side.  Therefore we
-//  copy the few small types (ChunkId, ChunkWithId, hashing adapter) instead of
-//  depending on the heavy client crate.  This keeps the WASM package tiny and
-//  avoids compilation failures in browser/Node environments.
+//  copy the few small types instead of depending on the heavy client crate.
+//  This keeps the WASM package tiny and avoids compilation failures
+//  in browser/Node environments.
 // ────────────────────────────────────────────────────────────────────────────
 
 #[derive(Default, Clone)]
