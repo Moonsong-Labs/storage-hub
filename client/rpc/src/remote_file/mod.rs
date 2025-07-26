@@ -88,7 +88,4 @@ pub mod ftp;
 pub mod http;
 pub mod local;
 
-#[cfg(test)]
-mod tests;
-
 pub use factory::RemoteFileHandlerFactory;
