@@ -192,7 +192,6 @@ impl RemoteFileHandler for HttpFileHandler {
         match response.status() {
             status if status.is_success() => {
                 let content_length = Self::get_content_length(&response)?;
-                self.validate_file_size(content_length)?;
 
                 Ok(content_length)
             }

@@ -237,13 +237,6 @@ impl RemoteFileHandler for FtpFileHandler {
             .await
             .map_err(Self::ftp_error_to_remote_error)?;
 
-        if size as u64 > self.config.max_file_size {
-            return Err(RemoteFileError::Other(format!(
-                "File size {} exceeds maximum allowed size {}",
-                size, self.config.max_file_size
-            )));
-        }
-
         let _ = stream.quit().await;
 
         Ok(size as u64)
