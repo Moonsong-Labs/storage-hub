@@ -1,16 +1,100 @@
+use std::pin::Pin;
+use std::task::{Context, Poll};
+use std::time::Duration;
+
 use async_trait::async_trait;
 use bytes::Bytes;
+use futures_util::future::FutureExt;
 use futures_util::io::{AsyncReadExt, AsyncWriteExt};
-use std::io::Cursor;
-use std::time::Duration;
 use suppaftp::types::FileType;
-use suppaftp::types::Response;
 use suppaftp::{AsyncFtpStream, FtpError};
-use tokio::io::AsyncRead;
-use tokio_util::compat::TokioAsyncReadCompatExt;
+use tokio::io::{AsyncRead, ReadBuf};
+use tokio::sync::{mpsc, oneshot};
 use url::Url;
 
 use crate::remote_file::{RemoteFileConfig, RemoteFileError, RemoteFileHandler};
+
+/// Async reader that streams FTP data through a channel
+struct FtpStreamReader {
+    receiver: mpsc::Receiver<Result<Bytes, RemoteFileError>>,
+    current_chunk: Option<Bytes>,
+    position: usize,
+    error_receiver: Option<oneshot::Receiver<RemoteFileError>>,
+}
+
+impl FtpStreamReader {
+    pub fn new(
+        chunks: mpsc::Receiver<Result<Bytes, RemoteFileError>>,
+        error: Option<oneshot::Receiver<RemoteFileError>>,
+    ) -> Self {
+        Self {
+            current_chunk: None,
+            position: 0,
+            receiver: chunks,
+            error_receiver: error,
+        }
+    }
+}
+
+impl AsyncRead for FtpStreamReader {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        let this = self.get_mut();
+
+        loop {
+            // If we have data in current chunk, read from it
+            if let Some(chunk) = &this.current_chunk {
+                if this.position < chunk.len() {
+                    let remaining = chunk.len() - this.position;
+                    let to_read = remaining.min(buf.remaining());
+                    buf.put_slice(&chunk[this.position..this.position + to_read]);
+                    this.position += to_read;
+
+                    if this.position >= chunk.len() {
+                        this.current_chunk = None;
+                        this.position = 0;
+                    }
+                }
+            }
+
+            if buf.remaining() == 0 {
+                return Poll::Ready(Ok(()));
+            }
+
+            // Try to get next chunk
+            break match this.receiver.poll_recv(cx) {
+                Poll::Ready(Some(Ok(chunk))) => {
+                    this.current_chunk = Some(chunk);
+                    this.position = 0;
+                    continue;
+                }
+                Poll::Ready(Some(Err(e))) => Poll::Ready(Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.to_string(),
+                ))),
+                Poll::Ready(None) => {
+                    // Check for any error from the download task and return it
+                    if let Some(mut error_rx) = this.error_receiver.take() {
+                        match error_rx.poll_unpin(cx) {
+                            Poll::Ready(Ok(e)) => {
+                                return Poll::Ready(Err(std::io::Error::new(
+                                    std::io::ErrorKind::Other,
+                                    e.to_string(),
+                                )));
+                            }
+                            _ => {}
+                        }
+                    }
+                    Poll::Ready(Ok(()))
+                }
+                Poll::Pending => Poll::Pending,
+            };
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct FtpFileHandler {
@@ -97,59 +181,38 @@ impl FtpFileHandler {
         Ok(stream)
     }
 
-    pub async fn download(&self) -> Result<Vec<u8>, RemoteFileError> {
-        let mut stream = self.connect().await?;
-
-        let size = stream
-            .size(&self.path)
-            .await
-            .map_err(Self::ftp_error_to_remote_error)?;
-
-        if size as u64 > self.config.max_file_size {
-            return Err(RemoteFileError::Other(format!(
-                "File size {} exceeds maximum allowed size {}",
-                size, self.config.max_file_size
-            )));
+    async fn chunked_read<T>(
+        tx: mpsc::Sender<Result<Bytes, RemoteFileError>>,
+        mut reader: T,
+        chunk_size: usize,
+    ) -> Result<((), T), FtpError>
+    where
+        T: futures_util::io::AsyncRead + Unpin,
+    {
+        // Read `chunk_size` at a time and send to channel
+        let mut buffer = vec![0u8; chunk_size];
+        loop {
+            match reader.read(&mut buffer).await {
+                Ok(0) => break, // EOF
+                Ok(n) => {
+                    let chunk = Bytes::copy_from_slice(&buffer[..n]);
+                    if tx.send(Ok(chunk)).await.is_err() {
+                        // Receiver dropped, stop reading
+                        break;
+                    }
+                }
+                Err(e) => {
+                    let _ = tx
+                        .send(Err(RemoteFileError::IoError(std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            e,
+                        ))))
+                        .await;
+                    break;
+                }
+            }
         }
-
-        let data = tokio::time::timeout(
-            Duration::from_secs(self.config.read_timeout),
-            stream.retr(&self.path, |mut reader| {
-                Box::pin(async move {
-                    let mut buffer = Vec::new();
-                    reader.read_to_end(&mut buffer).await.map_err(|e| {
-                        FtpError::UnexpectedResponse(Response::new(
-                            0.into(),
-                            format!("IO error: {}", e).into_bytes(),
-                        ))
-                    })?;
-                    Ok((buffer, reader))
-                })
-            }),
-        )
-        .await
-        .map_err(|_| RemoteFileError::Timeout)?
-        .map_err(Self::ftp_error_to_remote_error)?;
-
-        let _ = stream.quit().await;
-
-        Ok(data)
-    }
-
-    pub async fn upload(&self, data: &[u8]) -> Result<(), RemoteFileError> {
-        let mut stream = self.connect().await?;
-
-        let cursor = Cursor::new(data);
-        let mut compat_cursor = cursor.compat();
-
-        stream
-            .put_file(&self.path, &mut compat_cursor)
-            .await
-            .map_err(Self::ftp_error_to_remote_error)?;
-
-        let _ = stream.quit().await;
-
-        Ok(())
+        Ok(((), reader))
     }
 
     fn ftp_error_to_remote_error(error: FtpError) -> RemoteFileError {
@@ -161,48 +224,6 @@ impl FtpFileHandler {
             },
             _ => RemoteFileError::FtpError(error),
         }
-    }
-
-    pub async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
-        let mut stream = self.connect().await?;
-
-        // Use REST command to set the starting position
-        if offset > 0 {
-            stream
-                .resume_transfer(offset as usize)
-                .await
-                .map_err(Self::ftp_error_to_remote_error)?;
-        }
-
-        // Download the data starting from the offset, if any
-        let result = stream
-            .retr(&self.path, |mut reader| {
-                Box::pin(async move {
-                    let mut buffer = vec![0u8; length as usize];
-                    let bytes_read = reader.read(&mut buffer).await.map_err(|e| {
-                        FtpError::UnexpectedResponse(Response::new(
-                            0.into(),
-                            format!("IO error: {}", e).into_bytes(),
-                        ))
-                    })?;
-                    buffer.truncate(bytes_read);
-                    Ok((buffer, reader))
-                })
-            })
-            .await
-            .map_err(Self::ftp_error_to_remote_error)?;
-
-        // Reset REST position for future commands
-        if offset > 0 {
-            stream
-                .resume_transfer(0)
-                .await
-                .map_err(Self::ftp_error_to_remote_error)?;
-        }
-
-        let _ = stream.quit().await;
-
-        Ok(Bytes::from(result))
     }
 }
 
@@ -228,13 +249,58 @@ impl RemoteFileHandler for FtpFileHandler {
         Ok(size as u64)
     }
 
+    /// Downloads a file from the FTP server as an async stream.
+    ///
+    /// This implementation uses a channel-based approach to provide true streaming
+    /// without buffering the entire file in memory. The file is downloaded in chunks
+    /// through a background task, allowing for memory-efficient handling of large files.
     async fn download_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
-        // For now, we'll download the entire file and wrap it in a cursor
-        // TODO: Implement true streaming when suppaftp provides better async streaming support
-        let data = self.download().await?;
-        let cursor = Cursor::new(data);
+        // Create channel with buffer based on chunk size
+        let buffered_chunks = (self.config.chunk_size / 8192).max(10) + 1 as usize;
+        let (tx, rx) = mpsc::channel(buffered_chunks);
+        let (error_tx, error_rx) = oneshot::channel();
 
-        Ok(Box::new(cursor))
+        let mut stream = self.connect().await?;
+
+        // Verify file exists and get size
+        let size = stream
+            .size(&self.path)
+            .await
+            .map_err(Self::ftp_error_to_remote_error)?;
+
+        if size as u64 > self.config.max_file_size {
+            return Err(RemoteFileError::Other(format!(
+                "File size {} exceeds maximum allowed size {}",
+                size, self.config.max_file_size
+            )));
+        }
+
+        let path = self.path.clone();
+        let chunk_size = self.config.chunk_size;
+
+        // Spawn task to download file through channel
+        tokio::spawn(async move {
+            let result = async {
+                let result = stream
+                    .retr(&path, |reader| {
+                        Box::pin(Self::chunked_read(tx.clone(), reader, chunk_size))
+                    })
+                    .await
+                    .map_err(Self::ftp_error_to_remote_error)
+                    .map(|_| ());
+
+                let _ = stream.quit().await;
+                result
+            }
+            .await;
+
+            if let Err(e) = result {
+                // Propagate error to reader
+                let _ = error_tx.send(e);
+            }
+        });
+
+        Ok(Box::new(FtpStreamReader::new(rx, Some(error_rx))))
     }
 
     fn is_supported(&self, url: &Url) -> bool {
@@ -257,37 +323,58 @@ impl RemoteFileHandler for FtpFileHandler {
         let mut stream = self.connect().await?;
 
         // Use put_with_stream for streaming upload
-        let mut upload_stream = stream
+        let mut upload_stream = match stream
             .put_with_stream(&self.path)
             .await
-            .map_err(Self::ftp_error_to_remote_error)?;
+            .map_err(Self::ftp_error_to_remote_error)
+        {
+            Ok(upload_stream) => upload_stream,
+            Err(e) => {
+                let _ = stream.quit().await;
+                return Err(e);
+            }
+        };
 
-        // Stream data in chunks
-        let mut buffer = vec![0u8; self.config.chunk_size];
-        loop {
-            let n = tokio::io::AsyncReadExt::read(&mut data, &mut buffer)
-                .await
-                .map_err(|e| RemoteFileError::IoError(e))?;
+        let result = {
+            // Stream data in chunks
+            let mut buffer = vec![0u8; self.config.chunk_size];
+            let mut upload_error = None;
 
-            if n == 0 {
-                break;
+            loop {
+                match tokio::io::AsyncReadExt::read(&mut data, &mut buffer).await {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        if let Err(e) = upload_stream.write_all(&buffer[..n]).await {
+                            upload_error =
+                                Some(RemoteFileError::Other(format!("Write error: {}", e)));
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        upload_error = Some(RemoteFileError::IoError(e));
+                        break;
+                    }
+                }
             }
 
-            upload_stream
-                .write_all(&buffer[..n])
+            // Always finalize the upload stream, even on error
+            let finalize_result = stream
+                .finalize_put_stream(upload_stream)
                 .await
-                .map_err(|e| RemoteFileError::Other(format!("Write error: {}", e)))?;
-        }
+                .map_err(Self::ftp_error_to_remote_error);
 
-        // Finalize the upload
-        stream
-            .finalize_put_stream(upload_stream)
-            .await
-            .map_err(Self::ftp_error_to_remote_error)?;
+            // Return the first error that occurred
+            match (upload_error, finalize_result) {
+                (Some(e), _) => Err(e),
+                (None, Err(e)) => Err(e),
+                (None, Ok(_)) => Ok(()),
+            }
+        };
 
+        // Always quit the connection, even on error
         let _ = stream.quit().await;
 
-        Ok(())
+        result
     }
 }
 
