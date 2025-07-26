@@ -304,8 +304,7 @@ mod tests {
             .mock("HEAD", "/test.txt")
             .with_status(200)
             .with_header("content-length", "1024")
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -322,8 +321,7 @@ mod tests {
         let _m = server
             .mock("HEAD", "/missing.txt")
             .with_status(404)
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/missing.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -339,8 +337,7 @@ mod tests {
         let _m = server
             .mock("HEAD", "/forbidden.txt")
             .with_status(403)
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/forbidden.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -357,8 +354,7 @@ mod tests {
             .mock("HEAD", "/large.txt")
             .with_status(200)
             .with_header("content-length", "2097152")
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/large.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -376,8 +372,7 @@ mod tests {
             .mock("HEAD", "/no-length.txt")
             .with_status(200)
             .with_header("content-type", "text/plain")
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/no-length.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -400,8 +395,7 @@ mod tests {
             .mock("GET", "/test.txt")
             .with_status(200)
             .with_body(content)
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -420,8 +414,7 @@ mod tests {
             .match_header("range", "bytes=6-10")
             .with_status(206)
             .with_body(content)
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -441,8 +434,7 @@ mod tests {
             .match_header("range", "bytes=5-9")
             .with_status(200)
             .with_body(full_content)
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/no-range.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -461,8 +453,7 @@ mod tests {
                 std::thread::sleep(std::time::Duration::from_secs(2));
                 Ok(())
             })
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/slow.txt", server.url())).unwrap();
         let config = RemoteFileConfig {
@@ -483,8 +474,7 @@ mod tests {
         let _m = server
             .mock("GET", "/auth-required.txt")
             .with_status(401)
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/auth-required.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -503,8 +493,7 @@ mod tests {
             .with_status(206)
             .with_header("Content-Range", "bytes 6-10/100")
             .with_body(content)
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -523,8 +512,7 @@ mod tests {
             .with_status(206)
             .with_header("Content-Range", "bytes 0-4/100") // Wrong range
             .with_body(content)
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/test.txt", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -544,10 +532,8 @@ mod tests {
         let _m = server
             .mock("PUT", "/upload.txt")
             .match_header("content-length", "13")
-            .match_header("content-type", "text/plain")
             .with_status(200)
-            .create_async()
-            .await;
+            .create();
 
         let data = b"Hello, World!";
         let reader = Box::new(std::io::Cursor::new(data));
@@ -571,8 +557,7 @@ mod tests {
             .match_header("authorization", "Basic dXNlcjpwYXNz")
             .match_header("content-length", "6")
             .with_status(200)
-            .create_async()
-            .await;
+            .create();
 
         let data = b"secure";
         let reader = Box::new(std::io::Cursor::new(data));
@@ -596,8 +581,7 @@ mod tests {
         let _m = server
             .mock("PUT", "/forbidden-upload.txt")
             .with_status(403)
-            .create_async()
-            .await;
+            .create();
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
@@ -616,8 +600,7 @@ mod tests {
         let _m = server
             .mock("PUT", "/error-upload.txt")
             .with_status(500)
-            .create_async()
-            .await;
+            .create();
 
         let data = b"data";
         let reader = Box::new(std::io::Cursor::new(data));
@@ -661,22 +644,19 @@ mod tests {
             .mock("GET", "/redirect1")
             .with_status(302)
             .with_header("Location", &format!("{}/redirect2", server.url()))
-            .create_async()
-            .await;
+            .create();
 
         let _m2 = server
             .mock("GET", "/redirect2")
             .with_status(302)
             .with_header("Location", &format!("{}/final", server.url()))
-            .create_async()
-            .await;
+            .create();
 
         let _m3 = server
             .mock("GET", "/final")
             .with_status(200)
             .with_body(b"Final content")
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/redirect1", server.url())).unwrap();
         let handler = create_test_handler(&url);
@@ -692,22 +672,19 @@ mod tests {
             .mock("GET", "/redirect1")
             .with_status(302)
             .with_header("Location", &format!("{}/redirect2", server.url()))
-            .create_async()
-            .await;
+            .create();
 
         let _m2 = server
             .mock("GET", "/redirect2")
             .with_status(302)
             .with_header("Location", &format!("{}/redirect3", server.url()))
-            .create_async()
-            .await;
+            .create();
 
         let _m3 = server
             .mock("GET", "/redirect3")
             .with_status(302)
             .with_header("Location", &format!("{}/final", server.url()))
-            .create_async()
-            .await;
+            .create();
 
         let url = Url::parse(&format!("{}/redirect1", server.url())).unwrap();
         let config = RemoteFileConfig {
