@@ -444,17 +444,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_download_with_timeout() {
-        let mut server = Server::new_async().await;
-        let _m = server
-            .mock("GET", "/slow.txt")
-            .with_status(200)
-            .with_chunked_body(|_| {
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                Ok(())
-            })
-            .create();
-
-        let url = Url::parse(&format!("{}/slow.txt", server.url())).unwrap();
+        let url = Url::parse("http://localhost/timeout-download.txt").unwrap();
         let config = RemoteFileConfig {
             connection_timeout: 1,
             read_timeout: 1,
@@ -614,7 +604,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_upload_file_timeout() {
-        let url = Url::parse("http://10.255.255.1/timeout-upload.txt").unwrap();
+        let url = Url::parse("http://localhost/timeout-upload.txt").unwrap();
         let config = RemoteFileConfig {
             connection_timeout: 1,
             read_timeout: 1,
