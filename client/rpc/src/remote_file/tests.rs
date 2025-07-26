@@ -344,7 +344,6 @@ mod handler_trait_tests {
             Ok(Box::new(cursor))
         }
 
-
         fn is_supported(&self, url: &Url) -> bool {
             url.scheme() == self.supported_scheme
         }
@@ -391,7 +390,6 @@ mod handler_trait_tests {
 
         assert_eq!(buffer, b"streaming data");
     }
-
 
     #[tokio::test]
     async fn test_mock_handler_unsupported() {
