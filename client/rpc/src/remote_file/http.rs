@@ -53,6 +53,22 @@ impl HttpFileHandler {
         }
     }
 
+    fn get_content_length(response: &reqwest::Response) -> Result<u64, RemoteFileError> {
+        // We need to access the header directly as the `content_length` method determines it from the response body
+        match response
+            .headers()
+            .get("content-length")
+            .ok_or_else(|| RemoteFileError::Other("Content-Length header missing".to_string()))?
+            .to_str()
+            .map(|val| val.parse::<u64>())
+        {
+            Ok(Ok(val)) => Ok(val),
+            _ => Err(RemoteFileError::Other(
+                "Invalid Content-Length header value".to_string(),
+            )),
+        }
+    }
+
     fn validate_file_size(&self, size: u64) -> Result<(), RemoteFileError> {
         if size > self.config.max_file_size {
             Err(RemoteFileError::Other(format!(
@@ -175,10 +191,7 @@ impl RemoteFileHandler for HttpFileHandler {
 
         match response.status() {
             status if status.is_success() => {
-                let content_length = response.content_length().ok_or_else(|| {
-                    RemoteFileError::Other("Content-Length header missing".to_string())
-                })?;
-
+                let content_length = Self::get_content_length(&response)?;
                 self.validate_file_size(content_length)?;
 
                 Ok(content_length)
@@ -197,10 +210,8 @@ impl RemoteFileHandler for HttpFileHandler {
 
         match response.status() {
             status if status.is_success() => {
-                response
-                    .content_length()
-                    .map(|size| self.validate_file_size(size))
-                    .transpose()?;
+                Self::get_content_length(&response)
+                    .and_then(|size| self.validate_file_size(size))?;
 
                 let stream = response.bytes_stream();
                 let reader = StreamReader::new(
@@ -286,7 +297,6 @@ mod tests {
     /**  File size tests */
 
     #[tokio::test]
-    // #[ignore = "Mockito has issues with HEAD requests and content-length headers"]
     async fn test_file_size() {
         let mut server = Server::new_async().await;
 
@@ -341,7 +351,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore = "Mockito has issues with HEAD requests and content-length headers"]
     async fn test_file_size_too_large() {
         let mut server = Server::new_async().await;
         let _m = server
@@ -361,7 +370,6 @@ mod tests {
     }
 
     #[tokio::test]
-    // #[ignore = "Mockito automatically adds content-length: 0 for HEAD requests"]
     async fn test_file_size_no_content_length_header() {
         let mut server = Server::new_async().await;
         let _m = server

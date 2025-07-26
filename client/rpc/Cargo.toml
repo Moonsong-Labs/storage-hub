@@ -21,7 +21,7 @@ jsonrpsee = { features = [
 ], workspace = true }
 log = { workspace = true }
 mime_guess = "2.0"
-reqwest = { version = "0.11", features = ["stream", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false }
 serde = { workspace = true }
 suppaftp = { version = "6.0", features = ["async", "rustls"] }
 thiserror = "1.0"
