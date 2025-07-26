@@ -3,7 +3,7 @@ use bytes::Bytes;
 use futures_util::TryStreamExt;
 use reqwest::{header, Body, Client, StatusCode};
 use std::time::Duration;
-use tokio::io::AsyncRead;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_util::io::{ReaderStream, StreamReader};
 use url::Url;
 
@@ -34,10 +34,6 @@ impl HttpFileHandler {
             config,
             base_url: url.clone(),
         })
-    }
-
-    pub fn default(url: &Url, max_file_size: u64) -> Result<Self, RemoteFileError> {
-        Self::new(RemoteFileConfig::new(max_file_size), url)
     }
 
     fn status_to_error(status: StatusCode) -> RemoteFileError {
@@ -73,7 +69,6 @@ impl HttpFileHandler {
         response: reqwest::Response,
     ) -> Result<Bytes, RemoteFileError> {
         // For servers that don't support range requests, we accept the full content
-        // This maintains backward compatibility with existing behavior
         response.bytes().await.map_err(Self::map_request_error)
     }
 
@@ -92,7 +87,7 @@ impl HttpFileHandler {
             }
         }
         // Note: We don't error if Content-Range header is missing as some servers
-        // may return 206 without it, and the test expects this to work
+        // may return 206 without it
 
         response.bytes().await.map_err(Self::map_request_error)
     }
@@ -104,21 +99,20 @@ impl HttpFileHandler {
         expected_length: u64,
     ) -> Result<(u64, u64), RemoteFileError> {
         // Parse Content-Range header (format: "bytes start-end/total")
-        let range_part = header.strip_prefix("bytes ").ok_or_else(|| {
-            RemoteFileError::Other("Invalid Content-Range header format".to_string())
-        })?;
+        let (start_str, end_str) = (|| {
+            let range_part = header.strip_prefix("bytes ")?;
 
-        let slash_pos = range_part.find('/').ok_or_else(|| {
-            RemoteFileError::Other("Invalid Content-Range header format".to_string())
-        })?;
+            let slash_pos = range_part.find('/')?;
 
-        let range_values = &range_part[..slash_pos];
-        let dash_pos = range_values.find('-').ok_or_else(|| {
-            RemoteFileError::Other("Invalid Content-Range header format".to_string())
-        })?;
+            let range_values = &range_part[..slash_pos];
+            let dash_pos = range_values.find('-')?;
 
-        let start_str = &range_values[..dash_pos];
-        let end_str = &range_values[dash_pos + 1..];
+            let start_str = &range_values[..dash_pos];
+            let end_str = &range_values[dash_pos + 1..];
+
+            Some((start_str, end_str))
+        })()
+        .ok_or_else(|| RemoteFileError::Other("Invalid Content-Range header format".to_string()))?;
 
         let actual_start = start_str.parse::<u64>().map_err(|_| {
             RemoteFileError::Other("Invalid start value in Content-Range".to_string())
@@ -138,40 +132,7 @@ impl HttpFileHandler {
         Ok((actual_start, actual_end))
     }
 
-    pub async fn download(&self) -> Result<Vec<u8>, RemoteFileError> {
-        let response = self
-            .client
-            .get(self.base_url.as_str())
-            .send()
-            .await
-            .map_err(Self::map_request_error)?;
-
-        if !response.status().is_success() {
-            return Err(Self::status_to_error(response.status()));
-        }
-
-        if let Some(content_length) = response.content_length() {
-            if content_length > self.config.max_file_size {
-                return Err(RemoteFileError::Other(format!(
-                    "File size {} exceeds maximum allowed size {}",
-                    content_length, self.config.max_file_size
-                )));
-            }
-        }
-
-        let bytes = response.bytes().await.map_err(|e| {
-            if e.is_timeout() {
-                RemoteFileError::Timeout
-            } else {
-                RemoteFileError::HttpError(e)
-            }
-        })?;
-
-        self.validate_file_size(bytes.len() as u64)?;
-
-        Ok(bytes.to_vec())
-    }
-
+    #[allow(dead_code)] // might be used when we do pagination
     async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         let range = format!("bytes={}-{}", offset, offset + length - 1);
 
@@ -190,6 +151,15 @@ impl HttpFileHandler {
             }
             status => Err(Self::status_to_error(status)),
         }
+    }
+
+    pub async fn download(&self) -> Result<Bytes, RemoteFileError> {
+        let mut reader = self.download_file().await?;
+
+        let mut buffer = Vec::new();
+        reader.read_to_end(&mut buffer).await?;
+
+        Ok(buffer.into())
     }
 }
 
@@ -227,25 +197,16 @@ impl RemoteFileHandler for HttpFileHandler {
 
         match response.status() {
             status if status.is_success() => {
-                if let Some(content_length) = response.content_length() {
-                    if content_length > self.config.max_file_size {
-                        return Err(RemoteFileError::Other(format!(
-                            "File size {} exceeds maximum allowed size {}",
-                            content_length, self.config.max_file_size
-                        )));
-                    }
-                }
+                response
+                    .content_length()
+                    .map(|size| self.validate_file_size(size))
+                    .transpose()?;
 
                 let stream = response.bytes_stream();
-                // Use the chunk_size from config to buffer the stream
-                let stream = stream.map_ok(|chunk| {
-                    // The stream is already chunked by reqwest, but we can ensure
-                    // consistent chunk sizes if needed
-                    chunk
-                });
                 let reader = StreamReader::new(
                     stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
                 );
+
                 // Wrap the reader in a buffered reader with configured chunk size
                 let buffered_reader =
                     tokio::io::BufReader::with_capacity(self.config.chunk_size, reader);
@@ -266,12 +227,6 @@ impl RemoteFileHandler for HttpFileHandler {
         size: u64,
         content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        if !self.is_supported(&self.base_url) {
-            return Err(RemoteFileError::UnsupportedProtocol(
-                self.base_url.scheme().to_string(),
-            ));
-        }
-
         let stream = ReaderStream::new(data);
         let body = Body::wrap_stream(stream);
 
@@ -413,7 +368,7 @@ mod tests {
         let handler = create_test_handler(&url);
         let data = handler.download().await.unwrap();
 
-        assert_eq!(data, content);
+        assert_eq!(data.as_ref(), content);
     }
 
     #[tokio::test]
@@ -570,9 +525,7 @@ mod tests {
         let mut reader = handler.download_file().await.unwrap();
 
         let mut buffer = Vec::new();
-        tokio::io::AsyncReadExt::read_to_end(&mut reader, &mut buffer)
-            .await
-            .unwrap();
+        reader.read_to_end(&mut buffer).await.unwrap();
 
         assert_eq!(buffer, content);
     }
@@ -606,7 +559,7 @@ mod tests {
         let handler = create_test_handler(&url);
         let data = handler.download().await.unwrap();
 
-        assert_eq!(data, b"Final content");
+        assert_eq!(data.as_ref(), b"Final content");
     }
 
     #[tokio::test]
@@ -706,9 +659,10 @@ mod tests {
             ..RemoteFileConfig::new(TEST_MAX_FILE_SIZE)
         };
         let handler = HttpFileHandler::new(config, &url).unwrap();
-        let result = handler.download().await;
 
-        assert!(matches!(result, Err(RemoteFileError::Timeout)));
+        let result = handler.download().await.unwrap_err();
+
+        assert!(result.to_string().contains("timed out"));
     }
 
     #[tokio::test]
