@@ -322,7 +322,6 @@ mod external_service_tests {
 mod handler_trait_tests {
     use super::*;
     use async_trait::async_trait;
-    use bytes::Bytes;
     use std::io::Cursor;
     use tokio::io::AsyncRead;
 
@@ -345,11 +344,6 @@ mod handler_trait_tests {
             Ok(Box::new(cursor))
         }
 
-        async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
-            let end = std::cmp::min(offset + length, self.file_content.len() as u64) as usize;
-            let start = offset as usize;
-            Ok(Bytes::from(self.file_content[start..end].to_vec()))
-        }
 
         fn is_supported(&self, url: &Url) -> bool {
             url.scheme() == self.supported_scheme
@@ -398,21 +392,6 @@ mod handler_trait_tests {
         assert_eq!(buffer, b"streaming data");
     }
 
-    #[tokio::test]
-    async fn test_mock_handler_chunk() {
-        let handler = MockHandler {
-            supported_scheme: "mock".to_string(),
-            file_content: b"0123456789abcdef".to_vec(),
-            file_size: 16,
-        };
-
-        let _url = Url::parse("mock://example.com/file.txt").unwrap();
-
-        let chunk = handler.download_chunk(5, 5).await.unwrap();
-        assert_eq!(chunk.as_ref(), b"56789");
-        let chunk = handler.download_chunk(10, 10).await.unwrap();
-        assert_eq!(chunk.as_ref(), b"abcdef");
-    }
 
     #[tokio::test]
     async fn test_mock_handler_unsupported() {

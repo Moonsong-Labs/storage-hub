@@ -249,11 +249,6 @@ impl RemoteFileHandler for FtpFileHandler {
         Ok(size as u64)
     }
 
-    /// Downloads a file from the FTP server as an async stream.
-    ///
-    /// This implementation uses a channel-based approach to provide true streaming
-    /// without buffering the entire file in memory. The file is downloaded in chunks
-    /// through a background task, allowing for memory-efficient handling of large files.
     async fn download_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
         // Create channel with buffer based on chunk size
         let buffered_chunks = (self.config.chunk_size / 8192).max(10) + 1 as usize;
@@ -380,6 +375,8 @@ impl RemoteFileHandler for FtpFileHandler {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Cursor;
+
     use super::*;
 
     const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
