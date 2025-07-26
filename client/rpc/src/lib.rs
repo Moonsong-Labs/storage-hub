@@ -1029,14 +1029,11 @@ fn into_rpc_error(e: impl Debug) -> JsonRpseeError {
 
 /// Converts RemoteFileError into RPC error, preserving original IO error messages.
 fn remote_file_error_to_rpc_error(e: remote_file::RemoteFileError) -> JsonRpseeError {
-    match e {
-        remote_file::RemoteFileError::IoError(io_err) => JsonRpseeError::owned(
-            INTERNAL_ERROR_CODE,
-            INTERNAL_ERROR_MSG,
-            Some(format!("{:?}", io_err)),
-        ),
-        other => into_rpc_error(other),
-    }
+    JsonRpseeError::owned(
+        INTERNAL_ERROR_CODE,
+        INTERNAL_ERROR_MSG,
+        Some(format!("{e}")),
+    )
 }
 
 async fn generate_key_proof<FL, C, Block>(

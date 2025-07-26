@@ -179,12 +179,7 @@ impl LocalFileHandler {
     fn check_file_valid(&self) -> Result<(), RemoteFileError> {
         match &self.file_status {
             FileStatus::ValidFile { .. } => Ok(()),
-            FileStatus::NotFound { .. } => {
-                // Reconstruct the standard "file not found" error
-                let err =
-                    std::io::Error::new(std::io::ErrorKind::NotFound, "No such file or directory");
-                Err(RemoteFileError::IoError(err))
-            }
+            FileStatus::NotFound { .. } => Err(RemoteFileError::NotFound),
             FileStatus::NotAFile => Err(RemoteFileError::Other(format!(
                 "Path is not a file: {}",
                 self.absolute_file_path.display()
@@ -369,14 +364,11 @@ mod tests {
         )
         .unwrap();
 
-        let result = handler.get_file_size().await;
-        match result {
-            Err(RemoteFileError::IoError(e)) => {
-                assert_eq!(e.kind(), std::io::ErrorKind::NotFound);
-                assert_eq!(e.to_string(), "No such file or directory");
-            }
-            _ => panic!("Expected IoError with NotFound kind"),
-        }
+        let err = handler.get_file_size().await.unwrap_err();
+        assert!(matches!(err, RemoteFileError::NotFound));
+
+        // RPC expects this error message
+        assert_eq!(format!("{err}"), "File not found");
     }
 
     #[tokio::test]
