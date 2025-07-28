@@ -11859,7 +11859,7 @@ mod delete_file_tests {
                 let (bucket_id, file_key, location, size, fingerprint, msp_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
-                // Wrong signer (Bob instead of Alice) 
+                // Wrong signer (Bob instead of Alice)
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Bob, file_key);
 
@@ -11871,8 +11871,8 @@ mod delete_file_tests {
                 assert_noop!(
                     FileSystem::delete_file(
                         RuntimeOrigin::signed(alice.clone()),
-                        alice.clone(),           
-                        signed_delete_intention, 
+                        alice.clone(),
+                        signed_delete_intention,
                         signature,
                         bucket_id,
                         location,
