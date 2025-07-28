@@ -548,7 +548,7 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Notifies that a file deletion has been completed successfully by a BSP.
+       * Notifies that a file deletion has been completed successfully for a BSP.
        **/
       BspFileDeletionCompleted: AugmentedEvent<
         ApiType,
@@ -779,7 +779,7 @@ declare module "@polkadot/api-base/types/events" {
         }
       >;
       /**
-       * Notifies that a file deletion has been completed successfully by an MSP.
+       * Notifies that a file deletion has been completed successfully for an MSP.
        **/
       MspFileDeletionCompleted: AugmentedEvent<
         ApiType,

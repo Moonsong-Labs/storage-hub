@@ -5939,6 +5939,7 @@ declare module "@polkadot/types/lookup" {
     readonly isForestProofVerificationFailed: boolean;
     readonly isProviderNotStoringFile: boolean;
     readonly isInvalidProviderID: boolean;
+    readonly isInvalidSignedOperation: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -6024,7 +6025,8 @@ declare module "@polkadot/types/lookup" {
       | "InvalidSignature"
       | "ForestProofVerificationFailed"
       | "ProviderNotStoringFile"
-      | "InvalidProviderID";
+      | "InvalidProviderID"
+      | "InvalidSignedOperation";
   }
   /** @name PalletProofsDealerProofSubmissionRecord (489) */
   interface PalletProofsDealerProofSubmissionRecord extends Struct {

@@ -4871,7 +4871,8 @@ export default {
       "InvalidSignature",
       "ForestProofVerificationFailed",
       "ProviderNotStoringFile",
-      "InvalidProviderID"
+      "InvalidProviderID",
+      "InvalidSignedOperation"
     ]
   },
   /**

@@ -529,7 +529,7 @@ declare module "@polkadot/api-base/types/submittable" {
         [H256]
       >;
       /**
-       * Delete a file from the system with forest proof verification.
+       * Deletes a file from a provider's forest, changing its root
        *
        * This extrinsic allows any actor to execute file deletion based on signed intentions
        * from the `FileDeletionRequested` event. It requires a valid forest proof showing that the

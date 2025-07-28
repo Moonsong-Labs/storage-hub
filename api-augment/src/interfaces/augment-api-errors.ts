@@ -323,6 +323,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       InvalidSignature: AugmentedError<ApiType>;
       /**
+       * Invalid signed operation provided.
+       **/
+      InvalidSignedOperation: AugmentedError<ApiType>;
+      /**
        * Maximum threshold cannot be zero.
        **/
       MaximumThresholdCannotBeZero: AugmentedError<ApiType>;
