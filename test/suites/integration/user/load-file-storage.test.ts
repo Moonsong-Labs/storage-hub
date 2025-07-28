@@ -1,5 +1,6 @@
 import assert, { strictEqual } from "node:assert";
-import { describeBspNet, type EnrichedBspApi, getCopypartyContainer, removeCopypartyContainer } from "../../../util";
+import { describeBspNet, type EnrichedBspApi, addCopypartyContainer } from "../../../util";
+import type Docker from "dockerode";
 
 describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
@@ -154,6 +155,7 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
 
 describeBspNet("User: Load File Into Storage - Remote URLs", ({ before, after, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
+  let copypartyContainer: Docker.Container;
   let serverIp: string;
   let httpPort: number;
   let ftpPort: number;
@@ -162,14 +164,18 @@ describeBspNet("User: Load File Into Storage - Remote URLs", ({ before, after, c
     userApi = await createUserApi();
 
     // Setup Copyparty server
-    const { containerIp, httpPort: hp, ftpPort: fp } = await getCopypartyContainer();
-    serverIp = containerIp;
-    httpPort = hp;
-    ftpPort = fp;
+    const copypartyInfo = await addCopypartyContainer();
+    copypartyContainer = copypartyInfo.container;
+    serverIp = copypartyInfo.containerIp;
+    httpPort = copypartyInfo.httpPort;
+    ftpPort = copypartyInfo.ftpPort;
   });
 
   after(async () => {
-    await removeCopypartyContainer();
+    if (copypartyContainer) {
+      await copypartyContainer.stop();
+      await copypartyContainer.remove();
+    }
   });
 
   it("loadFileInStorage works with HTTP URL", async () => {

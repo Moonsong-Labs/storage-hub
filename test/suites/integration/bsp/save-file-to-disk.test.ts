@@ -3,13 +3,13 @@ import {
   describeBspNet, 
   shUser, 
   type EnrichedBspApi,
-  getCopypartyContainer,
-  removeCopypartyContainer,
+  addCopypartyContainer,
   waitFor,
   sleep
 } from "../../../util";
 import type { H256 } from "@polkadot/types/interfaces";
 import type { Bytes, u64, U8aFixed } from "@polkadot/types";
+import type Docker from "dockerode";
 
 describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi, it }) => {
   let bspApi: EnrichedBspApi;
@@ -132,6 +132,7 @@ describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi,
 describeBspNet("BSP: Save File To Disk - Remote URLs", ({ before, after, createBspApi, createUserApi, it }) => {
   let bspApi: EnrichedBspApi;
   let userApi: EnrichedBspApi;
+  let copypartyContainer: Docker.Container;
   let fileKey: string;
   let serverIp: string;
   let httpPort: number;
@@ -150,10 +151,11 @@ describeBspNet("BSP: Save File To Disk - Remote URLs", ({ before, after, createB
     userApi = await createUserApi();
 
     // Setup Copyparty server
-    const { containerIp, httpPort: hp, ftpPort: fp } = await getCopypartyContainer();
-    serverIp = containerIp;
-    httpPort = hp;
-    ftpPort = fp;
+    const copypartyInfo = await addCopypartyContainer();
+    copypartyContainer = copypartyInfo.container;
+    serverIp = copypartyInfo.containerIp;
+    httpPort = copypartyInfo.httpPort;
+    ftpPort = copypartyInfo.ftpPort;
 
     // Setup: Store a file first (same as above)
     const newBucketEventEvent = await userApi.createBucket(bucketName);
@@ -245,7 +247,10 @@ describeBspNet("BSP: Save File To Disk - Remote URLs", ({ before, after, createB
   });
 
   after(async () => {
-    await removeCopypartyContainer();
+    if (copypartyContainer) {
+      await copypartyContainer.stop();
+      await copypartyContainer.remove();
+    }
   });
 
   it("saveFileToDisk works with HTTP URL", async () => {

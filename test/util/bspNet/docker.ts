@@ -9,43 +9,23 @@ import assert from "node:assert";
 import { PassThrough, type Readable } from "node:stream";
 import { sleep } from "../timer";
 
-// Container management for Copyparty server
-let copypartyContainer: Docker.Container | undefined;
-let copypartyInfo: { containerIp: string; httpPort: number; ftpPort: number } | undefined;
-
-export const getCopypartyContainer = async (): Promise<{
-  container: Docker.Container;
-  containerIp: string;
-  httpPort: number;
-  ftpPort: number;
-}> => {
-  if (copypartyContainer && copypartyInfo) {
-    // Check if container is still running
-    try {
-      const info = await copypartyContainer.inspect();
-      if (info.State.Running) {
-        return { container: copypartyContainer, ...copypartyInfo };
-      }
-    } catch (e) {
-      // Container doesn't exist anymore
-    }
-  }
-
-  // Create new container
+export const addCopypartyContainer = async (options?: {
+  name?: string;
+}) => {
   const docker = new Docker();
-  const name = "docker-sh-copyparty-test";
+  const containerName = options?.name || "docker-sh-copyparty-test";
 
   // Remove any existing container with same name
   try {
-    const oldContainer = docker.getContainer(name);
+    const oldContainer = docker.getContainer(containerName);
     await oldContainer.remove({ force: true });
   } catch (e) {
     // Container doesn't exist, that's fine
   }
 
-  copypartyContainer = await docker.createContainer({
+  const container = await docker.createContainer({
     Image: "copyparty/min:latest",
-    name,
+    name: containerName,
     Cmd: [
       "--ftp", "3921",          // Enable FTP on port 3921
       "-v", "/res::r",          // Read-only access to resources
@@ -64,35 +44,22 @@ export const getCopypartyContainer = async (): Promise<{
     }
   });
 
-  await copypartyContainer.start();
+  await container.start();
 
   // Get container info
-  const containerInfo = await copypartyContainer.inspect();
+  const containerInfo = await container.inspect();
   const containerIp = containerInfo.NetworkSettings.Networks.docker_default.IPAddress;
-
-  copypartyInfo = {
-    containerIp,
-    httpPort: 3923,
-    ftpPort: 3921
-  };
 
   // Wait for server to start
   await sleep(3000);
 
-  return { container: copypartyContainer, ...copypartyInfo };
-};
-
-export const removeCopypartyContainer = async () => {
-  if (copypartyContainer) {
-    try {
-      await copypartyContainer.stop();
-      await copypartyContainer.remove();
-    } catch (e) {
-      // Ignore errors during cleanup
-    }
-    copypartyContainer = undefined;
-    copypartyInfo = undefined;
-  }
+  return {
+    container,
+    containerName,
+    containerIp,
+    httpPort: 3923,
+    ftpPort: 3921
+  };
 };
 
 export const checkBspForFile = async (filePath: string) => {
