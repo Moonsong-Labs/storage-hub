@@ -191,6 +191,8 @@ describeBspNet(
 
     it("loadFileInStorage works with HTTP URL", async () => {
       // Use localhost with host port for external access
+      // Note: We use localhost here (not container name) because loadFileInStorage runs 
+      // on the host machine (test runner) and accesses copyparty via the exposed port
       const source = `http://localhost:${httpHostPort}/res/adolphus.jpg`;
       const destination = "test/adolphus-http.jpg";
       const bucketName = "bucket-http-remote";

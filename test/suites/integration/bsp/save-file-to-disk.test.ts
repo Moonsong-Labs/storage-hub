@@ -157,6 +157,14 @@ describeBspNet(
       containerName = copypartyInfo.containerName;
       httpPort = copypartyInfo.httpPort;
       ftpPort = copypartyInfo.ftpPort;
+      
+      // Clean up uploads directory to ensure tests start fresh
+      const docker = new Docker();
+      await copypartyContainer.exec({
+        Cmd: ["sh", "-c", "rm -rf /uploads/* 2>/dev/null || true"],
+        AttachStdout: true,
+        AttachStderr: true
+      }).then(exec => exec.start({}));
 
       // Setup: Store a file first (same as above)
       const newBucketEventEvent = await userApi.createBucket(bucketName);
@@ -262,6 +270,8 @@ describeBspNet(
 
     it("saveFileToDisk works with HTTP URL", async () => {
       // Use container name for inter-container communication
+      // Note: We use container name here (not localhost) because saveFileToDisk runs 
+      // inside the BSP container and needs to reach copyparty via Docker's internal network
       const httpDestination = `http://${containerName}:${httpPort}/uploads/smile-http.jpg`;
       const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, httpDestination);
 
@@ -269,32 +279,11 @@ describeBspNet(
     });
 
     it("saveFileToDisk works with FTP URL", async () => {
-      // Clean up any existing file from previous tests
-      const docker = new Docker();
-      await copypartyContainer.exec({
-        Cmd: ["sh", "-c", "rm -f /uploads/smile-ftp.jpg"],
-        AttachStdout: true,
-        AttachStderr: true
-      }).then(exec => exec.start({}));
-      
       // Use container name for inter-container communication
       const ftpDestination = `ftp://${containerName}:${ftpPort}/uploads/smile-ftp.jpg`;
       
       const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, ftpDestination);
       assert(saveResult.isSuccess);
-      
-      // Verify the file was uploaded
-      console.log("\n=== Verifying FTP upload ===");
-      const checkExec = await copypartyContainer.exec({
-        Cmd: ["sh", "-c", "ls -la /uploads/smile-ftp.jpg"],
-        AttachStdout: true,
-        AttachStderr: true
-      });
-      const checkStream = await checkExec.start({});
-      await new Promise((resolve) => {
-        checkStream.on('data', (data) => console.log("Uploaded file:", data.toString()));
-        checkStream.on('end', resolve);
-      });
     });
   }
 );
