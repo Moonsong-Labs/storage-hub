@@ -9,6 +9,92 @@ import assert from "node:assert";
 import { PassThrough, type Readable } from "node:stream";
 import { sleep } from "../timer";
 
+// Container management for Copyparty server
+let copypartyContainer: Docker.Container | undefined;
+let copypartyInfo: { containerIp: string; httpPort: number; ftpPort: number } | undefined;
+
+export const getCopypartyContainer = async (): Promise<{
+  container: Docker.Container;
+  containerIp: string;
+  httpPort: number;
+  ftpPort: number;
+}> => {
+  if (copypartyContainer && copypartyInfo) {
+    // Check if container is still running
+    try {
+      const info = await copypartyContainer.inspect();
+      if (info.State.Running) {
+        return { container: copypartyContainer, ...copypartyInfo };
+      }
+    } catch (e) {
+      // Container doesn't exist anymore
+    }
+  }
+
+  // Create new container
+  const docker = new Docker();
+  const name = "docker-sh-copyparty-test";
+
+  // Remove any existing container with same name
+  try {
+    const oldContainer = docker.getContainer(name);
+    await oldContainer.remove({ force: true });
+  } catch (e) {
+    // Container doesn't exist, that's fine
+  }
+
+  copypartyContainer = await docker.createContainer({
+    Image: "copyparty/min:latest",
+    name,
+    Cmd: [
+      "--ftp", "3921",          // Enable FTP on port 3921
+      "-v", "/res::r",          // Read-only access to resources
+      "-v", "/uploads::rw"      // Read-write for uploads
+    ],
+    NetworkingConfig: {
+      EndpointsConfig: {
+        docker_default: {}
+      }
+    },
+    HostConfig: {
+      Binds: [
+        `${process.cwd()}/../docker/resource:/res:ro`,
+        `${process.cwd()}/../docker/tmp:/uploads:rw`
+      ]
+    }
+  });
+
+  await copypartyContainer.start();
+
+  // Get container info
+  const containerInfo = await copypartyContainer.inspect();
+  const containerIp = containerInfo.NetworkSettings.Networks.docker_default.IPAddress;
+
+  copypartyInfo = {
+    containerIp,
+    httpPort: 3923,
+    ftpPort: 3921
+  };
+
+  // Wait for server to start
+  await sleep(3000);
+
+  return { container: copypartyContainer, ...copypartyInfo };
+};
+
+export const removeCopypartyContainer = async () => {
+  if (copypartyContainer) {
+    try {
+      await copypartyContainer.stop();
+      await copypartyContainer.remove();
+    } catch (e) {
+      // Ignore errors during cleanup
+    }
+    copypartyContainer = undefined;
+    copypartyInfo = undefined;
+  }
+};
+
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "docker-sh-bsp-1";
   const loc = path.join("/storage", filePath);
