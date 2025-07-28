@@ -269,11 +269,32 @@ describeBspNet(
     });
 
     it("saveFileToDisk works with FTP URL", async () => {
+      // Clean up any existing file from previous tests
+      const docker = new Docker();
+      await copypartyContainer.exec({
+        Cmd: ["sh", "-c", "rm -f /uploads/smile-ftp.jpg"],
+        AttachStdout: true,
+        AttachStderr: true
+      }).then(exec => exec.start({}));
+      
       // Use container name for inter-container communication
       const ftpDestination = `ftp://${containerName}:${ftpPort}/uploads/smile-ftp.jpg`;
+      
       const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, ftpDestination);
-
       assert(saveResult.isSuccess);
+      
+      // Verify the file was uploaded
+      console.log("\n=== Verifying FTP upload ===");
+      const checkExec = await copypartyContainer.exec({
+        Cmd: ["sh", "-c", "ls -la /uploads/smile-ftp.jpg"],
+        AttachStdout: true,
+        AttachStderr: true
+      });
+      const checkStream = await checkExec.start({});
+      await new Promise((resolve) => {
+        checkStream.on('data', (data) => console.log("Uploaded file:", data.toString()));
+        checkStream.on('end', resolve);
+      });
     });
   }
 );

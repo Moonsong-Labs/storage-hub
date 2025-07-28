@@ -218,7 +218,10 @@ impl FtpFileHandler {
     fn ftp_error_to_remote_error(error: FtpError) -> RemoteFileError {
         match error {
             FtpError::UnexpectedResponse(ref resp) => match resp.status {
-                s if s == 550.into() => RemoteFileError::NotFound,
+                // 550 can mean different things depending on context:
+                // - For RETR (download): File not found
+                // - For STOR (upload): File already exists or permission denied
+                // We'll keep it as FtpError to preserve the actual error message
                 s if s == 530.into() => RemoteFileError::AccessDenied,
                 _ => RemoteFileError::FtpError(error),
             },
@@ -497,10 +500,10 @@ mod tests {
     async fn test_ftp_error_conversion() {
         use suppaftp::types::Response;
 
-        // Test 550 error (file not found)
+        // Test 550 error (now preserved as FtpError)
         let error = FtpError::UnexpectedResponse(Response::new(550.into(), vec![]));
         let converted = FtpFileHandler::ftp_error_to_remote_error(error);
-        assert!(matches!(converted, RemoteFileError::NotFound));
+        assert!(matches!(converted, RemoteFileError::FtpError(_)));
 
         // Test 530 error (access denied)
         let error = FtpError::UnexpectedResponse(Response::new(530.into(), vec![]));
