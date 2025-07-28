@@ -22,8 +22,7 @@ impl MspFile {
         diesel::insert_into(msp_file::table)
             .values((msp_file::msp_id.eq(msp_id), msp_file::file_id.eq(file_id)))
             .on_conflict_do_nothing()
-            .returning(MspFile::as_select())
-            .get_result(conn)
+            .execute(conn)
             .await?;
         Ok(())
     }
