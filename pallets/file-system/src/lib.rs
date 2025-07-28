@@ -751,7 +751,7 @@ pub mod pallet {
             signed_delete_intention: FileOperationIntention<T>,
             signature: T::OffchainSignature,
         },
-        /// Notifies that a file deletion has been completed successfully by an MSP.
+        /// Notifies that a file deletion has been completed successfully for an MSP.
         MspFileDeletionCompleted {
             user: T::AccountId,
             file_key: MerkleHash<T>,
@@ -759,7 +759,7 @@ pub mod pallet {
             bucket_id: BucketIdFor<T>,
             msp_id: ProviderIdFor<T>,
         },
-        /// Notifies that a file deletion has been completed successfully by a BSP.
+        /// Notifies that a file deletion has been completed successfully for a BSP.
         BspFileDeletionCompleted {
             user: T::AccountId,
             file_key: MerkleHash<T>,
@@ -942,6 +942,8 @@ pub mod pallet {
         ProviderNotStoringFile,
         /// Invalid provider ID provided.
         InvalidProviderID,
+        /// Invalid signed operation provided.
+        InvalidSignedOperation,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1463,7 +1465,7 @@ pub mod pallet {
             Ok(())
         }
 
-        /// Delete a file from the system with forest proof verification.
+        /// Deletes a file from a provider's forest, changing its root
         ///
         /// This extrinsic allows any actor to execute file deletion based on signed intentions
         /// from the `FileDeletionRequested` event. It requires a valid forest proof showing that the

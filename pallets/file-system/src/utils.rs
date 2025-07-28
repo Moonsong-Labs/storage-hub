@@ -1189,7 +1189,7 @@ where
         // Verify that the operation is Delete
         ensure!(
             signed_intention.operation == FileOperation::Delete,
-            Error::<T>::InvalidFileKeyMetadata
+            Error::<T>::InvalidSignedOperation
         );
 
         // Encode the intention for signature verification
@@ -1212,7 +1212,8 @@ where
         Ok(())
     }
 
-    /// Executes actual file deletion. Any entity that has the owner's signed intention can delete the file on their behalf.
+    /// Executes actual file deletion. Any entity that has the owner's signed intention can delete the file on their behalf,
+    /// If they present a valid forest proof showing that the file exists in the provider's forest.
     ///
     /// This function validates a signed file deletion request and performs the actual deletion by:
     /// 1. Checking that the file owner is not insolvent
@@ -1233,15 +1234,12 @@ where
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Check that the file owner is not currently insolvent.
-        // Insolvent users can't interact with the system and should wait for all MSPs and BSPs
-        // to delete their files and buckets using the available extrinsics or resolve their
-        // insolvency manually.
         ensure!(
             !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
             Error::<T>::OperationNotAllowedWithInsolventUser
         );
 
-        // Check if file owner provided by the entity calling the extrinsic is the owner of the bucket.
+        // Check if file owner provided by the entity is the owner of the bucket.
         ensure!(
             <T::Providers as ReadBucketsInterface>::is_bucket_owner(&file_owner, &bucket_id)?,
             Error::<T>::NotBucketOwner
@@ -1250,7 +1248,7 @@ where
         // Verify that the operation is Delete
         ensure!(
             signed_intention.operation == FileOperation::Delete,
-            Error::<T>::InvalidFileKeyMetadata
+            Error::<T>::InvalidSignedOperation
         );
 
         // Encode the intention for signature verification
@@ -1275,7 +1273,7 @@ where
             Error::<T>::InvalidFileKeyMetadata
         );
 
-        // Phase 3: Forest proof verification and file deletion
+        // Forest proof verification and file deletion
         if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
             Self::delete_file_from_msp(
                 file_owner,
@@ -1298,6 +1296,7 @@ where
             return Err(Error::<T>::InvalidProviderID.into());
         }
 
+        // TODO: Reward the caller
         Ok(())
     }
 
@@ -2681,7 +2680,7 @@ where
             .collect()
     }
 
-    /// Update MSP bucket root after file deletion
+    /// Removes file key from the bucket's forest, updating the bucket's root.
     pub(crate) fn delete_file_from_msp(
         file_owner: T::AccountId,
         file_key: MerkleHash<T>,
@@ -2733,7 +2732,7 @@ where
         Ok(())
     }
 
-    /// Update BSP root after root deletion
+    /// Removes file key from the BSP's forest, updating the BSP's root.
     pub(crate) fn delete_file_from_bsp(
         file_owner: T::AccountId,
         file_key: MerkleHash<T>,
@@ -2745,14 +2744,14 @@ where
         let _old_root = <T::Providers as ReadProvidersInterface>::get_root(provider_id)
             .ok_or(Error::<T>::NotABsp)?;
 
-        // Verify that the file key IS part of the BSP's forest
+        // Verify that the file key is part of the BSP's forest
         let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
             &provider_id,
             &[file_key],
             &forest_proof,
         )?;
 
-        // Ensure that the file key IS part of the BSP's forest
+        // Ensure that the file key is part of the BSP's forest
         ensure!(
             proven_keys.contains(&file_key),
             Error::<T>::ExpectedInclusionProof
