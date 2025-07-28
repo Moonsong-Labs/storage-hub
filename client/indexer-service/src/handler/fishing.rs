@@ -71,6 +71,7 @@ where
                 | pallet_file_system::Event::PriorityChallengeForFileDeletionQueued { .. }
                 | pallet_file_system::Event::FailedToQueuePriorityChallenge { .. }
                 | pallet_file_system::Event::FileDeletionRequest { .. }
+                | pallet_file_system::Event::FileDeletionRequested { .. }
                 | pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
                     ..
                 }
