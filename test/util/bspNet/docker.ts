@@ -14,6 +14,7 @@ export const addCopypartyContainer = async (options?: {
 }) => {
   const docker = new Docker();
   const containerName = options?.name || "docker-sh-copyparty-test";
+  const imageName = "copyparty/min:latest";
 
   // Remove any existing container with same name
   try {
@@ -23,13 +24,34 @@ export const addCopypartyContainer = async (options?: {
     // Container doesn't exist, that's fine
   }
 
+  // Check if image exists, pull if it doesn't
+  try {
+    await docker.getImage(imageName).inspect();
+  } catch (e) {
+    // Image doesn't exist, pull it
+    console.log(`Pulling ${imageName}...`);
+    const stream = await docker.pull(imageName);
+    await new Promise<void>((resolve, reject) => {
+      docker.modem.followProgress(stream, (err: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
   const container = await docker.createContainer({
     Image: "copyparty/min:latest",
     name: containerName,
     Cmd: [
-      "--ftp", "3921",          // Enable FTP on port 3921
-      "-v", "/res::r",          // Read-only access to resources
-      "-v", "/uploads::rw"      // Read-write for uploads
+      "--ftp",
+      "3921", // Enable FTP on port 3921
+      "-v",
+      "/res::r", // Read-only access to resources
+      "-v",
+      "/uploads::rw" // Read-write for uploads
     ],
     NetworkingConfig: {
       EndpointsConfig: {
