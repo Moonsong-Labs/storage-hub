@@ -31,13 +31,12 @@ mod tests {
     use axum_test::TestServer;
     // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
     // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
-    use crate::data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient};
     use std::sync::Arc;
 
     fn create_test_app() -> Router {
         let memory_storage = InMemoryStorage::new();
         let boxed_storage = BoxedStorageWrapper::new(memory_storage);
-        let storage: Arc<dyn crate::data::storage::BoxedStorage> = Arc::new(boxed_storage);
+        let _storage: Arc<dyn crate::data::storage::BoxedStorage> = Arc::new(boxed_storage);
         // WIP: Mock PostgreSQL connection commented out until diesel traits are fully implemented
         // let mock_conn = MockDbConnection::new();
         // let db_conn = Arc::new(AnyDbConnection::Mock(mock_conn));

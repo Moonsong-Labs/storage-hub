@@ -31,7 +31,8 @@ members = [
 	"primitives/*",
 	"xcm-simulator",
 	"sdk/core/wasm",
-	"backend/*",
+	"backend/bin",
+	"backend/lib",
 ]
 resolver = "2"
 

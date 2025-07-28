@@ -53,13 +53,12 @@ mod tests {
     use crate::data::storage::{BoxedStorageWrapper, InMemoryStorage};
     // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
     // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
-    use crate::data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient};
     use std::sync::Arc;
 
     fn create_test_services() -> Services {
         let memory_storage = InMemoryStorage::new();
         let boxed_storage = BoxedStorageWrapper::new(memory_storage);
-        let storage: Arc<dyn crate::data::storage::BoxedStorage> = Arc::new(boxed_storage);
+        let _storage: Arc<dyn crate::data::storage::BoxedStorage> = Arc::new(boxed_storage);
         // WIP: Mock PostgreSQL connection commented out until diesel traits are fully implemented
         // let mock_conn = Arc::new(AnyDbConnection::Mock(MockDbConnection::new()));
         // let postgres: Arc<dyn crate::data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(mock_conn));

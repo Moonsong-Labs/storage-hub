@@ -20,19 +20,17 @@ mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use data::storage::{BoxedStorageWrapper, InMemoryStorage};
-    use services::Services;
     use std::sync::Arc;
 
     // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
     // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
-    use crate::data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient};
 
     /// Creates a test application with in-memory storage
     fn create_test_app() -> axum::Router {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let boxed_storage = BoxedStorageWrapper::new(memory_storage);
-        let storage: Arc<dyn data::storage::BoxedStorage> = Arc::new(boxed_storage);
+        let _storage: Arc<dyn data::storage::BoxedStorage> = Arc::new(boxed_storage);
 
         // WIP: Mock PostgreSQL connection commented out until diesel traits are fully implemented
         // let mock_conn = MockDbConnection::new();
