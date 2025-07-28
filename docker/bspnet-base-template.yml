@@ -3,6 +3,8 @@ services:
     image: storage-hub:local
     container_name: docker-sh-bsp-1
     platform: linux/amd64
+    environment:
+      - RUST_LOG=debug
     ports:
       - "9666:9944"
       - "30350:30350"

@@ -161,6 +161,8 @@ describeBspNet(
     let serverIp: string;
     let httpPort: number;
     let ftpPort: number;
+    let httpHostPort: number;
+    let ftpHostPort: number;
 
     before(async () => {
       userApi = await createUserApi();
@@ -171,17 +173,25 @@ describeBspNet(
       serverIp = copypartyInfo.containerIp;
       httpPort = copypartyInfo.httpPort;
       ftpPort = copypartyInfo.ftpPort;
+      httpHostPort = copypartyInfo.httpHostPort;
+      ftpHostPort = copypartyInfo.ftpHostPort;
     });
 
     after(async () => {
       if (copypartyContainer) {
-        await copypartyContainer.stop();
-        await copypartyContainer.remove();
+        try {
+          await copypartyContainer.stop();
+          await copypartyContainer.remove();
+        } catch (e) {
+          // Container might already be removed
+          console.log("Error cleaning up copyparty container:", e.message);
+        }
       }
     });
 
     it("loadFileInStorage works with HTTP URL", async () => {
-      const source = `http://${serverIp}:${httpPort}/res/adolphus.jpg`;
+      // Use localhost with host port for external access
+      const source = `http://localhost:${httpHostPort}/res/adolphus.jpg`;
       const destination = "test/adolphus-http.jpg";
       const bucketName = "bucket-http-remote";
 
@@ -211,7 +221,8 @@ describeBspNet(
     });
 
     it("loadFileInStorage works with FTP URL", async () => {
-      const source = `ftp://${serverIp}:${ftpPort}/res/smile.jpg`;
+      // Use localhost with host port for external access
+      const source = `ftp://localhost:${ftpHostPort}/res/smile.jpg`;
       const destination = "test/smile-ftp.jpg";
       const bucketName = "bucket-ftp-remote";
 

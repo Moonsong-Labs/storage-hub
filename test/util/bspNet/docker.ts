@@ -49,16 +49,24 @@ export const addCopypartyContainer = async (options?: {
       "--ftp",
       "3921", // Enable FTP on port 3921
       "-v",
-      "/res::r", // Read-only access to resources
+      "/res:res:r", // Read-only access to resources at /res path
       "-v",
-      "/uploads::rw" // Read-write for uploads
+      "/uploads:uploads:rw" // Read-write for uploads at /uploads path
     ],
     NetworkingConfig: {
       EndpointsConfig: {
         docker_default: {}
       }
     },
+    ExposedPorts: {
+      "3923/tcp": {},
+      "3921/tcp": {}
+    },
     HostConfig: {
+      PortBindings: {
+        "3923/tcp": [{ HostPort: "0" }], // Random available port
+        "3921/tcp": [{ HostPort: "0" }]  // Random available port
+      },
       Binds: [
         `${process.cwd()}/../docker/resource:/res:ro`,
         `${process.cwd()}/../docker/tmp:/uploads:rw`
@@ -71,6 +79,10 @@ export const addCopypartyContainer = async (options?: {
   // Get container info
   const containerInfo = await container.inspect();
   const containerIp = containerInfo.NetworkSettings.Networks.docker_default.IPAddress;
+  
+  // Also get the mapped ports
+  const httpHostPort = containerInfo.NetworkSettings.Ports["3923/tcp"]?.[0]?.HostPort || "3923";
+  const ftpHostPort = containerInfo.NetworkSettings.Ports["3921/tcp"]?.[0]?.HostPort || "3921";
 
   // Wait for server to start
   await sleep(3000);
@@ -80,7 +92,9 @@ export const addCopypartyContainer = async (options?: {
     containerName,
     containerIp,
     httpPort: 3923,
-    ftpPort: 3921
+    ftpPort: 3921,
+    httpHostPort: parseInt(httpHostPort),
+    ftpHostPort: parseInt(ftpHostPort)
   };
 };
 
