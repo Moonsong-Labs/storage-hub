@@ -802,18 +802,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "backend-examples"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "sh-backend-lib",
- "shc-indexer-db",
- "tokio",
- "tracing",
- "tracing-subscriber 0.3.19",
-]
-
-[[package]]
 name = "backtrace"
 version = "0.3.74"
 source = "registry+https://github.com/rust-lang/crates.io-index"
