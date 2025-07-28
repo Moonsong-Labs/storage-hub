@@ -1151,11 +1151,7 @@ where
         Ok((msp_id, bucket_owner))
     }
 
-<<<<<<< HEAD
     /// Processes a file deletion request.
-=======
-    /// Processes a file deletion request with signature verification.
->>>>>>> main
     ///
     /// This function validates a signed file deletion request by:
     /// 1. Checking that the requester is not insolvent
