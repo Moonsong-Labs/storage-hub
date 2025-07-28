@@ -4839,7 +4839,6 @@ declare module "@polkadot/types/lookup" {
     } & Struct;
     readonly isDeleteFile: boolean;
     readonly asDeleteFile: {
-      readonly fileOwner: AccountId32;
       readonly signedIntention: PalletFileSystemFileOperationIntention;
       readonly signature: SpRuntimeMultiSignature;
       readonly bucketId: H256;
@@ -4850,8 +4849,6 @@ declare module "@polkadot/types/lookup" {
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
     readonly type:
-      | "CreateBucket"
-      | "RequestMoveBucket"
       | "MspRespondMoveBucketRequest"
       | "UpdateBucketPrivacy"
       | "CreateAndAssociateCollectionWithBucket"

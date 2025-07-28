@@ -1,0 +1,17 @@
+# SDK-specific ignore rules
+
+# Node deps
+node_modules/
+
+# TypeScript build output
+/dist/
+
+# Test coverage
+**/coverage/
+
+# Logs
+npm-debug.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store 

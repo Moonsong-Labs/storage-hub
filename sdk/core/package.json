@@ -1,0 +1,31 @@
+{
+    "name": "@storagehub-sdk/core",
+    "version": "0.1.0",
+    "description": "Core primitives for StorageHub SDK (types, crypto, filemanager, storage, wasm bindings)",
+    "type": "module",
+    "main": "./dist/index.js",
+    "module": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "files": [
+        "dist",
+        "wasm/pkg"
+    ],
+    "scripts": {
+        "build": "node ../scripts/build.js",
+        "dev": "node ../scripts/build.js --watch",
+        "lint": "eslint \"{src/**/*.ts,src/**/*.tsx}\"",
+        "format": "prettier --write \"{src/**/*.ts,src/**/*.tsx}\"",
+        "format:check": "prettier --check \"{src/**/*.ts,src/**/*.tsx}\"",
+        "test": "vitest",
+        "typecheck": "tsc --noEmit",
+        "coverage": "vitest run --coverage",
+        "build:wasm": "wasm-pack build ./wasm --target nodejs --release --out-dir pkg",
+        "preinstall": "pnpm run build:wasm"
+    },
+    "dependencies": {
+        "@storagehub/wasm": "file:./wasm/pkg"
+    },
+    "engines": {
+        "node": ">=23"
+    }
+}

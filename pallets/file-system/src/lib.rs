@@ -1482,7 +1482,7 @@ pub mod pallet {
             provider_id: ProviderIdFor<T>,
             forest_proof: ForestProof<T>,
         ) -> DispatchResult {
-            // We dont care about who is calling this extrinsic (either fisherman, msp or bsp node)
+            // TODO: We need to reward the caller of delete_file
             let _caller = ensure_signed(origin)?;
 
             Self::do_delete_file(

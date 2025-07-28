@@ -1,0 +1,20 @@
+{
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "rootDir": "src",
+        "outDir": "dist",
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "paths": {
+            "@storagehub-sdk/core": [
+                "../core/src"
+            ]
+        }
+    },
+    "include": [
+        "src/**/*"
+    ],
+    "exclude": [
+        "dist"
+    ]
+}
