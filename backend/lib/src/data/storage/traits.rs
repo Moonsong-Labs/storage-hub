@@ -4,8 +4,9 @@
 //! and not part of the StorageHub indexer database. This includes counters, sessions,
 //! caches, and other temporary or backend-specific data.
 
-use async_trait::async_trait;
 use std::error::Error;
+
+use async_trait::async_trait;
 
 /// Storage trait for backend-specific data operations
 ///

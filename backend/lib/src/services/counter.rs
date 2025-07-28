@@ -48,15 +48,12 @@ mod tests {
         // Create counter service
         let counter_service = CounterService::new(storage);
 
-        // Test increment
         let result = counter_service.increment().await.unwrap();
         assert_eq!(result, 1);
 
-        // Test get
         let result = counter_service.get().await.unwrap();
         assert_eq!(result, 1);
 
-        // Test decrement
         let result = counter_service.decrement().await.unwrap();
         assert_eq!(result, 0);
     }

@@ -1,7 +1,6 @@
 //! Storage data access module
 //!
 //! This module provides storage interfaces and implementations for backend-specific data
-//! that is not part of the StorageHub indexer database.
 
 pub mod boxed;
 pub mod memory;

@@ -1,4 +1,5 @@
 //! Services module for StorageHub backend
+use std::sync::Arc;
 
 pub mod counter;
 pub mod health;
@@ -6,12 +7,12 @@ pub mod health;
 use crate::data::postgres::PostgresClientTrait;
 use crate::data::rpc::StorageHubRpcTrait;
 use crate::data::storage::BoxedStorage;
-use std::sync::Arc;
+use counter::CounterService;
 
 /// Container for all backend services
 #[derive(Clone)]
 pub struct Services {
-    pub counter: Arc<counter::CounterService>,
+    pub counter: Arc<CounterService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<dyn PostgresClientTrait>,
     pub rpc: Arc<dyn StorageHubRpcTrait>,
@@ -29,7 +30,7 @@ impl Services {
         postgres: Arc<dyn PostgresClientTrait>,
         rpc: Arc<dyn StorageHubRpcTrait>,
     ) -> Self {
-        let counter = Arc::new(counter::CounterService::new(storage.clone()));
+        let counter = Arc::new(CounterService::new(storage.clone()));
         Self {
             counter,
             storage,

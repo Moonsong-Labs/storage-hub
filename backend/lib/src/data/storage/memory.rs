@@ -3,12 +3,14 @@
 //! This module provides a thread-safe in-memory implementation of the Storage trait,
 //! suitable for development and testing environments.
 
-use super::traits::Storage;
-use async_trait::async_trait;
-use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+
+use async_trait::async_trait;
+use parking_lot::RwLock;
 use thiserror::Error;
+
+use super::traits::Storage;
 
 /// Errors that can occur during in-memory storage operations
 #[derive(Debug, Error)]
@@ -89,15 +91,12 @@ mod tests {
     async fn test_increment_counter() {
         let storage = InMemoryStorage::new();
 
-        // First increment should return 1
         let result = storage.increment_counter("test", 1).await.unwrap();
         assert_eq!(result, 1);
 
-        // Second increment should return 2
         let result = storage.increment_counter("test", 1).await.unwrap();
         assert_eq!(result, 2);
 
-        // Increment by 5 should return 7
         let result = storage.increment_counter("test", 5).await.unwrap();
         assert_eq!(result, 7);
     }
@@ -106,14 +105,11 @@ mod tests {
     async fn test_decrement_counter() {
         let storage = InMemoryStorage::new();
 
-        // Set initial value
         storage.set_counter("test", 10).await.unwrap();
 
-        // Decrement by 1 should return 9
         let result = storage.decrement_counter("test", 1).await.unwrap();
         assert_eq!(result, 9);
 
-        // Decrement by 5 should return 4
         let result = storage.decrement_counter("test", 5).await.unwrap();
         assert_eq!(result, 4);
     }
@@ -122,11 +118,9 @@ mod tests {
     async fn test_get_counter() {
         let storage = InMemoryStorage::new();
 
-        // Non-existent counter should return 0
         let result = storage.get_counter("test").await.unwrap();
         assert_eq!(result, 0);
 
-        // Set value and verify
         storage.set_counter("test", 42).await.unwrap();
         let result = storage.get_counter("test").await.unwrap();
         assert_eq!(result, 42);
@@ -136,11 +130,9 @@ mod tests {
     async fn test_set_counter() {
         let storage = InMemoryStorage::new();
 
-        // First set should return 0 (no previous value)
         let result = storage.set_counter("test", 10).await.unwrap();
         assert_eq!(result, 0);
 
-        // Second set should return previous value
         let result = storage.set_counter("test", 20).await.unwrap();
         assert_eq!(result, 10);
     }
@@ -149,16 +141,13 @@ mod tests {
     async fn test_delete_counter() {
         let storage = InMemoryStorage::new();
 
-        // Delete non-existent counter should return 0
         let result = storage.delete_counter("test").await.unwrap();
         assert_eq!(result, 0);
 
-        // Set value, delete, and verify return value
         storage.set_counter("test", 42).await.unwrap();
         let result = storage.delete_counter("test").await.unwrap();
         assert_eq!(result, 42);
 
-        // Verify counter is deleted
         let result = storage.get_counter("test").await.unwrap();
         assert_eq!(result, 0);
     }
@@ -167,12 +156,10 @@ mod tests {
     async fn test_saturation_arithmetic() {
         let storage = InMemoryStorage::new();
 
-        // Test overflow protection
         storage.set_counter("test", i64::MAX - 1).await.unwrap();
         let result = storage.increment_counter("test", 2).await.unwrap();
         assert_eq!(result, i64::MAX);
 
-        // Test underflow protection
         storage.set_counter("test", i64::MIN + 1).await.unwrap();
         let result = storage.decrement_counter("test", 2).await.unwrap();
         assert_eq!(result, i64::MIN);
