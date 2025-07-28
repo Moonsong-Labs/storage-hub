@@ -111,7 +111,7 @@ impl FileTrie {
 mod tests {
     use super::*;
 
-    macro_rules! artefact_test {
+    macro_rules! artifact_test {
         ($name:ident, $file:literal, $expected:literal) => {
             #[test]
             fn $name() {
@@ -139,37 +139,37 @@ mod tests {
     // NOTE: The following values were taken from test/util/bspNet/consts.ts
     // In order to verify that we have the same result as original Rust code, we add these as unit tests
 
-    artefact_test!(
+    artifact_test!(
         merkle_root_adolphus,
         "adolphus.jpg",
         "34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970"
     );
-    artefact_test!(
+    artifact_test!(
         merkle_root_smile,
         "smile.jpg",
         "535dd863026735ffe0919cc0fc3d8e5da45b9203f01fbf014dbe98005bd8d2fe"
     );
-    artefact_test!(
+    artifact_test!(
         merkle_root_whatsup,
         "whatsup.jpg",
         "2b83b972e63f52abc0d4146c4aee1f1ec8aa8e274d2ad1b626529446da93736c"
     );
-    artefact_test!(
+    artifact_test!(
         merkle_root_cloud,
         "cloud.jpg",
         "5559299bc73782b5ad7e9dd57ba01bb06b8c44f5cab8d7afab5e1db2ea93da4c"
     );
-    artefact_test!(
+    artifact_test!(
         merkle_root_empty,
         "empty-file",
         "03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314"
     );
-    artefact_test!(
+    artifact_test!(
         merkle_root_half_chunk,
         "half-chunk-file",
         "ade3ca4ff2151a2533e816eb9402ae17e21160c6c52b1855ecff29faea8880b5"
     );
-    artefact_test!(
+    artifact_test!(
         merkle_root_one_chunk,
         "one-chunk-file",
         "0904317e4977ad6f872cd9672d2733da9a628fda86ee9add68623a66918cbd8c"
