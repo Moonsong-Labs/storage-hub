@@ -19,6 +19,9 @@ use std::collections::hash_map::DefaultHasher;
 //  copy the few small types instead of depending on the heavy client crate.
 //  This keeps the WASM package tiny and avoids compilation failures
 //  in browser/Node environments.
+//
+//  TODO: We need to refactor `client/file-manager` in order to remove all the duplicated code
+//  and keep this file as a wrapper for Rust <--> TS
 // ────────────────────────────────────────────────────────────────────────────
 
 #[derive(Default, Clone)]
