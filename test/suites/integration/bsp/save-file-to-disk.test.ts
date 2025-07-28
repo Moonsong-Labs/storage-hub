@@ -261,48 +261,14 @@ describeBspNet(
     });
 
     it("saveFileToDisk works with HTTP URL", async () => {
-      // First, let's test if we can reach the copyparty server from the test runner
-      try {
-        // Note: httpHostPort might not be available in this scope
-        console.log("Testing copyparty accessibility...");
-      } catch (e) {
-        console.log("Error:", e.message);
-      }
+      // Use container name for inter-container communication
+      const httpDestination = `http://${containerName}:${httpPort}/uploads/smile-http.jpg`;
+      const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, httpDestination);
 
-      // Now let's check Docker networking
-      const docker = new Docker();
-      console.log("\n=== Docker Network Check ===");
-      
-      // Check what network the BSP is on
-      const bspContainer = docker.getContainer("docker-sh-bsp-1");
-      const bspInfo = await bspContainer.inspect();
-      console.log("BSP networks:", Object.keys(bspInfo.NetworkSettings.Networks));
-      
-      // Check what network the copyparty is on
-      const copypartyInfo = await copypartyContainer.inspect();
-      console.log("Copyparty networks:", Object.keys(copypartyInfo.NetworkSettings.Networks));
-      console.log("Copyparty IP in docker_default:", copypartyInfo.NetworkSettings.Networks.docker_default?.IPAddress);
-      
-      // Try using IP address instead of container name
-      const httpDestinationIP = `http://${serverIp}:${httpPort}/uploads/smile-http.jpg`;
-      console.log("\nTrying with IP address:", httpDestinationIP);
-      
-      try {
-        const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, httpDestinationIP);
-        assert(saveResult.isSuccess);
-        console.log("Success with IP address!");
-      } catch (error) {
-        console.log("Failed with IP address too:", error.message);
-        
-        // Original attempt with container name
-        const httpDestination = `http://${containerName}:${httpPort}/uploads/smile-http.jpg`;
-        console.log("\nTrying with container name:", httpDestination);
-        const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, httpDestination);
-        assert(saveResult.isSuccess);
-      }
+      assert(saveResult.isSuccess);
     });
 
-    it.skip("saveFileToDisk works with FTP URL", async () => {
+    it("saveFileToDisk works with FTP URL", async () => {
       // Use container name for inter-container communication
       const ftpDestination = `ftp://${containerName}:${ftpPort}/uploads/smile-ftp.jpg`;
       const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, ftpDestination);
