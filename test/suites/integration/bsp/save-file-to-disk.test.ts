@@ -133,7 +133,6 @@ describeBspNet(
     let userApi: EnrichedBspApi;
     let copypartyContainer: Docker.Container;
     let fileKey: string;
-    let serverIp: string;
     let containerName: string;
     let httpPort: number;
     let ftpPort: number;
@@ -153,18 +152,18 @@ describeBspNet(
       // Setup Copyparty server
       const copypartyInfo = await addCopypartyContainer();
       copypartyContainer = copypartyInfo.container;
-      serverIp = copypartyInfo.containerIp;
       containerName = copypartyInfo.containerName;
       httpPort = copypartyInfo.httpPort;
       ftpPort = copypartyInfo.ftpPort;
-      
+
       // Clean up uploads directory to ensure tests start fresh
-      const docker = new Docker();
-      await copypartyContainer.exec({
-        Cmd: ["sh", "-c", "rm -rf /uploads/* 2>/dev/null || true"],
-        AttachStdout: true,
-        AttachStderr: true
-      }).then(exec => exec.start({}));
+      await copypartyContainer
+        .exec({
+          Cmd: ["sh", "-c", "rm -rf /uploads/* 2>/dev/null || true"],
+          AttachStdout: true,
+          AttachStderr: true
+        })
+        .then((exec) => exec.start({}));
 
       // Setup: Store a file first (same as above)
       const newBucketEventEvent = await userApi.createBucket(bucketName);
@@ -261,7 +260,7 @@ describeBspNet(
         try {
           await copypartyContainer.stop();
           await copypartyContainer.remove();
-        } catch (e) {
+        } catch (e: any) {
           // Container might already be removed
           console.log("Error cleaning up copyparty container:", e.message);
         }
@@ -270,7 +269,7 @@ describeBspNet(
 
     it("saveFileToDisk works with HTTP URL", async () => {
       // Use container name for inter-container communication
-      // Note: We use container name here (not localhost) because saveFileToDisk runs 
+      // Note: We use container name here (not localhost) because saveFileToDisk runs
       // inside the BSP container and needs to reach copyparty via Docker's internal network
       const httpDestination = `http://${containerName}:${httpPort}/uploads/smile-http.jpg`;
       const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, httpDestination);
@@ -281,7 +280,7 @@ describeBspNet(
     it("saveFileToDisk works with FTP URL", async () => {
       // Use container name for inter-container communication
       const ftpDestination = `ftp://${containerName}:${ftpPort}/uploads/smile-ftp.jpg`;
-      
+
       const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, ftpDestination);
       assert(saveResult.isSuccess);
     });

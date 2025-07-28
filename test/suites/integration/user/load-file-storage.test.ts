@@ -158,9 +158,6 @@ describeBspNet(
   ({ before, after, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let copypartyContainer: Docker.Container;
-    let serverIp: string;
-    let httpPort: number;
-    let ftpPort: number;
     let httpHostPort: number;
     let ftpHostPort: number;
 
@@ -170,9 +167,6 @@ describeBspNet(
       // Setup Copyparty server
       const copypartyInfo = await addCopypartyContainer();
       copypartyContainer = copypartyInfo.container;
-      serverIp = copypartyInfo.containerIp;
-      httpPort = copypartyInfo.httpPort;
-      ftpPort = copypartyInfo.ftpPort;
       httpHostPort = copypartyInfo.httpHostPort;
       ftpHostPort = copypartyInfo.ftpHostPort;
     });
@@ -182,7 +176,7 @@ describeBspNet(
         try {
           await copypartyContainer.stop();
           await copypartyContainer.remove();
-        } catch (e) {
+        } catch (e: any) {
           // Container might already be removed
           console.log("Error cleaning up copyparty container:", e.message);
         }
@@ -191,7 +185,7 @@ describeBspNet(
 
     it("loadFileInStorage works with HTTP URL", async () => {
       // Use localhost with host port for external access
-      // Note: We use localhost here (not container name) because loadFileInStorage runs 
+      // Note: We use localhost here (not container name) because loadFileInStorage runs
       // on the host machine (test runner) and accesses copyparty via the exposed port
       const source = `http://localhost:${httpHostPort}/res/adolphus.jpg`;
       const destination = "test/adolphus-http.jpg";

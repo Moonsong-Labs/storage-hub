@@ -65,7 +65,7 @@ export const addCopypartyContainer = async (options?: {
     HostConfig: {
       PortBindings: {
         "3923/tcp": [{ HostPort: "0" }], // Random available port
-        "3921/tcp": [{ HostPort: "0" }]  // Random available port
+        "3921/tcp": [{ HostPort: "0" }] // Random available port
       },
       Binds: [
         `${process.cwd()}/../docker/resource:/res:ro`,
@@ -79,7 +79,7 @@ export const addCopypartyContainer = async (options?: {
   // Get container info
   const containerInfo = await container.inspect();
   const containerIp = containerInfo.NetworkSettings.Networks.docker_default.IPAddress;
-  
+
   // Also get the mapped ports
   const httpHostPort = containerInfo.NetworkSettings.Ports["3923/tcp"]?.[0]?.HostPort || "3923";
   const ftpHostPort = containerInfo.NetworkSettings.Ports["3921/tcp"]?.[0]?.HostPort || "3921";
