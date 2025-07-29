@@ -23,11 +23,6 @@ pub struct Services {
 
 impl Services {
     /// Create a new services container
-    ///
-    /// # Arguments
-    /// * `storage` - Storage backend for counters and temporary data
-    /// * `postgres` - PostgreSQL client for accessing indexer database
-    /// * `rpc` - RPC client for accessing StorageHub blockchain
     pub fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<dyn PostgresClientTrait>,

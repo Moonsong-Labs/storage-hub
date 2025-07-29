@@ -1,7 +1,4 @@
 //! StorageHub RPC client implementation
-//!
-//! This module provides a client implementation that uses the RpcConnection 
-//! abstraction for making RPC calls to the StorageHub blockchain.
 
 use std::sync::Arc;
 

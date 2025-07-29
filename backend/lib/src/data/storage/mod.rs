@@ -1,6 +1,4 @@
 //! Storage data access module
-//!
-//! This module provides storage interfaces and implementations for backend-specific data
 
 use std::error::Error;
 
@@ -21,9 +19,6 @@ pub fn test_storage() -> std::sync::Arc<dyn BoxedStorage> {
 }
 
 /// Storage trait for backend-specific data operations
-///
-/// This trait provides an abstraction over different storage backends (in-memory, Redis, etc.)
-/// for data that is specific to the backend service and not part of the indexer database.
 #[async_trait]
 pub trait Storage: Send + Sync {
     /// Error type for storage operations

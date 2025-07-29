@@ -1,8 +1,4 @@
 //! RPC connection abstraction for StorageHub
-//!
-//! This module provides a trait-based abstraction for RPC connections,
-//! allowing for different implementations (HTTP, WebSocket, mock, etc.)
-//! while maintaining a consistent interface.
 
 use std::fmt::Debug;
 
@@ -71,9 +67,6 @@ impl Default for RpcConfig {
 }
 
 /// Trait for types that can be converted to RPC errors
-///
-/// This allows different RPC implementations to convert their
-/// specific error types to our generic `RpcConnectionError`.
 pub trait IntoRpcError {
     /// Convert this error into an `RpcConnectionError`
     fn into_rpc_error(self) -> RpcConnectionError;

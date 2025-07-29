@@ -1,7 +1,4 @@
 //! StorageHub RPC client module
-//!
-//! This module provides RPC client functionality for interacting with
-//! the StorageHub blockchain runtime.
 
 pub mod client;
 pub mod connection;
@@ -15,10 +12,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 /// Trait for RPC connections
-///
-/// This trait abstracts the underlying RPC transport mechanism,
-/// allowing for different implementations while maintaining a
-/// consistent interface for making RPC calls.
 #[async_trait]
 pub trait RpcConnection: Send + Sync {
     /// Execute a JSON-RPC method call

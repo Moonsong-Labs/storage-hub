@@ -1,6 +1,4 @@
-//! # StorageHub Backend Library
-//!
-//! Core library for the StorageHub backend service.
+//! StorageHub Backend Library
 
 pub mod api;
 pub mod config;

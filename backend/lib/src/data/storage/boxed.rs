@@ -1,7 +1,4 @@
 //! Type-erased storage implementation
-//!
-//! This module provides a boxed storage trait that erases the associated Error type,
-//! allowing different storage implementations to be used interchangeably.
 
 use std::error::Error as StdError;
 
