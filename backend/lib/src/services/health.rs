@@ -7,13 +7,6 @@ use crate::data::rpc::StorageHubRpcClient;
 use crate::data::storage::BoxedStorage;
 
 #[derive(Serialize)]
-pub struct HealthStatus {
-    pub status: String,
-    pub version: String,
-    pub service: String,
-}
-
-#[derive(Serialize)]
 pub struct DetailedHealthStatus {
     pub status: String,
     pub version: String,
@@ -117,14 +110,5 @@ impl HealthService {
                 message: Some("RPC connection not established".to_string()),
             },
         }
-    }
-}
-
-/// Simple health check for basic status
-pub fn get_health() -> HealthStatus {
-    HealthStatus {
-        status: "healthy".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
-        service: "storagehub-backend".to_string(),
     }
 }
