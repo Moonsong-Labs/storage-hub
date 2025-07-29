@@ -6,7 +6,9 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use super::RpcConnection;
+#[cfg(feature = "mocks")]
+use super::mock_connection::MockConnection;
+use super::{ws_connection::WsConnection, RpcConnection};
 
 /// Error type for RPC operations
 #[derive(Debug, thiserror::Error)]
@@ -72,7 +74,6 @@ pub trait IntoRpcError {
     fn into_rpc_error(self) -> RpcConnectionError;
 }
 
-// Implement IntoRpcError for jsonrpsee errors
 impl IntoRpcError for jsonrpsee::core::client::Error {
     fn into_rpc_error(self) -> RpcConnectionError {
         use jsonrpsee::core::client::Error;
@@ -102,42 +103,6 @@ impl IntoRpcError for jsonrpsee::core::client::Error {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_rpc_config_default() {
-        let config = RpcConfig::default();
-        assert_eq!(config.url, "");
-        assert_eq!(config.timeout_secs, Some(30));
-        assert_eq!(config.max_concurrent_requests, Some(100));
-        assert!(config.verify_tls);
-    }
-
-    #[test]
-    fn test_rpc_connection_error_display() {
-        let errors = vec![
-            RpcConnectionError::Transport("Network error".to_string()),
-            RpcConnectionError::Rpc("Method not found".to_string()),
-            RpcConnectionError::Serialization("Invalid JSON".to_string()),
-            RpcConnectionError::Timeout,
-            RpcConnectionError::ConnectionClosed,
-            RpcConnectionError::Other("Unknown error".to_string()),
-        ];
-
-        for error in errors {
-            // Just ensure Display is implemented
-            let _ = format!("{}", error);
-        }
-    }
-}
-
-// Import concrete types for the enum
-#[cfg(feature = "mocks")]
-use super::mock_connection::MockConnection;
-use super::ws_connection::WsConnection;
 
 /// Enum wrapper for different RPC connection implementations
 ///
@@ -201,6 +166,37 @@ impl RpcConnection for AnyRpcConnection {
             AnyRpcConnection::Real(conn) => conn.close().await,
             #[cfg(feature = "mocks")]
             AnyRpcConnection::Mock(conn) => conn.close().await,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_rpc_config_default() {
+        let config = RpcConfig::default();
+        assert_eq!(config.url, "");
+        assert_eq!(config.timeout_secs, Some(30));
+        assert_eq!(config.max_concurrent_requests, Some(100));
+        assert!(config.verify_tls);
+    }
+
+    #[test]
+    fn test_rpc_connection_error_display() {
+        let errors = vec![
+            RpcConnectionError::Transport("Network error".to_string()),
+            RpcConnectionError::Rpc("Method not found".to_string()),
+            RpcConnectionError::Serialization("Invalid JSON".to_string()),
+            RpcConnectionError::Timeout,
+            RpcConnectionError::ConnectionClosed,
+            RpcConnectionError::Other("Unknown error".to_string()),
+        ];
+
+        for error in errors {
+            // Just ensure Display is implemented
+            let _ = format!("{}", error);
         }
     }
 }

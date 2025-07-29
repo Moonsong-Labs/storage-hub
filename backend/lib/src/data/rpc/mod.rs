@@ -1,5 +1,9 @@
 //! StorageHub RPC client module
 
+use async_trait::async_trait;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
 pub mod client;
 pub mod connection;
 pub mod ws_connection;
@@ -7,9 +11,11 @@ pub mod ws_connection;
 #[cfg(feature = "mocks")]
 pub mod mock_connection;
 
-use async_trait::async_trait;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+pub use client::StorageHubRpcClient;
+pub use connection::{AnyRpcConnection, IntoRpcError, RpcConfig, RpcConnectionError, RpcResult};
+#[cfg(feature = "mocks")]
+pub use mock_connection::{ErrorMode, MockConnection, MockConnectionBuilder};
+pub use ws_connection::{WsConnection, WsConnectionBuilder};
 
 /// Trait for RPC connections
 #[async_trait]
@@ -78,13 +84,3 @@ pub struct TransactionReceipt {
     pub extrinsic_index: u32,
     pub success: bool,
 }
-
-
-// Main client
-pub use client::StorageHubRpcClient;
-// Connection types
-pub use connection::{AnyRpcConnection, IntoRpcError, RpcConfig, RpcConnectionError, RpcResult};
-// Mock types (only with mocks feature)
-#[cfg(feature = "mocks")]
-pub use mock_connection::{ErrorMode, MockConnection, MockConnectionBuilder};
-pub use ws_connection::{WsConnection, WsConnectionBuilder};
