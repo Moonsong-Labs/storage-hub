@@ -360,6 +360,10 @@ where
         //
         // We need to ensure we read exactly FILE_CHUNK_SIZE bytes per chunk (except the last one)
         // to ensure consistent fingerprints regardless of how the underlying stream returns data.
+        info!(target: LOG_TARGET, "Starting to read file from URL: {}", url.as_str());
+        let mut total_chunks = 0;
+        let mut total_bytes = 0;
+        
         'read: loop {
             let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
             let mut offset = 0;
@@ -372,14 +376,17 @@ where
                         if offset > 0 {
                             // We have a partial chunk
                             chunk.truncate(offset);
-                            debug!(target: LOG_TARGET, "Read final partial chunk of {} bytes", offset);
+                            debug!(target: LOG_TARGET, "Read final partial chunk {} of {} bytes", chunk_id, offset);
+                            info!(target: LOG_TARGET, "Final chunk {}: {} bytes, first 20 bytes: {:02x?}", 
+                                  chunk_id, offset, &chunk[..20.min(offset)]);
 
                             file_data_trie
                                 .write_chunk(&ChunkId::new(chunk_id), &chunk)
                                 .map_err(into_rpc_error)?;
-                            chunk_id += 1;
+                            total_chunks += 1;
+                            total_bytes += offset;
                         }
-                        debug!(target: LOG_TARGET, "Finished reading file");
+                        info!(target: LOG_TARGET, "Finished reading file. Total chunks: {}, Total bytes: {}", total_chunks, total_bytes);
                         break 'read;
                     }
                     Ok(bytes_read) => {
@@ -387,11 +394,17 @@ where
                         if offset == FILE_CHUNK_SIZE as usize {
                             // Full chunk
                             debug!(target: LOG_TARGET, "Read full chunk {} of {} bytes", chunk_id, FILE_CHUNK_SIZE);
+                            if chunk_id < 5 {
+                                info!(target: LOG_TARGET, "Chunk {}: {} bytes, first 20 bytes: {:02x?}", 
+                                      chunk_id, FILE_CHUNK_SIZE, &chunk[..20]);
+                            }
 
                             file_data_trie
                                 .write_chunk(&ChunkId::new(chunk_id), &chunk)
                                 .map_err(into_rpc_error)?;
                             chunk_id += 1;
+                            total_chunks += 1;
+                            total_bytes += FILE_CHUNK_SIZE as usize;
                             break; // Move to next chunk
                         }
                         // Continue reading to fill the chunk

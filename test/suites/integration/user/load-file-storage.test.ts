@@ -158,8 +158,9 @@ describeBspNet(
   ({ before, after, createUserApi, it }) => {
     let userApi: EnrichedBspApi;
     let copypartyContainer: Docker.Container;
-    let httpHostPort: number;
-    let ftpHostPort: number;
+    let containerName: string;
+    let httpPort: number;
+    let ftpPort: number;
 
     before(async () => {
       userApi = await createUserApi();
@@ -194,12 +195,61 @@ describeBspNet(
     });
 
     it("loadFileInStorage works with HTTP URL", async () => {
-      // Use localhost with host port for external access
-      // Note: We use localhost here (not container name) because loadFileInStorage runs
-      // on the host machine (test runner) and accesses copyparty via the exposed port
-      const source = `http://localhost:${httpHostPort}/res/adolphus.jpg`;
+      // Use container name for inter-container communication
+      // Note: We use container name here because loadFileInStorage runs
+      // inside the user container and needs to reach copyparty via Docker's internal network
+      const source = `http://${containerName}:${httpPort}/res/adolphus.jpg`;
       const destination = "test/adolphus-http.jpg";
       const bucketName = "bucket-http-remote";
+
+      // First, let's verify copyparty is serving the correct file
+      console.log(`\n=== DEBUG: Checking copyparty content ===`);
+      console.log(`Source URL: ${source}`);
+      
+      // Execute curl inside the user container to check what copyparty is serving
+      const curlResult = await userApi._api.rpc.offchain.localStorageSet({
+        kind: "PERSISTENT",
+        key: "debug-http-download",
+        value: "starting"
+      });
+      
+      // Try to download and check the file from within the user container (where the RPC runs)
+      try {
+        // Get the user container
+        const docker = new Docker();
+        const userContainer = docker.getContainer("docker-sh-user-1");
+        
+        // Check from user container perspective
+        const execResult = await userContainer.exec({
+          Cmd: ["sh", "-c", `curl -s http://${containerName}:${httpPort}/res/adolphus.jpg | sha256sum`],
+          AttachStdout: true,
+          AttachStderr: true
+        });
+        const stream = await execResult.start({});
+        const output = await new Promise<string>((resolve) => {
+          let data = '';
+          stream.on('data', (chunk: Buffer) => data += chunk.toString());
+          stream.on('end', () => resolve(data));
+        });
+        console.log(`SHA256 from user container: ${output.trim()}`);
+        console.log(`Expected SHA256: 739fb97f7c2b8e7f192b608722a60dc67ee0797c85ff1ea849c41333a40194f2`);
+        
+        // Also check file size
+        const sizeExec = await userContainer.exec({
+          Cmd: ["sh", "-c", `curl -sI http://${containerName}:${httpPort}/res/adolphus.jpg | grep -i content-length`],
+          AttachStdout: true,
+          AttachStderr: true
+        });
+        const sizeStream = await sizeExec.start({});
+        const sizeOutput = await new Promise<string>((resolve) => {
+          let data = '';
+          sizeStream.on('data', (chunk: Buffer) => data += chunk.toString());
+          sizeStream.on('end', () => resolve(data));
+        });
+        console.log(`Content-Length from user container: ${sizeOutput.trim()}`);
+      } catch (e) {
+        console.error(`Failed to check from user container: ${e}`);
+      }
 
       const newBucketEventEvent = await userApi.createBucket(bucketName);
       const newBucketEventDataBlob =
@@ -209,6 +259,9 @@ describeBspNet(
         throw new Error("Event doesn't match Type");
       }
 
+      console.log(`\n=== DEBUG: Calling loadFileInStorage ===`);
+      console.log(`Expected fingerprint: ${userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint}`);
+      
       const {
         file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
@@ -217,6 +270,10 @@ describeBspNet(
         userApi.shConsts.NODE_INFOS.user.AddressId,
         newBucketEventDataBlob.bucketId
       );
+
+      console.log(`\n=== DEBUG: loadFileInStorage result ===`);
+      console.log(`Actual fingerprint: ${fingerprint.toString()}`);
+      console.log(`File size: ${file_size.toString()}`);
 
       strictEqual(location.toHuman(), destination);
       strictEqual(
@@ -227,8 +284,8 @@ describeBspNet(
     });
 
     it("loadFileInStorage works with FTP URL", async () => {
-      // Use localhost with host port for external access
-      const source = `ftp://localhost:${ftpHostPort}/res/smile.jpg`;
+      // Use container name for inter-container communication
+      const source = `ftp://${containerName}:${ftpPort}/res/smile.jpg`;
       const destination = "test/smile-ftp.jpg";
       const bucketName = "bucket-ftp-remote";
 
