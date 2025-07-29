@@ -13,7 +13,8 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::time::sleep;
 
-use super::connection::{RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult};
+use super::connection::{RpcConnectionError, RpcResult};
+use super::RpcConnection;
 
 /// Error simulation modes for testing
 #[derive(Debug, Clone, PartialEq)]
@@ -312,12 +313,10 @@ impl Default for MockConnectionBuilder {
     }
 }
 
-#[async_trait]
-impl RpcConnectionBuilder for MockConnectionBuilder {
-    type Connection = MockConnection;
-
-    async fn build(self) -> RpcResult<Self::Connection> {
-        Ok(self.connection)
+impl MockConnectionBuilder {
+    /// Build the mock connection
+    pub fn build(self) -> MockConnection {
+        self.connection
     }
 }
 

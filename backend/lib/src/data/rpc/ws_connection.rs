@@ -13,9 +13,8 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use tokio::sync::RwLock;
 
-use super::connection::{
-    IntoRpcError, RpcConfig, RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult,
-};
+use super::connection::{IntoRpcError, RpcConfig, RpcConnectionError, RpcResult};
+use super::RpcConnection;
 
 /// WebSocket RPC connection implementation
 pub struct WsConnection {
@@ -169,11 +168,9 @@ impl WsConnectionBuilder {
     }
 }
 
-#[async_trait]
-impl RpcConnectionBuilder for WsConnectionBuilder {
-    type Connection = WsConnection;
-
-    async fn build(self) -> RpcResult<Self::Connection> {
+impl WsConnectionBuilder {
+    /// Build and establish the WebSocket connection
+    pub async fn build(self) -> RpcResult<WsConnection> {
         WsConnection::new(self.config).await
     }
 }
