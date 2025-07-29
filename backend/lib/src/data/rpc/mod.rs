@@ -120,8 +120,6 @@ pub trait StorageHubRpcTrait: Send + Sync {
 pub use client::StorageHubRpcClient;
 // Connection types
 pub use connection::{AnyRpcConnection, IntoRpcError, RpcConfig, RpcConnectionError, RpcResult};
-// Re-export RpcConnection trait
-pub use self::RpcConnection;
 // Mock types (only with mocks feature)
 #[cfg(feature = "mocks")]
 pub use mock_connection::{ErrorMode, MockConnection, MockConnectionBuilder};
