@@ -110,8 +110,8 @@ export const addCopypartyContainer = async (options?: {
     containerIp,
     httpPort: 3923,
     ftpPort: 3921,
-    httpHostPort: parseInt(httpHostPort),
-    ftpHostPort: parseInt(ftpHostPort)
+    httpHostPort: Number.parseInt(httpHostPort),
+    ftpHostPort: Number.parseInt(ftpHostPort)
   };
 };
 

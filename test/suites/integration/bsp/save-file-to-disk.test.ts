@@ -8,7 +8,7 @@ import {
   sleep
 } from "../../../util";
 import type { Bytes, u64, U8aFixed } from "@polkadot/types";
-import Docker from "dockerode";
+import type Docker from "dockerode";
 
 describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi, it }) => {
   let bspApi: EnrichedBspApi;
