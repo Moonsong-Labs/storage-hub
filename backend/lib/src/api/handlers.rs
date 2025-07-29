@@ -4,10 +4,8 @@ use axum::extract::State;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use crate::services::health;
-
 use crate::error::Result;
-use crate::services::Services;
+use crate::services::{health, Services};
 
 /// Response for counter operations
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,7 +32,9 @@ pub async fn get_counter(State(services): State<Services>) -> Result<Json<Counte
 }
 
 /// Health check handler
-pub async fn health_check_detailed(State(services): State<Services>) -> Json<health::DetailedHealthStatus> {
+pub async fn health_check_detailed(
+    State(services): State<Services>,
+) -> Json<health::DetailedHealthStatus> {
     Json(services.health.check_health().await)
 }
 

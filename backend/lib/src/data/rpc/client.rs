@@ -2,13 +2,12 @@
 
 use std::sync::Arc;
 
-use crate::error::{Error, Result};
 use serde_json::json;
 
 use super::{
-    AnyRpcConnection, BucketInfo, FileMetadata, ProviderInfo, RpcConnection,
-    TransactionReceipt,
+    AnyRpcConnection, BucketInfo, FileMetadata, ProviderInfo, RpcConnection, TransactionReceipt,
 };
+use crate::error::{Error, Result};
 
 /// StorageHub RPC client that uses an RpcConnection
 pub struct StorageHubRpcClient {
@@ -49,10 +48,7 @@ impl StorageHubRpcClient {
     }
 
     /// Get provider information
-    pub async fn get_provider_info(
-        &self,
-        provider_id: &[u8],
-    ) -> Result<Option<ProviderInfo>> {
+    pub async fn get_provider_info(&self, provider_id: &[u8]) -> Result<Option<ProviderInfo>> {
         let params = json!([provider_id]);
 
         self.connection
@@ -84,8 +80,12 @@ impl StorageHubRpcClient {
         // Convert hex string to bytes
         hash.ok_or_else(|| Error::NotFound("Block hash not found".to_string()))
             .and_then(|h| {
-                hex::decode(h.trim_start_matches("0x"))
-                    .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(format!("Invalid hex: {}", e))))
+                hex::decode(h.trim_start_matches("0x")).map_err(|e| {
+                    Error::Rpc(jsonrpsee::core::client::Error::Custom(format!(
+                        "Invalid hex: {}",
+                        e
+                    )))
+                })
             })
     }
 
@@ -124,10 +124,7 @@ impl StorageHubRpcClient {
     }
 
     /// Get storage request status
-    pub async fn get_storage_request_status(
-        &self,
-        file_key: &[u8],
-    ) -> Result<Option<String>> {
+    pub async fn get_storage_request_status(&self, file_key: &[u8]) -> Result<Option<String>> {
         let params = json!([file_key]);
 
         self.connection

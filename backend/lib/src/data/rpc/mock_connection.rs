@@ -243,13 +243,16 @@ mod tests {
     #[tokio::test]
     async fn test_mock_connection_basic() {
         let conn = MockConnection::new();
-        
+
         // Set up test response
-        conn.set_response("system_health", serde_json::json!({
-            "peers": 5,
-            "isSyncing": false,
-            "shouldHavePeers": true
-        }));
+        conn.set_response(
+            "system_health",
+            serde_json::json!({
+                "peers": 5,
+                "isSyncing": false,
+                "shouldHavePeers": true
+            }),
+        );
 
         // Test system health call
         let health: Value = conn.call("system_health", ()).await.unwrap();

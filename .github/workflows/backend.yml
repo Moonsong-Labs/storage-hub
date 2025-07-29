@@ -20,10 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+        with:
+          toolchain: nightly
+          components: rustfmt
       - name: Rustfmt Check Backend
         run: |
-          cargo fmt --manifest-path backend/lib/Cargo.toml -- --check
-          cargo fmt --manifest-path backend/bin/Cargo.toml -- --check
+          cargo +nightly fmt --manifest-path backend/lib/Cargo.toml -- --check
+          cargo +nightly fmt --manifest-path backend/bin/Cargo.toml -- --check
 
   check-backend-lint:
     name: "Check backend lint with clippy"

@@ -14,13 +14,6 @@ pub mod queries;
 // #[cfg(feature = "mocks")]
 // pub mod mock_connection;
 
-pub use pg_connection::PgConnection;
-use serde::{Deserialize, Serialize};
-
-use shc_indexer_db::models::{Bucket, File, FileStorageRequestStep, Msp};
-
-use crate::error::Result;
-
 // WIP: Mock types - commented out until diesel traits are fully implemented
 // #[cfg(feature = "mocks")]
 // pub use mock_connection::{MockDbConnection, MockErrorConfig, MockTestData};
@@ -28,6 +21,11 @@ pub use client::{PostgresClient, PostgresError};
 pub use connection::{
     AnyDbConnection, ConnectionProvider, DbConfig, DbConnection, DbConnectionError,
 };
+pub use pg_connection::PgConnection;
+use serde::{Deserialize, Serialize};
+use shc_indexer_db::models::{Bucket, File, FileStorageRequestStep, Msp};
+
+use crate::error::Result;
 
 /// Pagination parameters for database queries
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -7,13 +7,13 @@ use serde_json::json;
 pub enum Error {
     #[error("Configuration error: {0}")]
     Config(String),
-    
+
     #[error("RPC error: {0}")]
     Rpc(#[from] jsonrpsee::core::client::Error),
-    
+
     #[error("Storage error: {0}")]
     Storage(#[from] Box<dyn std::error::Error + Send + Sync>),
-    
+
     #[error("Database error: {0}")]
     Database(String),
 

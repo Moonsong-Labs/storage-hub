@@ -8,7 +8,8 @@ use serde::Serialize;
 
 #[cfg(feature = "mocks")]
 use super::mock_connection::MockConnection;
-use super::{ws_connection::WsConnection, RpcConnection};
+use super::ws_connection::WsConnection;
+use super::RpcConnection;
 
 /// Error type for RPC operations
 #[derive(Debug, thiserror::Error)]

@@ -6,19 +6,12 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing::{debug, info};
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::EnvFilter;
-
 use sh_backend_lib::api::create_app;
 use sh_backend_lib::config::Config;
 use sh_backend_lib::data::postgres::{
     AnyDbConnection, DbConfig, PgConnection, PostgresClient, PostgresClientTrait,
 };
-use sh_backend_lib::data::rpc::{
-    AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection,
-};
+use sh_backend_lib::data::rpc::{AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection};
 use sh_backend_lib::data::storage::{BoxedStorageWrapper, InMemoryStorage};
 // WIP: Mock imports - postgres mocks commented out until diesel traits are fully implemented
 #[cfg(feature = "mocks")]
@@ -27,6 +20,10 @@ use sh_backend_lib::data::{
     rpc::MockConnection,
 };
 use sh_backend_lib::services::Services;
+use tracing::{debug, info};
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::EnvFilter;
 
 #[derive(Parser, Debug)]
 #[command(name = "sh-backend")]
