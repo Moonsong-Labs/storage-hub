@@ -59,10 +59,4 @@ impl Services {
         panic!("Test services require PostgreSQL and RPC mock implementations - currently WIP")
     }
     
-    /// Create a test services container with only storage (for counter tests)
-    pub fn test_with_storage_only(storage: Arc<dyn BoxedStorage>) -> Self {
-        // This is a workaround for tests that only need storage
-        // Once full mocks are available, this can be removed
-        panic!("Test services require PostgreSQL and RPC mock implementations - currently WIP")
-    }
 }

@@ -32,16 +32,10 @@ mod tests {
 
     use super::*;
 
-    fn create_test_app() -> Router {
-        // Use consolidated test utilities
-        let services = Services::test();
-        create_routes(services)
-    }
-
     #[tokio::test]
     #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
     async fn test_health_route() {
-        let app = create_test_app();
+        let app = crate::api::test_app();
         let server = TestServer::new(app).unwrap();
 
         let response = server.get("/health").await;
@@ -54,7 +48,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
     async fn test_counter_routes() {
-        let app = create_test_app();
+        let app = crate::api::test_app();
         let server = TestServer::new(app).unwrap();
 
         // Get initial counter

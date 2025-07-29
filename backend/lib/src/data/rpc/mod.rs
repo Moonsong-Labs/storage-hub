@@ -11,10 +11,11 @@ pub mod ws_connection;
 pub mod mock_connection;
 
 use async_trait::async_trait;
-use connection::{RpcConnectionError, RpcResult};
 use jsonrpsee::core::client::Error as RpcError;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+
+use connection::{RpcConnectionError, RpcResult};
 
 /// Trait for RPC connections
 ///

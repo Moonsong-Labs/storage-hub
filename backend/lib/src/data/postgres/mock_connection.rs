@@ -4,7 +4,15 @@
 //! database behavior for testing purposes. It stores test data in memory and supports
 //! error simulation and delay injection for comprehensive testing scenarios.
 
-use super::connection::{DbConnection, DbConnectionError};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex, MutexGuard},
+    time::Duration,
+};
+
 use async_trait::async_trait;
 use chrono::NaiveDateTime;
 use diesel::{
@@ -14,16 +22,11 @@ use diesel::{
     RunQueryDsl,
 };
 use diesel_async::{AsyncConnection, SimpleAsyncConnection};
-use shc_indexer_db::models::{Bucket, File, Msp};
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    future::Future,
-    pin::Pin,
-    sync::{Arc, Mutex, MutexGuard},
-    time::Duration,
-};
 use tokio::time::sleep;
+
+use shc_indexer_db::models::{Bucket, File, Msp};
+
+use super::connection::{DbConnection, DbConnectionError};
 
 /// Test data storage for the mock connection
 #[derive(Debug, Default)]

@@ -23,3 +23,10 @@ pub fn create_app(services: Services) -> Router {
 
     router.layer(cors)
 }
+
+#[cfg(test)]
+/// Create a test application
+pub fn test_app() -> Router {
+    let services = Services::test();
+    create_app(services)
+}
