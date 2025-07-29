@@ -25,12 +25,9 @@ pub fn routes(services: Services) -> Router {
 mod tests {
     // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
     // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
-    use std::sync::Arc;
 
     use axum::http::StatusCode;
     use axum_test::TestServer;
-
-    use super::*;
 
     #[tokio::test]
     #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]

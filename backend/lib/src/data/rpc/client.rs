@@ -5,7 +5,6 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use jsonrpsee::core::client::Error as RpcError;
 use serde_json::json;
 

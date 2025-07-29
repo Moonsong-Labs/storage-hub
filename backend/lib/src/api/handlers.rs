@@ -46,7 +46,6 @@ pub async fn health_check() -> Json<Value> {
 mod tests {
     // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
     // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
-    use std::sync::Arc;
 
     use super::*;
 

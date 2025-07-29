@@ -43,6 +43,11 @@ pub trait RpcConnection: Send + Sync {
     async fn close(&self) -> RpcResult<()>;
 }
 
+// TODO: These types could be imported from the client crate if they were in a separate
+// types-only crate. Currently, importing from shc-rpc would bring in too many dependencies
+// and unrelated functionality (substrate node RPC implementation, file storage, etc.).
+// Consider extracting common types to a shared crate in the future.
+
 /// File metadata on the blockchain
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FileMetadata {

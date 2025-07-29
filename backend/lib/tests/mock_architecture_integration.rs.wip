@@ -12,7 +12,7 @@ mod tests {
                 PostgresClient, PostgresClientTrait, PaginationParams,
             },
             rpc::{
-                MockConnection, MockConnectionBuilder, RpcConnectionBuilder,
+                MockConnection, MockConnectionBuilder,
                 StorageHubRpcClient, WsConnectionBuilder,
                 ErrorMode, RpcConfig,
             },

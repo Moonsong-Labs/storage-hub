@@ -48,94 +48,10 @@ pub struct MockConnection {
 }
 
 impl MockConnection {
-    /// Create a new mock connection with default responses
+    /// Create a new mock connection without default responses
     pub fn new() -> Self {
-        let mut responses = HashMap::new();
-
-        // Add default responses for common StorageHub methods
-        responses.insert(
-            "system_health".to_string(),
-            serde_json::json!({
-                "peers": 5,
-                "isSyncing": false,
-                "shouldHavePeers": true
-            }),
-        );
-
-        responses.insert(
-            "chain_getBlockHash".to_string(),
-            serde_json::json!("0xdeadbeef"),
-        );
-
-        responses.insert(
-            "chain_getHeader".to_string(),
-            serde_json::json!({
-                "number": "0x64",
-                "parentHash": "0xabcdef",
-                "stateRoot": "0x123456",
-                "extrinsicsRoot": "0x789abc"
-            }),
-        );
-
-        responses.insert("state_getStorage".to_string(), serde_json::json!(null));
-
-        // Add default file metadata response
-        responses.insert(
-            "storagehub_getFileMetadata".to_string(),
-            serde_json::json!({
-                "owner": [50, 60, 70, 80],
-                "bucket_id": [5, 6, 7, 8],
-                "location": [110, 111, 112],
-                "fingerprint": [120, 121, 122],
-                "size": 1024,
-                "peer_ids": [[130, 131], [132, 133]]
-            }),
-        );
-
-        // Add default bucket info response
-        responses.insert(
-            "storagehub_getBucketInfo".to_string(),
-            serde_json::json!({
-                "owner": [50, 60, 70, 80],
-                "msp_id": [1, 2, 3, 4],
-                "root": [55, 66, 77, 88],
-                "user_peer_ids": [[90, 91, 92], [93, 94, 95]]
-            }),
-        );
-
-        // Add default provider info response
-        responses.insert(
-            "storagehub_getProviderInfo".to_string(),
-            serde_json::json!({
-                "peer_id": [10, 20, 30, 40],
-                "root": [11, 22, 33, 44],
-                "capacity": 1000000,
-                "data_used": 100000
-            }),
-        );
-
-        // Add transaction submission response
-        responses.insert(
-            "storagehub_submitStorageRequest".to_string(),
-            serde_json::json!({
-                "block_hash": [222, 173, 190, 239],
-                "block_number": 100,
-                "extrinsic_index": 1,
-                "success": true
-            }),
-        );
-
-        // Add storage request status response
-        responses.insert(
-            "storagehub_getStorageRequestStatus".to_string(),
-            serde_json::json!("confirmed"),
-        );
-
-        // Don't add default responses for methods that might be tested for errors
-        // The test_error_handling test expects no response to be set
-
         Self {
-            responses: Arc::new(Mutex::new(responses)),
+            responses: Arc::new(Mutex::new(HashMap::new())),
             error_mode: Arc::new(Mutex::new(ErrorMode::None)),
             connected: Arc::new(Mutex::new(true)),
             call_count: Arc::new(Mutex::new(0)),
@@ -327,6 +243,13 @@ mod tests {
     #[tokio::test]
     async fn test_mock_connection_basic() {
         let conn = MockConnection::new();
+        
+        // Set up test response
+        conn.set_response("system_health", serde_json::json!({
+            "peers": 5,
+            "isSyncing": false,
+            "shouldHavePeers": true
+        }));
 
         // Test system health call
         let health: Value = conn.call("system_health", ()).await.unwrap();
@@ -366,6 +289,7 @@ mod tests {
 
         // Test fail after N calls
         let conn = MockConnection::new();
+        conn.set_response("system_health", serde_json::json!({"status": "ok"}));
         conn.set_error_mode(ErrorMode::FailAfterNCalls(2));
 
         // First two calls should succeed
@@ -409,6 +333,7 @@ mod tests {
         assert!(conn.is_connected().await);
 
         // Call should work now
+        conn.set_response("system_health", serde_json::json!({"status": "ok"}));
         let _: Value = conn.call("system_health", ()).await.unwrap();
     }
 }

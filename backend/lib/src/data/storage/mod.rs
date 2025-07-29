@@ -13,7 +13,7 @@ pub use boxed::{BoxedStorage, BoxedStorageWrapper};
 pub use memory::InMemoryStorage;
 
 #[cfg(test)]
-pub fn test_storage() -> Arc<dyn BoxedStorage> {
+pub fn test_storage() -> std::sync::Arc<dyn BoxedStorage> {
     use std::sync::Arc;
     let memory_storage = InMemoryStorage::new();
     let boxed_storage = BoxedStorageWrapper::new(memory_storage);
