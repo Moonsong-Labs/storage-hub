@@ -11,10 +11,8 @@ pub mod ws_connection;
 pub mod mock_connection;
 
 use async_trait::async_trait;
-use jsonrpsee::core::client::Error as RpcError;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-
 
 /// Trait for RPC connections
 ///
@@ -83,38 +81,6 @@ pub struct TransactionReceipt {
     pub success: bool,
 }
 
-/// Trait for StorageHub RPC operations
-#[async_trait]
-pub trait StorageHubRpcTrait: Send + Sync {
-    /// Get file metadata from the blockchain
-    async fn get_file_metadata(&self, file_key: &[u8]) -> Result<Option<FileMetadata>, RpcError>;
-
-    /// Get bucket information from the blockchain
-    async fn get_bucket_info(&self, bucket_id: &[u8]) -> Result<Option<BucketInfo>, RpcError>;
-
-    /// Get provider information
-    async fn get_provider_info(&self, provider_id: &[u8])
-        -> Result<Option<ProviderInfo>, RpcError>;
-
-    /// Get current block number
-    async fn get_block_number(&self) -> Result<u64, RpcError>;
-
-    /// Get current block hash
-    async fn get_block_hash(&self) -> Result<Vec<u8>, RpcError>;
-
-    /// Submit a storage request transaction
-    async fn submit_storage_request(
-        &self,
-        location: Vec<u8>,
-        fingerprint: Vec<u8>,
-        size: u64,
-        peer_ids: Vec<Vec<u8>>,
-    ) -> Result<TransactionReceipt, RpcError>;
-
-    /// Get storage request status
-    async fn get_storage_request_status(&self, file_key: &[u8])
-        -> Result<Option<String>, RpcError>;
-}
 
 // Main client
 pub use client::StorageHubRpcClient;

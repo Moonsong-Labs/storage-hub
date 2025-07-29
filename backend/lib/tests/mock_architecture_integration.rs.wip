@@ -13,7 +13,7 @@ mod tests {
             },
             rpc::{
                 MockConnection, MockConnectionBuilder, RpcConnectionBuilder,
-                StorageHubRpcClient, StorageHubRpcTrait, WsConnectionBuilder,
+                StorageHubRpcClient, WsConnectionBuilder,
                 ErrorMode, RpcConfig,
             },
         },

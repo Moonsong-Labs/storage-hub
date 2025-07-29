@@ -7,7 +7,7 @@ pub mod health;
 use counter::CounterService;
 
 use crate::data::postgres::PostgresClientTrait;
-use crate::data::rpc::StorageHubRpcTrait;
+use crate::data::rpc::StorageHubRpcClient;
 use crate::data::storage::BoxedStorage;
 
 /// Container for all backend services
@@ -16,7 +16,7 @@ pub struct Services {
     pub counter: Arc<CounterService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<dyn PostgresClientTrait>,
-    pub rpc: Arc<dyn StorageHubRpcTrait>,
+    pub rpc: Arc<StorageHubRpcClient>,
 }
 
 impl Services {
@@ -29,7 +29,7 @@ impl Services {
     pub fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<dyn PostgresClientTrait>,
-        rpc: Arc<dyn StorageHubRpcTrait>,
+        rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
         let counter = Arc::new(CounterService::new(storage.clone()));
         Self {

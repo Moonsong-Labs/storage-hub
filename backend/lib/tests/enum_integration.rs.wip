@@ -1,6 +1,6 @@
 // Integration test for enum types
 use sh_backend_lib::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient, PostgresClientTrait};
-use sh_backend_lib::data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient, StorageHubRpcTrait};
+use sh_backend_lib::data::rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient};
 use std::sync::Arc;
 
 #[test]
@@ -14,5 +14,5 @@ fn test_any_db_connection_creation() {
 fn test_any_rpc_connection_creation() {
     let mock_rpc_conn = MockConnection::new();
     let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_rpc_conn));
-    let _rpc: Arc<dyn StorageHubRpcTrait> = Arc::new(StorageHubRpcClient::new(rpc_conn));
+    let _rpc: Arc<StorageHubRpcClient> = Arc::new(StorageHubRpcClient::new(rpc_conn));
 }

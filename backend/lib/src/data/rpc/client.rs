@@ -1,8 +1,7 @@
 //! StorageHub RPC client implementation
 //!
-//! This module provides a concrete implementation of the StorageHubRpcTrait
-//! that uses the RpcConnection abstraction for making RPC calls to the
-//! StorageHub blockchain.
+//! This module provides a client implementation that uses the RpcConnection 
+//! abstraction for making RPC calls to the StorageHub blockchain.
 
 use std::sync::Arc;
 
@@ -11,7 +10,7 @@ use jsonrpsee::core::client::Error as RpcError;
 use serde_json::json;
 
 use super::{
-    AnyRpcConnection, BucketInfo, FileMetadata, ProviderInfo, RpcConnection, StorageHubRpcTrait,
+    AnyRpcConnection, BucketInfo, FileMetadata, ProviderInfo, RpcConnection,
     TransactionReceipt,
 };
 
@@ -27,9 +26,9 @@ impl StorageHubRpcClient {
     }
 }
 
-#[async_trait]
-impl StorageHubRpcTrait for StorageHubRpcClient {
-    async fn get_file_metadata(&self, file_key: &[u8]) -> Result<Option<FileMetadata>, RpcError> {
+impl StorageHubRpcClient {
+    /// Get file metadata from the blockchain
+    pub async fn get_file_metadata(&self, file_key: &[u8]) -> Result<Option<FileMetadata>, RpcError> {
         let params = json!([file_key]);
 
         self.connection
@@ -38,7 +37,8 @@ impl StorageHubRpcTrait for StorageHubRpcClient {
             .map_err(|e| RpcError::Custom(e.to_string()))
     }
 
-    async fn get_bucket_info(&self, bucket_id: &[u8]) -> Result<Option<BucketInfo>, RpcError> {
+    /// Get bucket information from the blockchain
+    pub async fn get_bucket_info(&self, bucket_id: &[u8]) -> Result<Option<BucketInfo>, RpcError> {
         let params = json!([bucket_id]);
 
         self.connection
@@ -47,7 +47,8 @@ impl StorageHubRpcTrait for StorageHubRpcClient {
             .map_err(|e| RpcError::Custom(e.to_string()))
     }
 
-    async fn get_provider_info(
+    /// Get provider information
+    pub async fn get_provider_info(
         &self,
         provider_id: &[u8],
     ) -> Result<Option<ProviderInfo>, RpcError> {
@@ -59,14 +60,16 @@ impl StorageHubRpcTrait for StorageHubRpcClient {
             .map_err(|e| RpcError::Custom(e.to_string()))
     }
 
-    async fn get_block_number(&self) -> Result<u64, RpcError> {
+    /// Get current block number
+    pub async fn get_block_number(&self) -> Result<u64, RpcError> {
         self.connection
             .call_no_params("chain_getBlockNumber")
             .await
             .map_err(|e| RpcError::Custom(e.to_string()))
     }
 
-    async fn get_block_hash(&self) -> Result<Vec<u8>, RpcError> {
+    /// Get current block hash
+    pub async fn get_block_hash(&self) -> Result<Vec<u8>, RpcError> {
         // Get the latest block hash
         let block_number = self.get_block_number().await?;
         let params = json!([block_number]);
@@ -85,7 +88,8 @@ impl StorageHubRpcTrait for StorageHubRpcClient {
             })
     }
 
-    async fn submit_storage_request(
+    /// Submit a storage request transaction
+    pub async fn submit_storage_request(
         &self,
         location: Vec<u8>,
         fingerprint: Vec<u8>,
@@ -118,7 +122,8 @@ impl StorageHubRpcTrait for StorageHubRpcClient {
         Ok(receipt)
     }
 
-    async fn get_storage_request_status(
+    /// Get storage request status
+    pub async fn get_storage_request_status(
         &self,
         file_key: &[u8],
     ) -> Result<Option<String>, RpcError> {

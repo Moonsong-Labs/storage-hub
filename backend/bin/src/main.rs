@@ -17,7 +17,7 @@ use sh_backend_lib::data::postgres::{
     AnyDbConnection, DbConfig, PgConnection, PostgresClient, PostgresClientTrait,
 };
 use sh_backend_lib::data::rpc::{
-    AnyRpcConnection, RpcConfig, StorageHubRpcClient, StorageHubRpcTrait, WsConnection,
+    AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection,
 };
 use sh_backend_lib::data::storage::{BoxedStorageWrapper, InMemoryStorage};
 // WIP: Mock imports - postgres mocks commented out until diesel traits are fully implemented
@@ -146,7 +146,7 @@ async fn create_postgres_client(config: &Config) -> Result<Arc<dyn PostgresClien
     Ok(Arc::new(client))
 }
 
-async fn create_rpc_client(config: &Config) -> Result<Arc<dyn StorageHubRpcTrait>> {
+async fn create_rpc_client(config: &Config) -> Result<Arc<StorageHubRpcClient>> {
     #[cfg(feature = "mocks")]
     {
         if config.storage_hub.mock_mode {

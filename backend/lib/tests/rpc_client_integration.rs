@@ -6,7 +6,7 @@ mod tests {
 
     use serde_json::json;
     use sh_backend_lib::data::rpc::{
-        AnyRpcConnection, MockConnection, RpcConfig, StorageHubRpcClient, StorageHubRpcTrait,
+        AnyRpcConnection, MockConnection, RpcConfig, StorageHubRpcClient,
     };
 
     #[tokio::test]
