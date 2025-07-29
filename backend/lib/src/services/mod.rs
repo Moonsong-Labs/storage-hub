@@ -44,19 +44,7 @@ impl Services {
 #[cfg(test)]
 impl Services {
     /// Create a test services container with in-memory storage
-    ///
-    /// Note: This currently panics as it requires PostgreSQL and RPC mocks
-    /// which are not yet implemented. Use only for tests that don't require
-    /// these services.
     pub fn test() -> Self {
-        use crate::data::storage::{BoxedStorageWrapper, InMemoryStorage};
-        
-        let memory_storage = InMemoryStorage::new();
-        let boxed_storage = BoxedStorageWrapper::new(memory_storage);
-        let storage: Arc<dyn BoxedStorage> = Arc::new(boxed_storage);
-        
-        // TODO: Once mock implementations are complete, use them here
-        panic!("Test services require PostgreSQL and RPC mock implementations - currently WIP")
+        panic!("Test services not yet implemented - requires mock implementations for PostgresClientTrait and StorageHubRpcClient")
     }
-    
 }

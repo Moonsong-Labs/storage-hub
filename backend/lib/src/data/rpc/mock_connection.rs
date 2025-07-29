@@ -383,9 +383,7 @@ mod tests {
             .with_response("test", serde_json::json!(42))
             .with_latency_ms(10)
             .with_error_mode(ErrorMode::None)
-            .build()
-            .await
-            .unwrap();
+            .build();
 
         let response: i32 = conn.call("test", ()).await.unwrap();
         assert_eq!(response, 42);
