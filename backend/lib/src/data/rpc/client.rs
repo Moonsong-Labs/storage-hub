@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use jsonrpsee::core::client::Error as RpcError;
+use crate::error::{Error, Result};
 use serde_json::json;
 
 use super::{
@@ -27,48 +27,48 @@ impl StorageHubRpcClient {
 
 impl StorageHubRpcClient {
     /// Get file metadata from the blockchain
-    pub async fn get_file_metadata(&self, file_key: &[u8]) -> Result<Option<FileMetadata>, RpcError> {
+    pub async fn get_file_metadata(&self, file_key: &[u8]) -> Result<Option<FileMetadata>> {
         let params = json!([file_key]);
 
         self.connection
             .call("storagehub_getFileMetadata", params)
             .await
-            .map_err(|e| RpcError::Custom(e.to_string()))
+            .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(e.to_string())))
     }
 
     /// Get bucket information from the blockchain
-    pub async fn get_bucket_info(&self, bucket_id: &[u8]) -> Result<Option<BucketInfo>, RpcError> {
+    pub async fn get_bucket_info(&self, bucket_id: &[u8]) -> Result<Option<BucketInfo>> {
         let params = json!([bucket_id]);
 
         self.connection
             .call("storagehub_getBucketInfo", params)
             .await
-            .map_err(|e| RpcError::Custom(e.to_string()))
+            .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(e.to_string())))
     }
 
     /// Get provider information
     pub async fn get_provider_info(
         &self,
         provider_id: &[u8],
-    ) -> Result<Option<ProviderInfo>, RpcError> {
+    ) -> Result<Option<ProviderInfo>> {
         let params = json!([provider_id]);
 
         self.connection
             .call("storagehub_getProviderInfo", params)
             .await
-            .map_err(|e| RpcError::Custom(e.to_string()))
+            .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(e.to_string())))
     }
 
     /// Get current block number
-    pub async fn get_block_number(&self) -> Result<u64, RpcError> {
+    pub async fn get_block_number(&self) -> Result<u64> {
         self.connection
             .call_no_params("chain_getBlockNumber")
             .await
-            .map_err(|e| RpcError::Custom(e.to_string()))
+            .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(e.to_string())))
     }
 
     /// Get current block hash
-    pub async fn get_block_hash(&self) -> Result<Vec<u8>, RpcError> {
+    pub async fn get_block_hash(&self) -> Result<Vec<u8>> {
         // Get the latest block hash
         let block_number = self.get_block_number().await?;
         let params = json!([block_number]);
@@ -77,13 +77,13 @@ impl StorageHubRpcClient {
             .connection
             .call("chain_getBlockHash", params)
             .await
-            .map_err(|e| RpcError::Custom(e.to_string()))?;
+            .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(e.to_string())))?;
 
         // Convert hex string to bytes
-        hash.ok_or_else(|| RpcError::Custom("Block hash not found".to_string()))
+        hash.ok_or_else(|| Error::NotFound("Block hash not found".to_string()))
             .and_then(|h| {
                 hex::decode(h.trim_start_matches("0x"))
-                    .map_err(|e| RpcError::Custom(format!("Invalid hex: {}", e)))
+                    .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(format!("Invalid hex: {}", e))))
             })
     }
 
@@ -94,7 +94,7 @@ impl StorageHubRpcClient {
         fingerprint: Vec<u8>,
         size: u64,
         peer_ids: Vec<Vec<u8>>,
-    ) -> Result<TransactionReceipt, RpcError> {
+    ) -> Result<TransactionReceipt> {
         // Create the storage request parameters
         let params = json!({
             "location": location,
@@ -108,7 +108,7 @@ impl StorageHubRpcClient {
             .connection
             .call("author_submitStorageRequest", params)
             .await
-            .map_err(|e| RpcError::Custom(e.to_string()))?;
+            .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(e.to_string())))?;
 
         // Wait for transaction finalization and get receipt
         let receipt_params = json!([tx_hash]);
@@ -116,7 +116,7 @@ impl StorageHubRpcClient {
             .connection
             .call("storagehub_getTransactionReceipt", receipt_params)
             .await
-            .map_err(|e| RpcError::Custom(e.to_string()))?;
+            .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(e.to_string())))?;
 
         Ok(receipt)
     }
@@ -125,13 +125,13 @@ impl StorageHubRpcClient {
     pub async fn get_storage_request_status(
         &self,
         file_key: &[u8],
-    ) -> Result<Option<String>, RpcError> {
+    ) -> Result<Option<String>> {
         let params = json!([file_key]);
 
         self.connection
             .call("storagehub_getStorageRequestStatus", params)
             .await
-            .map_err(|e| RpcError::Custom(e.to_string()))
+            .map_err(|e| Error::Rpc(jsonrpsee::core::client::Error::Custom(e.to_string())))
     }
 }
 
