@@ -84,8 +84,25 @@ export const addCopypartyContainer = async (options?: {
   const httpHostPort = containerInfo.NetworkSettings.Ports["3923/tcp"]?.[0]?.HostPort || "3923";
   const ftpHostPort = containerInfo.NetworkSettings.Ports["3921/tcp"]?.[0]?.HostPort || "3921";
 
-  // Wait for server to start
-  await sleep(3000);
+  // Wait for server to be ready by checking HTTP endpoint
+  const maxRetries = 30;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      // Try to connect to the HTTP endpoint
+      const response = await fetch(`http://localhost:${httpHostPort}/`);
+      if (response.ok || response.status === 403) {
+        // Server is ready (403 is expected for root path)
+        console.log(`Copyparty server ready on http://localhost:${httpHostPort}`);
+        break;
+      }
+    } catch (e) {
+      if (i === maxRetries - 1) {
+        throw new Error(`Copyparty server failed to start after ${maxRetries} attempts`);
+      }
+      // Server not ready yet, wait and retry
+      await sleep(1000);
+    }
+  }
 
   return {
     container,

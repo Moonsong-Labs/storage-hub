@@ -167,8 +167,18 @@ describeBspNet(
       // Setup Copyparty server
       const copypartyInfo = await addCopypartyContainer();
       copypartyContainer = copypartyInfo.container;
-      httpHostPort = copypartyInfo.httpHostPort;
-      ftpHostPort = copypartyInfo.ftpHostPort;
+      containerName = copypartyInfo.containerName;
+      httpPort = copypartyInfo.httpPort;
+      ftpPort = copypartyInfo.ftpPort;
+
+      // Clean up uploads directory to ensure tests start fresh
+      await copypartyContainer
+        .exec({
+          Cmd: ["sh", "-c", "rm -rf /uploads/* 2>/dev/null || true"],
+          AttachStdout: true,
+          AttachStderr: true
+        })
+        .then((exec) => exec.start({}));
     });
 
     after(async () => {
