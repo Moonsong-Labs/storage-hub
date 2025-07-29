@@ -5,6 +5,7 @@ pub mod counter;
 pub mod health;
 
 use counter::CounterService;
+use health::HealthService;
 
 use crate::data::postgres::PostgresClientTrait;
 use crate::data::rpc::StorageHubRpcClient;
@@ -14,6 +15,7 @@ use crate::data::storage::BoxedStorage;
 #[derive(Clone)]
 pub struct Services {
     pub counter: Arc<CounterService>,
+    pub health: Arc<HealthService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<dyn PostgresClientTrait>,
     pub rpc: Arc<StorageHubRpcClient>,
@@ -32,8 +34,14 @@ impl Services {
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
         let counter = Arc::new(CounterService::new(storage.clone()));
+        let health = Arc::new(HealthService::new(
+            storage.clone(),
+            postgres.clone(),
+            rpc.clone(),
+        ));
         Self {
             counter,
+            health,
             storage,
             postgres,
             rpc,

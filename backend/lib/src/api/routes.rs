@@ -9,8 +9,9 @@ use crate::services::Services;
 /// Creates the router with all API routes
 pub fn routes(services: Services) -> Router {
     Router::new()
-        // Health check endpoint
+        // Health check endpoints
         .route("/health", get(handlers::health_check))
+        .route("/health/detailed", get(handlers::health_check_detailed))
         // Counter endpoints
         .route("/counter", get(handlers::get_counter))
         .route("/counter/inc", post(handlers::increment_counter))

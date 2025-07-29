@@ -26,6 +26,11 @@ impl StorageHubRpcClient {
 }
 
 impl StorageHubRpcClient {
+    /// Check if the RPC connection is active
+    pub async fn is_connected(&self) -> bool {
+        self.connection.is_connected().await
+    }
+
     /// Get file metadata from the blockchain
     pub async fn get_file_metadata(&self, file_key: &[u8]) -> Result<Option<FileMetadata>> {
         let params = json!([file_key]);

@@ -9,6 +9,30 @@ mod tests {
     async fn test_mock_connection_with_storagehub_methods() {
         let conn = MockConnection::new();
 
+        // Set up expected responses
+        conn.set_response("storagehub_getFileMetadata", serde_json::json!({
+            "owner": vec![0; 32],
+            "bucket_id": vec![0; 32],
+            "location": vec![0; 32],
+            "fingerprint": vec![0; 32],
+            "size": 1024,
+            "peer_ids": []
+        }));
+
+        conn.set_response("storagehub_getBucketInfo", serde_json::json!({
+            "owner": vec![0; 32],
+            "msp_id": vec![0; 32],
+            "root": vec![0; 32],
+            "user_peer_ids": []
+        }));
+
+        conn.set_response("storagehub_getProviderInfo", serde_json::json!({
+            "peer_id": vec![0; 32],
+            "root": vec![0; 32],
+            "capacity": 1000000,
+            "data_used": 500000
+        }));
+
         // Test StorageHub-specific methods
         let file_metadata: Value = conn.call("storagehub_getFileMetadata", ()).await.unwrap();
         assert_eq!(file_metadata["size"], 1024);
