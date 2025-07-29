@@ -268,9 +268,6 @@ describeBspNet(
     });
 
     it("saveFileToDisk works with HTTP URL", async () => {
-      // Use container name for inter-container communication
-      // Note: We use container name here (not localhost) because saveFileToDisk runs
-      // inside the BSP container and needs to reach copyparty via Docker's internal network
       const httpDestination = `http://${containerName}:${httpPort}/uploads/smile-http.jpg`;
       const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, httpDestination);
 
@@ -278,7 +275,6 @@ describeBspNet(
     });
 
     it("saveFileToDisk works with FTP URL", async () => {
-      // Use container name for inter-container communication
       const ftpDestination = `ftp://${containerName}:${ftpPort}/uploads/smile-ftp.jpg`;
 
       const saveResult = await bspApi.rpc.storagehubclient.saveFileToDisk(fileKey, ftpDestination);
