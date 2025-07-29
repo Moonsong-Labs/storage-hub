@@ -4,9 +4,13 @@
 //! allowing for different implementations (HTTP, WebSocket, mock, etc.)
 //! while maintaining a consistent interface.
 
-use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
 use std::fmt::Debug;
+
+use async_trait::async_trait;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+
+use super::RpcConnection;
 
 /// Error type for RPC operations
 #[derive(Debug, thiserror::Error)]
@@ -38,71 +42,6 @@ pub enum RpcConnectionError {
 
 /// Result type for RPC operations
 pub type RpcResult<T> = Result<T, RpcConnectionError>;
-
-/// Trait for RPC connections
-///
-/// This trait abstracts the underlying RPC transport mechanism,
-/// allowing for different implementations while maintaining a
-/// consistent interface for making RPC calls.
-#[async_trait]
-pub trait RpcConnection: Send + Sync {
-    /// Execute a JSON-RPC method call
-    ///
-    /// # Arguments
-    /// * `method` - The RPC method name to call
-    /// * `params` - The parameters to send with the method call
-    ///
-    /// # Returns
-    /// The deserialized result of the RPC call
-    async fn call<P, R>(&self, method: &str, params: P) -> RpcResult<R>
-    where
-        P: Serialize + Send + Sync,
-        R: DeserializeOwned;
-
-    /// Execute a JSON-RPC method call without parameters
-    ///
-    /// # Arguments
-    /// * `method` - The RPC method name to call
-    ///
-    /// # Returns
-    /// The deserialized result of the RPC call
-    async fn call_no_params<R>(&self, method: &str) -> RpcResult<R>
-    where
-        R: DeserializeOwned,
-    {
-        // Default implementation using empty tuple as params
-        self.call::<_, R>(method, ()).await
-    }
-
-    /// Check if the connection is currently active
-    ///
-    /// # Returns
-    /// `true` if the connection is active and ready for use
-    async fn is_connected(&self) -> bool;
-
-    /// Close the connection gracefully
-    ///
-    /// This method should clean up any resources associated with
-    /// the connection. After calling this method, the connection
-    /// should not be used for further RPC calls.
-    async fn close(&self) -> RpcResult<()>;
-}
-
-/// Builder trait for creating RPC connections
-///
-/// This trait allows for flexible configuration of RPC connections
-/// before establishing them.
-#[async_trait]
-pub trait RpcConnectionBuilder: Send + Sync {
-    /// The type of connection this builder creates
-    type Connection: RpcConnection;
-
-    /// Build and establish the RPC connection
-    ///
-    /// # Returns
-    /// A new RPC connection ready for use
-    async fn build(self) -> RpcResult<Self::Connection>;
-}
 
 /// Configuration for RPC connections
 #[derive(Debug, Clone)]

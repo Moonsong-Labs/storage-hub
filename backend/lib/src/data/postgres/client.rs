@@ -3,9 +3,11 @@
 //! This module provides a client wrapper around diesel-async connections
 //! for querying the existing StorageHub indexer database in a read-only manner.
 
-use super::connection::{AnyDbConnection, DbConnection, DbConnectionError};
 use std::sync::Arc;
+
 use thiserror::Error;
+
+use super::connection::{AnyDbConnection, DbConnection, DbConnectionError};
 
 /// Errors that can occur during PostgreSQL operations
 #[derive(Debug, Error)]

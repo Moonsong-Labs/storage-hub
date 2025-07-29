@@ -2,11 +2,12 @@
 
 #[cfg(feature = "mocks")]
 mod tests {
+    use std::sync::Arc;
+
     use serde_json::json;
     use sh_backend_lib::data::rpc::{
         AnyRpcConnection, MockConnection, RpcConfig, StorageHubRpcClient, StorageHubRpcTrait,
     };
-    use std::sync::Arc;
 
     #[tokio::test]
     async fn test_client_with_mock_connection() {

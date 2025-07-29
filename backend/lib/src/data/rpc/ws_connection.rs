@@ -3,18 +3,19 @@
 //! This module provides a WebSocket-based RPC connection implementation
 //! using jsonrpsee for communication with StorageHub nodes.
 
+use std::sync::Arc;
+use std::time::Duration;
+
+use async_trait::async_trait;
+use jsonrpsee::core::client::ClientT;
+use jsonrpsee::ws_client::{WsClient, WsClientBuilder};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
+use tokio::sync::RwLock;
+
 use super::connection::{
     IntoRpcError, RpcConfig, RpcConnection, RpcConnectionBuilder, RpcConnectionError, RpcResult,
 };
-use async_trait::async_trait;
-use jsonrpsee::{
-    core::client::ClientT,
-    ws_client::{WsClient, WsClientBuilder},
-};
-use serde::{de::DeserializeOwned, Serialize};
-use std::sync::Arc;
-use std::time::Duration;
-use tokio::sync::RwLock;
 
 /// WebSocket RPC connection implementation
 pub struct WsConnection {

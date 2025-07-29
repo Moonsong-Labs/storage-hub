@@ -1,6 +1,7 @@
+use std::sync::Arc;
+
 use crate::data::storage::BoxedStorage;
 use crate::error::Result;
-use std::sync::Arc;
 
 pub struct CounterService {
     storage: Arc<dyn BoxedStorage>,
@@ -36,14 +37,11 @@ impl CounterService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::storage::{BoxedStorageWrapper, InMemoryStorage};
 
     #[tokio::test]
     async fn test_counter_service() {
-        // Create in-memory storage
-        let memory_storage = InMemoryStorage::new();
-        let boxed_storage = BoxedStorageWrapper::new(memory_storage);
-        let storage: Arc<dyn BoxedStorage> = Arc::new(boxed_storage);
+        // Create test storage
+        let storage = crate::data::storage::test_storage();
 
         // Create counter service
         let counter_service = CounterService::new(storage);

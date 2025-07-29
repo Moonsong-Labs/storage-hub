@@ -1,9 +1,7 @@
 //! Route definitions for StorageHub API
 
-use axum::{
-    routing::{get, post},
-    Router,
-};
+use axum::routing::{get, post};
+use axum::Router;
 
 use super::handlers;
 use crate::services::Services;
@@ -25,25 +23,19 @@ pub fn routes(services: Services) -> Router {
 #[cfg(test)]
 #[allow(dead_code)]
 mod tests {
-    use super::*;
-    use crate::data::storage::{BoxedStorageWrapper, InMemoryStorage};
-    use axum::http::StatusCode;
-    use axum_test::TestServer;
     // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
     // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
     use std::sync::Arc;
 
-    fn create_test_app() -> Router {
-        let memory_storage = InMemoryStorage::new();
-        let boxed_storage = BoxedStorageWrapper::new(memory_storage);
-        let _storage: Arc<dyn crate::data::storage::BoxedStorage> = Arc::new(boxed_storage);
-        // WIP: Mock PostgreSQL connection commented out until diesel traits are fully implemented
-        // let mock_conn = MockDbConnection::new();
-        // let db_conn = Arc::new(AnyDbConnection::Mock(mock_conn));
-        // let postgres: Arc<dyn crate::data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(db_conn));
+    use axum::http::StatusCode;
+    use axum_test::TestServer;
 
-        // For now, we'll panic in tests that need postgres
-        panic!("Test requires PostgreSQL mock implementation - currently WIP")
+    use super::*;
+
+    fn create_test_app() -> Router {
+        // Use consolidated test utilities
+        let services = Services::test();
+        create_routes(services)
     }
 
     #[tokio::test]

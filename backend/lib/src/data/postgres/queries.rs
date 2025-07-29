@@ -3,8 +3,9 @@
 //! This module provides query functions that use the shc-indexer-db models
 //! to retrieve data from the StorageHub indexer database.
 
-use super::{PostgresClient, PostgresError};
 use shc_indexer_db::models::{Bsp, File, Msp, PaymentStream};
+
+use super::{PostgresClient, PostgresError};
 
 impl PostgresClient {
     /// Get all active backup storage providers (BSPs)
@@ -42,7 +43,9 @@ impl PostgresClient {
     /// # Returns
     /// A vector of files owned by the user
     pub async fn get_files_by_user(&self, _user_id: &str) -> Result<Vec<File>, PostgresError> {
-        todo!("Add to shc-indexer-db: SELECT * FROM files WHERE owner = $1 ORDER BY created_at DESC")
+        todo!(
+            "Add to shc-indexer-db: SELECT * FROM files WHERE owner = $1 ORDER BY created_at DESC"
+        )
     }
 
     /// Get payment streams for a specific user
@@ -106,9 +109,10 @@ impl PostgresClient {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
     use crate::data::postgres::{AnyDbConnection, DbConfig, PgConnection};
-    use std::sync::Arc;
 
     #[tokio::test]
     #[ignore] // Requires actual database

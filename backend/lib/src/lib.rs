@@ -16,11 +16,13 @@ pub use error::{Error, Result};
 #[cfg(test)]
 #[allow(dead_code)]
 mod tests {
-    use super::*;
+    use std::sync::Arc;
+
     use axum::http::StatusCode;
     use axum_test::TestServer;
     use data::storage::{BoxedStorageWrapper, InMemoryStorage};
-    use std::sync::Arc;
+
+    use super::*;
 
     // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
     // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};

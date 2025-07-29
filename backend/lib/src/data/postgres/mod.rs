@@ -13,19 +13,16 @@ pub mod queries;
 // pub mod mock_connection;
 
 // Main client
+// WIP: Mock types - commented out until diesel traits are fully implemented
+// #[cfg(feature = "mocks")]
+// pub use mock_connection::{MockDbConnection, MockErrorConfig, MockTestData};
+use async_trait::async_trait;
 pub use client::{PostgresClient, PostgresError};
-
 // Connection types
 pub use connection::{
     AnyDbConnection, ConnectionProvider, DbConfig, DbConnection, DbConnectionError,
 };
 pub use pg_connection::PgConnection;
-
-// WIP: Mock types - commented out until diesel traits are fully implemented
-// #[cfg(feature = "mocks")]
-// pub use mock_connection::{MockDbConnection, MockErrorConfig, MockTestData};
-
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use shc_indexer_db::models::{Bucket, File, FileStorageRequestStep, Msp};
 

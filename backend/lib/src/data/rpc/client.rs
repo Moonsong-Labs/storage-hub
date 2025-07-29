@@ -4,10 +4,11 @@
 //! that uses the RpcConnection abstraction for making RPC calls to the
 //! StorageHub blockchain.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use jsonrpsee::core::client::Error as RpcError;
 use serde_json::json;
-use std::sync::Arc;
 
 use super::{
     AnyRpcConnection, BucketInfo, FileMetadata, ProviderInfo, RpcConnection, StorageHubRpcTrait,

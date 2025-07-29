@@ -3,10 +3,11 @@
 //! This module defines the `DbConnection` trait that abstracts database operations,
 //! allowing for both real PostgreSQL connections and mock implementations for testing.
 
+use std::fmt::Debug;
+
 use async_trait::async_trait;
 use diesel::QueryResult;
 use diesel_async::AsyncConnection;
-use std::fmt::Debug;
 
 /// Trait representing a database connection abstraction
 ///

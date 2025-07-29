@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use parking_lot::RwLock;
 use thiserror::Error;
 
-use super::traits::Storage;
+use super::Storage;
 
 /// Errors that can occur during in-memory storage operations
 #[derive(Debug, Error)]

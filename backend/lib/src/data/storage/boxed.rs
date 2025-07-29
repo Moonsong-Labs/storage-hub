@@ -3,9 +3,11 @@
 //! This module provides a boxed storage trait that erases the associated Error type,
 //! allowing different storage implementations to be used interchangeably.
 
-use super::traits::Storage;
-use async_trait::async_trait;
 use std::error::Error as StdError;
+
+use async_trait::async_trait;
+
+use super::Storage;
 
 /// A boxed storage error that can wrap any storage implementation's error type
 pub type BoxedStorageError = Box<dyn StdError + Send + Sync>;

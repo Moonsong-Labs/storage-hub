@@ -3,14 +3,15 @@
 //! This module provides a production-ready PostgreSQL connection pool implementation
 //! that implements the `DbConnection` trait for use in the StorageHub backend.
 
-use super::connection::{DbConfig, DbConnection, DbConnectionError};
-use async_trait::async_trait;
-use diesel_async::{
-    pooled_connection::{bb8::Pool, AsyncDieselConnectionManager},
-    AsyncConnection, AsyncPgConnection,
-};
 use std::fmt::Debug;
 use std::time::Duration;
+
+use async_trait::async_trait;
+use diesel_async::pooled_connection::bb8::Pool;
+use diesel_async::pooled_connection::AsyncDieselConnectionManager;
+use diesel_async::{AsyncConnection, AsyncPgConnection};
+
+use super::connection::{DbConfig, DbConnection, DbConnectionError};
 
 /// Real PostgreSQL connection pool implementation
 ///
