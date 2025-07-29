@@ -206,13 +206,6 @@ describeBspNet(
       console.log(`\n=== DEBUG: Checking copyparty content ===`);
       console.log(`Source URL: ${source}`);
       
-      // Execute curl inside the user container to check what copyparty is serving
-      const curlResult = await userApi._api.rpc.offchain.localStorageSet({
-        kind: "PERSISTENT",
-        key: "debug-http-download",
-        value: "starting"
-      });
-      
       // Try to download and check the file from within the user container (where the RPC runs)
       try {
         // Get the user container

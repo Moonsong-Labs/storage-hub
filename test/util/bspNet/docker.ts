@@ -213,6 +213,9 @@ const addContainer = async (
       },
       Binds: [`${process.cwd()}/../docker/dev-keystores:${keystorePath}:rw`]
     },
+    Env: [
+      "RUST_LOG=shc_rpc=debug,debug"
+    ],
     Cmd: [
       "--dev",
       "--sealing=manual",

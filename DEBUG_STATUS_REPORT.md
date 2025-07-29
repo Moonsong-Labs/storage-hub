@@ -72,8 +72,30 @@ Possible causes:
    - First bytes of each chunk
    - Total bytes processed
 
-## Summary
-The HTTP implementation is correct (proven by unit tests and standalone copyparty test), but something in the Docker container environment is causing different data to be received. The next step is to run the enhanced debugging to identify exactly what differs between the two environments.
+## Resolution
+The issue has been resolved. The root cause was identified and fixed in commit 545a652.
+
+### Root Cause
+The HTTP stream was returning data in variable chunk sizes (not always filling the full buffer), while the FTP implementation always read full chunks. The fingerprint calculation depends on exact chunk boundaries, so different read patterns produced different fingerprints even though the file content was identical.
+
+### The Fix
+Modified `load_file_in_storage` in `client/rpc/src/lib.rs` to ensure it always reads exactly `FILE_CHUNK_SIZE` bytes per chunk (except the last one). This ensures consistent fingerprints regardless of how the underlying stream returns data.
+
+### Key Code Change
+Instead of accepting whatever bytes the stream returns in a single read, the code now loops until it fills each chunk completely:
+```rust
+// Keep reading until we fill the chunk or hit EOF
+while offset < FILE_CHUNK_SIZE as usize {
+    match stream.read(&mut chunk[offset..]).await {
+        // Continue reading until chunk is full
+    }
+}
+```
+
+### Verification
+After rebuilding Docker images with this fix, the HTTP integration tests now pass with the correct fingerprint:
+- Expected: `0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970`
+- Actual: `0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970` ✓
 
 ## Important Development Guidelines
 
