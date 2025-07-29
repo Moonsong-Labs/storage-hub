@@ -30,9 +30,10 @@ mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
 
+    #[ignore]
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
     async fn test_health_route() {
+        todo!("Implement when PostgreSQL mock available");
         let app = crate::api::test_app();
         let server = TestServer::new(app).unwrap();
 
@@ -43,9 +44,10 @@ mod tests {
         assert_eq!(json["status"], "ok");
     }
 
+    #[ignore]
     #[tokio::test]
-    #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
     async fn test_counter_routes() {
+        todo!("Implement when PostgreSQL mock available");
         let app = crate::api::test_app();
         let server = TestServer::new(app).unwrap();
 

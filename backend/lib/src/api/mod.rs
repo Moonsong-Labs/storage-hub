@@ -26,6 +26,9 @@ pub fn create_app(services: Services) -> Router {
 
 #[cfg(test)]
 /// Create a test application
+///
+/// This function creates a test application with mock services.
+/// Currently requires PostgreSQL mock implementation to be completed.
 pub fn test_app() -> Router {
     let services = Services::test();
     create_app(services)

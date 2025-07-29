@@ -46,8 +46,11 @@ impl Services {
 
 #[cfg(test)]
 impl Services {
-    /// Create a test services container with in-memory storage
+    /// Create a test services container
+    ///
+    /// Note: This method requires mock implementations for PostgresClientTrait
+    /// and proper test setup. Currently not implemented.
     pub fn test() -> Self {
-        panic!("Test services not yet implemented - requires mock implementations for PostgresClientTrait and StorageHubRpcClient")
+        todo!("Implement when PostgreSQL mock and test RPC client available")
     }
 }
