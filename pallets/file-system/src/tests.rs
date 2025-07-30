@@ -11695,6 +11695,7 @@ mod delete_file_tests {
 
     mod success {
         use super::*;
+        use pallet_payment_streams::types::UnitsProvidedFor;
 
         #[test]
         fn msp_can_delete_file_with_valid_forest_proof() {
@@ -11763,6 +11764,35 @@ mod delete_file_tests {
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
                 assert_ok!(Providers::increase_capacity_used(&bsp_id, size));
 
+                // Create and increase payment stream, to simulate that BSP is indeed storing the file
+                let amount_provided = UnitsProvidedFor::<Test>::from(size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    alice.clone(),
+                    amount_provided,
+                ));
+
+                // Check initial capacity and payment stream state before deletion
+                let initial_capacity_used = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    initial_capacity_used, size,
+                    "BSP should have capacity used equal to file size"
+                );
+
+                // Verify payment stream exists before deletion
+                let payment_stream =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &alice);
+                assert!(
+                    payment_stream.is_ok(),
+                    "Payment stream should exist before deletion"
+                );
+                assert_eq!(
+                    payment_stream.unwrap().amount_provided,
+                    amount_provided,
+                    "Payment stream should have correct amount provided"
+                );
+
                 // Create signature and proof
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
@@ -11786,12 +11816,28 @@ mod delete_file_tests {
                 // Verify BSP event
                 System::assert_last_event(
                     Event::BspFileDeletionCompleted {
-                        user: alice,
+                        user: alice.clone(),
                         file_key,
                         file_size: size,
                         bsp_id,
                     }
                     .into(),
+                );
+
+                // Check capacity and payment stream state after deletion
+                let final_capacity_used = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    final_capacity_used,
+                    initial_capacity_used - size,
+                    "BSP capacity should have decreased by file size after deletion"
+                );
+
+                // Verify payment stream was removed after deletion
+                let payment_stream_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &alice);
+                assert!(
+                    payment_stream_after.is_err(),
+                    "Payment stream should be removed after file deletion"
                 );
             });
         }

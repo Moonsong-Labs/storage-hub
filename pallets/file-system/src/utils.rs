@@ -2717,7 +2717,15 @@ where
         // Update root of the bucket
         <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
 
-        // Decrease bucket size
+        // Decrease capacity used of the MSP
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &provider_id,
+            size,
+        )?;
+
+        // Decrease bucket size of the MSP
+        // This function also updates the fixed rate payment stream between the user and the MSP.
+        // via apply_delta_fixed_rate_payment_stream function in providers pallet.
         <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
 
         // Emit the MSP file deletion completed event
@@ -2737,16 +2745,16 @@ where
         file_owner: T::AccountId,
         file_key: MerkleHash<T>,
         size: StorageDataUnit<T>,
-        provider_id: ProviderIdFor<T>,
+        bsp_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Get current BSP root
-        let _old_root = <T::Providers as ReadProvidersInterface>::get_root(provider_id)
+        let _old_root = <T::Providers as ReadProvidersInterface>::get_root(bsp_id)
             .ok_or(Error::<T>::NotABsp)?;
 
         // Verify that the file key is part of the BSP's forest
         let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
-            &provider_id,
+            &bsp_id,
             &[file_key],
             &forest_proof,
         )?;
@@ -2759,26 +2767,59 @@ where
 
         // Compute new root after removing file key from forest
         let new_root = <T::ProofDealer as ProofsDealerInterface>::apply_delta(
-            &provider_id,
+            &bsp_id,
             &[(file_key, TrieRemoveMutation::default().into())],
             &forest_proof,
         )?;
 
         // Update root of BSP
-        <T::Providers as MutateProvidersInterface>::update_root(provider_id, new_root)?;
+        <T::Providers as MutateProvidersInterface>::update_root(bsp_id, new_root)?;
 
         // Decrease capacity used by the BSP
-        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
-            &provider_id,
-            size,
-        )?;
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&bsp_id, size)?;
+
+        // Update the payment stream between the user and the BSP. If the new amount provided is zero, delete it instead.
+        // Note: This logic is handled by decrease_bucket_size (via apply_delta_fixed_rate_payment_stream) in the case of MSPs.
+        let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &file_owner)
+			.ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
+			.saturating_sub(size);
+        if new_amount_provided.is_zero() {
+            <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                &bsp_id,
+                &file_owner,
+            )?;
+        } else {
+            <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+                &bsp_id,
+                &file_owner,
+                &new_amount_provided,
+            )?;
+        }
+
+        // If the root of the BSP is now the default root, stop its cycles.
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // Check the current used capacity of the BSP. Since its root is the default one, it should
+            // be zero.
+            let used_capacity =
+                <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
+            if !used_capacity.is_zero() {
+                // Emit event if we have inconsistency. We can later monitor for those.
+                Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                    actual_used_capacity: used_capacity,
+                });
+            }
+
+            // Stop the BSP's challenge and randomness cycles.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
+        };
 
         // Emit the BSP file deletion completed event
         Self::deposit_event(Event::BspFileDeletionCompleted {
             user: file_owner,
             file_key,
             file_size: size,
-            bsp_id: provider_id,
+            bsp_id,
         });
 
         Ok(())
