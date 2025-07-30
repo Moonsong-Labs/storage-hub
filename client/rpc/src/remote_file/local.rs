@@ -85,10 +85,10 @@ impl LocalFileHandler {
             traversed = true;
             current_path = match current_path.parent() {
                 Some(p) if !p.as_os_str().is_empty() => p,
-                // TODO: check if this can actually happen:
-                // 1. None is returned if `current_path` is a root folder (/ or windows prefix)
-                // 2. Some("") is returned if `current_path` is a relative path
-                _ => std::path::Path::new("."),
+                // This branch is unreachable:
+                // - Some("") only occurs for relative paths, but we assert absolute paths at function start
+                // - None only occurs for root paths, but roots always exist so the loop breaks first
+                _ => unreachable!("parent() cannot return None or Some(\"\") for absolute paths"),
             };
         };
 
@@ -668,5 +668,44 @@ mod tests {
 
         // Restore old current dir
         std::env::set_current_dir(old_dir).unwrap();
+    }
+
+    #[test]
+    fn test_todo_match_arm_unreachable() {
+        // Verify that the parent() match arm returning None or Some("") is unreachable
+        
+        // Edge case 1: parent() returns None only for root paths
+        #[cfg(unix)]
+        {
+            let root = std::path::Path::new("/");
+            assert_eq!(root.parent(), None);
+            assert!(root.exists()); // Root always exists, so loop breaks before parent()
+        }
+        
+        // Edge case 2: parent() returns Some("") only for relative paths
+        let file = std::path::Path::new("file.txt");
+        assert_eq!(file.parent(), Some(std::path::Path::new("")));
+        assert!(!file.is_absolute());
+        
+        // But new_from_path_internal requires absolute paths
+        let abs_path = PathBuf::from("/some/absolute/path");
+        assert!(abs_path.is_absolute());
+        let handler = LocalFileHandler::new_from_path_internal(
+            abs_path,
+            RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
+        ).unwrap();
+        assert!(matches!(handler.file_status, FileStatus::NotFound { .. }));
+        
+        // Test traversal up to root for non-existent absolute path
+        #[cfg(unix)]
+        {
+            let deep_path = PathBuf::from("/a/b/c/d/e/f/g/h/i/j/k/file.txt");
+            let handler = LocalFileHandler::new_from_path_internal(
+                deep_path,
+                RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
+            ).unwrap();
+            // Should traverse up to "/" which exists
+            assert!(matches!(handler.file_status, FileStatus::NotFound { .. }));
+        }
     }
 }
