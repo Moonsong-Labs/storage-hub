@@ -158,9 +158,9 @@ async fn create_rpc_client(config: &Config) -> Result<Arc<StorageHubRpcClient>> 
 
     let rpc_config = RpcConfig {
         url: config.storage_hub.rpc_url.clone(),
-        timeout_secs: Some(30),
-        max_concurrent_requests: Some(100),
-        verify_tls: true,
+        timeout_secs: config.storage_hub.timeout_secs,
+        max_concurrent_requests: config.storage_hub.max_concurrent_requests,
+        verify_tls: config.storage_hub.verify_tls,
     };
 
     let ws_conn = WsConnection::new(rpc_config)
