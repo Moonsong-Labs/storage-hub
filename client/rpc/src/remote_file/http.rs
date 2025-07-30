@@ -218,9 +218,10 @@ impl RemoteFileHandler for HttpFileHandler {
                     stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
                 );
 
-                // Wrap the reader in a buffered reader with configured chunk size
+                // Wrap the reader in a buffered reader with buffer size based on chunks_buffer
+                let buffer_size = self.config.chunks_buffer.max(1) * shc_common::types::FILE_CHUNK_SIZE as usize;
                 let buffered_reader =
-                    tokio::io::BufReader::with_capacity(self.config.chunk_size, reader);
+                    tokio::io::BufReader::with_capacity(buffer_size, reader);
 
                 Ok(Box::new(buffered_reader) as Box<dyn AsyncRead + Send + Unpin>)
             }
@@ -279,6 +280,7 @@ mod tests {
             max_redirects: 3,
             user_agent: "Test-Agent".to_string(),
             chunk_size: 8192,
+            chunks_buffer: 512,
         };
         HttpFileHandler::new(config, url).unwrap()
     }
