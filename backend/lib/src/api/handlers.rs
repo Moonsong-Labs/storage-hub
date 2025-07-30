@@ -62,10 +62,9 @@ mod tests {
         assert!(!response.0.version.is_empty());
     }
 
-    #[ignore]
     #[tokio::test]
+    #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
     async fn test_counter_handlers() {
-        todo!("Implement when PostgreSQL mock available");
         let services = create_test_services();
 
         // Test get initial value

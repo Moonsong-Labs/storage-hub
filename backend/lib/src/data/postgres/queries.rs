@@ -114,10 +114,9 @@ mod tests {
     use super::*;
     use crate::data::postgres::{AnyDbConnection, DbConfig, PgConnection};
 
-    #[ignore]
     #[tokio::test]
+    #[ignore] // Requires actual database
     async fn test_get_active_bsps() {
-        todo!("Implement when database available");
         let config = DbConfig::new("postgres://localhost/storagehub");
         let pg_conn = PgConnection::new(config)
             .await
@@ -128,10 +127,9 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[ignore]
     #[tokio::test]
+    #[ignore] // Requires actual database
     async fn test_get_file_by_id() {
-        todo!("Implement when database available");
         let config = DbConfig::new("postgres://localhost/storagehub");
         let pg_conn = PgConnection::new(config)
             .await

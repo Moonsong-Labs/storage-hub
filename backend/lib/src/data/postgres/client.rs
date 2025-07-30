@@ -356,10 +356,9 @@ mod tests {
     use super::*;
     use crate::data::postgres::{AnyDbConnection, DbConfig, PgConnection};
 
-    #[ignore]
     #[tokio::test]
+    #[ignore] // Requires actual database
     async fn test_client_creation() {
-        todo!("Implement when database available");
         let config = DbConfig::new("postgres://localhost/test");
         let pg_conn = PgConnection::new(config)
             .await
