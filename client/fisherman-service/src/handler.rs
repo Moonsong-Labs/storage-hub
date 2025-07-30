@@ -46,7 +46,7 @@ pub enum FishermanServiceError {
 ///
 /// This service monitors the StorageHub blockchain for file deletion requests,
 /// constructs proofs of inclusion from Bucket/BSP forests, and submits these proofs
-/// to the StorageHub protocol to permisionlessly mutate (delete the file key) the merkle forest on chain.
+/// to the StorageHub protocol to permissionlessly mutate (delete the file key) the merkle forest on chain.
 pub struct FishermanService<RuntimeApi> {
     /// Substrate client for blockchain interaction
     client: Arc<ParachainClient<RuntimeApi>>,
