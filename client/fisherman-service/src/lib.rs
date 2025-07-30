@@ -18,7 +18,6 @@ use std::sync::Arc;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::ParachainClient;
-use shc_indexer_db::DbPool;
 
 pub use self::handler::{FishermanService, FishermanServiceCommand, FishermanServiceError};
 pub use events::{
@@ -34,7 +33,6 @@ pub async fn spawn_fisherman_service<
 >(
     task_spawner: &TaskSpawner,
     client: Arc<ParachainClient<RuntimeApi>>,
-    db_pool: DbPool,
 ) -> ActorHandle<FishermanService<RuntimeApi>>
 where
     RuntimeApi::RuntimeApi: Send,
@@ -45,7 +43,7 @@ where
         .with_group("monitoring");
 
     // Create the fisherman service instance
-    let fisherman_service = FishermanService::new(client, db_pool);
+    let fisherman_service = FishermanService::new(client);
 
     // Spawn the actor and return the handle
     task_spawner.spawn_actor(fisherman_service)
