@@ -83,6 +83,7 @@ std = [
 	"codec/std",
 	"frame-benchmarking/std",
 	"frame-system/std",
+	"fp-account/std",
 	"sc-executor/std",
 	"sp-core/std",
 	"sp-keystore/std",

@@ -1,5 +1,14 @@
 [toolchain]
-channel = "1.83.0"
-components = ["rustfmt", "clippy", "rust-src", "rust-analyzer"]
-targets = ["wasm32-unknown-unknown"]
+channel = "1.85"
+components = [
+    "cargo",
+    "clippy",
+    "rust-analyzer",
+    "rust-src",
+    "rust-std",
+    "rustc-dev",
+    "rustc",
+    "rustfmt",
+]
 profile = "minimal"
+targets = ["wasm32-unknown-unknown", "x86_64-unknown-linux-gnu"]
