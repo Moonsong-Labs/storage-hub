@@ -44,7 +44,6 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires test app setup with mocked services"]
     async fn test_health_endpoint() {
-        todo!("Implement when PostgreSQL mock available");
         // Create test server
         let app = create_test_app();
         let server = TestServer::new(app).unwrap();
@@ -64,7 +63,6 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires test app setup with mocked services"]
     async fn test_counter_endpoints() {
-        todo!("Implement when PostgreSQL mock available");
         // Create test server
         let app = create_test_app();
         let server = TestServer::new(app).unwrap();
