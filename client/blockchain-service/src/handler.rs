@@ -526,7 +526,8 @@ where
                     }
                 }
                 BlockchainServiceCommand::GetNodePublicKey { callback } => {
-                    let pub_key = Self::caller_pub_key(self.keystore.clone());
+                    let pub_key =
+                        Self::caller_pub_key::<sp_core::sr25519::Pair>(self.keystore.clone());
                     match callback.send(Ok(pub_key)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Node's public key sent successfully");
@@ -948,8 +949,9 @@ where
                 } => {
                     let current_block_hash = self.client.info().best_hash;
 
-                    let node_pub_key = maybe_node_pub_key
-                        .unwrap_or_else(|| Self::caller_pub_key(self.keystore.clone()));
+                    let node_pub_key = maybe_node_pub_key.unwrap_or_else(|| {
+                        Self::caller_pub_key::<sp_core::sr25519::Pair>(self.keystore.clone())
+                    });
 
                     let provider_id = self
                         .client

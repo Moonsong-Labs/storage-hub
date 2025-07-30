@@ -209,3 +209,57 @@ where
         sp_keystore::Keystore::sr25519_public_keys(self, key_type)
     }
 }
+
+/// Trait for abstracting key type operations to support multiple cryptographic schemes.
+///
+/// This trait provides a unified interface for working with different key types (sr25519, ecdsa)
+/// in the StorageHub client. It abstracts the differences between key types, allowing
+/// generic code to work with any supported cryptographic scheme.
+///
+/// # Purpose
+///
+/// Different cryptographic schemes have different key sizes and signing mechanisms.
+/// For example, sr25519 public keys are 32 bytes while ecdsa public keys are 33 bytes
+/// (compressed format). This trait provides a consistent interface for:
+/// - Retrieving public keys from the keystore
+/// - Signing messages
+/// - Converting between key types and runtime types
+///
+/// # Type Parameters
+///
+/// - `Public`: The public key type (e.g., `sp_core::sr25519::Public`)
+/// - `Signature`: The signature type (e.g., `sp_core::sr25519::Signature`)
+///
+/// # Usage
+///
+/// ```ignore
+/// fn sign_extrinsic<T: KeyTypeOperations>(keystore: KeystorePtr) -> UncheckedExtrinsic {
+///     let public_key = T::public_keys(&keystore, BCSV_KEY_TYPE).pop().unwrap();
+///     let signature = T::sign(&keystore, BCSV_KEY_TYPE, &public_key, &payload).unwrap();
+///     // ... construct extrinsic
+/// }
+/// ```
+pub trait KeyTypeOperations: Sized {
+    /// The public key type associated with this key type
+    type Public;
+
+    /// The signature type associated with this key type
+    type Signature;
+
+    /// Get all public keys of this type from the keystore
+    fn public_keys(keystore: &sp_keystore::KeystorePtr, key_type: KeyTypeId) -> Vec<Self::Public>;
+
+    /// Sign a message with the given public key
+    fn sign(
+        keystore: &sp_keystore::KeystorePtr,
+        key_type: KeyTypeId,
+        public: &Self::Public,
+        msg: &[u8],
+    ) -> Option<Self::Signature>;
+
+    /// Convert the signature to the runtime signature type
+    fn to_runtime_signature(signature: Self::Signature) -> polkadot_primitives::Signature;
+    
+    /// Convert the public key to AccountId32
+    fn public_to_account_id(public: &Self::Public) -> sp_runtime::AccountId32;
+}

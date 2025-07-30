@@ -26,7 +26,7 @@ use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::Actor;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::{KeyTypeOperations, StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
@@ -356,12 +356,12 @@ where
         }
     }
 
-    /// Get the current account nonce on-chain.
-    pub(crate) fn account_nonce(&mut self, block_hash: &H256) -> u32 {
-        let pub_key = Self::caller_pub_key(self.keystore.clone());
+    /// Get the current account nonce on-chain for a generic key type.
+    pub(crate) fn account_nonce<T: KeyTypeOperations>(&self, block_hash: &H256) -> u32 {
+        let pub_key = Self::caller_pub_key::<T>(self.keystore.clone());
         self.client
             .runtime_api()
-            .account_nonce(*block_hash, pub_key.into())
+            .account_nonce(*block_hash, T::public_to_account_id(&pub_key))
             .expect("Fetching account nonce works; qed")
     }
 
@@ -369,7 +369,7 @@ where
     ///
     /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
     pub(crate) fn sync_nonce(&mut self, block_hash: &H256) {
-        let latest_nonce = self.account_nonce(block_hash);
+        let latest_nonce = self.account_nonce::<sp_core::sr25519::Pair>(block_hash);
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
         }
@@ -463,11 +463,16 @@ where
         // Use the highest valid nonce.
         let nonce = max(
             options.nonce().unwrap_or(self.nonce_counter),
-            self.account_nonce(&block_hash),
+            self.account_nonce::<sp_core::sr25519::Pair>(&block_hash),
         );
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, options.tip());
+        let extrinsic = self.construct_extrinsic::<sp_core::sr25519::Pair>(
+            self.client.clone(),
+            call,
+            nonce,
+            options.tip(),
+        );
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -513,8 +518,20 @@ where
         })
     }
 
-    /// Construct an extrinsic that can be applied to the runtime.
-    pub fn construct_extrinsic(
+    // Generic function to get signer public key for any key type
+    pub fn caller_pub_key<T: KeyTypeOperations>(keystore: KeystorePtr) -> T::Public {
+        let caller_pub_key = T::public_keys(&keystore, BCSV_KEY_TYPE).pop().expect(
+            format!(
+                "There should be at least one key in the keystore with key type '{:?}' ; qed",
+                BCSV_KEY_TYPE
+            )
+            .as_str(),
+        );
+        caller_pub_key
+    }
+
+    /// Construct an extrinsic that can be applied to the runtime using a generic key type.
+    pub fn construct_extrinsic<T: KeyTypeOperations>(
         &self,
         client: Arc<ParachainClient<RuntimeApi>>,
         function: impl Into<storage_hub_runtime::RuntimeCall>,
@@ -567,35 +584,20 @@ where
             ),
         );
 
-        let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+        let caller_pub_key = Self::caller_pub_key::<T>(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload
-            .using_encoded(|e| self.keystore.sr25519_sign(BCSV_KEY_TYPE, &caller_pub_key, e))
-            .expect("The payload is always valid and should be possible to sign; qed")
-            .expect("They key type and public key are valid because we just extracted them from the keystore; qed");
+            .using_encoded(|e| T::sign(&self.keystore, BCSV_KEY_TYPE, &caller_pub_key, e))
+            .expect("The payload is always valid and should be possible to sign; qed");
 
         // Construct the extrinsic.
         UncheckedExtrinsic::new_signed(
             function.clone(),
-            storage_hub_runtime::Address::Id(<sp_core::sr25519::Public as Into<
-                storage_hub_runtime::AccountId,
-            >>::into(caller_pub_key)),
-            polkadot_primitives::Signature::Sr25519(signature),
+            storage_hub_runtime::Address::Id(T::public_to_account_id(&caller_pub_key)),
+            T::to_runtime_signature(signature),
             extra.clone(),
         )
-    }
-
-    // Getting signer public key.
-    pub fn caller_pub_key(keystore: KeystorePtr) -> sp_core::sr25519::Public {
-        let caller_pub_key = keystore.sr25519_public_keys(BCSV_KEY_TYPE).pop().expect(
-            format!(
-                "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
-                BCSV_KEY_TYPE
-            )
-            .as_str(),
-        );
-        caller_pub_key
     }
 
     /// Get an extrinsic from a block.
@@ -1142,7 +1144,11 @@ where
                 multiaddresses,
                 owner,
                 size,
-            }) if owner == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) => {
+            }) if owner
+                == AccountId32::from(Self::caller_pub_key::<sp_core::sr25519::Pair>(
+                    self.keystore.clone(),
+                )) =>
+            {
                 // This event should only be of any use if a node is run by as a user.
                 if self.maybe_managed_provider.is_none() {
                     log::info!(
