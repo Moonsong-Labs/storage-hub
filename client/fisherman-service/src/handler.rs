@@ -1,9 +1,13 @@
 use futures::stream::{self, StreamExt};
 use log::{debug, error, info, warn};
-use sc_client_api::BlockchainEvents;
-use shc_common::{blockchain_utils::EventsRetrievalError, traits::StorageEnableRuntime};
+use sc_client_api::{BlockchainEvents, HeaderBackend};
+use shc_common::types::FileOperation;
+use shc_common::{
+    blockchain_utils::{get_events_at_block, EventsRetrievalError},
+    traits::StorageEnableRuntime,
+};
 use sp_runtime::traits::Header;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
@@ -14,9 +18,38 @@ use crate::events::FishermanServiceEventBusProvider;
 
 pub(crate) const LOG_TARGET: &str = "fisherman-service";
 
+/// Represents an operation that occurred on a file key
+#[derive(Debug, Clone)]
+pub enum FileKeyOperation {
+    /// File key was added with complete metadata
+    Add(shc_common::types::FileMetadata),
+    /// File key was removed
+    Remove,
+}
+
+/// Represents a change to a file key between blocks
+#[derive(Debug, Clone)]
+pub struct FileKeyChange {
+    /// The file key that changed
+    pub file_key: Vec<u8>,
+    /// The operation that was applied
+    pub operation: FileKeyOperation,
+}
+
 /// Commands that can be sent to the FishermanService actor
 #[derive(Debug)]
-pub enum FishermanServiceCommand {}
+pub enum FishermanServiceCommand {
+    /// Get file key changes since a specific block for a given provider
+    GetFileKeyChangesSinceBlock {
+        /// The starting block (exclusive) - changes will be tracked from this block + 1
+        from_block: BlockNumber,
+        /// The provider to track changes for (BSP ID or Bucket ID)
+        provider: crate::events::FileDeletionTarget,
+        /// Response channel for the file key changes
+        response_tx:
+            tokio::sync::oneshot::Sender<Result<Vec<FileKeyChange>, FishermanServiceError>>,
+    },
+}
 
 /// Errors that can occur in the fisherman service
 #[derive(Error, Debug)]
@@ -54,17 +87,250 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     }
 
     /// Monitor new blocks for file deletion request events
-    async fn monitor_block(
+    pub async fn monitor_block(
         &mut self,
         block_number: BlockNumber,
         block_hash: H256,
-    ) -> Result<(), FishermanServiceError> {
+    ) -> Result<(), FishermanServiceError>
+    where
+        RuntimeApi: StorageEnableRuntimeApi,
+        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
-        // TODO: Emit ProcessFileDeletionRequest event
+        let events = get_events_at_block(&self.client, &block_hash)?;
+
+        for event_record in events.iter() {
+            let event: Result<storage_hub_runtime::RuntimeEvent, _> =
+                event_record.event.clone().try_into();
+            let event = match event {
+                Ok(e) => e,
+                Err(e) => {
+                    warn!(
+                        target: LOG_TARGET,
+                        "Failed to decode event: {:?}",
+                        e
+                    );
+                    continue;
+                }
+            };
+            match event {
+                storage_hub_runtime::RuntimeEvent::FileSystem(
+                    pallet_file_system::Event::FileDeletionRequested {
+                        signed_delete_intention,
+                        signature,
+                    },
+                ) if signed_delete_intention.operation == FileOperation::Delete => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Found FileDeletionRequested event for file key: {:?}",
+                        signed_delete_intention.file_key
+                    );
+
+                    let event = crate::events::ProcessFileDeletionRequest {
+                        signed_file_operation_intention: signed_delete_intention,
+                        signature,
+                    };
+
+                    self.emit(event);
+                }
+                _ => {}
+            }
+        }
 
         self.last_processed_block = Some(block_number);
         Ok(())
+    }
+
+    /// Get file key changes between two blocks for a specific provider
+    pub async fn get_file_key_changes_since_block(
+        &self,
+        from_block: BlockNumber,
+        provider: crate::events::FileDeletionTarget,
+    ) -> Result<Vec<FileKeyChange>, FishermanServiceError>
+    where
+        RuntimeApi: StorageEnableRuntimeApi,
+        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    {
+        // Get the current best block
+        let best_block_info = self.client.info();
+        let best_block_number = best_block_info.best_number;
+
+        debug!(
+            target: LOG_TARGET,
+            "🎣 Fetching file key changes from block {} to {}", from_block, best_block_number
+        );
+
+        // Track file key states
+        // TODO: Add proper memory management and block range limits to prevent OOM
+        let mut file_key_states: HashMap<Vec<u8>, FileKeyOperation> = HashMap::new();
+
+        // Process blocks from from_block + 1 to best_block
+        for block_num in (from_block + 1)..=best_block_number {
+            // Get block hash
+            let block_hash = self
+                .client
+                .hash(block_num.into())
+                .map_err(|e| FishermanServiceError::Client(e.to_string()))?
+                .ok_or_else(|| {
+                    FishermanServiceError::Client(format!("Block {} not found", block_num))
+                })?;
+
+            // Get events at this block
+            let events = get_events_at_block(&self.client, &block_hash)?;
+
+            // Process events for file key changes
+            for event_record in events.iter() {
+                let event: Result<storage_hub_runtime::RuntimeEvent, _> =
+                    event_record.event.clone().try_into();
+                let event = match event {
+                    Ok(e) => e,
+                    Err(_) => continue,
+                };
+
+                match event {
+                    // Track BSP confirmations
+                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                        pallet_file_system::Event::BspConfirmedStoring {
+                            bsp_id,
+                            confirmed_file_keys,
+                            ..
+                        },
+                    ) => {
+                        if let crate::events::FileDeletionTarget::BspId(target_bsp_id) = &provider {
+                            if &bsp_id == target_bsp_id {
+                                // Process each confirmed file key with embedded metadata
+                                for (file_key, file_metadata) in confirmed_file_keys.iter() {
+                                    // Convert pallet FileMetadata to client FileMetadata
+                                    if let Ok(metadata) = shc_common::types::FileMetadata::new(
+                                        file_metadata.owner().clone(),
+                                        file_metadata.bucket_id().clone(),
+                                        file_metadata.location().clone(),
+                                        file_metadata.file_size(),
+                                        *file_metadata.fingerprint(),
+                                    ) {
+                                        let operation = FileKeyOperation::Add(metadata);
+                                        file_key_states
+                                            .insert(file_key.as_ref().to_vec(), operation);
+                                    }
+                                }
+                                debug!(
+                                    target: LOG_TARGET,
+                                    "Added {} BSP confirmed file keys with embedded metadata",
+                                    confirmed_file_keys.len()
+                                );
+                            }
+                        }
+                    }
+                    // Track BSP stop storing
+                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                        pallet_file_system::Event::BspConfirmStoppedStoring {
+                            bsp_id,
+                            file_key,
+                            ..
+                        },
+                    ) => {
+                        if let crate::events::FileDeletionTarget::BspId(target_bsp_id) = &provider {
+                            if &bsp_id == target_bsp_id {
+                                file_key_states
+                                    .insert(file_key.as_ref().to_vec(), FileKeyOperation::Remove);
+                            }
+                        }
+                    }
+                    // Track successful proof submissions for pending deletions
+                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                        pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
+                            file_key,
+                            ..
+                        },
+                    ) => {
+                        // This confirms the file was deleted
+                        file_key_states
+                            .insert(file_key.as_ref().to_vec(), FileKeyOperation::Remove);
+                    }
+                    // Track MSP accepted storage requests
+                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                        pallet_file_system::Event::MspAcceptedStorageRequest {
+                            file_key,
+                            file_metadata,
+                        },
+                    ) => {
+                        // For bucket providers, check if this file is for our target bucket
+                        if let crate::events::FileDeletionTarget::BucketId(target_bucket_id) =
+                            &provider
+                        {
+                            // Check if this file belongs to our target bucket by comparing bucket IDs
+                            if file_metadata.bucket_id() == target_bucket_id.as_ref() {
+                                // Convert pallet FileMetadata to client FileMetadata
+                                if let Ok(metadata) = shc_common::types::FileMetadata::new(
+                                    file_metadata.owner().clone(),
+                                    file_metadata.bucket_id().clone(),
+                                    file_metadata.location().clone(),
+                                    file_metadata.file_size(),
+                                    *file_metadata.fingerprint(),
+                                ) {
+                                    file_key_states.insert(
+                                        file_key.as_ref().to_vec(),
+                                        FileKeyOperation::Add(metadata),
+                                    );
+                                    debug!(
+                                        target: LOG_TARGET,
+                                        "Added MSP accepted file key with embedded metadata"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    // Track insolvent user file removals
+                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                        pallet_file_system::Event::SpStopStoringInsolventUser {
+                            sp_id,
+                            file_key,
+                            ..
+                        },
+                    ) => {
+                        match &provider {
+                            crate::events::FileDeletionTarget::BspId(target_bsp_id) => {
+                                // Convert AccountId32 to H256
+                                if &H256::from_slice(sp_id.as_ref()) == target_bsp_id {
+                                    file_key_states.insert(
+                                        file_key.as_ref().to_vec(),
+                                        FileKeyOperation::Remove,
+                                    );
+                                }
+                            }
+                            crate::events::FileDeletionTarget::BucketId(_) => {
+                                // This also affects bucket storage
+                                file_key_states
+                                    .insert(file_key.as_ref().to_vec(), FileKeyOperation::Remove);
+                            }
+                        }
+                    }
+                    // TODO: Track new file deletion completion events once they are implemented
+                    _ => {}
+                }
+            }
+        }
+
+        // Convert HashMap to Vec<FileKeyChange>
+        let changes: Vec<FileKeyChange> = file_key_states
+            .into_iter()
+            .map(|(file_key, operation)| FileKeyChange {
+                file_key,
+                operation,
+            })
+            .collect();
+
+        info!(
+            target: LOG_TARGET,
+            "🎣 Found {} file key changes for provider {:?} between blocks {} and {}",
+            changes.len(),
+            provider,
+            from_block,
+            best_block_number
+        );
+
+        Ok(changes)
     }
 }
 
@@ -76,10 +342,34 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
 
     fn handle_message(
         &mut self,
-        _message: Self::Message,
+        message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
-            // TODO: handle fisherman catch up command
+            match message {
+                FishermanServiceCommand::GetFileKeyChangesSinceBlock {
+                    from_block,
+                    provider,
+                    response_tx,
+                } => {
+                    debug!(
+                        target: LOG_TARGET,
+                        "🎣 GetFileKeyChangesSinceBlock from block {} for provider {:?}",
+                        from_block,
+                        provider
+                    );
+
+                    let result = self
+                        .get_file_key_changes_since_block(from_block, provider)
+                        .await;
+
+                    if let Err(_) = response_tx.send(result) {
+                        warn!(
+                            target: LOG_TARGET,
+                            "Failed to send GetFileKeyChangesSinceBlock response - receiver dropped"
+                        );
+                    }
+                }
+            }
         }
     }
 

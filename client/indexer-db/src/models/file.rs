@@ -338,6 +338,21 @@ impl File {
             .await?;
         Ok(files)
     }
+
+    /// Get all file keys in a specific bucket
+    pub async fn get_all_file_keys_for_bucket<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: &[u8],
+    ) -> Result<Vec<Vec<u8>>, diesel::result::Error> {
+        let file_keys: Vec<Vec<u8>> = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .select(file::file_key)
+            .load::<Vec<u8>>(conn)
+            .await?;
+
+        Ok(file_keys)
+    }
 }
 
 impl File {

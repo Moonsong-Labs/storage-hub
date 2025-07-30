@@ -227,4 +227,35 @@ impl BspFile {
             .await?;
         Ok(())
     }
+
+    pub async fn get_bsps_for_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: &[u8],
+    ) -> Result<Vec<String>, diesel::result::Error> {
+        let bsp_ids: Vec<String> = bsp_file::table
+            .inner_join(bsp::table.on(bsp_file::bsp_id.eq(bsp::id)))
+            .inner_join(file::table.on(bsp_file::file_id.eq(file::id)))
+            .filter(file::file_key.eq(file_key))
+            .select(bsp::onchain_bsp_id)
+            .load::<String>(conn)
+            .await?;
+
+        Ok(bsp_ids)
+    }
+
+    /// Get all file keys stored by a specific BSP
+    pub async fn get_all_file_keys_for_bsp<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bsp_id: &str,
+    ) -> Result<Vec<Vec<u8>>, diesel::result::Error> {
+        let file_keys: Vec<Vec<u8>> = bsp_file::table
+            .inner_join(bsp::table.on(bsp_file::bsp_id.eq(bsp::id)))
+            .inner_join(file::table.on(bsp_file::file_id.eq(file::id)))
+            .filter(bsp::onchain_bsp_id.eq(onchain_bsp_id))
+            .select(file::file_key)
+            .load::<Vec<u8>>(conn)
+            .await?;
+
+        Ok(file_keys)
+    }
 }

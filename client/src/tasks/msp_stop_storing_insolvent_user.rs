@@ -298,10 +298,10 @@ where
             .await
         {
             Err(anyhow!(
-				"Failed to submit extrinsic to stop storing bucket {:?} for insolvent user. Error: {:?}",
-				bucket_id,
-				e
-			))
+                "Failed to submit extrinsic to stop storing bucket {:?} for insolvent user. Error: {:?}",
+                bucket_id,
+                e
+            ))
         } else {
             trace!(target: LOG_TARGET, "Stop storing bucket {:?} for insolvent user submitted successfully and included in block.", bucket_id);
             Ok(())

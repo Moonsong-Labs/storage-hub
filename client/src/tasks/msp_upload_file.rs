@@ -217,7 +217,9 @@ where
         let own_msp_id = match own_provider_id {
             Some(StorageProviderId::MainStorageProvider(id)) => id,
             Some(StorageProviderId::BackupStorageProvider(_)) => {
-                return Err(anyhow!("Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."));
+                return Err(anyhow!(
+                    "Current node account is a Backup Storage Provider. Expected a Main Storage Provider ID."
+                ));
             }
             None => {
                 return Err(anyhow!("Failed to get own MSP ID."));
@@ -625,7 +627,10 @@ where
             Ok(metadata) => match metadata {
                 Some(metadata) => H256::from_slice(metadata.bucket_id().as_ref()),
                 None => {
-                    let err_msg = format!("File does not exist for key {:?}. Maybe we forgot to unregister before deleting?", event.file_key);
+                    let err_msg = format!(
+                        "File does not exist for key {:?}. Maybe we forgot to unregister before deleting?",
+                        event.file_key
+                    );
                     error!(target: LOG_TARGET, err_msg);
                     return Err(anyhow!(err_msg));
                 }

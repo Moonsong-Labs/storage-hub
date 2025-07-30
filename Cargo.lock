@@ -14701,6 +14701,7 @@ dependencies = [
  "diesel-async",
  "futures",
  "log",
+ "pallet-file-system",
  "pallet-storage-providers-runtime-api",
  "sc-client-api",
  "sc-utils",

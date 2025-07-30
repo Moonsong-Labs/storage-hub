@@ -5,7 +5,7 @@ use diesel_async::RunQueryDsl;
 use crate::{schema::multiaddress, DbConnection};
 
 /// Table that holds the list of multiaddresses that the indexer is interested in.
-#[derive(Debug, Queryable, Insertable, Selectable)]
+#[derive(Debug, Clone, Queryable, Insertable, Selectable)]
 #[diesel(table_name = multiaddress)]
 pub struct MultiAddress {
     pub id: i64,
