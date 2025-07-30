@@ -190,6 +190,10 @@ impl LocalFileHandler {
     fn check_write_permission(&self) -> Result<(), RemoteFileError> {
         match &self.file_status {
             FileStatus::NotFound {
+                parent_writable: true,
+            }
+            | FileStatus::ValidFile { writable: true } => Ok(()),
+            FileStatus::NotFound {
                 parent_writable: false,
             }
             | FileStatus::ValidFile { writable: false } => Err(RemoteFileError::AccessDenied),
@@ -197,7 +201,6 @@ impl LocalFileHandler {
                 "Path is not a file: {}",
                 self.absolute_file_path.display()
             ))),
-            FileStatus::NotFound { .. } | FileStatus::ValidFile { .. } => Ok(()),
         }
     }
 
