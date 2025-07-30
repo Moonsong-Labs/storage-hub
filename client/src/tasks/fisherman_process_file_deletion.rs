@@ -59,12 +59,11 @@ where
     async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
-            "Processing file deletion request for file key: {:?} and deletion target: {:?}",
-            event.file_key,
-            event.deletion_target
+            "Processing file deletion request for file key: {:?}",
+            event.signed_file_operation_intention.file_key,
         );
 
-        // TODO: Implement file deletion request handling:
+        // TODO: Implement file deletion request handling (non-exhaustive):
         // 1. Fetch file metadata and identify storage providers
         // 2. Construct Bucket/BSP forest based on deletion target
         // 3. Construct proof of inclusion for file key

@@ -4,14 +4,14 @@ use sc_client_api::BlockchainEvents;
 use shc_common::{
     blockchain_utils::EventsRetrievalError,
     traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
+    types::FileOperationIntention,
 };
-use sp_runtime::traits::Header;
+use sp_runtime::{traits::Header, MultiSignature};
 use std::sync::Arc;
 use thiserror::Error;
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{BlockNumber, ParachainClient};
-use shc_indexer_db::DbPool;
 use sp_core::H256;
 
 use crate::events::FishermanServiceEventBusProvider;
@@ -23,7 +23,12 @@ pub(crate) const LOG_TARGET: &str = "fisherman-service";
 pub enum FishermanServiceCommand {
     /// Process a file deletion request by constructing proof of inclusion
     /// from Bucket/BSP forest and submitting it to the blockchain
-    ProcessFileDeletionRequest,
+    ProcessFileDeletionRequest {
+        /// The file key from the signed intention
+        signed_file_operation_intention: FileOperationIntention,
+        /// The signed intention
+        signature: MultiSignature,
+    },
 }
 
 /// Errors that can occur in the fisherman service
@@ -45,8 +50,6 @@ pub enum FishermanServiceError {
 pub struct FishermanService<RuntimeApi> {
     /// Substrate client for blockchain interaction
     client: Arc<ParachainClient<RuntimeApi>>,
-    /// Database pool for accessing indexed data
-    _db_pool: DbPool,
     /// Last processed block number to avoid reprocessing
     last_processed_block: Option<BlockNumber>,
     /// Event bus provider for emitting fisherman events
@@ -55,10 +58,9 @@ pub struct FishermanService<RuntimeApi> {
 
 impl<RuntimeApi> FishermanService<RuntimeApi> {
     /// Create a new FishermanService instance
-    pub fn new(client: Arc<ParachainClient<RuntimeApi>>, db_pool: DbPool) -> Self {
+    pub fn new(client: Arc<ParachainClient<RuntimeApi>>) -> Self {
         Self {
             client,
-            _db_pool: db_pool,
             last_processed_block: None,
             event_bus_provider: FishermanServiceEventBusProvider::new(),
         }
@@ -72,7 +74,7 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
-        // TODO: Send FileDeletionRequest command when FileDeletionRequest event is detected
+        // TODO: Emit FileDeletionRequest event
 
         self.last_processed_block = Some(block_number);
         Ok(())
@@ -95,12 +97,12 @@ where
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
             match message {
-                FishermanServiceCommand::ProcessFileDeletionRequest => {
+                FishermanServiceCommand::ProcessFileDeletionRequest { .. } => {
                     info!(
                         target: LOG_TARGET,
-                        "🎣 ProcessFileDeletionRequest received - constructing proof of inclusion"
+                        "🎣 ProcessFileDeletionRequest received"
                     );
-                    // TODO: Emit ProcessFileDeletionRequest event for every Bucket and BSP found to hold the file key in the forest
+                    // TODO: Emit ProcessFileDeletionRequest event to trigger task
                 }
             }
         }
@@ -169,6 +171,8 @@ where
                         Some(MergedEventLoopMessage::BlockImportNotification(notification)) => {
                             let block_number = *notification.header.number();
                             let block_hash = notification.hash;
+
+                            // TODO: Only monitor block if it is the new best block
 
                             if let Err(e) = self.service.monitor_block(block_number, block_hash).await {
                                 error!(target: LOG_TARGET, "Failed to monitor block: {:?}", e);
