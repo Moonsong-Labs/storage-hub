@@ -377,7 +377,6 @@ where
                             file_data_trie
                                 .write_chunk(&ChunkId::new(chunk_id), &chunk)
                                 .map_err(into_rpc_error)?;
-                            chunk_id += 1;
                         }
                         debug!(target: LOG_TARGET, "Finished reading file");
                         break 'read;
