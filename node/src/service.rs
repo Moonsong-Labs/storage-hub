@@ -239,6 +239,7 @@ where
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
+            remote_file,
             ..
         }) => {
             info!(
@@ -290,7 +291,8 @@ where
             }
 
             // Get the RPC configuration to use for this StorageHub node client.
-            let rpc_config = storage_hub_builder.create_rpc_config(keystore);
+            let rpc_config = storage_hub_builder.create_rpc_config(keystore)
+                .with_remote_file_config(remote_file.clone().into());
 
             Some((storage_hub_builder, rpc_config))
         }

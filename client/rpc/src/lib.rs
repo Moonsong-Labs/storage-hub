@@ -47,6 +47,7 @@ pub struct StorageHubClientRpcConfig<FL, FSH> {
     pub file_storage: Arc<RwLock<FL>>,
     pub forest_storage_handler: FSH,
     pub keystore: KeystorePtr,
+    pub remote_file_config: RemoteFileConfig,
 }
 
 impl<FL, FSH: Clone> Clone for StorageHubClientRpcConfig<FL, FSH> {
@@ -55,6 +56,7 @@ impl<FL, FSH: Clone> Clone for StorageHubClientRpcConfig<FL, FSH> {
             file_storage: self.file_storage.clone(),
             forest_storage_handler: self.forest_storage_handler.clone(),
             keystore: self.keystore.clone(),
+            remote_file_config: self.remote_file_config.clone(),
         }
     }
 }
@@ -73,7 +75,13 @@ where
             file_storage,
             forest_storage_handler,
             keystore,
+            remote_file_config: RemoteFileConfig::default(),
         }
+    }
+
+    pub fn with_remote_file_config(mut self, config: RemoteFileConfig) -> Self {
+        self.remote_file_config = config;
+        self
     }
 }
 
@@ -268,6 +276,7 @@ pub struct StorageHubClientRpc<FL, FSH, C, Block> {
     file_storage: Arc<RwLock<FL>>,
     forest_storage_handler: FSH,
     keystore: KeystorePtr,
+    remote_file_config: RemoteFileConfig,
     _block_marker: std::marker::PhantomData<Block>,
 }
 
@@ -285,6 +294,7 @@ where
             file_storage: storage_hub_client_rpc_config.file_storage,
             forest_storage_handler: storage_hub_client_rpc_config.forest_storage_handler,
             keystore: storage_hub_client_rpc_config.keystore,
+            remote_file_config: storage_hub_client_rpc_config.remote_file_config,
             _block_marker: Default::default(),
         }
     }
@@ -331,7 +341,7 @@ where
         check_if_safe(ext)?;
 
         // Create file handler
-        let config = RemoteFileConfig::new(DEFAULT_MAX_FILE_SIZE);
+        let config = self.remote_file_config.clone();
         let (handler, url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 
@@ -500,7 +510,7 @@ where
         }
 
         // Create file handler for writing to local or remote destination.
-        let config = RemoteFileConfig::new(DEFAULT_MAX_FILE_SIZE);
+        let config = self.remote_file_config.clone();
         let (handler, _url) = RemoteFileHandlerFactory::create_from_string(&file_path, config)
             .map_err(|e| into_rpc_error(format!("Failed to create file handler: {:?}", e)))?;
 

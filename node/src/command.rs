@@ -62,6 +62,9 @@ pub struct ProviderOptions {
     pub blockchain_service: Option<BlockchainServiceOptions>,
     /// Whether the node is running in maintenance mode.
     pub maintenance_mode: bool,
+    /// Remote file configuration options.
+    #[serde(default)]
+    pub remote_file: crate::config::RemoteFileOptions,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
