@@ -115,7 +115,7 @@ mod tests {
     use crate::data::postgres::{AnyDbConnection, DbConfig, PgConnection};
 
     #[tokio::test]
-    #[ignore] // Requires actual database
+    #[ignore = "Requires actual database"]
     async fn test_get_active_bsps() {
         let config = DbConfig::new("postgres://localhost/storagehub");
         let pg_conn = PgConnection::new(config)
@@ -128,7 +128,7 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // Requires actual database
+    #[ignore = "Requires actual database"]
     async fn test_get_file_by_id() {
         let config = DbConfig::new("postgres://localhost/storagehub");
         let pg_conn = PgConnection::new(config)
