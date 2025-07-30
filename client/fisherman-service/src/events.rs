@@ -1,26 +1,22 @@
 use shc_actors_derive::{ActorEvent, ActorEventBus};
-use shc_common::types::{BackupStorageProviderId, BucketId, FileKey};
-
+use shc_common::types::{BackupStorageProviderId, BucketId, FileOperationIntention};
+use sp_runtime::MultiSignature;
 /// Represent where a file should be deleted from for the deletion process
 #[derive(Clone, Debug)]
 pub enum FileDeletionTarget {
     BspId(BackupStorageProviderId),
     BucketId(BucketId),
 }
-
 /// Event triggered when fisherman detects a file deletion request
 ///
-/// Should contain all the data required to construct a proof of inclusion for a file key
-/// to be deleted from the [`FileDeletionTarget`].
+/// Contains the signed deletion intention data to be processed by the task.
 #[derive(Clone, ActorEvent)]
 #[actor(actor = "fisherman_service")]
 pub struct ProcessFileDeletionRequest {
-    /// The file key for which deletion proof is requested
-    pub file_key: FileKey,
-    /// The deletion target containing provider and bucket information
-    pub deletion_target: FileDeletionTarget,
-    // TODO: Add user signed message
+    /// The file key from the signed intention
+    pub signed_file_operation_intention: FileOperationIntention,
+    /// The signed intention
+    pub signature: MultiSignature,
 }
-
 #[ActorEventBus("fisherman_service")]
 pub struct FishermanServiceEventBusProvider;
