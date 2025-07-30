@@ -52,6 +52,9 @@ polkadot-primitives = { workspace = true }
 cumulus-client-service = { workspace = true }
 cumulus-primitives-core = { workspace = true }
 
+# Frontier
+fp-account = { workspace = true }
+
 # Local
 storage-hub-runtime = { workspace = true }
 shp-constants = { workspace = true }
