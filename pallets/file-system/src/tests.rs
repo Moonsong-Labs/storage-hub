@@ -11705,9 +11705,27 @@ mod delete_file_tests {
                 let (bucket_id, file_key, location, size, fingerprint, msp_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
+                let used_capacity = <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+                println!("used_capacity: {:?}", used_capacity);
+
                 // Increase bucket size to simulate it storing the file
                 let initial_bucket_size = 2 * size;
                 assert_ok!(<<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(&bucket_id, initial_bucket_size));
+
+                // Increase the used capacity of the MSP
+                assert_ok!(<<Test as crate::Config>::Providers as MutateStorageProvidersInterface>::increase_capacity_used(&msp_id, size));
+
+                let used_capacity = <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+                println!("used_capacity 2: {:?}", used_capacity);
+
+                // Log the payment stream value
+                let initial_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                // Payment stream value is 9 because:
+                // 1. Initial bucket size is 2 * size = 8 gigabyte units
+                // 2. price_per_giga_unit_of_data_per_block is 1
+                // 3. Price per empty bucket is 1
+                // 4. 8 * 1 + 1 = 9
+                assert_eq!(initial_payment_stream_value, Some(9));
 
                 // Create signature 
                 let (signed_delete_intention, signature) =
@@ -11734,7 +11752,7 @@ mod delete_file_tests {
                 // Verify MspFileDeletionCompleted event was emitted
                 System::assert_last_event(
                     Event::MspFileDeletionCompleted {
-                        user: alice,
+                        user: alice.clone(),
                         file_key,
                         file_size: size,
                         bucket_id,
@@ -11742,6 +11760,11 @@ mod delete_file_tests {
                     }
                     .into(),
                 );
+
+                 // Log the payment stream value
+                let payment_stream_value: Option<BalanceOf<Test>> = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                // we delete a file with size is 4 gigabyte units (and price per gigabyte unit is 1):
+                assert_eq!(payment_stream_value, Some(5));
             });
         }
 
@@ -12304,7 +12327,8 @@ fn setup_file_in_msp_bucket(
 
     // Standard file metadata (reusing existing patterns)
     let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-    let size = 4;
+    // We need giga units to see significant changes in payment streams 
+    let size = 4 * (shp_constants::GIGAUNIT as u64);
     let fingerprint = BlakeTwo256::hash(&b"test_content".to_vec());
     let file_key = FileSystem::compute_file_key(
         owner.clone(),
