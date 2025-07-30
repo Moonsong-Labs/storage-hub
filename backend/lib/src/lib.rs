@@ -41,8 +41,8 @@ mod tests {
         panic!("Test requires PostgreSQL mock implementation - currently WIP")
     }
 
-    #[ignore]
     #[tokio::test]
+    #[ignore = "Requires test app setup with mocked services"]
     async fn test_health_endpoint() {
         todo!("Implement when PostgreSQL mock available");
         // Create test server
@@ -61,8 +61,8 @@ mod tests {
         assert_eq!(json["service"], "storagehub-backend");
     }
 
-    #[ignore]
     #[tokio::test]
+    #[ignore = "Requires test app setup with mocked services"]
     async fn test_counter_endpoints() {
         todo!("Implement when PostgreSQL mock available");
         // Create test server
