@@ -234,9 +234,7 @@ where
         // Check that the challenges tick is greater than current tick minus `ChallengeHistoryLength`,
         // i.e. that the challenges tick is within the ticks this pallet keeps track of.
         expect_or_err!(
-            challenges_tick
-                > current_tick
-                    .saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
+            challenges_tick > current_tick.saturating_sub(ChallengeHistoryLengthFor::<T>::get()),
             "Challenges tick is too old, beyond the history this pallet keeps track of. This should not be possible.",
             Error::<T>::ChallengesTickTooOld,
             bool
@@ -279,12 +277,11 @@ where
 
         if last_tick_proven < last_checkpoint_tick && last_checkpoint_tick <= challenges_tick {
             // Add challenges from the Checkpoint Challenge block.
-            checkpoint_challenges =
-                Some(expect_or_err!(
-                    TickToCheckpointChallenges::<T>::get(last_checkpoint_tick),
-                    "Checkpoint challenges not found, when dereferencing in last registered checkpoint challenge block.",
-                    Error::<T>::CheckpointChallengesNotFound
-                ));
+            checkpoint_challenges = Some(expect_or_err!(
+                TickToCheckpointChallenges::<T>::get(last_checkpoint_tick),
+                "Checkpoint challenges not found, when dereferencing in last registered checkpoint challenge block.",
+                Error::<T>::CheckpointChallengesNotFound
+            ));
 
             if let Some(ref checkpoint_challenges) = checkpoint_challenges {
                 challenges.extend(
@@ -422,7 +419,12 @@ where
         match current_tick_valid_submitters {
             // If the set already exists and has valid submitters, we just insert the new submitter.
             Some(mut valid_submitters) => {
-                let did_not_already_exist = expect_or_err!(valid_submitters.try_insert(*submitter), "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.", Error::<T>::TooManyValidProofSubmitters, result);
+                let did_not_already_exist = expect_or_err!(
+                    valid_submitters.try_insert(*submitter),
+                    "The set should never be full as the limit we set should be greater than the implicit limit given by max block weight.",
+                    Error::<T>::TooManyValidProofSubmitters,
+                    result
+                );
                 // We only update storage if the Provider ID wasn't yet in the set to avoid unnecessary writes.
                 if did_not_already_exist {
                     ValidProofSubmittersLastTicks::<T>::insert(current_tick, valid_submitters);

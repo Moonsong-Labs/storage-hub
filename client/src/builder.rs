@@ -134,7 +134,9 @@ where
     /// Cannot be added if the Blockchain Service has already been spawned.
     pub fn with_notify_period(&mut self, notify_period: Option<u32>) -> &mut Self {
         if self.blockchain.is_some() {
-            panic!("`with_notify_period` should be called before starting the Blockchain Service. Use `with_blockchain` after calling `with_notify_period`.");
+            panic!(
+                "`with_notify_period` should be called before starting the Blockchain Service. Use `with_blockchain` after calling `with_notify_period`."
+            );
         }
         self.notify_period = notify_period;
         self

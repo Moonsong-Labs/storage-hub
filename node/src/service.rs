@@ -258,14 +258,7 @@ async fn configure_and_spawn_indexer_fisherman(
     if fisherman_config.fisherman {
         info!("🎣 Starting Fisherman monitoring service...");
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "fisherman-service");
-        spawn_fisherman_service(
-            &task_spawner,
-            client.clone(),
-            maybe_db_pool.expect(
-                "Fisherman requires indexer to be enabled, but no database URL is provided (via CLI using --database-url or setting DATABASE_URL environment variable)",
-            ),
-        )
-        .await;
+        spawn_fisherman_service(&task_spawner, client.clone()).await;
         info!("🎣 Fisherman service started successfully");
     }
 
@@ -576,7 +569,9 @@ where
             }
             cli::Sealing::Interval(millis) => {
                 if millis < 3000 {
-                    log::info!("⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended.");
+                    log::info!(
+                        "⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended."
+                    );
                 }
 
                 Box::new(StreamExt::map(
@@ -660,9 +655,9 @@ where
         match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if collator => {
                 log::warn!(
-				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
-				err
-			);
+                    "⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
+                    err
+                );
             }
             _ => {}
         }
@@ -1238,9 +1233,9 @@ where
         match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if validator => {
                 log::warn!(
-				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
-				err
-			);
+                    "⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
+                    err
+                );
             }
             _ => {}
         }

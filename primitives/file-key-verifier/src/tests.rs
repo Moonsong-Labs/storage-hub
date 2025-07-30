@@ -135,7 +135,7 @@ pub fn create_sequential_test_data(size: u64) -> Vec<u8> {
 /// Generate random test data of a given size.
 pub fn create_random_test_data(size: u64) -> Vec<u8> {
     let mut rng = rand::thread_rng();
-    let content: Vec<u8> = (0..size).map(|_| rng.gen()).collect();
+    let content: Vec<u8> = (0..size).map(|_| rng.r#gen()).collect();
     content
 }
 

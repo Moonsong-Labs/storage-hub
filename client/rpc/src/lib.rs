@@ -766,11 +766,15 @@ where
                     (Some(left), None) => proven_keys.push(left.key),
                     (None, Some(right)) => proven_keys.push(right.key),
                     (None, None) => {
-                        return Err(into_rpc_error("Both left and right leaves in forest proof are None. This should not be possible."));
+                        return Err(into_rpc_error(
+                            "Both left and right leaves in forest proof are None. This should not be possible.",
+                        ));
                     }
                 },
                 Proven::Empty => {
-                    return Err(into_rpc_error("Forest proof generated with empty forest. This should not be possible, as this provider shouldn't have been challenged with an empty forest."));
+                    return Err(into_rpc_error(
+                        "Forest proof generated with empty forest. This should not be possible, as this provider shouldn't have been challenged with an empty forest.",
+                    ));
                 }
             }
         }
