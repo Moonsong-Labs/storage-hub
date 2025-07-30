@@ -10,12 +10,11 @@ repository = "https://github.com/moonsong-labs/storage-hub"
 crate-type = ["cdylib"]
 
 [dependencies]
-wasm-bindgen = "0.2"
 hex = { workspace = true }
 parity-scale-codec = "3.7.4"
-sp-trie = { workspace = true, default-features = false }
+shp-constants = { workspace = true, default-features = false }
+shp-file-metadata = { workspace = true, default-features = false }
 sp-core = { workspace = true, default-features = false }
 sp-runtime-interface = { workspace = true, default-features = false, features = ["disable_target_static_assertions"] }
-
-shp-file-metadata = { workspace = true, default-features = false }
-shp-constants = { workspace = true, default-features = false }
+sp-trie = { workspace = true, default-features = false }
+wasm-bindgen = "0.2"

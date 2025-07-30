@@ -1,6 +1,6 @@
 use wasm_bindgen::prelude::*;
 
-use parity_scale_codec::{Compact, Decode, Encode};
+use parity_scale_codec::Encode;
 use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::{Chunk, ChunkId, ChunkWithId};
 use sp_core::{hashing::blake2_256, Hasher};
@@ -9,7 +9,7 @@ use std::collections::hash_map::DefaultHasher;
 
 // ────────────────────────────────────────────────────────────────────────────
 //  NOTE:
-//  The full StorageHub client crate (`client/file-manager`) depends on a large
+//  The full StorageHub `file-manager` crate (`client/file-manager`) depends on a large
 //  graph of Substrate-runtime crates that pull in features which cannot be
 //  compiled to `wasm32-unknown-unknown` (e.g. `std` I/O, rocksdb, proc-macro
 //  helpers, etc.).

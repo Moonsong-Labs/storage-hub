@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { join } from 'node:path';
 import { statSync, createReadStream } from 'node:fs';
 import { Readable } from 'node:stream';
-// @ts-ignore – wasm types emitted after build
-import { FileManager } from '../src/file-manager.ts';
+import { FileManager } from '../src/index.js';
 const EXPECTED_FINGERPRINT_HEX = '0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970';
 
 const resourcePath = (name: string) =>
