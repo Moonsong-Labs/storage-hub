@@ -148,7 +148,8 @@ impl HttpFileHandler {
         Ok((actual_start, actual_end))
     }
 
-    #[allow(dead_code)] // might be used when we do pagination
+    // TODO: This might be used when we do pagination, remove if it's not needed
+    #[allow(dead_code)]
     async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         let range = format!("bytes={}-{}", offset, offset + length - 1);
 

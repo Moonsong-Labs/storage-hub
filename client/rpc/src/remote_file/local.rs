@@ -219,7 +219,8 @@ impl LocalFileHandler {
         }
     }
 
-    #[allow(dead_code)] // might be useful when we add pagination
+    // TODO: This might be used when we do pagination, remove if it's not needed
+    #[allow(dead_code)]
     async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         self.check_file_valid()?;
 
