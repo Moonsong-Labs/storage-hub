@@ -65,6 +65,9 @@ pub struct RemoteFileConfig {
 }
 
 impl RemoteFileConfig {
+    /// Default maximum file size: 5GB
+    pub const DEFAULT_MAX_FILE_SIZE: u64 = 5 * 1024 * 1024 * 1024;
+
     /// Create a new config with explicit max_file_size
     pub fn new(max_file_size: u64) -> Self {
         Self {
@@ -82,7 +85,7 @@ impl RemoteFileConfig {
 
 impl Default for RemoteFileConfig {
     fn default() -> Self {
-        Self::new(5 * 1024 * 1024 * 1024) // 5GB default
+        Self::new(Self::DEFAULT_MAX_FILE_SIZE)
     }
 }
 

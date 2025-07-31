@@ -39,7 +39,7 @@ pub struct RemoteFileOptions {
 
 impl Default for RemoteFileOptions {
     fn default() -> Self {
-        let config = shc_rpc::remote_file::RemoteFileConfig::new(10 * 1024 * 1024 * 1024); // 10GB
+        let config = shc_rpc::remote_file::RemoteFileConfig::default();
         Self {
             max_file_size: config.max_file_size,
             connection_timeout: config.connection_timeout,
