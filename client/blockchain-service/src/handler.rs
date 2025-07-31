@@ -526,8 +526,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::GetNodePublicKey { callback } => {
-                    let pub_key =
-                        Self::caller_pub_key::<MultiSignature>(self.keystore.clone());
+                    let pub_key = Self::caller_pub_key::<MultiSignature>(self.keystore.clone());
                     match callback.send(Ok(pub_key)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Node's public key sent successfully");
