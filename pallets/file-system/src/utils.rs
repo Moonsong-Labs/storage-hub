@@ -2384,40 +2384,13 @@ where
             &bsp_id, file_size,
         )?;
 
-        // Update the payment stream between the user and the BSP. If the new amount provided is zero, delete it instead.
-        let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &file_owner)
-			.ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
-			.saturating_sub(file_size);
-        if new_amount_provided == Zero::zero() {
-            <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
-                &bsp_id,
-                &file_owner,
-            )?;
-        } else {
-            <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-                &bsp_id,
-                &file_owner,
-                &new_amount_provided,
-            )?;
-        }
-
-        // If the root of the BSP is now the default root, stop its cycles.
-        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
-            // Check the current used capacity of the BSP. Since its root is the default one, it should
-            // be zero.
-            let used_capacity =
-                <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
-            if used_capacity != Zero::zero() {
-                // Emit event if we have inconsistency. We can later monitor for those.
-                Self::deposit_event(Event::UsedCapacityShouldBeZero {
-                    actual_used_capacity: used_capacity,
-                });
-            }
-
-            // Stop the BSP's challenge and randomness cycles.
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
-            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
-        };
+        // Update payment stream and manage BSP cycles after file removal
+        Self::update_bsp_payment_and_cycles_after_file_removal(
+            bsp_id,
+            &file_owner,
+            file_size,
+            new_root,
+        )?;
 
         Ok((bsp_id, new_root))
     }
@@ -2778,11 +2751,40 @@ where
         // Decrease capacity used by the BSP
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&bsp_id, size)?;
 
+        // Update payment stream and manage BSP cycles after file removal
+        // Note: Payment stream logic is handled by decrease_bucket_size (via apply_delta_fixed_rate_payment_stream) in the case of MSPs.
+        Self::update_bsp_payment_and_cycles_after_file_removal(
+            bsp_id,
+            &file_owner,
+            size,
+            new_root,
+        )?;
+
+        // Emit the BSP file deletion completed event
+        Self::deposit_event(Event::BspFileDeletionCompleted {
+            user: file_owner,
+            file_key,
+            file_size: size,
+            bsp_id,
+        });
+
+        Ok(())
+    }
+
+    /// Updates the BSP payment stream and manages BSP cycles after file removal.
+    ///
+    /// 1. Updating or deleting the payment stream between a user and BSP based on file size
+    /// 2. Stopping BSP challenge and randomness cycles when the BSP root becomes default (no more files stored)
+    fn update_bsp_payment_and_cycles_after_file_removal(
+        bsp_id: ProviderIdFor<T>,
+        file_owner: &T::AccountId,
+        file_size: StorageDataUnit<T>,
+        new_root: MerkleHash<T>,
+    ) -> DispatchResult {
         // Update the payment stream between the user and the BSP. If the new amount provided is zero, delete it instead.
-        // Note: This logic is handled by decrease_bucket_size (via apply_delta_fixed_rate_payment_stream) in the case of MSPs.
         let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &file_owner)
-			.ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
-			.saturating_sub(size);
+            .ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
+            .saturating_sub(file_size);
         if new_amount_provided.is_zero() {
             <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
                 &bsp_id,
@@ -2812,15 +2814,7 @@ where
             // Stop the BSP's challenge and randomness cycles.
             <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
             <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
-        };
-
-        // Emit the BSP file deletion completed event
-        Self::deposit_event(Event::BspFileDeletionCompleted {
-            user: file_owner,
-            file_key,
-            file_size: size,
-            bsp_id,
-        });
+        }
 
         Ok(())
     }

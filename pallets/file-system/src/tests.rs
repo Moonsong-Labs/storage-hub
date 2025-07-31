@@ -11705,27 +11705,14 @@ mod delete_file_tests {
                 let (bucket_id, file_key, location, size, fingerprint, msp_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
-                let used_capacity = <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
-                println!("used_capacity: {:?}", used_capacity);
-
-                // Increase bucket size to simulate it storing the file
-                let initial_bucket_size = 2 * size;
-                assert_ok!(<<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(&bucket_id, initial_bucket_size));
-
-                // Increase the used capacity of the MSP
-                assert_ok!(<<Test as crate::Config>::Providers as MutateStorageProvidersInterface>::increase_capacity_used(&msp_id, size));
-
-                let used_capacity = <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
-                println!("used_capacity 2: {:?}", used_capacity);
-
                 // Log the payment stream value
                 let initial_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
-                // Payment stream value is 9 because:
-                // 1. Initial bucket size is 2 * size = 8 gigabyte units
+                // Payment stream value is 5 because:
+                // 1. Initial bucket size is  size = 4 gigabyte units
                 // 2. price_per_giga_unit_of_data_per_block is 1
                 // 3. Price per empty bucket is 1
-                // 4. 8 * 1 + 1 = 9
-                assert_eq!(initial_payment_stream_value, Some(9));
+                // 4. 4 * 1 + 1 = 5
+                assert_eq!(initial_payment_stream_value, Some(5));
 
                 // Create signature 
                 let (signed_delete_intention, signature) =
@@ -11761,15 +11748,17 @@ mod delete_file_tests {
                     .into(),
                 );
 
-                 // Log the payment stream value
                 let payment_stream_value: Option<BalanceOf<Test>> = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
-                // we delete a file with size is 4 gigabyte units (and price per gigabyte unit is 1):
-                assert_eq!(payment_stream_value, Some(5));
+                assert_eq!(payment_stream_value, Some(1));
+
+                let used_capacity = <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+                // The only file being stored was removed
+                assert!(used_capacity == 0);
             });
         }
 
         #[test]
-        fn bsp_can_delete_file_with_valid_forest_proof() {
+        fn bsp_delete_file_with_valid_forest_proof_payment_stream_finish_if_no_more_files_stored() {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let bsp = Keyring::Bob.to_account_id();
@@ -11866,6 +11855,111 @@ mod delete_file_tests {
         }
 
         #[test]
+        fn bsp_delete_file_with_two_files_stored_payment_stream_updated_not_deleted() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let bsp = Keyring::Bob.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Sign up BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), 200));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Create bucket for Alice (BSP test still need valid buckets for ownership checks)
+                let (bucket_id, file_key, location, size, fingerprint, _) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Simulate storing 2 files
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, 2 * size));
+
+                // Create and increase payment stream twice, to simulate that BSP is storing 2 files
+                let amount_provided_per_file = UnitsProvidedFor::<Test>::from(size);
+                let amount_provided = 2 * amount_provided_per_file;
+
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    alice.clone(),
+                    amount_provided,
+                ));
+
+                // Check initial capacity and payment stream state before deletion
+                let initial_capacity_used = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    initial_capacity_used,
+                    size * 2,
+                    "BSP should have capacity used equal to 2 times file size"
+                );
+
+                // Verify payment stream exists before deletion with correct total amount
+                let payment_stream =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &alice);
+                assert!(
+                    payment_stream.is_ok(),
+                    "Payment stream should exist before deletion"
+                );
+                assert_eq!(
+                    payment_stream.unwrap().amount_provided,
+                    amount_provided,
+                    "Payment stream should have correct total amount provided for 2 files"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    bsp_id,
+                    forest_proof,
+                ));
+
+                // Verify BSP event
+                System::assert_last_event(
+                    Event::BspFileDeletionCompleted {
+                        user: alice.clone(),
+                        file_key,
+                        file_size: size,
+                        bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Check capacity and payment stream state after deletion
+                let final_capacity_used = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    final_capacity_used,
+                    initial_capacity_used - size,
+                    "BSP capacity should have decreased by one file size after deletion"
+                );
+
+                // Verify payment stream still exists but is updated (decreased by one file amount)
+                let payment_stream_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &alice);
+                assert!(
+                    payment_stream_after.is_ok(),
+                    "Payment stream should still exist after deleting one of two files"
+                );
+                assert_eq!(
+                    payment_stream_after.unwrap().amount_provided,
+                    amount_provided_per_file,
+                    "Payment stream should be updated to reflect remaining file amount"
+                );
+            });
+        }
+
+        #[test]
         fn delete_file_works_with_any_caller() {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
@@ -11873,9 +11967,13 @@ mod delete_file_tests {
                 let (bucket_id, file_key, location, size, fingerprint, msp_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
-                // Increase bucket size to simulate it storing the file
-                let initial_bucket_size = 2 * size;
-                assert_ok!(<<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(&bucket_id, initial_bucket_size));
+                let initial_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                // Payment stream value is 5 because:
+                // 1. Initial bucket size is  size = 4 gigabyte units
+                // 2. price_per_giga_unit_of_data_per_block is 1
+                // 3. Price per empty bucket is 1
+                // 4. 4 * 1 + 1 = 5
+                assert_eq!(initial_payment_stream_value, Some(5));
 
                 // Alice signs the deletion message
                 let (signed_delete_intention, signature) =
@@ -11905,7 +12003,7 @@ mod delete_file_tests {
                 // Verify event shows Alice as the user
                 System::assert_last_event(
                     Event::MspFileDeletionCompleted {
-                        user: alice,
+                        user: alice.clone(),
                         file_key,
                         file_size: size,
                         bucket_id,
@@ -11913,6 +12011,13 @@ mod delete_file_tests {
                     }
                     .into(),
                 );
+
+                let payment_stream_value: Option<BalanceOf<Test>> = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                assert_eq!(payment_stream_value, Some(1));
+
+                let used_capacity = <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+                // The only file being stored was removed
+                assert!(used_capacity == 0);
             });
         }
     }
@@ -11963,10 +12068,6 @@ mod delete_file_tests {
                 let (bucket_id, file_key, location, size, fingerprint, msp_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
-                // Increase bucket size to simulate it storing the file
-                let initial_bucket_size = 2 * size;
-                assert_ok!(<<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(&bucket_id, initial_bucket_size));
-
                 // Alice signs the deletion message
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
@@ -11979,18 +12080,21 @@ mod delete_file_tests {
                     encoded_nodes: vec![H256::default().as_ref().to_vec()],
                 };
 
-                assert_noop!(FileSystem::delete_file(
-                    RuntimeOrigin::signed(bob),
-                    alice.clone(),
-                    signed_delete_intention,
-                    signature,
-                    bucket_id,
-                    location,
-                    size,
-                    fingerprint,
-                    msp_id,
-                    invalid_forest_proof,
-                ), Error::<Test>::ExpectedInclusionProof);
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(bob),
+                        alice.clone(),
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        msp_id,
+                        invalid_forest_proof,
+                    ),
+                    Error::<Test>::ExpectedInclusionProof
+                );
             });
         }
 
@@ -12327,7 +12431,7 @@ fn setup_file_in_msp_bucket(
 
     // Standard file metadata (reusing existing patterns)
     let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
-    // We need giga units to see significant changes in payment streams 
+    // We need giga units to see significant changes in payment streams
     let size = 4 * (shp_constants::GIGAUNIT as u64);
     let fingerprint = BlakeTwo256::hash(&b"test_content".to_vec());
     let file_key = FileSystem::compute_file_key(
@@ -12338,6 +12442,16 @@ fn setup_file_in_msp_bucket(
         fingerprint,
     )
     .unwrap();
+
+    // Increase bucket size to simulate it storing the file
+    assert_ok!(
+        <<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(
+            &bucket_id, size
+        )
+    );
+
+    // Increase the used capacity of the MSP
+    assert_ok!(<<Test as crate::Config>::Providers as MutateStorageProvidersInterface>::increase_capacity_used(&msp_id, size));
 
     (bucket_id, file_key, location, size, fingerprint, msp_id)
 }
