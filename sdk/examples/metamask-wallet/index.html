@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metamask Wallet Example</title>
+    <script type="importmap">
+        {
+            "imports": {
+                "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/dist/ethers.js",
+                "@storagehub-sdk/core": "/core/dist/index.js",
+                "@storagehub/wasm": "/core/wasm/pkg/storagehub_wasm.js"
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Metamask Wallet Example</h1>
+        <button id="connectButton">Connect to Metamask</button>
+        <div id="walletInfo" class="hidden">
+            <h2>Wallet Connected</h2>
+            <p><strong>Address:</strong> <span id="walletAddress"></span></p>
+            <hr>
+            <div class="action">
+                <h3>Sign a Message</h3>
+                <input type="text" id="messageInput" placeholder="Enter a message" value="hello world" />
+                <button id="signMessageButton">Sign Message</button>
+                <p><strong>Signature:</strong> <span id="signatureOutput"></span></p>
+            </div>
+            <hr>
+            <div class="action">
+                <h3>Sign &amp; Send Transaction</h3>
+                <input type="text" id="toInput" placeholder="Recipient Address" />
+                <input type="text" id="valueInput" placeholder="Amount (in Ether)" value="0.001" />
+                <button id="sendTxButton">Send Transaction</button>
+                <p><strong>Signature:</strong> <span id="txSigOutput"></span></p>
+            </div>
+        </div>
+        <div id="error" class="error hidden"></div>
+    </div>
+    <script type="module" src="app.js"></script>
+</body>
+
+</html>
