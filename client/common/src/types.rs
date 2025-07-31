@@ -18,6 +18,8 @@ use sp_trie::CompactProof;
 use storage_hub_runtime::Runtime;
 use trie_db::TrieLayout;
 
+use crate::traits::ExtensionOperations;
+
 /// Size of each batch in bytes (2 MiB)
 /// This is the maximum size of a batch of chunks that can be uploaded in a single call
 /// (request-response round-trip).
@@ -217,13 +219,13 @@ impl UploadRequestId {
     }
 }
 
-pub struct MinimalSignedExtra {
+pub struct MinimalExtension {
     pub era: generic::Era,
     pub nonce: u32,
     pub tip: Tip,
 }
 
-impl MinimalSignedExtra {
+impl MinimalExtension {
     pub fn new(era: generic::Era, nonce: u32, tip: Tip) -> Self {
         Self { era, nonce, tip }
     }
@@ -231,8 +233,10 @@ impl MinimalSignedExtra {
 
 //TODO: This should be moved to the runtime crate once the SH Client is abstracted
 //TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
-impl From<MinimalSignedExtra> for storage_hub_runtime::SignedExtra {
-    fn from(minimal: MinimalSignedExtra) -> Self {
+impl ExtensionOperations<storage_hub_runtime::RuntimeCall> for storage_hub_runtime::SignedExtra {
+    type Hash = storage_hub_runtime::Hash;
+
+    fn from_minimal_extension(minimal: MinimalExtension) -> Self {
         (
             frame_system::CheckNonZeroSender::<Runtime>::new(),
             frame_system::CheckSpecVersion::<Runtime>::new(),
@@ -244,6 +248,21 @@ impl From<MinimalSignedExtra> for storage_hub_runtime::SignedExtra {
             minimal.tip,
             cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<Runtime>::new(),
             frame_metadata_hash_extension::CheckMetadataHash::new(false),
+        )
+    }
+
+    fn implicit(genesis_block_hash: Self::Hash, current_block_hash: Self::Hash) -> Self::Implicit {
+        (
+            (),
+            storage_hub_runtime::VERSION.spec_version,
+            storage_hub_runtime::VERSION.transaction_version,
+            genesis_block_hash,
+            current_block_hash,
+            (),
+            (),
+            (),
+            (),
+            None,
         )
     }
 }

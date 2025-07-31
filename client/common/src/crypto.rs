@@ -9,19 +9,19 @@ use sp_core::{ecdsa, keccak_256, sr25519, H160, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
     traits::{IdentifyAccount, Verify},
-    KeyTypeId, MultiSignature,
+    AccountId32, KeyTypeId, MultiAddress, MultiSignature,
 };
 
 use crate::traits::KeyTypeOperations;
 
-/// Implementation of KeyTypeOperations for MultiSignature with AccountId32.
+/// Implementation of KeyTypeOperations for MultiSignature with MultiAddress.
 ///
 /// This implementation assumes sr25519 as the underlying signature scheme.
 /// While MultiSignature can represent multiple signature types (Sr25519, Ed25519, ECDSA),
 /// this implementation specifically uses Sr25519 for all operations.
 impl KeyTypeOperations for MultiSignature {
     type Public = sr25519::Public;
-    type AccountId = <<MultiSignature as Verify>::Signer as IdentifyAccount>::AccountId;
+    type Address = MultiAddress<AccountId32, ()>;
 
     fn public_keys(keystore: &KeystorePtr, key_type: KeyTypeId) -> Vec<Self::Public> {
         keystore.sr25519_public_keys(key_type)
@@ -48,8 +48,8 @@ impl KeyTypeOperations for MultiSignature {
         }
     }
 
-    fn public_to_account_id(public: &Self::Public) -> Self::AccountId {
-        (*public).into()
+    fn public_to_address(public: &Self::Public) -> Self::Address {
+        MultiAddress::Id((*public).into())
     }
 }
 
@@ -60,7 +60,7 @@ impl KeyTypeOperations for MultiSignature {
 /// of the keccak256 hash of the public key.
 impl KeyTypeOperations for EthereumSignature {
     type Public = ecdsa::Public;
-    type AccountId = <<EthereumSignature as Verify>::Signer as IdentifyAccount>::AccountId;
+    type Address = <<EthereumSignature as Verify>::Signer as IdentifyAccount>::AccountId;
 
     fn public_keys(keystore: &KeystorePtr, key_type: KeyTypeId) -> Vec<Self::Public> {
         keystore.ecdsa_public_keys(key_type)
@@ -94,7 +94,7 @@ impl KeyTypeOperations for EthereumSignature {
         polkadot_primitives::Signature::Ecdsa(ecdsa_sig)
     }
 
-    fn public_to_account_id(public: &Self::Public) -> Self::AccountId {
+    fn public_to_address(public: &Self::Public) -> Self::Address {
         AccountId20(H160::from(H256::from(keccak_256(&public))).0)
     }
 }

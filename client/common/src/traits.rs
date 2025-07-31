@@ -1,4 +1,5 @@
 use crate::types::*;
+use codec::Encode;
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
@@ -11,6 +12,8 @@ use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, sr25519, H256};
+use sp_runtime::traits::Dispatchable;
+use sp_runtime::traits::TransactionExtension;
 
 /// A trait bundle that ensures a runtime API includes all storage-related capabilities.
 ///
@@ -224,39 +227,79 @@ where
 /// - Retrieving public keys from the keystore
 /// - Signing messages
 /// - Converting signatures to runtime types
-/// - Converting public keys to account identifiers
+/// - Converting public keys to address types
 ///
 /// # Type Parameters
 ///
-/// - `Public`: The public key type (e.g., `sp_core::sr25519::Public`)
-/// - `AccountId`: The account identifier type (e.g., `AccountId32`, `AccountId20`)
-/// - `Pair`: The key pair type used for signing operations
+/// - `Public`: The public key type (e.g., `sp_core::sr25519::Public`, `sp_core::ecdsa::Public`)
+/// - `Address`: The address type (e.g., `MultiAddress<AccountId32, ()>`, `AccountId20`)
+///
+/// # Implementations
+///
+/// StorageHub provides two implementations:
+/// - `MultiSignature`: Uses sr25519 keys with `MultiAddress<AccountId32, ()>`
+/// - `EthereumSignature`: Uses ECDSA keys with `AccountId20` (Ethereum-compatible)
 ///
 /// # Usage
 ///
+/// ## Generic Extrinsic Construction
 /// ```ignore
-/// fn sign_extrinsic<S: KeyTypeOperations>(keystore: KeystorePtr) -> UncheckedExtrinsic {
-///     let public_key = S::public_keys(&keystore, BCSV_KEY_TYPE).pop().unwrap();
-///     let signature = S::sign(&keystore, BCSV_KEY_TYPE, &public_key, &payload).unwrap();
-///     let account_id = S::public_to_account_id(&public_key);
-///     // ... construct extrinsic
+/// pub fn construct_extrinsic<Signature>(&self, function: Call) -> UncheckedExtrinsic
+/// where
+///     Signature: KeyTypeOperations<Address = Address>,
+/// {
+///     let public_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
+///     let signature = Signature::sign(&self.keystore, BCSV_KEY_TYPE, &public_key, &payload)?;
+///     let address = Signature::public_to_address(&public_key);
+///     
+///     generic::UncheckedExtrinsic::new_signed(function, address, signature, extra)
+/// }
+/// ```
+///
+/// ## Getting Public Keys
+/// ```ignore
+/// pub fn caller_pub_key<S: KeyTypeOperations>(keystore: KeystorePtr) -> S::Public {
+///     S::public_keys(&keystore, BCSV_KEY_TYPE).pop()
+///         .expect("At least one key should exist in the keystore")
 /// }
 /// ```
 pub trait KeyTypeOperations: Sized {
-    /// The public key type associated with this signature type
+    /// The public key type associated with this signature type.
+    ///
+    /// For example:
+    /// - `sr25519::Public` for sr25519 signatures
+    /// - `ecdsa::Public` for ECDSA signatures
     type Public;
 
-    /// The account identifier type
+    /// The address type used to identify accounts on-chain.
     ///
-    /// This type must be constructible from a 32-byte array and provide access to its bytes.
-    /// Common implementations include `AccountId32` for Substrate chains and `AccountId20` for
-    /// Ethereum-compatible chains.
-    type AccountId: From<[u8; 32]> + AsRef<[u8]>;
+    /// Common implementations:
+    /// - `MultiAddress<AccountId32, ()>`: Standard Substrate/Polkadot address format
+    /// - `AccountId20`: Ethereum-compatible 20-byte address format
+    type Address;
 
-    /// Get all public keys of this type from the keystore
+    /// Retrieves all public keys of this signature type from the keystore.
+    ///
+    /// # Parameters
+    /// - `keystore`: Reference to the keystore containing the keys
+    /// - `key_type`: The key type identifier to filter keys (e.g., `BCSV_KEY_TYPE`)
+    ///
+    /// # Returns
+    /// A vector of public keys found in the keystore for the specified key type.
+    /// May be empty if no keys are found.
     fn public_keys(keystore: &sp_keystore::KeystorePtr, key_type: KeyTypeId) -> Vec<Self::Public>;
 
-    /// Sign a message with the given public key and return a signature
+    /// Signs a message using the specified public key from the keystore.
+    ///
+    /// # Parameters
+    /// - `keystore`: Reference to the keystore containing the private key
+    /// - `key_type`: The key type identifier for the signing key
+    /// - `public`: The public key whose corresponding private key will be used
+    /// - `msg`: The message bytes to sign
+    ///
+    /// # Returns
+    /// - `Some(Self)`: The signature if signing was successful
+    /// - `None`: If the private key is not found or signing fails
     fn sign(
         keystore: &sp_keystore::KeystorePtr,
         key_type: KeyTypeId,
@@ -264,9 +307,114 @@ pub trait KeyTypeOperations: Sized {
         msg: &[u8],
     ) -> Option<Self>;
 
-    /// Convert this signature to the runtime signature type
+    /// Converts this signature to the Polkadot runtime signature type.
+    ///
+    /// This enables compatibility with the Polkadot runtime which expects
+    /// signatures in the `polkadot_primitives::Signature` enum format.
+    ///
+    /// # Note
+    /// The implementation for `EthereumSignature` uses encoding/decoding as a workaround
+    /// since `EthereumSignature` doesn't expose its inner `ecdsa::Signature` directly.
     fn to_runtime_signature(self) -> polkadot_primitives::Signature;
 
-    /// Convert the public key to the account identifier type
-    fn public_to_account_id(public: &Self::Public) -> Self::AccountId;
+    /// Converts a public key to its corresponding on-chain address.
+    ///
+    /// # Parameters
+    /// - `public`: The public key to convert
+    ///
+    /// # Returns
+    /// The address representation of the public key, which varies by implementation:
+    /// - For sr25519: Direct conversion to `AccountId32` wrapped in `MultiAddress`
+    /// - For ECDSA: Ethereum-style address (last 20 bytes of keccak256 hash)
+    fn public_to_address(public: &Self::Public) -> Self::Address;
+}
+
+/// Trait for abstracting transaction extension operations across different runtime configurations.
+///
+/// This trait provides a unified interface for working with transaction extensions (formerly known
+/// as "signed extensions") in Substrate-based blockchains. It abstracts the creation and management
+/// of extensions that provide additional transaction metadata and validation logic.
+///
+/// # Purpose
+///
+/// Transaction extensions are used to attach additional data to transactions and perform
+/// validation checks. Examples include:
+/// - Checking account nonces to prevent replay attacks
+/// - Validating transaction mortality (timeouts)
+/// - Handling transaction fees and tips
+/// - Adding runtime-specific metadata
+///
+/// This trait allows generic code to work with different extension configurations by providing:
+/// - A way to construct extensions from minimal data
+/// - Methods to generate implicit data required by the extension
+///
+/// # Type Parameters
+///
+/// - `Call`: The runtime call type that this extension validates
+/// - `Hash`: The block hash type used for mortality and genesis checks
+///
+/// # Required Traits
+///
+/// Implementors must also implement `TransactionExtension<Call>` which provides the core
+/// extension functionality including validation and metadata generation.
+///
+/// # Usage
+///
+/// ## Generic Extrinsic Construction
+/// ```ignore
+/// pub fn construct_extrinsic<E>(&self, function: Call) -> UncheckedExtrinsic
+/// where
+///     E: ExtensionOperations<Call, Hash = H256>,
+/// {
+///     let extension = E::from_minimal_extension(MinimalExtension {
+///         era: self.era,
+///         nonce: self.nonce,
+///         tip: self.tip,
+///     });
+///     
+///     let implicit = E::implicit(self.genesis_hash, self.block_hash);
+///     
+///     generic::UncheckedExtrinsic::new_signed(
+///         function,
+///         address,
+///         signature,
+///         extension,
+///     )
+/// }
+/// ```
+pub trait ExtensionOperations<Call: Encode + Dispatchable>: TransactionExtension<Call> {
+    /// The block hash type used by this extension.
+    ///
+    /// This is typically `H256` for most Substrate chains, but could vary
+    /// for chains with different hashing algorithms.
+    type Hash;
+
+    /// Creates a transaction extension from minimal required data.
+    ///
+    /// This method constructs a full extension from just the essential fields
+    /// that vary between transactions (era, nonce, tip). Other fields are
+    /// typically set to default or zero values.
+    ///
+    /// # Parameters
+    /// - `minimal`: The minimal extension data containing era, nonce, and tip
+    ///
+    /// # Returns
+    /// A fully constructed extension ready for use in transaction signing
+    fn from_minimal_extension(minimal: MinimalExtension) -> Self;
+
+    /// Generates the implicit data required by this extension.
+    ///
+    /// Implicit data is information that is not explicitly included in the
+    /// transaction but is required for validation. This typically includes:
+    /// - The genesis block hash (for chain identification)
+    /// - The current block hash (for mortality checks)
+    /// - Runtime version information
+    ///
+    /// # Parameters
+    /// - `genesis_block_hash`: The hash of the genesis block
+    /// - `current_block_hash`: The hash of the current block
+    ///
+    /// # Returns
+    /// The implicit data structure required by this extension type
+    fn implicit(genesis_block_hash: Self::Hash, current_block_hash: Self::Hash) -> Self::Implicit;
 }
