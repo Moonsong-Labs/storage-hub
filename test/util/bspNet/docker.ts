@@ -1,6 +1,7 @@
 import Docker from "dockerode";
 import { execSync } from "node:child_process";
 import path from "node:path";
+import net from "node:net";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import * as NodeBspNet from "./node";
@@ -84,24 +85,62 @@ export const addCopypartyContainer = async (options?: {
   const httpHostPort = containerInfo.NetworkSettings.Ports["3923/tcp"]?.[0]?.HostPort || "3923";
   const ftpHostPort = containerInfo.NetworkSettings.Ports["3921/tcp"]?.[0]?.HostPort || "3921";
 
-  // Wait for server to be ready by checking HTTP endpoint
+  // Wait for server to be ready by checking both HTTP and FTP endpoints
   const maxRetries = 30;
+  let httpReady = false;
+  let ftpReady = false;
+
   for (let i = 0; i < maxRetries; i++) {
-    try {
-      // Try to connect to the HTTP endpoint
-      const response = await fetch(`http://localhost:${httpHostPort}/`);
-      if (response.ok || response.status === 403) {
-        // Server is ready (403 is expected for root path)
-        console.log(`Copyparty server ready on http://localhost:${httpHostPort}`);
-        break;
+    // Check HTTP endpoint
+    if (!httpReady) {
+      try {
+        const response = await fetch(`http://localhost:${httpHostPort}/`);
+        if (response.ok || response.status === 403) {
+          httpReady = true;
+          console.log(`Copyparty HTTP server ready on http://localhost:${httpHostPort}`);
+        }
+      } catch (e) {
+        // HTTP not ready yet
       }
-    } catch (e) {
-      if (i === maxRetries - 1) {
-        throw new Error(`Copyparty server failed to start after ${maxRetries} attempts`);
-      }
-      // Server not ready yet, wait and retry
-      await sleep(1000);
     }
+
+    // Check FTP endpoint by trying to connect
+    if (!ftpReady) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const client = net.createConnection(
+            { port: Number(ftpHostPort), host: "localhost" },
+            () => {
+              client.end();
+              resolve();
+            }
+          );
+          client.on("error", reject);
+          client.setTimeout(1000, () => {
+            client.destroy();
+            reject(new Error("Timeout"));
+          });
+        });
+        ftpReady = true;
+        console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
+      } catch (e) {
+        // FTP not ready yet
+      }
+    }
+
+    // Both ready, we can proceed
+    if (httpReady && ftpReady) {
+      break;
+    }
+
+    if (i === maxRetries - 1) {
+      throw new Error(
+        `Copyparty server failed to start after ${maxRetries} attempts (HTTP: ${httpReady}, FTP: ${ftpReady})`
+      );
+    }
+
+    // Server not ready yet, wait and retry
+    await sleep(1000);
   }
 
   return {
