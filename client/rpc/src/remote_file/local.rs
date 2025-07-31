@@ -258,7 +258,8 @@ impl RemoteFileHandler for LocalFileHandler {
         let file = File::open(&self.absolute_file_path).await?;
 
         // Wrap file in a buffered reader with buffer size based on chunks_buffer
-        let buffer_size = self.config.chunks_buffer.max(1) * shc_common::types::FILE_CHUNK_SIZE as usize;
+        let buffer_size =
+            self.config.chunks_buffer.max(1) * shc_common::types::FILE_CHUNK_SIZE as usize;
         let buffered_reader = tokio::io::BufReader::with_capacity(buffer_size, file);
         Ok(Box::new(buffered_reader))
     }
@@ -674,7 +675,7 @@ mod tests {
     #[test]
     fn test_todo_match_arm_unreachable() {
         // Verify that the parent() match arm returning None or Some("") is unreachable
-        
+
         // Edge case 1: parent() returns None only for root paths
         #[cfg(unix)]
         {
@@ -682,21 +683,22 @@ mod tests {
             assert_eq!(root.parent(), None);
             assert!(root.exists()); // Root always exists, so loop breaks before parent()
         }
-        
+
         // Edge case 2: parent() returns Some("") only for relative paths
         let file = std::path::Path::new("file.txt");
         assert_eq!(file.parent(), Some(std::path::Path::new("")));
         assert!(!file.is_absolute());
-        
+
         // But new_from_path_internal requires absolute paths
         let abs_path = PathBuf::from("/some/absolute/path");
         assert!(abs_path.is_absolute());
         let handler = LocalFileHandler::new_from_path_internal(
             abs_path,
             RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
-        ).unwrap();
+        )
+        .unwrap();
         assert!(matches!(handler.file_status, FileStatus::NotFound { .. }));
-        
+
         // Test traversal up to root for non-existent absolute path
         #[cfg(unix)]
         {
@@ -704,7 +706,8 @@ mod tests {
             let handler = LocalFileHandler::new_from_path_internal(
                 deep_path,
                 RemoteFileConfig::new(TEST_MAX_FILE_SIZE),
-            ).unwrap();
+            )
+            .unwrap();
             // Should traverse up to "/" which exists
             assert!(matches!(handler.file_status, FileStatus::NotFound { .. }));
         }

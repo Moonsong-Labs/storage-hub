@@ -238,7 +238,6 @@ where
         )
     }
 
-
     /// Set configuration options for the MSP charge fees task.
     pub fn with_msp_charge_fees_config(
         &mut self,

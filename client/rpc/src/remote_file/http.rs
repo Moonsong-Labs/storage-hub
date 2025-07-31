@@ -219,9 +219,9 @@ impl RemoteFileHandler for HttpFileHandler {
                 );
 
                 // Wrap the reader in a buffered reader with buffer size based on chunks_buffer
-                let buffer_size = self.config.chunks_buffer.max(1) * shc_common::types::FILE_CHUNK_SIZE as usize;
-                let buffered_reader =
-                    tokio::io::BufReader::with_capacity(buffer_size, reader);
+                let buffer_size =
+                    self.config.chunks_buffer.max(1) * shc_common::types::FILE_CHUNK_SIZE as usize;
+                let buffered_reader = tokio::io::BufReader::with_capacity(buffer_size, reader);
 
                 Ok(Box::new(buffered_reader) as Box<dyn AsyncRead + Send + Unpin>)
             }

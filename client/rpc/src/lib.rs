@@ -28,8 +28,6 @@ use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
-// Default max file size: 10GB
-const DEFAULT_MAX_FILE_SIZE: u64 = 10 * 1024 * 1024 * 1024;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CheckpointChallenge {
