@@ -28,7 +28,6 @@ use remote_file::{RemoteFileConfig, RemoteFileHandlerFactory};
 
 const LOG_TARGET: &str = "storage-hub-client-rpc";
 
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CheckpointChallenge {
     pub file_key: H256,
