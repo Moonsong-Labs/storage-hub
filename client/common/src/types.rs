@@ -228,3 +228,22 @@ impl MinimalSignedExtra {
         Self { era, nonce, tip }
     }
 }
+
+//TODO: This should be moved to the runtime crate once the SH Client is abstracted
+//TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
+impl From<MinimalSignedExtra> for storage_hub_runtime::SignedExtra {
+    fn from(minimal: MinimalSignedExtra) -> Self {
+        (
+            frame_system::CheckNonZeroSender::<Runtime>::new(),
+            frame_system::CheckSpecVersion::<Runtime>::new(),
+            frame_system::CheckTxVersion::<Runtime>::new(),
+            frame_system::CheckGenesis::<Runtime>::new(),
+            frame_system::CheckEra::<Runtime>::from(minimal.era),
+            frame_system::CheckNonce::<Runtime>::from(minimal.nonce),
+            frame_system::CheckWeight::<Runtime>::new(),
+            minimal.tip,
+            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<Runtime>::new(),
+            frame_metadata_hash_extension::CheckMetadataHash::new(false),
+        )
+    }
+}

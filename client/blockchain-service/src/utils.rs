@@ -14,7 +14,7 @@ use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
-    traits::Zero,
+    traits::{Dispatchable, TransactionExtension, Zero},
     AccountId32, MultiSignature, SaturatedConversion,
 };
 use substrate_frame_rpc_system::AccountNonceApi;
@@ -32,8 +32,9 @@ use shc_common::{
         get_provider_id_from_keystore, GetProviderIdError,
     },
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
+        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalSignedExtra, ParachainClient,
+        ProofsDealerProviderId, StorageProviderId, TrieAddMutation, TrieMutation,
+        TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_common::{
@@ -42,7 +43,7 @@ use shc_common::{
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
-use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
+use storage_hub_runtime::{RuntimeCall, RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
 use crate::{
     events::{
@@ -473,7 +474,7 @@ where
         );
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic::<MultiSignature>(
+        let extrinsic = self.construct_extrinsic::<MultiSignature, SignedExtra, RuntimeCall>(
             self.client.clone(),
             call,
             nonce,
@@ -537,15 +538,17 @@ where
     }
 
     /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
-    pub fn construct_extrinsic<Signature>(
+    pub fn construct_extrinsic<Signature, SigExtra, Call>(
         &self,
         client: Arc<ParachainClient<RuntimeApi>>,
-        function: impl Into<storage_hub_runtime::RuntimeCall>,
+        function: impl Into<Call>,
         nonce: u32,
         tip: Tip,
     ) -> UncheckedExtrinsic
     where
         Signature: KeyTypeOperations<AccountId = storage_hub_runtime::AccountId>,
+        SigExtra: From<MinimalSignedExtra> + TransactionExtension<Call> + Encode + Clone,
+        Call: Encode + Dispatchable + Clone,
     {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
@@ -558,40 +561,25 @@ where
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
-        let extra: SignedExtra = (
-            frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(generic::Era::mortal(
-                period,
-                current_block,
-            )),
-            frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(nonce),
-            frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
-            tip,
-            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
-                storage_hub_runtime::Runtime,
-            >::new(),
-            frame_metadata_hash_extension::CheckMetadataHash::new(false),
+
+        let minimal_extra =
+            MinimalSignedExtra::new(generic::Era::mortal(period, current_block), nonce, tip);
+        let extra: SigExtra = minimal_extra.into();
+
+        let implicit = (
+            (),
+            storage_hub_runtime::VERSION.spec_version,
+            storage_hub_runtime::VERSION.transaction_version,
+            genesis_block,
+            current_block_hash,
+            (),
+            (),
+            (),
+            (),
+            None,
         );
 
-        let raw_payload = SignedPayload::from_raw(
-            function.clone(),
-            extra.clone(),
-            (
-                (),
-                storage_hub_runtime::VERSION.spec_version,
-                storage_hub_runtime::VERSION.transaction_version,
-                genesis_block,
-                current_block_hash,
-                (),
-                (),
-                (),
-                (),
-                None,
-            ),
-        );
+        let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
         let caller_pub_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
 
