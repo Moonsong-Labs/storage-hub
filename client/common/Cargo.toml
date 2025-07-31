@@ -73,6 +73,7 @@ pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
+pallet-transaction-payment = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -103,6 +104,7 @@ std = [
 	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
+	"pallet-transaction-payment/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
@@ -111,5 +113,6 @@ runtime-benchmarks = [
 	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
+	"pallet-transaction-payment/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]

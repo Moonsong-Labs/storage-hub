@@ -12,7 +12,7 @@ pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
 use shp_opaque::Block;
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
-use sp_runtime::{traits::Block as BlockT, KeyTypeId};
+use sp_runtime::{generic, traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use storage_hub_runtime::Runtime;
@@ -83,6 +83,7 @@ pub type StorageRequestMetadata = pallet_file_system::types::StorageRequestMetad
 pub type MaxBatchConfirmStorageRequests =
     <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
 pub type ValuePropositionWithId = pallet_storage_providers::types::ValuePropositionWithId<Runtime>;
+pub type Tip = pallet_transaction_payment::ChargeTransactionPayment<Runtime>;
 
 /// Type alias for the events vector.
 ///
@@ -213,5 +214,17 @@ impl UploadRequestId {
     pub fn next(&self) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(1);
         UploadRequestId(COUNTER.fetch_add(1, Ordering::SeqCst))
+    }
+}
+
+pub struct MinimalSignedExtra {
+    pub era: generic::Era,
+    pub nonce: u32,
+    pub tip: Tip,
+}
+
+impl MinimalSignedExtra {
+    pub fn new(era: generic::Era, nonce: u32, tip: Tip) -> Self {
+        Self { era, nonce, tip }
     }
 }

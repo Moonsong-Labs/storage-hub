@@ -26,7 +26,6 @@ use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
 use shc_actors_framework::actor::Actor;
-use shc_common::traits::{KeyTypeOperations, StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
@@ -36,6 +35,10 @@ use shc_common::{
         BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
         StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
+};
+use shc_common::{
+    traits::{KeyTypeOperations, StorageEnableApiCollection, StorageEnableRuntimeApi},
+    types::Tip,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
@@ -49,7 +52,7 @@ use crate::{
     handler::LOG_TARGET,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
-        NewBlockNotificationKind, SendExtrinsicOptions, Tip,
+        NewBlockNotificationKind, SendExtrinsicOptions,
     },
     BlockchainService,
 };
@@ -357,9 +360,9 @@ where
     }
 
     /// Get the current account nonce on-chain for a generic signature type.
-    pub(crate) fn account_nonce<S>(&self, block_hash: &H256) -> u32 
-    where 
-        S: KeyTypeOperations<AccountId = AccountId32>
+    pub(crate) fn account_nonce<S>(&self, block_hash: &H256) -> u32
+    where
+        S: KeyTypeOperations<AccountId = AccountId32>,
     {
         let pub_key = Self::caller_pub_key::<S>(self.keystore.clone());
         self.client
@@ -534,15 +537,15 @@ where
     }
 
     /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
-    pub fn construct_extrinsic<S>(
+    pub fn construct_extrinsic<Signature>(
         &self,
         client: Arc<ParachainClient<RuntimeApi>>,
         function: impl Into<storage_hub_runtime::RuntimeCall>,
         nonce: u32,
         tip: Tip,
-    ) -> UncheckedExtrinsic 
+    ) -> UncheckedExtrinsic
     where
-        S: KeyTypeOperations<AccountId = AccountId32>
+        Signature: KeyTypeOperations<AccountId = storage_hub_runtime::AccountId>,
     {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
@@ -590,17 +593,17 @@ where
             ),
         );
 
-        let caller_pub_key = Self::caller_pub_key::<S>(self.keystore.clone());
+        let caller_pub_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload
-            .using_encoded(|e| S::sign(&self.keystore, BCSV_KEY_TYPE, &caller_pub_key, e))
+            .using_encoded(|e| Signature::sign(&self.keystore, BCSV_KEY_TYPE, &caller_pub_key, e))
             .expect("The payload is always valid and should be possible to sign; qed");
 
         // Construct the extrinsic.
         UncheckedExtrinsic::new_signed(
             function.clone(),
-            storage_hub_runtime::Address::Id(S::public_to_account_id(&caller_pub_key)),
+            storage_hub_runtime::Address::Id(Signature::public_to_account_id(&caller_pub_key)),
             signature.to_runtime_signature(),
             extra.clone(),
         )

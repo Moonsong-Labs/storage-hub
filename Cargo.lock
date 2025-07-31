@@ -14121,6 +14121,7 @@ dependencies = [
  "pallet-proofs-dealer-runtime-api",
  "pallet-storage-providers",
  "pallet-storage-providers-runtime-api",
+ "pallet-transaction-payment 39.1.0",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
  "polkadot-primitives 17.1.0",

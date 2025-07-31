@@ -5,7 +5,7 @@
 
 use codec::{Decode, Encode};
 use fp_account::{AccountId20, EthereumSignature};
-use sp_core::{ecdsa, keccak_256, sr25519, Hasher, H160, H256};
+use sp_core::{ecdsa, keccak_256, sr25519, H160, H256};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{
     traits::{IdentifyAccount, Verify},
