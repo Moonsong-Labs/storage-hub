@@ -3,7 +3,9 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi};
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
+};
 use sp_api::ApiError;
 use sp_core::H256;
 
@@ -197,7 +199,9 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
 
 /// Interface for interacting with the BlockchainService actor.
 #[async_trait]
-pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntime>: BlockchainServiceCommandInterface<Runtime> {
+pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntime>:
+    BlockchainServiceCommandInterface
+{
     /// Helper function to check if an extrinsic failed or succeeded in a block.
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
 

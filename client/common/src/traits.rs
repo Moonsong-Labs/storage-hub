@@ -184,14 +184,21 @@ impl<T> StorageEnableRuntimeApi for T where
 /// - `Call` - The dispatchable call type for submitting extrinsics
 /// - `Signature` - The signature type used for signing transactions
 /// - `Extension` - The transaction extension type for additional transaction logic
-pub trait StorageEnableRuntime {
+pub trait StorageEnableRuntime: Send + Sync + 'static {
     /// The address format used to identify accounts in the runtime.
     /// Must support type information, encoding/decoding, and debug formatting.
-    type Address: StaticTypeInfo + Decode + Encode + core::fmt::Debug;
+    type Address: StaticTypeInfo + Decode + Encode + core::fmt::Debug + Send;
 
     /// The dispatchable call type representing extrinsics that can be submitted to the runtime.
     /// Must be a member type that supports encoding/decoding and dispatching.
-    type Call: StaticTypeInfo + Decode + Encode + Member + Dispatchable;
+    type Call: StaticTypeInfo
+        + Decode
+        + Encode
+        + Member
+        + Dispatchable
+        // TODO: Remove these once we create an abstraction trait to convert `StorageEnableCalls` to `RuntimeCall`.
+        + From<storage_hub_runtime::RuntimeCall>
+        + Into<storage_hub_runtime::RuntimeCall>;
 
     /// The signature type used for signing transactions.
     /// Must support verification and key operations that produce the associated `Address` type.

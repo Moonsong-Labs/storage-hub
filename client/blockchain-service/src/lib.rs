@@ -13,7 +13,9 @@ use std::{path::PathBuf, sync::Arc};
 
 use handler::BlockchainServiceConfig;
 use sc_service::RpcHandlers;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi};
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
+};
 use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};
@@ -38,7 +40,7 @@ where
     FSH: shc_forest_manager::traits::ForestStorageHandler + Clone + Send + Sync + 'static,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    Runtime: StorageEnableRuntime,
+    Runtime: StorageEnableRuntime + Send + 'static,
 {
     let task_spawner = task_spawner
         .with_name("blockchain-service")

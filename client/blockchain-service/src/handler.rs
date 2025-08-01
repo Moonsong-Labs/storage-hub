@@ -1,6 +1,8 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi};
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
+};
 use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 use sc_client_api::{
@@ -161,11 +163,12 @@ where
 }
 
 /// Merged event loop message for the BlockchainService actor.
-enum MergedEventLoopMessage<Block>
+enum MergedEventLoopMessage<Block, Runtime>
 where
     Block: cumulus_primitives_core::BlockT,
+    Runtime: StorageEnableRuntime,
 {
-    Command(BlockchainServiceCommand),
+    Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<Block>),
     FinalityNotification(FinalityNotification<Block>),
 }
@@ -177,7 +180,7 @@ where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    Runtime: StorageEnableRuntime,
+    Runtime: StorageEnableRuntime + Send + Sync + 'static,
 {
     fn new(
         actor: BlockchainService<FSH, RuntimeApi, Runtime>,
