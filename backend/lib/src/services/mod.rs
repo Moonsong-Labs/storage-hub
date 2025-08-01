@@ -13,9 +13,11 @@ use crate::data::{
 // Remove when implementing real MSP services
 pub mod counter;
 pub mod health;
+pub mod msp;
 
 use counter::CounterService;
 use health::HealthService;
+use msp::MspService;
 
 /// Container for all backend services
 #[derive(Clone)]
@@ -24,6 +26,7 @@ pub struct Services {
     // Remove when implementing real MSP services
     pub counter: Arc<CounterService>,
     pub health: Arc<HealthService>,
+    pub msp: Arc<MspService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<DBClient>,
     pub rpc: Arc<StorageHubRpcClient>,
@@ -42,9 +45,15 @@ impl Services {
             postgres.clone(),
             rpc.clone(),
         ));
+        let msp = Arc::new(MspService::new(
+            storage.clone(),
+            postgres.clone(),
+            rpc.clone(),
+        ));
         Self {
             counter,
             health,
+            msp,
             storage,
             postgres,
             rpc,
