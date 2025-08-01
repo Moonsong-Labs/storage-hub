@@ -3,6 +3,13 @@ use thiserror::Error;
 use tokio::io::AsyncRead;
 use url::Url;
 
+pub mod factory;
+pub mod ftp;
+pub mod http;
+pub mod local;
+
+pub use factory::RemoteFileHandlerFactory;
+
 #[derive(Debug, Error)]
 pub enum RemoteFileError {
     #[error("Invalid URL: {0}")]
@@ -88,10 +95,3 @@ impl Default for RemoteFileConfig {
         Self::new(Self::DEFAULT_MAX_FILE_SIZE)
     }
 }
-
-pub mod factory;
-pub mod ftp;
-pub mod http;
-pub mod local;
-
-pub use factory::RemoteFileHandlerFactory;
