@@ -11,8 +11,10 @@ use crate::data::{
 };
 
 pub mod health;
+pub mod msp;
 
 use health::HealthService;
+use msp::MspService;
 
 // TODO: consider re-exporting all the services in this module
 // so other modules can easily get the right types (eg DBClient) at `crate::services`
@@ -23,6 +25,7 @@ pub struct Services {
     // TODO(SCAFFOLDING): Health service is for demostration only
     // Will be replaced with a proper health service is needed when we implement the backend proper
     pub health: Arc<HealthService>,
+    pub msp: Arc<MspService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<DBClient>,
     pub rpc: Arc<StorageHubRpcClient>,
@@ -40,8 +43,14 @@ impl Services {
             postgres.clone(),
             rpc.clone(),
         ));
+        let msp = Arc::new(MspService::new(
+            storage.clone(),
+            postgres.clone(),
+            rpc.clone(),
+        ));
         Self {
             health,
+            msp,
             storage,
             postgres,
             rpc,
