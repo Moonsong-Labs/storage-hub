@@ -5,8 +5,7 @@ pub fn validate_eth_address(address: &str) -> Result<(), Error> {
        address[2..].chars().all(|c| c.is_ascii_hexdigit()) {
         Ok(())
     } else {
-        // TODO: Replace with Error::BadRequest in Phase 5
-        Err(Error::NotFound("Invalid Ethereum address".to_string()))
+        Err(Error::BadRequest("Invalid Ethereum address".to_string()))
     }
 }
 
@@ -14,8 +13,7 @@ pub fn validate_hex_id(id: &str, expected_len: usize) -> Result<(), Error> {
     if id.len() == expected_len && id.chars().all(|c| c.is_ascii_hexdigit()) {
         Ok(())
     } else {
-        // TODO: Replace with Error::BadRequest in Phase 5
-        Err(Error::NotFound(format!("Invalid hex ID, expected {} characters", expected_len)))
+        Err(Error::BadRequest(format!("Invalid hex ID, expected {} characters", expected_len)))
     }
 }
 
@@ -40,7 +38,6 @@ pub fn extract_bearer_token(auth_header: Option<&str>) -> Result<String, Error> 
         Some(header) if header.starts_with("Bearer ") => {
             Ok(header[7..].to_string())
         }
-        // TODO: Replace with Error::Unauthorized in Phase 5
-        _ => Err(Error::NotFound("Missing or invalid authorization header".to_string()))
+        _ => Err(Error::Unauthorized("Missing or invalid authorization header".to_string()))
     }
 }
