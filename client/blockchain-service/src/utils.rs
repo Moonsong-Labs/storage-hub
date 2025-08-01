@@ -481,12 +481,7 @@ where
         );
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic::<Runtime>(
-            self.client.clone(),
-            call,
-            nonce,
-            options.tip(),
-        );
+        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, options.tip());
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -533,7 +528,7 @@ where
     }
 
     /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
-    pub fn construct_extrinsic<Runtime: StorageEnableRuntime>(
+    pub fn construct_extrinsic(
         &self,
         client: Arc<ParachainClient<RuntimeApi>>,
         function: impl Into<Runtime::Call>,
