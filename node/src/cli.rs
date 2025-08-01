@@ -418,7 +418,7 @@ impl ProviderConfigurations {
             bsp_submit_proof,
             blockchain_service,
             maintenance_mode: self.maintenance_mode,
-            remote_file: Default::default(),
+            rpc: Default::default(),
         }
     }
 }

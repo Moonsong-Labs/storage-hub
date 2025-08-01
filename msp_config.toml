@@ -36,8 +36,10 @@ max_tip = 100.0
 [provider.blockchain_service]
 extrinsic_retry_timeout = 60
 
+# RPC configuration
+[provider.rpc]
 # Remote file configuration
-[provider.remote_file]
+[provider.rpc.remote_file]
 # Maximum file size in bytes (default: 10GB)
 max_file_size = 10737418240
 # Connection timeout in seconds (default: 30)
