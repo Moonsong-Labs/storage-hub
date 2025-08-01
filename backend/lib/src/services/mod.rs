@@ -9,12 +9,12 @@ use crate::data::{
     storage::{BoxedStorageWrapper, InMemoryStorage},
 };
 
-// TODO(SCAFFOLDING): Counter module is for demonstration only
-// Remove when implementing real MSP services
+pub mod auth;
 pub mod counter;
 pub mod health;
 pub mod msp;
 
+use auth::AuthService;
 use counter::CounterService;
 use health::HealthService;
 use msp::MspService;
@@ -22,8 +22,7 @@ use msp::MspService;
 /// Container for all backend services
 #[derive(Clone)]
 pub struct Services {
-    // TODO(SCAFFOLDING): Counter service field is for demonstration only
-    // Remove when implementing real MSP services
+    pub auth: Arc<AuthService>,
     pub counter: Arc<CounterService>,
     pub health: Arc<HealthService>,
     pub msp: Arc<MspService>,
@@ -39,6 +38,7 @@ impl Services {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
+        let auth = Arc::new(AuthService::new(storage.clone()));
         let counter = Arc::new(CounterService::new(storage.clone()));
         let health = Arc::new(HealthService::new(
             storage.clone(),
@@ -51,6 +51,7 @@ impl Services {
             rpc.clone(),
         ));
         Self {
+            auth,
             counter,
             health,
             msp,
