@@ -249,3 +249,5 @@ try-runtime = [
 	"shp-treasury-funding/try-runtime",
 	"sp-runtime/try-runtime",
 ]
+
+fast-runtime = []
