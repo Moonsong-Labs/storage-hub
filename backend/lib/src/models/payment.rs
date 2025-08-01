@@ -1,0 +1,1 @@
+// Placeholder for payment models - to be implemented in Phase 2
