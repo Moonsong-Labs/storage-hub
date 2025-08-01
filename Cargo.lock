@@ -16525,6 +16525,13 @@ dependencies = [
 name = "storagehub-wasm"
 version = "0.1.0"
 dependencies = [
+ "hex",
+ "parity-scale-codec",
+ "shp-constants",
+ "shp-file-metadata",
+ "sp-core 35.0.0",
+ "sp-runtime-interface 29.0.0",
+ "sp-trie 38.0.0",
  "wasm-bindgen",
 ]
 
