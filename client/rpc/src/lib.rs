@@ -67,18 +67,14 @@ where
         file_storage: Arc<RwLock<FL>>,
         forest_storage_handler: FSH,
         keystore: KeystorePtr,
+        remote_file_config: RemoteFileConfig,
     ) -> Self {
         Self {
             file_storage,
             forest_storage_handler,
             keystore,
-            remote_file_config: RemoteFileConfig::default(),
+            remote_file_config,
         }
-    }
-
-    pub fn with_remote_file_config(mut self, config: RemoteFileConfig) -> Self {
-        self.remote_file_config = config;
-        self
     }
 }
 

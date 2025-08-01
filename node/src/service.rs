@@ -291,9 +291,8 @@ where
             }
 
             // Get the RPC configuration to use for this StorageHub node client.
-            let rpc_config = storage_hub_builder
-                .create_rpc_config(keystore)
-                .with_remote_file_config(remote_file.clone().into());
+            let rpc_config =
+                storage_hub_builder.create_rpc_config(keystore, remote_file.clone().into());
 
             Some((storage_hub_builder, rpc_config))
         }
