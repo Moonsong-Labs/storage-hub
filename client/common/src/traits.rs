@@ -173,15 +173,37 @@ impl<T> StorageEnableRuntimeApi for T where
 {
 }
 
+/// Trait defining the runtime types required for StorageHub Client operations.
+///
+/// This trait establishes the core types needed for interacting with a StorageHub-enabled
+/// runtime, including address formats, call types, signatures, and transaction extensions.
+///
+/// # Associated Types
+///
+/// - `Address` - The account address format used by the runtime
+/// - `Call` - The dispatchable call type for submitting extrinsics
+/// - `Signature` - The signature type used for signing transactions
+/// - `Extension` - The transaction extension type for additional transaction logic
 pub trait StorageEnableRuntime {
+    /// The address format used to identify accounts in the runtime.
+    /// Must support type information, encoding/decoding, and debug formatting.
     type Address: StaticTypeInfo + Decode + Encode + core::fmt::Debug;
+
+    /// The dispatchable call type representing extrinsics that can be submitted to the runtime.
+    /// Must be a member type that supports encoding/decoding and dispatching.
     type Call: StaticTypeInfo + Decode + Encode + Member + Dispatchable;
+
+    /// The signature type used for signing transactions.
+    /// Must support verification and key operations that produce the associated `Address` type.
     type Signature: StaticTypeInfo
         + Decode
         + Encode
         + Member
         + Verify
         + KeyTypeOperations<Address = Self::Address>;
+
+    /// The transaction extension type for additional validation and transaction logic.
+    /// Extensions can modify transaction behavior and must support the runtime's call type.
     type Extension: StaticTypeInfo
         + Decode
         + Encode

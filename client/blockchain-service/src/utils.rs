@@ -41,10 +41,10 @@ use sp_core::{Blake2Hasher, Hasher, H256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
-    traits::{Dispatchable, TransactionExtension, Zero},
+    traits::Zero,
     AccountId32, MultiSignature, SaturatedConversion,
 };
-use storage_hub_runtime::{Address, RuntimeCall, RuntimeEvent, SignedExtra};
+use storage_hub_runtime::{Address, RuntimeEvent};
 use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{

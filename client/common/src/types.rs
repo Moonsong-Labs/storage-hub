@@ -240,6 +240,8 @@ impl StorageEnableRuntime for storage_hub_runtime::Runtime {
     type Extension = storage_hub_runtime::SignedExtra;
 }
 
+//TODO: This should be moved to the runtime crate once the SH Client is abstracted
+//TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
 impl ExtensionOperations<storage_hub_runtime::RuntimeCall> for storage_hub_runtime::SignedExtra {
     type Hash = storage_hub_runtime::Hash;
 
