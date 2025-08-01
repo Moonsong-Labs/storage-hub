@@ -158,17 +158,16 @@ where
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
+    receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
     actor: BlockchainService<FSH, RuntimeApi, Runtime>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
-enum MergedEventLoopMessage<Block, Runtime>
+enum MergedEventLoopMessage<Block>
 where
     Block: cumulus_primitives_core::BlockT,
-    Runtime: StorageEnableRuntime,
 {
-    Command(BlockchainServiceCommand<Runtime>),
+    Command(BlockchainServiceCommand),
     BlockImportNotification(BlockImportNotification<Block>),
     FinalityNotification(FinalityNotification<Block>),
 }
@@ -184,7 +183,7 @@ where
 {
     fn new(
         actor: BlockchainService<FSH, RuntimeApi, Runtime>,
-        receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
+        receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
     ) -> Self {
         Self { actor, receiver }
     }
@@ -240,7 +239,7 @@ where
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    type Message = BlockchainServiceCommand<Runtime>;
+    type Message = BlockchainServiceCommand;
     type EventLoop = BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>;
     type EventBusProvider = BlockchainServiceEventBusProvider;
 

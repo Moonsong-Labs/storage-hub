@@ -51,7 +51,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 )]
-pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
+pub enum BlockchainServiceCommand {
     #[command(success_type = SubmittedTransaction)]
     SendExtrinsic {
         call: Runtime::Call,
