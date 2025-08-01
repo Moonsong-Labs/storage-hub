@@ -41,10 +41,10 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
-        FileLocation, FileOperation, FileOperationIntention, Fingerprint, ForestProof, MerkleHash,
-        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
-        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
-        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
+        FileLocation, FileMetadata, FileOperation, FileOperationIntention, Fingerprint,
+        ForestProof, MerkleHash, MoveBucketRequestMetadata, MultiAddresses, PeerIds,
+        PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest, ReplicationTarget,
+        ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
         StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
@@ -1325,7 +1325,7 @@ where
             // add the file metadata to the `accepted_files_metadata` since all keys in this array will be added to the bucket forest via an apply delta.
             // This can happen if the storage request was issued again by the user and the MSP has already stored the file.
             if !proven_keys.contains(&file_key_with_proof.file_key) {
-                accepted_files_metadata.push((file_metadata, file_key_with_proof));
+                accepted_files_metadata.push((file_metadata.clone(), file_key_with_proof));
 
                 // Check that the key proof is valid.
                 <T::ProofDealer as shp_traits::ProofsDealerInterface>::verify_key_proof(
@@ -1356,6 +1356,7 @@ where
             // Notify that the storage request has been accepted by the MSP.
             Self::deposit_event(Event::MspAcceptedStorageRequest {
                 file_key: file_key_with_proof.file_key,
+                file_metadata: file_metadata.clone(),
             });
 
             // Check if all BSPs have confirmed storing the file.
@@ -1641,7 +1642,7 @@ where
 
         // Create a queue to store the file keys and metadata to be processed.
         let mut file_keys_and_metadata: BoundedVec<
-            (MerkleHash<T>, Vec<u8>),
+            (MerkleHash<T>, Vec<u8>, FileMetadata),
             T::MaxBatchConfirmStorageRequests,
         > = BoundedVec::new();
 
@@ -1817,7 +1818,7 @@ where
             let encoded_trie_value = file_metadata.encode();
 
             expect_or_err!(
-                file_keys_and_metadata.try_push((file_key, encoded_trie_value)),
+                file_keys_and_metadata.try_push((file_key, encoded_trie_value, file_metadata)),
                 "Failed to push file key and metadata",
                 Error::<T>::FileMetadataProcessingQueueFull,
                 result
@@ -1879,7 +1880,7 @@ where
         }
 
         // Remove all the skipped file keys from file_keys_and_metadata
-        file_keys_and_metadata.retain(|(fk, _)| !skipped_file_keys.contains(fk));
+        file_keys_and_metadata.retain(|(fk, _, _)| !skipped_file_keys.contains(fk));
 
         ensure!(
             !file_keys_and_metadata.is_empty(),
@@ -1911,7 +1912,9 @@ where
 
         let mutations = file_keys_and_metadata
             .iter()
-            .map(|(fk, metadata)| (*fk, TrieAddMutation::new(metadata.clone()).into()))
+            .map(|(fk, encoded_metadata, _)| {
+                (*fk, TrieAddMutation::new(encoded_metadata.clone()).into())
+            })
             .collect::<Vec<_>>();
 
         // Compute new root after inserting new file keys in forest partial trie.
@@ -1935,10 +1938,13 @@ where
             result
         );
 
-        let confirmed_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests> = expect_or_err!(
+        let confirmed_file_keys: BoundedVec<
+            (MerkleHash<T>, FileMetadata),
+            T::MaxBatchConfirmStorageRequests,
+        > = expect_or_err!(
             file_keys_and_metadata
                 .into_iter()
-                .map(|(fk, _)| fk)
+                .map(|(fk, _, fm)| (fk, fm))
                 .collect::<Vec<_>>()
                 .try_into(),
             "Failed to convert file_keys_and_metadata to BoundedVec",
