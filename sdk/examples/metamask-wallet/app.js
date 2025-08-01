@@ -1,4 +1,8 @@
-import { MetamaskWallet } from '@storagehub-sdk/core';
+import { MetamaskWallet, FileManager } from '@storagehub-sdk/core';
+import initWasm from '@storagehub/wasm';
+
+// Initialize WASM once at module load
+const wasmReady = initWasm();
 import { parseEther, Transaction, getBytes } from 'ethers';
 
 // DOM Elements
@@ -89,5 +93,35 @@ sendTxButton.addEventListener('click', async () => {
         txSigOutput.textContent = signature;
     } catch (err) {
         showError(err.message);
+    }
+});
+
+// ---------------- File Handling ----------------
+
+// DOM elements for file hash computation
+const fileInput = document.getElementById('fileInput');
+const fileNameDisplay = document.getElementById('fileNameDisplay');
+const rootHashDisplay = document.getElementById('rootHashDisplay');
+
+fileInput?.addEventListener('change', async (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+        return;
+    }
+    hideError();
+    fileNameDisplay.textContent = file.name;
+    rootHashDisplay.textContent = 'Computing...';
+    try {
+        // Ensure the WASM module is ready before interacting with FileTrie
+        await wasmReady;
+        const fm = new FileManager({
+            size: file.size,
+            stream: () => file.stream(),
+        });
+        const fp = await fm.getFingerprint();
+        rootHashDisplay.textContent = fp.toHex ? fp.toHex() : fp.toString();
+    } catch (err) {
+        showError(err.message);
+        rootHashDisplay.textContent = '';
     }
 }); 
