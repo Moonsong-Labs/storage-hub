@@ -1,7 +1,9 @@
 //! API module for StorageHub backend
 
 pub mod handlers;
+pub mod msp_handlers;
 pub mod routes;
+pub mod validation;
 
 use axum::http::header::CONTENT_TYPE;
 use axum::http::Method;
