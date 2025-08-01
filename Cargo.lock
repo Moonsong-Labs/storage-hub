@@ -14041,6 +14041,7 @@ dependencies = [
  "shc-common",
  "shc-file-manager",
  "shc-file-transfer-service",
+ "shc-fisherman-service",
  "shc-forest-manager",
  "shc-indexer-db",
  "shc-rpc",
@@ -14156,6 +14157,30 @@ dependencies = [
  "shc-common",
  "shp-file-key-verifier",
  "shp-file-metadata",
+ "thiserror 1.0.69",
+ "tokio",
+]
+
+[[package]]
+name = "shc-fisherman-service"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "diesel",
+ "diesel-async",
+ "futures",
+ "log",
+ "pallet-storage-providers-runtime-api",
+ "sc-client-api",
+ "sc-utils",
+ "shc-actors-derive",
+ "shc-actors-framework",
+ "shc-common",
+ "shc-indexer-db",
+ "sp-api 35.0.0",
+ "sp-core 35.0.0",
+ "sp-runtime 40.1.0",
+ "storage-hub-runtime",
  "thiserror 1.0.69",
  "tokio",
 ]
@@ -16406,6 +16431,7 @@ dependencies = [
  "shc-common",
  "shc-file-manager",
  "shc-file-transfer-service",
+ "shc-fisherman-service",
  "shc-forest-manager",
  "shc-indexer-db",
  "shc-indexer-service",
