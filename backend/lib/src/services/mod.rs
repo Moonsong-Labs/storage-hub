@@ -3,9 +3,11 @@ use std::sync::Arc;
 
 pub mod counter;
 pub mod health;
+pub mod msp;
 
 use counter::CounterService;
 use health::HealthService;
+use msp::MspService;
 
 use crate::data::postgres::PostgresClientTrait;
 use crate::data::rpc::StorageHubRpcClient;
@@ -16,6 +18,7 @@ use crate::data::storage::BoxedStorage;
 pub struct Services {
     pub counter: Arc<CounterService>,
     pub health: Arc<HealthService>,
+    pub msp: Arc<MspService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<dyn PostgresClientTrait>,
     pub rpc: Arc<StorageHubRpcClient>,
@@ -34,9 +37,15 @@ impl Services {
             postgres.clone(),
             rpc.clone(),
         ));
+        let msp = Arc::new(MspService::new(
+            storage.clone(),
+            postgres.clone(),
+            rpc.clone(),
+        ));
         Self {
             counter,
             health,
+            msp,
             storage,
             postgres,
             rpc,
