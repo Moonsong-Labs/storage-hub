@@ -6,7 +6,7 @@ use shc_actors_framework::actor::ActorHandle;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_common::types::{FileMetadata, StorageProofsMerkleTrieLayout, StorageProviderId};
+use shc_common::types::{StorageProofsMerkleTrieLayout, StorageProviderId};
 use shc_fisherman_service::events::ProcessFileDeletionRequest;
 use shc_fisherman_service::{FileKeyOperation, FishermanService, FishermanServiceCommand};
 use shc_forest_manager::in_memory::InMemoryForestStorage;
@@ -62,52 +62,6 @@ where
             storage_hub_handler,
             fisherman_service,
         }
-    }
-
-    /// Query indexer for file metadata, with fallback to chain storage
-    async fn query_file_metadata(&self, file_key: &H256) -> anyhow::Result<Option<FileMetadata>> {
-        // First try to get from indexer
-        if let Some(indexer_db_pool) = &self.storage_hub_handler.indexer_db_pool {
-            let mut conn = indexer_db_pool
-                .get()
-                .await
-                .map_err(|e| anyhow!("Failed to get indexer connection: {:?}", e))?;
-
-            // Query indexer for file metadata
-            match shc_indexer_db::models::File::get_by_file_key(&mut conn, file_key).await {
-                Ok(file) => {
-                    // Get bucket info
-                    let bucket =
-                        shc_indexer_db::models::Bucket::get_by_id(&mut conn, file.bucket_id)
-                            .await
-                            .map_err(|e| anyhow!("Failed to get bucket from indexer: {:?}", e))?;
-
-                    // Convert to FileMetadata
-                    match file.to_file_metadata(bucket.onchain_bucket_id.clone()) {
-                        Ok(metadata) => return Ok(Some(metadata)),
-                        Err(e) => {
-                            warn!(
-                                target: LOG_TARGET,
-                                "Failed to create FileMetadata from indexer data: {:?}",
-                                e
-                            );
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        target: LOG_TARGET,
-                        "Failed to query file from indexer: {:?}",
-                        e
-                    );
-                }
-            }
-        }
-
-        // TODO: Implement fallback to query chain storage directly
-        // This would require querying the StorageRequests storage map
-        // For now, return None if not found in indexer
-        Ok(None)
     }
 }
 
@@ -409,45 +363,12 @@ where
             // Apply changes to the ephemeral trie
             for change in file_key_changes {
                 match change.operation {
-                    FileKeyOperation::Add(metadata_option) => {
-                        match metadata_option {
-                            Some(metadata) => {
-                                // Use the metadata from the change
-                                ephemeral_forest
-                                    .insert_files_metadata(&[metadata])
-                                    .map_err(|e| {
-                                        anyhow!(
-                                            "Failed to insert file key during catch-up: {:?}",
-                                            e
-                                        )
-                                    })?;
-                            }
-                            None => {
-                                // Metadata not available in the event, query from indexer/chain
-                                let file_key = H256::from_slice(&change.file_key);
-                                match self.query_file_metadata(&file_key).await? {
-                                    Some(metadata) => {
-                                        ephemeral_forest
-                                            .insert_files_metadata(&[metadata])
-                                            .map_err(|e| {
-                                                anyhow!("Failed to insert file key during catch-up: {:?}", e)
-                                            })?;
-                                        debug!(
-                                            target: LOG_TARGET,
-                                            "Successfully resolved metadata for file key {:?} from indexer",
-                                            file_key
-                                        );
-                                    }
-                                    None => {
-                                        warn!(
-                                            target: LOG_TARGET,
-                                            "Could not resolve metadata for file key {:?} - skipping",
-                                            file_key
-                                        );
-                                    }
-                                }
-                            }
-                        }
+                    FileKeyOperation::Add(metadata) => {
+                        ephemeral_forest
+                            .insert_files_metadata(&[metadata])
+                            .map_err(|e| {
+                                anyhow!("Failed to insert file key during catch-up: {:?}", e)
+                            })?;
                     }
                     FileKeyOperation::Remove => {
                         // Remove the file key from the trie

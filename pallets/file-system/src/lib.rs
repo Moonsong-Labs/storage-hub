@@ -587,7 +587,10 @@ pub mod pallet {
         /// # Note
         /// This event is not emitted when the storage request is immediately fulfilled upon
         /// MSP acceptance. In such cases, a [`StorageRequestFulfilled`] event is emitted instead.
-        MspAcceptedStorageRequest { file_key: MerkleHash<T> },
+        MspAcceptedStorageRequest {
+            file_key: MerkleHash<T>,
+            file_metadata: FileMetadata,
+        },
         /// Notifies that a BSP has been accepted to store a given file.
         AcceptedBspVolunteer {
             bsp_id: ProviderIdFor<T>,
@@ -602,7 +605,8 @@ pub mod pallet {
         BspConfirmedStoring {
             who: T::AccountId,
             bsp_id: ProviderIdFor<T>,
-            confirmed_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
+            confirmed_file_keys:
+                BoundedVec<(MerkleHash<T>, FileMetadata), T::MaxBatchConfirmStorageRequests>,
             skipped_file_keys: BoundedVec<MerkleHash<T>, T::MaxBatchConfirmStorageRequests>,
             new_root: MerkleHash<T>,
         },

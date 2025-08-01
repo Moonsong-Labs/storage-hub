@@ -283,7 +283,7 @@ where
                     .await?;
 
                 let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
-                for file_key in confirmed_file_keys {
+                for (file_key, _file_metadata) in confirmed_file_keys {
                     let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                     BspFile::create(conn, bsp.id, file.id).await?;
                 }
@@ -341,7 +341,10 @@ where
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
                 File::delete(conn, file_key.as_ref().to_vec()).await?;
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest { file_key } => {
+            pallet_file_system::Event::MspAcceptedStorageRequest {
+                file_key,
+                file_metadata: _,
+            } => {
                 let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                 let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
                 if let Some(msp_id) = bucket.msp_id {

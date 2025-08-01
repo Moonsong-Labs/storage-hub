@@ -1,14 +1,10 @@
 use futures::stream::{self, StreamExt};
 use log::{debug, error, info, warn};
 use sc_client_api::{BlockchainEvents, HeaderBackend};
+use shc_common::types::{FileOperation, FileOperationIntention};
 use shc_common::{
     blockchain_utils::{get_events_at_block, EventsRetrievalError},
     traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
-    types::FileOperationIntention,
-};
-use sp_runtime::{traits::Header, MultiSignature};
-use std::sync::Arc;
-    types::{FileOperation, FileOperationIntention},
 };
 use sp_runtime::{traits::Header, MultiSignature};
 use std::{collections::HashMap, sync::Arc};
@@ -17,7 +13,6 @@ use thiserror::Error;
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::types::{BlockNumber, ParachainClient};
 use sp_core::H256;
-use sp_core::{Encode, H256};
 
 use crate::events::FishermanServiceEventBusProvider;
 
@@ -26,8 +21,8 @@ pub(crate) const LOG_TARGET: &str = "fisherman-service";
 /// Represents an operation that occurred on a file key
 #[derive(Debug, Clone)]
 pub enum FileKeyOperation {
-    /// File key was added with optional metadata (Some when available, None when pending)
-    Add(Option<shc_common::types::FileMetadata>),
+    /// File key was added with complete metadata
+    Add(shc_common::types::FileMetadata),
     /// File key was removed
     Remove,
 }
@@ -178,10 +173,6 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
         // TODO: Add proper memory management and block range limits to prevent OOM
         let mut file_key_states: HashMap<Vec<u8>, FileKeyOperation> = HashMap::new();
 
-        // Track file metadata from NewStorageRequest events
-        let mut file_metadata_cache: HashMap<Vec<u8>, shc_common::types::FileMetadata> =
-            HashMap::new();
-
         // Process blocks from from_block + 1 to best_block
         for block_num in (from_block + 1)..=best_block_number {
             // Get block hash
@@ -206,50 +197,6 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
                 };
 
                 match event {
-                    // Track new storage requests
-                    storage_hub_runtime::RuntimeEvent::FileSystem(
-                        pallet_file_system::Event::NewStorageRequest {
-                            who,
-                            file_key,
-                            bucket_id,
-                            location,
-                            fingerprint,
-                            size,
-                            ..
-                        },
-                    ) => {
-                        // Cache metadata based on provider type
-                        match &provider {
-                            crate::events::FileDeletionTarget::BspId(_) => {
-                                // For BSP providers, always cache metadata (any file might be stored by our BSP)
-                                if let Ok(metadata) = shc_common::types::FileMetadata::new(
-                                    who.encode(),
-                                    bucket_id.as_bytes().to_vec(),
-                                    location.to_vec(),
-                                    size,
-                                    fingerprint.as_bytes().into(),
-                                ) {
-                                    file_metadata_cache
-                                        .insert(file_key.as_ref().to_vec(), metadata);
-                                }
-                            }
-                            crate::events::FileDeletionTarget::BucketId(target_bucket_id) => {
-                                // For bucket providers, only cache if it's our bucket
-                                if &bucket_id == target_bucket_id {
-                                    if let Ok(metadata) = shc_common::types::FileMetadata::new(
-                                        who.encode(),
-                                        bucket_id.as_bytes().to_vec(),
-                                        location.to_vec(),
-                                        size,
-                                        fingerprint.as_bytes().into(),
-                                    ) {
-                                        file_metadata_cache
-                                            .insert(file_key.as_ref().to_vec(), metadata);
-                                    }
-                                }
-                            }
-                        }
-                    }
                     // Track BSP confirmations
                     storage_hub_runtime::RuntimeEvent::FileSystem(
                         pallet_file_system::Event::BspConfirmedStoring {
@@ -260,20 +207,24 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
                     ) => {
                         if let crate::events::FileDeletionTarget::BspId(target_bsp_id) = &provider {
                             if &bsp_id == target_bsp_id {
-                                // For BSP confirmations, check metadata cache first
-                                for file_key in confirmed_file_keys.iter() {
-                                    let operation = if let Some(metadata) =
-                                        file_metadata_cache.get(file_key.as_ref())
-                                    {
-                                        FileKeyOperation::Add(Some(metadata.clone()))
-                                    } else {
-                                        FileKeyOperation::Add(None)
-                                    };
-                                    file_key_states.insert(file_key.as_ref().to_vec(), operation);
+                                // Process each confirmed file key with embedded metadata
+                                for (file_key, file_metadata) in confirmed_file_keys.iter() {
+                                    // Convert pallet FileMetadata to client FileMetadata
+                                    if let Ok(metadata) = shc_common::types::FileMetadata::new(
+                                        file_metadata.owner().clone(),
+                                        file_metadata.bucket_id().clone(),
+                                        file_metadata.location().clone(),
+                                        file_metadata.file_size(),
+                                        *file_metadata.fingerprint(),
+                                    ) {
+                                        let operation = FileKeyOperation::Add(metadata);
+                                        file_key_states
+                                            .insert(file_key.as_ref().to_vec(), operation);
+                                    }
                                 }
                                 debug!(
                                     target: LOG_TARGET,
-                                    "Added {} BSP confirmed file keys",
+                                    "Added {} BSP confirmed file keys with embedded metadata",
                                     confirmed_file_keys.len()
                                 );
                             }
@@ -304,28 +255,38 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
                         // This confirms the file was deleted
                         file_key_states
                             .insert(file_key.as_ref().to_vec(), FileKeyOperation::Remove);
-                        // Remove from metadata cache
-                        file_metadata_cache.remove(file_key.as_ref());
                     }
                     // Track MSP accepted storage requests
                     storage_hub_runtime::RuntimeEvent::FileSystem(
-                        pallet_file_system::Event::MspAcceptedStorageRequest { file_key, .. },
+                        pallet_file_system::Event::MspAcceptedStorageRequest {
+                            file_key,
+                            file_metadata,
+                        },
                     ) => {
-                        // For bucket providers, check if we have cached metadata
-                        if let crate::events::FileDeletionTarget::BucketId(_) = &provider {
-                            // If metadata exists in cache, it means this file is for our bucket
-                            // (we only cache metadata for our target bucket)
-                            if let Some(metadata) = file_metadata_cache.get(file_key.as_ref()) {
-                                file_key_states.insert(
-                                    file_key.as_ref().to_vec(),
-                                    FileKeyOperation::Add(Some(metadata.clone())),
-                                );
-                                debug!(
-                                    target: LOG_TARGET,
-                                    "Added MSP accepted file key with cached metadata"
-                                );
+                        // For bucket providers, check if this file is for our target bucket
+                        if let crate::events::FileDeletionTarget::BucketId(target_bucket_id) =
+                            &provider
+                        {
+                            // Check if this file belongs to our target bucket by comparing bucket IDs
+                            if file_metadata.bucket_id() == target_bucket_id.as_ref() {
+                                // Convert pallet FileMetadata to client FileMetadata
+                                if let Ok(metadata) = shc_common::types::FileMetadata::new(
+                                    file_metadata.owner().clone(),
+                                    file_metadata.bucket_id().clone(),
+                                    file_metadata.location().clone(),
+                                    file_metadata.file_size(),
+                                    *file_metadata.fingerprint(),
+                                ) {
+                                    file_key_states.insert(
+                                        file_key.as_ref().to_vec(),
+                                        FileKeyOperation::Add(metadata),
+                                    );
+                                    debug!(
+                                        target: LOG_TARGET,
+                                        "Added MSP accepted file key with embedded metadata"
+                                    );
+                                }
                             }
-                            // If no metadata in cache, this file is not for our bucket, so we skip it
                         }
                     }
                     // Track insolvent user file removals
