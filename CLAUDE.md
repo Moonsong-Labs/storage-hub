@@ -116,3 +116,40 @@ The client uses an actor-based architecture (`/client/actors-framework`) with sp
 - When updating RuntimeAPIs or RPC calls, update `/types-bundle/src/rpc.ts` and `/types-bundle/src/runtime.ts`
 - BSP selection can be "gamed" in tests by choosing BSP IDs that match file fingerprints
 - The client implements a sophisticated actor system for handling storage operations
+
+## Rust Import Ordering Convention
+
+All imports and module declarations should follow these ordering rules:
+
+1. **Location**: All imports and child module declarations must be at the top of the file, following normal Rust conventions.
+
+2. **Grouping**: Imports should be grouped by category and separated by blank newlines in this order:
+   - `std` imports
+   - External crate imports
+   - Workspace imports
+   - Internal imports (`use crate::...` or `use super::...`)
+   - Child module declarations
+   - Child module imports
+
+3. **Re-exports**: Re-exports follow the same category order but appear after all import blocks. Example:
+   ```rust
+   use std::collections::HashMap;
+
+   mod foo; // child module
+
+   pub use std::iter; // std re-export
+
+   pub use crate::bar; // internal re-export
+   ```
+   
+   Exception: If a child module should be public, `pub mod` is considered a declaration and belongs in the import section.
+
+4. **Conditional imports**: `#[cfg(...)]` imports/re-exports appear right after their category in a separate group. Example:
+   ```rust
+   use std::option::Option;
+
+   #[cfg(feature = "result")]
+   use std::result::Result;
+
+   use tokio::fs;
+   ```
