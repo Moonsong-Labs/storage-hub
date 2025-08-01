@@ -60,11 +60,12 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     /// Notify tasks waiting for a block number.
     pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber) {
@@ -466,7 +467,7 @@ where
     /// checking that the on-chain nonce is not lower.
     pub(crate) async fn send_extrinsic(
         &mut self,
-        call: impl Into<storage_hub_runtime::RuntimeCall>,
+        call: impl Into<Runtime::Call>,
         options: &SendExtrinsicOptions,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
@@ -480,7 +481,7 @@ where
         );
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic::<storage_hub_runtime::Runtime>(
+        let extrinsic = self.construct_extrinsic::<Runtime>(
             self.client.clone(),
             call,
             nonce,
