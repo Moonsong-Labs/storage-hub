@@ -31,6 +31,14 @@ diesel-async = { workspace = true }
 # Utilities
 hex = { workspace = true }
 chrono = { workspace = true }
+base64 = "0.21"
+rand = "0.8"
+
+# JWT
+jsonwebtoken = "9"
+
+# Multipart support
+axum-extra = { version = "0.9", features = ["multipart"] }
 
 # RPC
 jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
