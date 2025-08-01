@@ -10,17 +10,16 @@ use std::{
 use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
+use shc_common::types::{
+    BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
+    MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput, RejectedStorageRequestReason,
+    StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout, StorageProviderId, Tip,
+};
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::H256;
 use sp_runtime::{
     traits::{Header, NumberFor},
     AccountId32, DispatchError, SaturatedConversion,
-};
-
-use shc_common::types::{
-    BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
-    MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput, RejectedStorageRequestReason,
-    StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 
 use crate::{events, handler::LOG_TARGET};
@@ -227,9 +226,6 @@ pub enum ExtrinsicResult {
 
 /// Type alias for the extrinsic hash.
 pub type ExtrinsicHash = H256;
-
-/// Type alias for the tip.
-pub type Tip = pallet_transaction_payment::ChargeTransactionPayment<storage_hub_runtime::Runtime>;
 
 /// Options for [`send_extrinsic`](crate::BlockchainService::send_extrinsic).
 ///

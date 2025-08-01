@@ -264,6 +264,8 @@ try-runtime = [
 	"sp-runtime/try-runtime",
 ]
 
+fast-runtime = []
+
 # Enable the metadata hash generation.
 #
 # This is hidden behind a feature because it increases the compile time.
