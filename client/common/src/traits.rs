@@ -1,4 +1,5 @@
 use crate::types::*;
+use codec::Decode;
 use codec::Encode;
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
@@ -8,12 +9,15 @@ use polkadot_primitives::AccountId;
 use polkadot_primitives::Nonce;
 
 use sc_service::TFullClient;
+use scale_info::StaticTypeInfo;
 use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, sr25519, H256};
 use sp_runtime::traits::Dispatchable;
+use sp_runtime::traits::Member;
 use sp_runtime::traits::TransactionExtension;
+use sp_runtime::traits::Verify;
 
 /// A trait bundle that ensures a runtime API includes all storage-related capabilities.
 ///
@@ -167,6 +171,25 @@ impl<T> StorageEnableRuntimeApi for T where
         + Sync
         + 'static
 {
+}
+
+pub trait StorageEnableRuntime {
+    type Address: StaticTypeInfo + Decode + Encode + core::fmt::Debug;
+    type Call: StaticTypeInfo + Decode + Encode + Member + Dispatchable;
+    type Signature: StaticTypeInfo
+        + Decode
+        + Encode
+        + Member
+        + Verify
+        + KeyTypeOperations<Address = Self::Address>;
+    type Extension: StaticTypeInfo
+        + Decode
+        + Encode
+        + TransactionExtension<Self::Call>
+        // TODO: Consider removing the `Hash` constraint.
+        + ExtensionOperations<Self::Call, Hash = H256>
+        + Clone
+        + core::fmt::Debug;
 }
 
 /// A read-only keystore trait that provides access to public keys without signing capabilities.

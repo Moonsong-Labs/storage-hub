@@ -20,6 +20,7 @@ use shc_common::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
         get_provider_id_from_keystore, GetProviderIdError,
     },
+    traits::StorageEnableRuntime,
     types::{
         BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, ParachainClient,
         ProofsDealerProviderId, StorageProviderId, TrieAddMutation, TrieMutation,
@@ -479,13 +480,12 @@ where
         );
 
         // Construct the extrinsic.
-        let extrinsic = self
-            .construct_extrinsic::<Address, RuntimeCall, MultiSignature, SignedExtra>(
-                self.client.clone(),
-                call,
-                nonce,
-                options.tip(),
-            );
+        let extrinsic = self.construct_extrinsic::<storage_hub_runtime::Runtime>(
+            self.client.clone(),
+            call,
+            nonce,
+            options.tip(),
+        );
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -532,20 +532,18 @@ where
     }
 
     /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
-    pub fn construct_extrinsic<Address, Call, Signature, Extension>(
+    pub fn construct_extrinsic<Runtime: StorageEnableRuntime>(
         &self,
         client: Arc<ParachainClient<RuntimeApi>>,
-        function: impl Into<Call>,
+        function: impl Into<Runtime::Call>,
         nonce: u32,
         tip: Tip,
-    ) -> generic::UncheckedExtrinsic<Address, Call, Signature, Extension>
-    where
-        Signature: KeyTypeOperations<Address = Address>,
-        // TODO: Consider removing the `Hash` constraint from `ExtensionOperations`.
-        Extension:
-            TransactionExtension<Call> + ExtensionOperations<Call, Hash = H256> + Encode + Clone,
-        Call: Encode + Dispatchable + Clone,
-    {
+    ) -> generic::UncheckedExtrinsic<
+        Runtime::Address,
+        Runtime::Call,
+        Runtime::Signature,
+        Runtime::Extension,
+    > {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
         let current_block = client.info().best_number.saturated_into();
@@ -560,23 +558,27 @@ where
 
         let minimal_extra =
             MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
-        let extra: Extension = Extension::from_minimal_extension(minimal_extra);
-        let implicit =
-            <Extension as ExtensionOperations<Call>>::implicit(genesis_block, current_block_hash);
+        let extra: Runtime::Extension = Runtime::Extension::from_minimal_extension(minimal_extra);
+        let implicit = <Runtime::Extension as ExtensionOperations<Runtime::Call>>::implicit(
+            genesis_block,
+            current_block_hash,
+        );
 
         let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
-        let caller_pub_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
+        let caller_pub_key = Self::caller_pub_key::<Runtime::Signature>(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload
-            .using_encoded(|e| Signature::sign(&self.keystore, BCSV_KEY_TYPE, &caller_pub_key, e))
+            .using_encoded(|e| {
+                Runtime::Signature::sign(&self.keystore, BCSV_KEY_TYPE, &caller_pub_key, e)
+            })
             .expect("The payload is always valid and should be possible to sign; qed");
 
         // Construct the extrinsic.
         generic::UncheckedExtrinsic::new_signed(
             function,
-            Signature::public_to_address(&caller_pub_key),
+            Runtime::Signature::public_to_address(&caller_pub_key),
             signature,
             extra,
         )
