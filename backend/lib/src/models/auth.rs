@@ -1,0 +1,1 @@
+// Placeholder for auth models - to be implemented in Phase 2
