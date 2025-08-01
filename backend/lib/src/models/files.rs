@@ -1,0 +1,1 @@
+// Placeholder for file models - to be implemented in Phase 2
