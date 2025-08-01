@@ -4,9 +4,8 @@ use sc_client_api::BlockchainEvents;
 use shc_common::{
     blockchain_utils::EventsRetrievalError,
     traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
-    types::FileOperationIntention,
 };
-use sp_runtime::{traits::Header, MultiSignature};
+use sp_runtime::traits::Header;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -20,16 +19,7 @@ pub(crate) const LOG_TARGET: &str = "fisherman-service";
 
 /// Commands that can be sent to the FishermanService actor
 #[derive(Debug)]
-pub enum FishermanServiceCommand {
-    /// Process a file deletion request by constructing proof of inclusion
-    /// from Bucket/BSP forest and submitting it to the blockchain
-    ProcessFileDeletionRequest {
-        /// The file key from the signed intention
-        signed_file_operation_intention: FileOperationIntention,
-        /// The signed intention
-        signature: MultiSignature,
-    },
-}
+pub enum FishermanServiceCommand {}
 
 /// Errors that can occur in the fisherman service
 #[derive(Error, Debug)]
@@ -74,7 +64,7 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
-        // TODO: Emit FileDeletionRequest event
+        // TODO: Emit ProcessFileDeletionRequest event
 
         self.last_processed_block = Some(block_number);
         Ok(())
@@ -93,18 +83,10 @@ where
 
     fn handle_message(
         &mut self,
-        message: Self::Message,
+        _message: Self::Message,
     ) -> impl std::future::Future<Output = ()> + Send {
         async move {
-            match message {
-                FishermanServiceCommand::ProcessFileDeletionRequest { .. } => {
-                    info!(
-                        target: LOG_TARGET,
-                        "🎣 ProcessFileDeletionRequest received"
-                    );
-                    // TODO: Emit ProcessFileDeletionRequest event to trigger task
-                }
-            }
+            // TODO: handle fisherman catch up command
         }
     }
 
