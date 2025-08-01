@@ -25,6 +25,11 @@ tower-http = { workspace = true }
 # Workspace dependencies
 shc-indexer-db = { workspace = true, default-features = true }
 
+# Additional dependencies from mock-endpoints
+base64 = "0.21"
+rand = "0.8"
+jsonwebtoken = "9"
+axum-extra = { version = "0.9", features = ["multipart"] }
 [dev-dependencies]
 axum-test = { workspace = true }
 futures = { workspace = true }
