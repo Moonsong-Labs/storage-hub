@@ -177,6 +177,7 @@ impl BspFile {
     ) -> Result<(), diesel::result::Error> {
         diesel::insert_into(bsp_file::table)
             .values((bsp_file::bsp_id.eq(bsp_id), bsp_file::file_id.eq(file_id)))
+            .on_conflict_do_nothing()
             .execute(conn)
             .await?;
         Ok(())
