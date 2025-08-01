@@ -9,7 +9,6 @@ use shc_client::builder::IndexerOptions;
 
 use crate::command::ProviderOptions;
 
-
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub provider: ProviderOptions,
