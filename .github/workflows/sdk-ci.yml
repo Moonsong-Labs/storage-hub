@@ -74,7 +74,7 @@ jobs:
 
       # Unit tests client
       - name: Run tests
-        run: pnpm test:client -- --run
+        run: pnpm test:msp-client -- --run
 
       # Coverage check (fails if coverage <80%)
       - name: Coverage

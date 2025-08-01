@@ -1,3 +1,4 @@
-export { add } from './wasm';
-
-// TODO: re-export crypto, filemanager, storage utilities once implemented
+export { WalletBase } from './wallet/base.js';
+export { LocalWallet } from './wallet/local.js';
+export { MetamaskWallet } from './wallet/metamask.js';
+export { FileManager } from './file-manager.js';

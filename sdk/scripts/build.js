@@ -11,8 +11,8 @@ await build({
     sourcemap: true,
     minify: true,
     target: ['es2022'],
-    platform: 'node',
-    external: ['node:*'],
+    platform: 'browser',
+    external: ['ethers', '@storagehub/wasm'],
     format: 'esm',
 });
 
