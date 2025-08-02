@@ -33,11 +33,6 @@ pub trait DbConnection: Send + Sync + Debug {
         Ok(())
     }
 
-    // WIP: Transaction method is temporarily removed because diesel-async requires
-    // an async closure that returns a Future, not a sync closure returning Result.
-    // This would require a major redesign of the trait interface.
-    // For now, users should get a connection and use diesel-async's transaction method directly.
-
     /// Check if the connection pool is healthy
     ///
     /// This method can be used for health checks to ensure the database
@@ -200,8 +195,6 @@ impl DbConnection for AnyDbConnection {
             // AnyDbConnection::Mock(conn) => conn.test_connection().await,
         }
     }
-
-    // WIP: Transaction method removed - see trait definition for explanation
 
     async fn is_healthy(&self) -> bool {
         match self {
