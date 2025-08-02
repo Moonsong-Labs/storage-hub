@@ -52,8 +52,8 @@ follow_redirects = true
 max_redirects = 10
 # User agent string (default: "StorageHub-Client/1.0")
 user_agent = "StorageHub-Client/1.0"
-# Chunk size in bytes (default: 8192)
-chunk_size = 8192
+# Chunk size in bytes (default: 1024 - FILE_CHUNK_SIZE)
+chunk_size = 1024
 # Number of FILE_CHUNK_SIZE chunks to buffer (default: 512)
 chunks_buffer = 512
 

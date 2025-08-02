@@ -66,8 +66,12 @@ pub struct RemoteFileConfig {
     pub follow_redirects: bool,
     pub max_redirects: u32,
     pub user_agent: String,
+    /// The size in bytes for reading/writing data over the wire.
+    /// This should typically be set to FILE_CHUNK_SIZE (1KB) for consistency
+    /// with the StorageHub file chunking system.
     pub chunk_size: usize,
-    /// Number of FILE_CHUNK_SIZE chunks to buffer (minimum 1, default 512)
+    /// Buffer size multiplier. The actual buffer size used will be chunk_size * chunks_buffer.
+    /// This allows efficient buffering of multiple chunks (minimum 1, default 512).
     pub chunks_buffer: usize,
 }
 
@@ -84,8 +88,8 @@ impl RemoteFileConfig {
             follow_redirects: true,
             max_redirects: 10,
             user_agent: "StorageHub-Client/1.0".to_string(),
-            chunk_size: 8192,   // 8KB default
-            chunks_buffer: 512, // 512 FILE_CHUNK_SIZE chunks default (512KB)
+            chunk_size: shc_common::types::FILE_CHUNK_SIZE as usize, // 1KB (FILE_CHUNK_SIZE)
+            chunks_buffer: 512, // 512 chunks * 1KB = 512KB buffer
         }
     }
 }
