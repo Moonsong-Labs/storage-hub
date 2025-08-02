@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+use crate::constants::{
+    server::DEFAULT_PORT,
+    rpc::{DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS, DEFAULT_MAX_CONCURRENT_REQUESTS},
+    database::DEFAULT_DATABASE_URL,
+};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub host: String,
@@ -31,17 +37,17 @@ impl Default for Config {
         // have them overridden
         Self {
             host: "127.0.0.1".to_string(),
-            port: 8080,
+            port: DEFAULT_PORT,
             storage_hub: StorageHubConfig {
-                rpc_url: "ws://localhost:9944".to_string(),
-                timeout_secs: Some(30),
-                max_concurrent_requests: Some(100),
+                rpc_url: DEFAULT_RPC_URL.to_string(),
+                timeout_secs: Some(DEFAULT_TIMEOUT_SECS),
+                max_concurrent_requests: Some(DEFAULT_MAX_CONCURRENT_REQUESTS),
                 verify_tls: true,
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
             },
             database: DatabaseConfig {
-                url: "postgres://localhost:5432/storage_hub".to_string(),
+                url: DEFAULT_DATABASE_URL.to_string(),
                 #[cfg(feature = "mocks")]
                 mock_mode: true,
             },

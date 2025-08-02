@@ -13,6 +13,8 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::time::sleep;
 
+use crate::constants::rpc::TIMEOUT_MULTIPLIER;
+
 use super::connection::{RpcConnectionError, RpcResult};
 use super::RpcConnection;
 
@@ -109,7 +111,7 @@ impl MockConnection {
                 // Simulate timeout by sleeping then returning error
                 let latency = *self.latency_ms.lock().unwrap();
                 if let Some(latency_ms) = latency {
-                    sleep(Duration::from_millis(latency_ms * 10)).await;
+                    sleep(Duration::from_millis(latency_ms * TIMEOUT_MULTIPLIER)).await;
                 }
                 Err(RpcConnectionError::Timeout)
             }
