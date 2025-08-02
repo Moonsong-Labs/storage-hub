@@ -138,6 +138,9 @@ impl StorageHubRpcClient {
 mod tests {
     use super::*;
     use crate::data::rpc::{AnyRpcConnection, ErrorMode, MockConnection};
+    use crate::test_constants::{
+        accounts, blockchain, buckets, file_keys, file_metadata, helpers, peers,
+    };
 
     #[tokio::test]
     async fn test_get_file_metadata() {
@@ -145,54 +148,42 @@ mod tests {
         let mock_conn = MockConnection::new();
         mock_conn.set_response(
             "storagehub_getFileMetadata",
-            json!({
-                "owner": [4, 5, 6],
-                "bucket_id": [7, 8, 9],
-                "location": [10, 11, 12],
-                "fingerprint": [13, 14, 15],
-                "size": 1024,
-                "peer_ids": [[16, 17], [18, 19]]
-            }),
+            helpers::create_test_file_metadata(),
         );
 
         let connection = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let client = StorageHubRpcClient::new(connection);
 
-        // Test the method
-        let result = client.get_file_metadata(&[1, 2, 3]).await.unwrap();
+        // Test the method with a clearly defined test file key
+        let result = client.get_file_metadata(file_keys::TEST_FILE_KEY).await.unwrap();
         assert!(result.is_some());
 
         let metadata = result.unwrap();
-        assert_eq!(metadata.owner, vec![4, 5, 6]);
-        assert_eq!(metadata.size, 1024);
+        assert_eq!(metadata.owner, accounts::TEST_OWNER.to_vec());
+        assert_eq!(metadata.size, file_metadata::TEST_FILE_SIZE);
     }
 
     #[tokio::test]
     async fn test_get_block_number() {
         let mock_conn = MockConnection::new();
-        mock_conn.set_response("chain_getBlockNumber", json!(12345));
+        mock_conn.set_response("chain_getBlockNumber", json!(blockchain::TEST_BLOCK_NUMBER));
 
         let connection = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let client = StorageHubRpcClient::new(connection);
 
         let block_number = client.get_block_number().await.unwrap();
-        assert_eq!(block_number, 12345);
+        assert_eq!(block_number, blockchain::TEST_BLOCK_NUMBER);
     }
 
     #[tokio::test]
     async fn test_submit_storage_request() {
         let mock_conn = MockConnection::new();
         // Mock the submission response
-        mock_conn.set_response("author_submitStorageRequest", json!("0x1234567890abcdef"));
+        mock_conn.set_response("author_submitStorageRequest", json!(blockchain::TEST_TX_HASH));
         // Mock the receipt response
         mock_conn.set_response(
             "storagehub_getTransactionReceipt",
-            json!({
-                "block_hash": [11, 12, 13],
-                "block_number": 100,
-                "extrinsic_index": 5,
-                "success": true
-            }),
+            helpers::create_test_transaction_receipt(),
         );
 
         let connection = Arc::new(AnyRpcConnection::Mock(mock_conn));
@@ -200,15 +191,15 @@ mod tests {
 
         let receipt = client
             .submit_storage_request(
-                vec![1, 2, 3],
-                vec![4, 5, 6],
-                2048,
-                vec![vec![7, 8], vec![9, 10]],
+                file_metadata::ALTERNATIVE_LOCATION.to_vec(),
+                file_metadata::ALTERNATIVE_FINGERPRINT.to_vec(),
+                file_metadata::LARGE_FILE_SIZE,
+                helpers::create_test_peer_ids(),
             )
             .await
             .unwrap();
 
-        assert_eq!(receipt.block_number, 100);
+        assert_eq!(receipt.block_number, blockchain::ALTERNATIVE_BLOCK_NUMBER);
         assert!(receipt.success);
     }
 
@@ -221,8 +212,8 @@ mod tests {
         let connection = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let client = StorageHubRpcClient::new(connection);
 
-        // Test that errors are properly propagated
-        let result = client.get_file_metadata(&[1, 2, 3]).await;
+        // Test that errors are properly propagated with a well-defined test file key
+        let result = client.get_file_metadata(file_keys::TEST_FILE_KEY).await;
         assert!(result.is_err());
     }
 }

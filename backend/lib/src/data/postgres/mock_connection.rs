@@ -28,6 +28,11 @@ use shc_indexer_db::models::{Bucket, File, Msp};
 
 use super::connection::{DbConnection, DbConnectionError};
 
+#[cfg(test)]
+use crate::test_constants::{
+    accounts, buckets as test_buckets, file_keys, file_metadata, merkle, msp as test_msp, timestamps,
+};
+
 /// Test data storage for the mock connection
 #[derive(Debug, Default)]
 pub struct MockTestData {
@@ -531,15 +536,15 @@ mod tests {
         // Add test file
         let test_file = File {
             id: 0, // Will be auto-assigned
-            account: vec![1, 2, 3],
-            file_key: vec![4, 5, 6],
+            account: accounts::TEST_USER_ACCOUNT.to_vec(),
+            file_key: file_keys::ALTERNATIVE_FILE_KEY.to_vec(),
             bucket_id: 1,
-            location: vec![7, 8, 9],
-            fingerprint: vec![10, 11, 12],
-            size: 1024,
+            location: file_metadata::ALTERNATIVE_LOCATION.to_vec(),
+            fingerprint: file_metadata::ALTERNATIVE_FINGERPRINT.to_vec(),
+            size: file_metadata::TEST_FILE_SIZE,
             step: FileStorageRequestStep::Stored as i32,
-            created_at: NaiveDateTime::from_timestamp_opt(1_700_000_000, 0).unwrap(),
-            updated_at: NaiveDateTime::from_timestamp_opt(1_700_000_000, 0).unwrap(),
+            created_at: NaiveDateTime::from_timestamp_opt(timestamps::TEST_TIMESTAMP, 0).unwrap(),
+            updated_at: NaiveDateTime::from_timestamp_opt(timestamps::TEST_TIMESTAMP, 0).unwrap(),
         };
         
         mock_conn.add_test_file(test_file);
@@ -547,7 +552,7 @@ mod tests {
         {
             let data = mock_conn.get_test_data();
             assert_eq!(data.files.len(), 1);
-            let stored_file = data.files.get(&vec![4, 5, 6]).unwrap();
+            let stored_file = data.files.get(file_keys::ALTERNATIVE_FILE_KEY).unwrap();
             assert_eq!(stored_file.id, 1); // Auto-assigned ID
         }
         
@@ -571,8 +576,8 @@ mod tests {
         assert_eq!(data.buckets.len(), 1);
         
         // Check default MSP
-        let default_msp = data.msps.get(&1).unwrap();
-        assert_eq!(default_msp.onchain_msp_id, vec![1, 2, 3, 4]);
+        let default_msp = data.msps.get(&test_msp::DEFAULT_MSP_ID).unwrap();
+        assert_eq!(default_msp.onchain_msp_id, test_msp::TEST_MSP_ONCHAIN_ID);
         
         // Check default bucket
         let default_bucket = data.buckets.get(&1).unwrap();
