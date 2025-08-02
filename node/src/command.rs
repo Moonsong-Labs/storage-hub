@@ -62,6 +62,9 @@ pub struct ProviderOptions {
     pub blockchain_service: Option<BlockchainServiceOptions>,
     /// Whether the node is running in maintenance mode.
     pub maintenance_mode: bool,
+    /// RPC configuration options.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rpc: Option<shc_client::builder::RpcOptions>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {

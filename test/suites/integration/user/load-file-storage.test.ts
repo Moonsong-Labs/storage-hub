@@ -146,8 +146,8 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
           userApi.shConsts.NODE_INFOS.user.AddressId,
           newBucketEventDataBlob.bucketId
         ),
-      /-32603: Internal error: Os { code: 2, kind: NotFound, message: "No such file or directory" }/,
-      "Error message should be 'No such file or directory'"
+      /-32603: Internal error: File not found/,
+      "Error message should be 'File not found'"
     );
   });
 });

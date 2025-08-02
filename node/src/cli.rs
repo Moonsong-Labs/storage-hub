@@ -418,6 +418,7 @@ impl ProviderConfigurations {
             bsp_submit_proof,
             blockchain_service,
             maintenance_mode: self.maintenance_mode,
+            rpc: None,
         }
     }
 }
