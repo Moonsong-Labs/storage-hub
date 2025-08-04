@@ -1,5 +1,4 @@
 import { defineConfig } from 'vite';
-
 import { resolve as resolvePath } from 'path';
 
 export default defineConfig({
