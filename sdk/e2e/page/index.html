@@ -20,6 +20,16 @@
             display: block;
             margin-top: 1rem;
         }
+
+        section {
+            margin-top: 1.5rem;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            width: 100%;
+            padding: 0.4rem;
+        }
     </style>
 </head>
 
@@ -32,19 +42,44 @@
         Connected as <span id="walletAddress" data-testid="address"></span>
     </div>
 
-    <hr />
+    <section>
+        <h2>File fingerprint</h2>
+        <label>
+            Select file:
+            <input type="file" id="fileInput" data-testid="file-input" />
+        </label>
+        <p>
+            File name: <span id="fileNameDisplay" data-testid="file-name"></span>
+        </p>
+        <p>
+            Root hash:
+            <code id="rootHashDisplay" data-testid="root-hash"></code>
+        </p>
+    </section>
 
-    <label>
-        Select file:
-        <input type="file" id="fileInput" data-testid="file-input" />
-    </label>
-    <p>
-        File name: <span id="fileNameDisplay" data-testid="file-name"></span>
-    </p>
-    <p>
-        Root hash:
-        <code id="rootHashDisplay" data-testid="root-hash"></code>
-    </p>
+    <section>
+        <h2>Sign message</h2>
+        <label>
+            Message:
+            <input type="text" id="msgInput" placeholder="Hello, StorageHub!" data-testid="msg-input" />
+        </label>
+        <button id="signMsgBtn" data-testid="sign-msg" disabled>Sign Message</button>
+        <p>Signature: <code id="msgSig" data-testid="msg-sig"></code></p>
+    </section>
+
+    <section>
+        <h2>Send transaction</h2>
+        <label>
+            To:
+            <input type="text" id="toInput" placeholder="0xRecipient" data-testid="to-input" />
+        </label>
+        <label>
+            Value (ETH):
+            <input type="number" id="valueInput" step="0.01" placeholder="0.01" data-testid="value-input" />
+        </label>
+        <button id="signTxnBtn" data-testid="sign-txn" disabled>Send Tx</button>
+        <p>Tx signature: <code id="txnSig" data-testid="txn-sig"></code></p>
+    </section>
 
     <pre id="error" class="hidden" data-testid="error" style="color: red;"></pre>
 

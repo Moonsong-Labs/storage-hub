@@ -21,7 +21,9 @@
         "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck",
         "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
         "clean": "node scripts/clean.js",
-        "serve:e2e": "vite dev --config e2e/page/vite.config.ts"
+        "serve:e2e": "vite dev --config e2e/page/vite.config.ts",
+        "test:e2e": "playwright test --config e2e/playwright.config.ts",
+        "node:e2e": "docker run --rm -p 8545:8545 ghcr.io/foundry-rs/foundry:latest anvil --chain-id 31337 --mnemonic \"test test test test test test test test test test test junk\""
     },
     "devDependencies": {
         "@eslint/eslintrc": "2.1.4",
@@ -35,7 +37,11 @@
         "prettier": "^3.6.2",
         "typescript": "~5.5.4",
         "vitest": "^3.2.4",
-        "vite": "^5.2.0"
+        "vite": "^5.2.0",
+        "@playwright/test": "^1.44.0",
+        "@tenkeylabs/dappwright": "^2.11.2",
+        "start-server-and-test": "^2.0.1",
+        "ethers": "^6.15.0"
     },
     "engines": {
         "node": ">=23"
