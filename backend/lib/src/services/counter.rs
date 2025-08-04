@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::constants::counter::{DEFAULT_INCREMENT, DEFAULT_COUNTER_KEY};
+use crate::constants::counter::{DEFAULT_COUNTER_KEY, DEFAULT_INCREMENT};
 use crate::data::storage::BoxedStorage;
 use crate::error::Result;
 

@@ -6,12 +6,11 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::constants::rpc::{DEFAULT_TIMEOUT_SECS, DEFAULT_MAX_CONCURRENT_REQUESTS};
-
 #[cfg(feature = "mocks")]
 use super::mock_connection::MockConnection;
 use super::ws_connection::WsConnection;
 use super::RpcConnection;
+use crate::constants::rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_TIMEOUT_SECS};
 
 /// Error type for RPC operations
 #[derive(Debug, thiserror::Error)]
@@ -182,7 +181,10 @@ mod tests {
         let config = RpcConfig::default();
         assert_eq!(config.url, "");
         assert_eq!(config.timeout_secs, Some(DEFAULT_TIMEOUT_SECS));
-        assert_eq!(config.max_concurrent_requests, Some(DEFAULT_MAX_CONCURRENT_REQUESTS));
+        assert_eq!(
+            config.max_concurrent_requests,
+            Some(DEFAULT_MAX_CONCURRENT_REQUESTS)
+        );
         assert!(config.verify_tls);
     }
 

@@ -137,10 +137,10 @@ impl StorageHubRpcClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::rpc::{AnyRpcConnection, ErrorMode, MockConnection};
-    use crate::test_constants::{
+    use crate::constants::test::{
         accounts, blockchain, buckets, file_keys, file_metadata, helpers, peers,
     };
+    use crate::data::rpc::{AnyRpcConnection, ErrorMode, MockConnection};
 
     #[tokio::test]
     async fn test_get_file_metadata() {
@@ -155,7 +155,10 @@ mod tests {
         let client = StorageHubRpcClient::new(connection);
 
         // Test the method with a clearly defined test file key
-        let result = client.get_file_metadata(file_keys::TEST_FILE_KEY).await.unwrap();
+        let result = client
+            .get_file_metadata(file_keys::TEST_FILE_KEY)
+            .await
+            .unwrap();
         assert!(result.is_some());
 
         let metadata = result.unwrap();
@@ -179,7 +182,10 @@ mod tests {
     async fn test_submit_storage_request() {
         let mock_conn = MockConnection::new();
         // Mock the submission response
-        mock_conn.set_response("author_submitStorageRequest", json!(blockchain::TEST_TX_HASH));
+        mock_conn.set_response(
+            "author_submitStorageRequest",
+            json!(blockchain::TEST_TX_HASH),
+        );
         // Mock the receipt response
         mock_conn.set_response(
             "storagehub_getTransactionReceipt",

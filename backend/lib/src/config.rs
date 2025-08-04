@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::constants::{
-    server::DEFAULT_PORT,
-    rpc::{DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS, DEFAULT_MAX_CONCURRENT_REQUESTS},
-    database::DEFAULT_DATABASE_URL,
+use crate::constants::database::DEFAULT_DATABASE_URL;
+use crate::constants::rpc::{
+    DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
 };
+use crate::constants::server::DEFAULT_PORT;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {

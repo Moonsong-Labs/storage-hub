@@ -29,7 +29,7 @@ use shc_indexer_db::models::{Bucket, File, Msp};
 use super::connection::{DbConnection, DbConnectionError};
 
 #[cfg(test)]
-use crate::test_constants::{
+use crate::constants::test::{
     accounts, buckets as test_buckets, file_keys, file_metadata, merkle, msp as test_msp, timestamps,
 };
 

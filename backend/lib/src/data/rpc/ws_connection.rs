@@ -178,7 +178,7 @@ impl WsConnectionBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::test::{RPC_TIMEOUT_SECS, MAX_CONCURRENT_REQUESTS};
+    use crate::constants::test::{MAX_CONCURRENT_REQUESTS, RPC_TIMEOUT_SECS};
 
     #[test]
     fn test_ws_connection_builder() {
@@ -189,7 +189,10 @@ mod tests {
 
         assert_eq!(builder.config.url, "ws://localhost:9944");
         assert_eq!(builder.config.timeout_secs, Some(RPC_TIMEOUT_SECS));
-        assert_eq!(builder.config.max_concurrent_requests, Some(MAX_CONCURRENT_REQUESTS));
+        assert_eq!(
+            builder.config.max_concurrent_requests,
+            Some(MAX_CONCURRENT_REQUESTS)
+        );
         assert!(!builder.config.verify_tls);
     }
 }

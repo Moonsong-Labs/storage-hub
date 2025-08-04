@@ -13,10 +13,9 @@ use serde::Serialize;
 use serde_json::Value;
 use tokio::time::sleep;
 
-use crate::constants::rpc::TIMEOUT_MULTIPLIER;
-
 use super::connection::{RpcConnectionError, RpcResult};
 use super::RpcConnection;
+use crate::constants::rpc::TIMEOUT_MULTIPLIER;
 
 /// Error simulation modes for testing
 #[derive(Debug, Clone, PartialEq)]

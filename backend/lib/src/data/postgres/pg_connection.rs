@@ -11,8 +11,6 @@ use diesel_async::pooled_connection::bb8::Pool;
 use diesel_async::pooled_connection::AsyncDieselConnectionManager;
 use diesel_async::{AsyncConnection, AsyncPgConnection};
 
-use crate::constants::database::{DEFAULT_MAX_CONNECTIONS, DEFAULT_CONNECTION_TIMEOUT_SECS};
-
 use super::connection::{DbConfig, DbConnection, DbConnectionError};
 
 /// Real PostgreSQL connection pool implementation
@@ -153,6 +151,7 @@ impl DbConnection for PgConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::database::{DEFAULT_CONNECTION_TIMEOUT_SECS, DEFAULT_MAX_CONNECTIONS};
 
     fn get_test_db_url() -> String {
         std::env::var("DATABASE_URL")
@@ -200,7 +199,8 @@ mod tests {
     #[tokio::test]
     #[ignore = "Requires a running PostgreSQL instance"]
     async fn test_pool_state() {
-        let config = DbConfig::new(get_test_db_url()).with_max_connections(crate::constants::test::DB_MAX_CONNECTIONS);
+        let config = DbConfig::new(get_test_db_url())
+            .with_max_connections(crate::constants::test::DB_MAX_CONNECTIONS);
         let pg_conn = PgConnection::new(config)
             .await
             .expect("Failed to create connection");
