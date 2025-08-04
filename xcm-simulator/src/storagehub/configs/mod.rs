@@ -450,13 +450,8 @@ impl pallet_randomness::GetBabeData<u64, Hash> for BabeDataGetter {
 }
 
 parameter_types! {
-    pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * HOURS, 2 * MINUTES);
-}
-
-// TODO: If the next line is uncommented (which should be eventually), compilation breaks (most likely because of mismatched dependency issues)
-/* parameter_types! {
     pub const MaxBlocksForRandomness: BlockNumber = prod_or_fast!(2 * runtime_constants::time::EPOCH_DURATION_IN_SLOTS, 2 * MINUTES);
-} */
+}
 
 /// Configure the randomness pallet
 impl pallet_randomness::Config for Runtime {
