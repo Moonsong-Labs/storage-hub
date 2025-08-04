@@ -239,7 +239,7 @@ impl RemoteFileHandler for HttpFileHandler {
         content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
         let buffer_size = self.config.chunk_size * self.config.chunks_buffer.max(1);
-        let stream = ReaderStream::with_capacity(buffer_size, data);
+        let stream = ReaderStream::with_capacity(data, buffer_size);
         let body = Body::wrap_stream(stream);
 
         // Upload to the configured base URL
