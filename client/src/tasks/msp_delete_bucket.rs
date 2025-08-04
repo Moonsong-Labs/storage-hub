@@ -2,7 +2,9 @@ use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::{FinalisedBucketMovedAway, FinalisedMspStoppedStoringBucket};
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
+};
 use shc_common::types::BucketId;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -27,50 +29,55 @@ const LOG_TARGET: &str = "msp-stopped-storing-task";
 ///
 /// [`FileStorage`]: shc_file_manager::traits::FileStorage
 /// [`ForestStorageHandler`]: shc_forest_manager::traits::ForestStorageHandler
-pub struct MspDeleteBucketTask<NT, RuntimeApi>
+pub struct MspDeleteBucketTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>,
 }
 
-impl<NT, RuntimeApi> Clone for MspDeleteBucketTask<NT, RuntimeApi>
+impl<NT, RuntimeApi, Runtime> Clone for MspDeleteBucketTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> MspDeleteBucketTask<NT, RuntimeApi> {
+    fn clone(&self) -> MspDeleteBucketTask<NT, RuntimeApi, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT, RuntimeApi> MspDeleteBucketTask<NT, RuntimeApi>
+impl<NT, RuntimeApi, Runtime> MspDeleteBucketTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<FinalisedBucketMovedAway> for MspDeleteBucketTask<NT, RuntimeApi>
+impl<NT, RuntimeApi, Runtime> EventHandler<FinalisedBucketMovedAway>
+    for MspDeleteBucketTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: FinalisedBucketMovedAway) -> anyhow::Result<()> {
         info!(
@@ -100,13 +107,14 @@ where
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<FinalisedMspStoppedStoringBucket>
-    for MspDeleteBucketTask<NT, RuntimeApi>
+impl<NT, RuntimeApi, Runtime> EventHandler<FinalisedMspStoppedStoringBucket>
+    for MspDeleteBucketTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
@@ -139,12 +147,13 @@ where
     }
 }
 
-impl<NT, RuntimeApi> MspDeleteBucketTask<NT, RuntimeApi>
+impl<NT, RuntimeApi, Runtime> MspDeleteBucketTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     /// Deletes all files in a bucket and removes the bucket's forest storage
     async fn delete_bucket(&mut self, bucket_id: &BucketId) -> anyhow::Result<()> {

@@ -3,7 +3,9 @@ use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::events::FinalisedBspConfirmStoppedStoring;
 use shc_common::consts::CURRENT_FOREST_KEY;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
+};
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::H256;
@@ -15,38 +17,41 @@ use crate::{
 
 const LOG_TARGET: &str = "bsp-delete-file-task";
 
-pub struct BspDeleteFileTask<NT, RuntimeApi>
+pub struct BspDeleteFileTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>,
 }
 
-impl<NT, RuntimeApi> Clone for BspDeleteFileTask<NT, RuntimeApi>
+impl<NT, RuntimeApi, Runtime> Clone for BspDeleteFileTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> BspDeleteFileTask<NT, RuntimeApi> {
+    fn clone(&self) -> BspDeleteFileTask<NT, RuntimeApi, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT, RuntimeApi> BspDeleteFileTask<NT, RuntimeApi>
+impl<NT, RuntimeApi, Runtime> BspDeleteFileTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -70,13 +75,14 @@ where
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<FinalisedBspConfirmStoppedStoring>
-    for BspDeleteFileTask<NT, RuntimeApi>
+impl<NT, RuntimeApi, Runtime> EventHandler<FinalisedBspConfirmStoppedStoring>
+    for BspDeleteFileTask<NT, RuntimeApi, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
     RuntimeApi: StorageEnableRuntimeApi,
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
