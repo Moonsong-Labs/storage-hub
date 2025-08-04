@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>StorageHub SDK – E2E Demo</title>
+    <style>
+        .hidden {
+            display: none;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            padding: 1rem;
+            max-width: 680px;
+            margin: 0 auto;
+        }
+
+        label {
+            display: block;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>StorageHub SDK – E2E Demo</h1>
+
+    <button id="connectButton" data-testid="connect">Connect Wallet</button>
+
+    <div id="walletInfo" class="hidden">
+        Connected as <span id="walletAddress" data-testid="address"></span>
+    </div>
+
+    <hr />
+
+    <label>
+        Select file:
+        <input type="file" id="fileInput" data-testid="file-input" />
+    </label>
+    <p>
+        File name: <span id="fileNameDisplay" data-testid="file-name"></span>
+    </p>
+    <p>
+        Root hash:
+        <code id="rootHashDisplay" data-testid="root-hash"></code>
+    </p>
+
+    <pre id="error" class="hidden" data-testid="error" style="color: red;"></pre>
+
+    <script type="module" src="/app.ts"></script>
+</body>
+
+</html>

@@ -20,7 +20,8 @@
         "format:check": "pnpm --filter ./core run format:check && pnpm --filter ./msp-client run format:check",
         "typecheck": "pnpm --filter ./core run typecheck && pnpm --filter ./msp-client run typecheck",
         "coverage": "pnpm --filter ./core run coverage && pnpm --filter ./msp-client run coverage",
-        "clean": "node scripts/clean.js"
+        "clean": "node scripts/clean.js",
+        "serve:e2e": "vite dev --config examples/e2e/vite.config.ts",
     },
     "devDependencies": {
         "@eslint/eslintrc": "2.1.4",
@@ -33,7 +34,8 @@
         "lint-staged": "^16.1.2",
         "prettier": "^3.6.2",
         "typescript": "~5.5.4",
-        "vitest": "^3.2.4"
+        "vitest": "^3.2.4",
+        "vite": "^5.2.0"
     },
     "engines": {
         "node": ">=23"
