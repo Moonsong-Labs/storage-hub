@@ -50,6 +50,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>, Runtime: StorageEnableRuntime>,
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
+    generics(Runtime: StorageEnableRuntime)
 )]
 pub enum BlockchainServiceCommand {
     #[command(success_type = SubmittedTransaction)]
@@ -200,7 +201,7 @@ pub enum BlockchainServiceCommand {
 /// Interface for interacting with the BlockchainService actor.
 #[async_trait]
 pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntime>:
-    BlockchainServiceCommandInterface
+    BlockchainServiceCommandInterface<Runtime>
 {
     /// Helper function to check if an extrinsic failed or succeeded in a block.
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;

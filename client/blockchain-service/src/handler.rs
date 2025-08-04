@@ -158,16 +158,17 @@ where
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
+    receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     actor: BlockchainService<FSH, RuntimeApi, Runtime>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
-enum MergedEventLoopMessage<Block>
+enum MergedEventLoopMessage<Block, Runtime>
 where
     Block: cumulus_primitives_core::BlockT,
+    Runtime: StorageEnableRuntime,
 {
-    Command(BlockchainServiceCommand),
+    Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<Block>),
     FinalityNotification(FinalityNotification<Block>),
 }
@@ -183,7 +184,7 @@ where
 {
     fn new(
         actor: BlockchainService<FSH, RuntimeApi, Runtime>,
-        receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
+        receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     ) -> Self {
         Self { actor, receiver }
     }
@@ -203,12 +204,14 @@ where
 
         // Merging notification streams with command stream.
         let mut merged_stream = stream::select_all(vec![
-            self.receiver.map(MergedEventLoopMessage::Command).boxed(),
+            self.receiver
+                .map(MergedEventLoopMessage::<_, Runtime>::Command)
+                .boxed(),
             block_import_notification_stream
-                .map(MergedEventLoopMessage::BlockImportNotification)
+                .map(MergedEventLoopMessage::<_, Runtime>::BlockImportNotification)
                 .boxed(),
             finality_notification_stream
-                .map(MergedEventLoopMessage::FinalityNotification)
+                .map(MergedEventLoopMessage::<_, Runtime>::FinalityNotification)
                 .boxed(),
         ]);
 
@@ -239,7 +242,7 @@ where
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    type Message = BlockchainServiceCommand;
+    type Message = BlockchainServiceCommand<Runtime>;
     type EventLoop = BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>;
     type EventBusProvider = BlockchainServiceEventBusProvider;
 
