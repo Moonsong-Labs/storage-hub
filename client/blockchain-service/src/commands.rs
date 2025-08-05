@@ -47,7 +47,7 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 
 /// Commands that can be sent to the BlockchainService actor.
 #[actor_command(
-    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>, Runtime: StorageEnableRuntime>,
+    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, Runtime: StorageEnableRuntime>,
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
     generics(Runtime: StorageEnableRuntime)
@@ -219,12 +219,10 @@ pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntime>:
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
 #[async_trait]
-impl<FSH, RuntimeApi, Runtime> BlockchainServiceCommandInterfaceExt<Runtime>
-    for ActorHandle<BlockchainService<FSH, RuntimeApi, Runtime>>
+impl<FSH, Runtime> BlockchainServiceCommandInterfaceExt<Runtime>
+    for ActorHandle<BlockchainService<FSH, Runtime>>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {

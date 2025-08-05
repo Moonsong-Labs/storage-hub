@@ -227,11 +227,9 @@ impl CapacityRequestData {
     }
 }
 
-impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
+impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     /// Queue a capacity request.

@@ -62,11 +62,9 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
 /// For such purposes, it uses the [`ParachainClient<RuntimeApi>`] to interact with the runtime, the [`RpcHandlers`] to send
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
-pub struct BlockchainService<FSH, RuntimeApi, Runtime>
+pub struct BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     /// The configuration for the BlockchainService.
@@ -74,7 +72,7 @@ where
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
     /// The parachain client. Used to interact with the runtime.
-    pub(crate) client: Arc<ParachainClient<RuntimeApi>>,
+    pub(crate) client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
@@ -151,15 +149,13 @@ impl Default for BlockchainServiceConfig {
 }
 
 /// Event loop for the BlockchainService actor.
-pub struct BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>
+pub struct BlockchainServiceEventLoop<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
-    actor: BlockchainService<FSH, RuntimeApi, Runtime>,
+    actor: BlockchainService<FSH, Runtime>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
@@ -174,16 +170,14 @@ where
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
-impl<FSH, RuntimeApi, Runtime> ActorEventLoop<BlockchainService<FSH, RuntimeApi, Runtime>>
-    for BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>
+impl<FSH, Runtime> ActorEventLoop<BlockchainService<FSH, Runtime>>
+    for BlockchainServiceEventLoop<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime + Send + Sync + 'static,
 {
     fn new(
-        actor: BlockchainService<FSH, RuntimeApi, Runtime>,
+        actor: BlockchainService<FSH, Runtime>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     ) -> Self {
         Self { actor, receiver }
@@ -235,15 +229,13 @@ where
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
-impl<FSH, RuntimeApi, Runtime> Actor for BlockchainService<FSH, RuntimeApi, Runtime>
+impl<FSH, Runtime> Actor for BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     type Message = BlockchainServiceCommand<Runtime>;
-    type EventLoop = BlockchainServiceEventLoop<FSH, RuntimeApi, Runtime>;
+    type EventLoop = BlockchainServiceEventLoop<FSH, Runtime>;
     type EventBusProvider = BlockchainServiceEventBusProvider;
 
     fn handle_message(
@@ -1161,17 +1153,15 @@ where
     }
 }
 
-impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
+impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     /// Create a new [`BlockchainService`].
     pub fn new(
         config: BlockchainServiceConfig,
-        client: Arc<ParachainClient<RuntimeApi>>,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         forest_storage_handler: FSH,

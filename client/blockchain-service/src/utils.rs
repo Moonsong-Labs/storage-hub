@@ -60,11 +60,9 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
+impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     /// Notify tasks waiting for a block number.
@@ -530,7 +528,7 @@ where
     /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
     pub fn construct_extrinsic(
         &self,
-        client: Arc<ParachainClient<RuntimeApi>>,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         function: impl Into<Runtime::Call>,
         nonce: u32,
         tip: Tip,

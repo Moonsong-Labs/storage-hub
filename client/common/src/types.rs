@@ -240,6 +240,7 @@ impl StorageEnableRuntime for storage_hub_runtime::Runtime {
     type Call = storage_hub_runtime::RuntimeCall;
     type Signature = storage_hub_runtime::Signature;
     type Extension = storage_hub_runtime::SignedExtra;
+    type RuntimeApi = storage_hub_runtime::apis::RuntimeApi;
 }
 
 //TODO: This should be moved to the runtime crate once the SH Client is abstracted

@@ -43,11 +43,9 @@ use crate::{
 // TODO: Make this configurable in the config file
 const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
-impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
+impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     /// Handles the initial sync of a MSP, after coming out of syncing mode.

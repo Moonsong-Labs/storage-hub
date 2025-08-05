@@ -40,11 +40,9 @@ use crate::{
     BlockchainService,
 };
 
-impl<FSH, RuntimeApi, Runtime> BlockchainService<FSH, RuntimeApi, Runtime>
+impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     /// Handles the initial sync of a BSP, after coming out of syncing mode.

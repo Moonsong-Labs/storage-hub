@@ -210,7 +210,7 @@ pub trait StorageEnableRuntime: Send + Sync + 'static {
         + KeyTypeOperations<Address = Self::Address>;
 
     /// The transaction extension type for additional validation and transaction logic.
-    /// Extensions can modify transaction behavior and must support the runtime's call type.
+    /// Extensions can modify transaction behaviour and must support the runtime's call type.
     type Extension: StaticTypeInfo
         + Decode
         + Encode
@@ -219,6 +219,11 @@ pub trait StorageEnableRuntime: Send + Sync + 'static {
         + ExtensionOperations<Self::Call, Hash = H256>
         + Clone
         + core::fmt::Debug;
+
+    /// The runtime API type that provides access to all StorageHub-specific runtime functions.
+    /// Must support construction and provide complete access to all required runtime APIs
+    /// including file system, storage providers, proofs dealer, and payment streams functionality.
+    type RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>;
 }
 
 /// A read-only keystore trait that provides access to public keys without signing capabilities.
@@ -293,20 +298,6 @@ where
 /// - `EthereumSignature`: Uses ECDSA keys with `AccountId20` (Ethereum-compatible)
 ///
 /// # Usage
-///
-/// ## Generic Extrinsic Construction
-/// ```ignore
-/// pub fn construct_extrinsic<Signature>(&self, function: Call) -> UncheckedExtrinsic
-/// where
-///     Signature: KeyTypeOperations<Address = Address>,
-/// {
-///     let public_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
-///     let signature = Signature::sign(&self.keystore, BCSV_KEY_TYPE, &public_key, &payload)?;
-///     let address = Signature::public_to_address(&public_key);
-///     
-///     generic::UncheckedExtrinsic::new_signed(function, address, signature, extra)
-/// }
-/// ```
 ///
 /// ## Getting Public Keys
 /// ```ignore
@@ -407,7 +398,7 @@ pub trait KeyTypeOperations: Sized {
 ///
 /// # Required Traits
 ///
-/// Implementors must also implement `TransactionExtension<Call>` which provides the core
+/// Implementers must also implement `TransactionExtension<Call>` which provides the core
 /// extension functionality including validation and metadata generation.
 ///
 /// # Usage
