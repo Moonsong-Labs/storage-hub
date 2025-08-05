@@ -1,6 +1,6 @@
 //! Cryptographic utilities and implementations for StorageHub client.
 //!
-//! This module provides implementations of the `KeyTypeOperations` trait for different
+//! This module provides implementations of the [`KeyTypeOperations`] trait for different
 //! cryptographic schemes used in the StorageHub client.
 
 use codec::{Decode, Encode};
@@ -16,7 +16,7 @@ use crate::traits::KeyTypeOperations;
 
 /// Implementation of KeyTypeOperations for MultiSignature with MultiAddress.
 ///
-/// This implementation assumes sr25519 as the underlying signature scheme.
+/// This implementation uses sr25519 as the underlying signature scheme.
 /// While MultiSignature can represent multiple signature types (Sr25519, Ed25519, ECDSA),
 /// this implementation specifically uses Sr25519 for all operations.
 impl KeyTypeOperations for MultiSignature {
