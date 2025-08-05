@@ -11,7 +11,9 @@ use sp_core::H256;
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi};
+use shc_common::traits::{
+    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
+};
 use shc_common::{
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{BlockHash, BlockNumber, Fingerprint, ProviderId, StorageRequestMetadata},
