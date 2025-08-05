@@ -65,8 +65,9 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
 
   it("MSP first libp2p multiaddress is wrong and second should be correct. User will be able to connect and send file on the second attempt.", async () => {
     const { containerName, p2pPort, peerId } = await addMspContainer({
-      name: "lola1",
+      name: "storage-hub-sh-msp-three",
       additionalArgs: [
+        "--keystore-path=/keystore/msp-three",
         "--database=rocksdb",
         `--max-storage-capacity=${MAX_STORAGE_CAPACITY}`,
         `--jump-capacity=${CAPACITY[1024]}`,
@@ -74,7 +75,14 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
       ]
     });
 
-    //Give it some balance.
+    // Wait until the MSP is up and running.
+    await userApi.docker.waitForLog({
+      searchString: "Idle",
+      containerName: containerName,
+      timeout: 30000
+    });
+
+    // Give it some balance.
     const amount = 10000n * 10n ** 12n;
     await userApi.block.seal({
       calls: [
@@ -83,6 +91,7 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
     });
 
     const mspIp = await getContainerIp(containerName);
+    const badMultiAddress = `/ip4/51.75.30.194/tcp/30350/p2p/${peerId}`;
     const multiAddressMsp = `/ip4/${mspIp}/tcp/${p2pPort}/p2p/${peerId}`;
     await userApi.block.seal({
       calls: [
@@ -91,7 +100,7 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
             mspThreeKey.address,
             mspThreeKey.publicKey,
             userApi.shConsts.CAPACITY_512,
-            [`/ip4/51.75.30.194/tcp/30350/p2p/${peerId}`, multiAddressMsp],
+            [badMultiAddress, multiAddressMsp],
             100 * 1024 * 1024,
             "Terms of Service...",
             9999999,
@@ -150,16 +159,18 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
 
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
-    // Fail to connect to the first libp2p address because it is a phony one.
+    // It should have failed to connect to the first libp2p address because it is a phony one.
     await userApi.docker.waitForLog({
-      searchString: "Unable to upload final batch to peer",
-      containerName: userApi.shConsts.NODE_INFOS.user.containerName
+      searchString: `Unable to upload final batch to peer PeerId("${peerId}")`,
+      containerName: userApi.shConsts.NODE_INFOS.user.containerName,
+      timeout: 20000
     });
 
     // Second libp2p address is the right one so we should successfully send the file through this one.
     await userApi.docker.waitForLog({
-      searchString: "File upload complete.",
-      containerName: userApi.shConsts.NODE_INFOS.user.containerName
+      searchString: `File upload complete. Peer PeerId("${peerId}")`,
+      containerName: userApi.shConsts.NODE_INFOS.user.containerName,
+      timeout: 20000
     });
   });
 });
