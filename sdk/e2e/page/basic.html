@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>StorageHub SDK – Basic E2E Test</title>
+    <style>
+        .hidden {
+            display: none;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            padding: 2rem;
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+        }
+
+        button:hover {
+            background: #0056b3;
+        }
+
+        .wallet-info {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .address {
+            font-family: monospace;
+            background: #e9ecef;
+            padding: 8px;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🔗 Basic Wallet Connection Test</h1>
+    <p>Simple test page for MetaMask connection via dappwright</p>
+
+    <button id="connectButton" data-testid="connect">Connect Wallet</button>
+
+    <div id="walletInfo" class="hidden wallet-info">
+        <h3>✅ Wallet Connected!</h3>
+        <p>Address: <span id="walletAddress" data-testid="address" class="address"></span></p>
+    </div>
+
+    <script type="module" src="/basic-app.ts"></script>
+</body>
+
+</html>
