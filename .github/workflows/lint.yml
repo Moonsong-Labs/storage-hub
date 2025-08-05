@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify Cargo.lock is up to date
-        run: cargo update --locked
+        run: cargo update --offline
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
