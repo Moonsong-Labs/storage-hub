@@ -112,28 +112,20 @@
             </div>
         </div>
 
-        <!-- DISABLED: Transaction signing until needed -->
-        <!--
+        <!-- Transaction Signing Section -->
         <div class="signing-section">
-            <h4>🖊️ Signing Tests</h4>
-
-            <div class="sign-group">
-                <label for="messageInput">Message to sign:</label>
-                <input type="text" id="messageInput" data-testid="message-input" placeholder="Hello StorageHub!" value="Hello StorageHub!">
-                <button id="signMessageBtn" data-testid="sign-message">Sign Message</button>
-                <p>Signature: <code id="messageSignature" data-testid="message-signature"></code></p>
-            </div>
-
+            <h4>💸 Transaction Signing</h4>
             <div class="sign-group">
                 <label for="recipientInput">Send to address:</label>
-                <input type="text" id="recipientInput" data-testid="recipient-input" placeholder="0x...">
+                <input type="text" id="recipientInput" data-testid="recipient-input" placeholder="0x..."
+                    value="0x70997970C51812dc3A010C7d01b50e0d17dc79C8">
                 <label for="amountInput">Amount (ETH):</label>
-                <input type="number" id="amountInput" data-testid="amount-input" placeholder="0.01" value="0.01" step="0.01">
+                <input type="number" id="amountInput" data-testid="amount-input" placeholder="0.001" value="0.001"
+                    step="0.001">
                 <button id="signTxnBtn" data-testid="sign-transaction">Sign & Send Transaction</button>
                 <p>TX Signature: <code id="txSignature" data-testid="tx-signature"></code></p>
             </div>
         </div>
-        -->
     </div>
 
     <script type="module" src="/basic-app.ts"></script>

@@ -37,7 +37,7 @@ test.beforeEach(async ({ page }) => {
     await page.goto("http://localhost:5173/basic.html"); // Using the correct URL for your setup
 });
 
-test("should connect, switch network, and sign message with StorageHub SDK", async ({ wallet, page }) => {
+test("should connect, switch network, sign message, and send transaction with StorageHub SDK", async ({ wallet, page }) => {
     // Step 1: Connect wallet via dappwright
     await page.click("#connectButton");
     await wallet.approve();
@@ -284,6 +284,125 @@ test("should connect, switch network, and sign message with StorageHub SDK", asy
     // Also verify it appears in the UI
     await expect(signatureElement).toHaveText(signature);
 
+    // Step 5: Test transaction signing with StorageHub SDK
+    console.log("Starting transaction signing with StorageHub SDK...");
+
+    const recipientInput = page.getByTestId("recipient-input");
+    const amountInput = page.getByTestId("amount-input");
+    const signTxButton = page.getByTestId("sign-transaction");
+
+    await expect(recipientInput).toBeVisible();
+    await expect(amountInput).toBeVisible();
+    await expect(signTxButton).toBeVisible();
+
+    // Verify the pre-filled values
+    await expect(recipientInput).toHaveValue("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
+    await expect(amountInput).toHaveValue("0.001");
+
+    console.log("Transaction form values verified, clicking sign transaction button...");
+
+    // Get current pages count before transaction
+    const preTxPages = page.context().pages();
+    console.log(`Pre-transaction pages count: ${preTxPages.length}`);
+
+    // Click the transaction button to trigger MetaMask popup
+    await signTxButton.click();
+    console.log("Transaction button clicked, waiting for MetaMask transaction popup...");
+
+    // Wait for MetaMask TRANSACTION popup to appear
+    let metamaskTxPage = null;
+    attempts = 0;
+
+    while (attempts < 30 && !metamaskTxPage) {
+        await page.waitForTimeout(200);
+        const currentPages = page.context().pages();
+        console.log(`TX Attempt ${attempts}: Current pages count: ${currentPages.length}`);
+
+        // Look for a page that contains transaction content
+        for (const currentPage of currentPages) {
+            const url = currentPage.url();
+            const title = await currentPage.title().catch(() => '');
+            console.log(`  TX Page: ${url} - Title: "${title}"`);
+
+            if (url.includes('extension://')) {
+                try {
+                    const pageText = await currentPage.textContent('body');
+                    const hasTxContent = pageText.includes('Confirm transaction') ||
+                        pageText.includes('Send transaction') ||
+                        pageText.includes('Gas fee') ||
+                        url.includes('transaction') ||
+                        url.includes('confirm');
+
+                    const hasConfirmButton = await currentPage.locator('button:has-text("Confirm")').count() > 0;
+
+                    console.log(`  TX Page has transaction content: ${hasTxContent}, has confirm button: ${hasConfirmButton}`);
+
+                    if (hasTxContent || hasConfirmButton) {
+                        metamaskTxPage = currentPage;
+                        console.log(`Found MetaMask transaction page: ${url}`);
+                        break;
+                    }
+                } catch (e) {
+                    console.log(`  Error checking TX page content: ${e.message}`);
+                }
+            }
+        }
+        attempts++;
+    }
+
+    if (!metamaskTxPage) {
+        console.log("Could not find MetaMask transaction popup, trying dappwright approve fallback...");
+        try {
+            await wallet.approve();
+        } catch (error) {
+            console.log("Dappwright approve for transaction also failed:", error);
+            throw new Error("Failed to approve MetaMask transaction - no transaction popup found");
+        }
+    } else {
+        console.log("MetaMask transaction popup detected, approving transaction...");
+
+        // Wait for the popup to fully load
+        await metamaskTxPage.waitForLoadState('networkidle');
+        await page.waitForTimeout(1000);
+
+        // Try to find and click the confirm button
+        const confirmButton = metamaskTxPage.locator('button:has-text("Confirm")').first();
+        await confirmButton.waitFor({ timeout: 5000 });
+        await confirmButton.click();
+        console.log("Transaction confirm button clicked successfully!");
+    }
+
+    // Wait for the transaction signature to appear in the UI
+    console.log("Waiting for transaction signature to appear in UI...");
+    const txSignatureElement = page.getByTestId("tx-signature");
+
+    // Poll for transaction signature completion
+    let txSignatureText = '';
+    attempts = 0;
+    while (attempts < 60) { // 12 second timeout for transactions
+        await page.waitForTimeout(200);
+        txSignatureText = await txSignatureElement.textContent() || '';
+        console.log(`TX Signature attempt ${attempts}: "${txSignatureText}"`);
+
+        if (txSignatureText && txSignatureText !== 'Signing...' && txSignatureText !== 'Error signing transaction') {
+            console.log('✅ Transaction signature received!');
+            break;
+        }
+        attempts++;
+    }
+
+    if (!txSignatureText || txSignatureText === 'Signing...' || txSignatureText === 'Error signing transaction') {
+        throw new Error('Transaction signing process timed out or failed');
+    }
+
+    const txSignature = txSignatureText;
+    console.log("Transaction signature received:", txSignature);
+
+    // Verify the transaction signature is valid
+    expect(txSignature).toBeTruthy();
+    expect(txSignature.length).toBeGreaterThan(50); // Transaction signatures/hashes are long
+    expect(txSignature).toMatch(/^0x[a-fA-F0-9]+$/); // Hex format
+
     console.log("✅ Complete StorageHub SDK + dappwright integration test passed!");
     console.log("- ✅ Connected to MetaMask via dappwright");
     console.log("- ✅ Switched to Hardhat local network");
@@ -291,4 +410,6 @@ test("should connect, switch network, and sign message with StorageHub SDK", asy
     console.log("- ✅ Successfully signed message using StorageHub SDK");
     console.log("- ✅ dappwright approved the signature request");
     console.log("- ✅ Signature verification passed");
+    console.log("- ✅ Successfully signed and sent transaction using StorageHub SDK");
+    console.log("- ✅ Transaction approval and execution completed");
 });

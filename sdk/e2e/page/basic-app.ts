@@ -14,11 +14,11 @@ const messageInput = document.getElementById('messageInput') as HTMLInputElement
 const signMessageBtn = document.getElementById('signMessageBtn') as HTMLButtonElement;
 const messageSignature = document.getElementById('messageSignature') as HTMLElement;
 
-// DISABLED: Transaction signing elements until needed
-// const recipientInput = document.getElementById('recipientInput') as HTMLInputElement;
-// const amountInput = document.getElementById('amountInput') as HTMLInputElement;
-// const signTxnBtn = document.getElementById('signTxnBtn') as HTMLButtonElement;
-// const txSignature = document.getElementById('txSignature') as HTMLElement;
+// Transaction signing elements
+const recipientInput = document.getElementById('recipientInput') as HTMLInputElement;
+const amountInput = document.getElementById('amountInput') as HTMLInputElement;
+const signTxnBtn = document.getElementById('signTxnBtn') as HTMLButtonElement;
+const txSignature = document.getElementById('txSignature') as HTMLElement;
 
 let wallet: MetamaskWallet | null = null;
 
@@ -108,7 +108,9 @@ signMessageBtn?.addEventListener('click', async () => {
             console.log('No wallet instance, creating new MetamaskWallet...');
             // Create a new MetamaskWallet instance using the existing ethereum provider
             // This ensures we use the provider that dappwright has already connected
-            wallet = new MetamaskWallet(window.ethereum as any);
+            const { BrowserProvider } = await import('ethers');
+            const provider = new BrowserProvider(window.ethereum as any);
+            wallet = new (MetamaskWallet as any)(provider); // Using private constructor
         }
 
         console.log('Using StorageHub SDK MetamaskWallet.signMessage()...');
@@ -129,47 +131,50 @@ signMessageBtn?.addEventListener('click', async () => {
     }
 });
 
-/* DISABLED: Transaction signing handlers until needed
-
 // Transaction signing handler
 signTxnBtn?.addEventListener('click', async () => {
+    // Use StorageHub SDK's MetamaskWallet for transaction signing
     if (!wallet) {
-        showError('Please connect wallet first');
-        return;
+        console.log('No wallet instance for transaction, creating new MetamaskWallet...');
+        // Create a new MetamaskWallet instance using the existing ethereum provider
+        const { BrowserProvider } = await import('ethers');
+        const provider = new BrowserProvider(window.ethereum as any);
+        wallet = new (MetamaskWallet as any)(provider); // Using private constructor
     }
-    
+
     console.log('💸 Signing transaction...');
     txSignature.textContent = 'Signing...';
-    
+
     try {
         const to = recipientInput.value.trim();
-        const amount = amountInput.value.trim() || '0.01';
-        
+        const amount = amountInput.value.trim() || '0.001';
+
         if (!/^0x[0-9a-fA-F]{40}$/.test(to)) {
             throw new Error('Invalid recipient address');
         }
-        
+
         // Create transaction object
         const txRequest = {
             to,
             value: parseEther(amount).toString(),
             gasLimit: 21000
         };
-        
+
         console.log('📋 Transaction:', txRequest);
-        
+
         // Convert to Transaction object and get raw bytes
         const txObj = Transaction.from(txRequest);
         const rawBytes = getBytes(txObj.unsignedSerialized);
-        
-        // Sign transaction (this will also send it via MetaMask)
+
+        console.log('🔧 About to call StorageHub SDK wallet.signTxn()...');
+        // Sign transaction using StorageHub SDK's MetamaskWallet
         const signature = await wallet.signTxn(rawBytes);
-        
+
         console.log('✅ Transaction signed & sent successfully!');
         console.log('📋 Signature:', signature);
-        
+
         txSignature.textContent = signature;
-        
+
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('❌ Transaction signing failed:', msg);
@@ -177,5 +182,3 @@ signTxnBtn?.addEventListener('click', async () => {
         txSignature.textContent = 'Error signing transaction';
     }
 });
-
-*/
