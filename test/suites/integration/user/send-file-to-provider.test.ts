@@ -61,11 +61,16 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
       searchString: "Unable to upload final batch to peer",
       containerName: userApi.shConsts.NODE_INFOS.user.containerName
     });
+
+    // Resume the MSP container, otherwise the test won't exit correctly as it won't be able to connect to the MSP to clean it up.
+    await userApi.docker.resumeContainer({
+      containerName: userApi.shConsts.NODE_INFOS.msp1.containerName
+    });
   });
 
   it("MSP first libp2p multiaddress is wrong and second should be correct. User will be able to connect and send file on the second attempt.", async () => {
     const { containerName, p2pPort, peerId } = await addMspContainer({
-      name: "storage-hub-sh-msp-three",
+      name: "storage-hub-sh-msp-3",
       additionalArgs: [
         "--keystore-path=/keystore/msp-three",
         "--database=rocksdb",
@@ -160,8 +165,13 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     // It should have failed to connect to the first libp2p address because it is a phony one.
-    await userApi.docker.waitForLog({
-      searchString: `Unable to upload final batch to peer PeerId("${peerId}")`,
+    // Check for either "Unable to upload final batch" (network/connection issues) or
+    // "Final batch upload rejected" (refused requests) - both can occur when the peer is unreachable
+    await userApi.docker.waitForAnyLog({
+      searchStrings: [
+        `Unable to upload final batch to peer PeerId("${peerId}")`,
+        `Final batch upload rejected by peer PeerId("${peerId}")`
+      ],
       containerName: userApi.shConsts.NODE_INFOS.user.containerName,
       timeout: 20000
     });

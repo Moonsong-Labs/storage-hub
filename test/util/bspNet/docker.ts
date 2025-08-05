@@ -323,3 +323,76 @@ export const waitForLog = async (options: {
     );
   });
 };
+
+export const waitForAnyLog = async (options: {
+  searchStrings: string[];
+  containerName: string;
+  timeout?: number;
+  tail?: number;
+}): Promise<{ log: string; matchedString: string }> => {
+  return new Promise((resolve, reject) => {
+    const docker = new Docker();
+    const container = docker.getContainer(options.containerName);
+
+    container.logs(
+      { follow: true, stdout: true, stderr: true, tail: options.tail, timestamps: false },
+      (err, stream) => {
+        if (err) {
+          return reject(err);
+        }
+
+        if (stream === undefined) {
+          return reject(new Error("No stream returned."));
+        }
+
+        const stdout = new PassThrough();
+        const stderr = new PassThrough();
+
+        docker.modem.demuxStream(stream, stdout, stderr);
+
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+        const cleanup = () => {
+          (stream as Readable).destroy();
+          stdout.destroy();
+          stderr.destroy();
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+        };
+
+        const onData = (chunk: Buffer) => {
+          const log = chunk.toString("utf8");
+
+          // Check if any of the search strings match
+          for (const searchString of options.searchStrings) {
+            if (log.includes(searchString)) {
+              cleanup();
+              resolve({ log, matchedString: searchString });
+              return;
+            }
+          }
+        };
+
+        stdout.on("data", onData);
+        stderr.on("data", onData);
+
+        stream.on("error", (err) => {
+          cleanup();
+          reject(err);
+        });
+
+        if (options.timeout) {
+          timeoutHandle = setTimeout(() => {
+            cleanup();
+            reject(
+              new Error(
+                `Timeout of ${options.timeout}ms exceeded while waiting for any of these logs: ${options.searchStrings.join(", ")}`
+              )
+            );
+          }, options.timeout);
+        }
+      }
+    );
+  });
+};
