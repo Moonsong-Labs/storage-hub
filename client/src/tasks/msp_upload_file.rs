@@ -18,9 +18,7 @@ use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, events::NewStorageRequest,
 };
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{
     FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
     StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
@@ -61,27 +59,23 @@ const LOG_TARGET: &str = "msp-upload-file-task";
 ///   which will emit an event that describes the final result of the batch response (i.e. all accepted,
 ///   rejected and/or failed file keys). The MSP will then apply the necessary deltas to each one of the bucket's
 ///   forest storage to reflect the result.
-pub struct MspUploadFileTask<NT, RuntimeApi, Runtime>
+pub struct MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
     file_key_cleanup: Option<H256>,
 }
 
-impl<NT, RuntimeApi, Runtime> Clone for MspUploadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> Clone for MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> MspUploadFileTask<NT, RuntimeApi, Runtime> {
+    fn clone(&self) -> MspUploadFileTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
@@ -89,15 +83,13 @@ where
     }
 }
 
-impl<NT, RuntimeApi, Runtime> MspUploadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler,
             file_key_cleanup: None,
@@ -113,13 +105,10 @@ where
 /// - Check if the MSP has enough storage capacity to store the file and increase it if necessary (up to a maximum).
 /// - Register the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<NT, RuntimeApi, Runtime> EventHandler<NewStorageRequest>
-    for MspUploadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<NewStorageRequest> for MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
@@ -145,13 +134,10 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the MSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<NT, RuntimeApi, Runtime> EventHandler<RemoteUploadRequest>
-    for MspUploadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<RemoteUploadRequest> for MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
@@ -200,13 +186,10 @@ where
 ///
 /// The MSP will call the `msp_respond_storage_requests_multiple_buckets` extrinsic on the FileSystem pallet to respond to the
 /// storage requests.
-impl<NT, RuntimeApi, Runtime> EventHandler<ProcessMspRespondStoringRequest>
-    for MspUploadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<ProcessMspRespondStoringRequest> for MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: ProcessMspRespondStoringRequest) -> anyhow::Result<()> {
@@ -385,12 +368,10 @@ where
     }
 }
 
-impl<NT, RuntimeApi, Runtime> MspUploadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(

@@ -15,9 +15,7 @@ use shc_blockchain_service::{
     types::{RetryStrategy, SendExtrinsicOptions, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
 };
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
@@ -74,28 +72,24 @@ impl Default for BspSubmitProofConfig {
 ///     - If the key is still present, logs a warning, as this may indicate that the key was re-added after deletion.
 ///     - If the key is absent from the Forest Storage, safely removes the corresponding file from the File Storage.
 ///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
-pub struct BspSubmitProofTask<NT, RuntimeApi, Runtime>
+pub struct BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
     /// Configuration for this task
     config: BspSubmitProofConfig,
 }
 
-impl<NT, RuntimeApi, Runtime> Clone for BspSubmitProofTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> Clone for BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> BspSubmitProofTask<NT, RuntimeApi, Runtime> {
+    fn clone(&self) -> BspSubmitProofTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             config: self.config.clone(),
@@ -103,15 +97,13 @@ where
     }
 }
 
-impl<NT, RuntimeApi, Runtime> BspSubmitProofTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             config: storage_hub_handler.provider_config.bsp_submit_proof.clone(),
@@ -127,13 +119,10 @@ where
 /// - Derives forest challenges from the seed.
 /// - Checks for checkpoint challenges and adds them to the forest challenges.
 /// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
-impl<NT, RuntimeApi, Runtime> EventHandler<MultipleNewChallengeSeeds>
-    for BspSubmitProofTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<MultipleNewChallengeSeeds> for BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: MultipleNewChallengeSeeds) -> anyhow::Result<()> {
@@ -167,13 +156,10 @@ where
 ///   - Retries up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] times if the submission fails.
 /// - Applies any necessary mutations to the Forest Storage (not the File Storage).
 /// - Ensures the new Forest root matches the one on-chain.
-impl<NT, RuntimeApi, Runtime> EventHandler<ProcessSubmitProofRequest>
-    for BspSubmitProofTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
@@ -371,13 +357,11 @@ where
 ///   - If the key is still present, it logs a warning,
 ///     since this could indicate that the key has been re-added after being deleted.
 ///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-impl<NT, RuntimeApi, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied>
-    for BspSubmitProofTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied>
+    for BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
@@ -420,12 +404,10 @@ where
     }
 }
 
-impl<NT, RuntimeApi, Runtime> BspSubmitProofTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> BspSubmitProofTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn queue_submit_proof_request(
@@ -533,7 +515,7 @@ where
     }
 
     async fn check_if_proof_is_outdated(
-        blockchain: &ActorHandle<BlockchainService<NT::FSH, RuntimeApi, Runtime>>,
+        blockchain: &ActorHandle<BlockchainService<NT::FSH, Runtime>>,
         event: &ProcessSubmitProofRequest,
     ) -> anyhow::Result<()> {
         // Get the next challenge tick for this provider.
@@ -626,7 +608,7 @@ where
     /// 2. The proof is up to date, i.e. the Forest root has not changed, and the tick for
     ///    which the proof was generated is still the tick this Provider should submit a proof for.
     async fn should_retry_submit_proof(
-        sh_handler: Arc<StorageHubHandler<NT, RuntimeApi, Runtime>>,
+        sh_handler: Arc<StorageHubHandler<NT, Runtime>>,
         event: Arc<ProcessSubmitProofRequest>,
         forest_root: Arc<ForestRoot>,
         error: WatchTransactionError,

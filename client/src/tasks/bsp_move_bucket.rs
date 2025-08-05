@@ -6,9 +6,7 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface,
     events::{MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected, MoveBucketRequested},
 };
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 use shc_file_transfer_service::commands::{
     FileTransferServiceCommandInterface, FileTransferServiceCommandInterfaceExt,
 };
@@ -37,28 +35,24 @@ impl Default for BspMoveBucketConfig {
 
 /// Task that handles the [`MoveBucketRequested`], [`MoveBucketAccepted`], [`MoveBucketRejected`]
 /// and [`MoveBucketExpired`] events from the BSP point of view.
-pub struct BspMoveBucketTask<NT, RuntimeApi, Runtime>
+pub struct BspMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
     /// Configuration for this task
     config: BspMoveBucketConfig,
 }
 
-impl<NT, RuntimeApi, Runtime> Clone for BspMoveBucketTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> Clone for BspMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> BspMoveBucketTask<NT, RuntimeApi, Runtime> {
+    fn clone(&self) -> BspMoveBucketTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             config: self.config.clone(),
@@ -66,15 +60,13 @@ where
     }
 }
 
-impl<NT, RuntimeApi, Runtime> BspMoveBucketTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> BspMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             config: storage_hub_handler.provider_config.bsp_move_bucket.clone(),
@@ -86,13 +78,10 @@ where
 ///
 /// This event is triggered when an user requests to move a bucket to a new MSP.
 /// As a BSP, we need to allow the new MSP to download the files we have from the bucket.
-impl<NT, RuntimeApi, Runtime> EventHandler<MoveBucketRequested>
-    for BspMoveBucketTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketRequested> for BspMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: MoveBucketRequested) -> anyhow::Result<()> {
@@ -140,13 +129,10 @@ where
 /// This does not mean that the move bucket request is complete, but that the new MSP has committed.
 /// For this to be complete, we need to wait for the new MSP to download all the files from the
 /// bucket.
-impl<NT, RuntimeApi, Runtime> EventHandler<MoveBucketAccepted>
-    for BspMoveBucketTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketAccepted> for BspMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: MoveBucketAccepted) -> anyhow::Result<()> {
@@ -175,13 +161,10 @@ where
 ///
 /// This event is triggered when the new MSP rejects the move bucket request.
 /// In this case, we need to stop accepting download requests for the bucket.
-impl<NT, RuntimeApi, Runtime> EventHandler<MoveBucketRejected>
-    for BspMoveBucketTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketRejected> for BspMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: MoveBucketRejected) -> anyhow::Result<()> {
@@ -206,13 +189,10 @@ where
 ///
 /// This event is triggered when the move bucket request expires.
 /// In this case, we need to stop accepting download requests for the bucket.
-impl<NT, RuntimeApi, Runtime> EventHandler<MoveBucketExpired>
-    for BspMoveBucketTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketExpired> for BspMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: MoveBucketExpired) -> anyhow::Result<()> {

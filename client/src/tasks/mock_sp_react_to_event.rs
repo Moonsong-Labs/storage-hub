@@ -8,9 +8,7 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, events::MultipleNewChallengeSeeds,
     types::SendExtrinsicOptions,
 };
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 
 use crate::{handler::StorageHubHandler, types::ShNodeType};
 
@@ -23,50 +21,41 @@ pub type EventToReactTo = MultipleNewChallengeSeeds;
 ///
 /// This can be used for debugging purposes.
 /// The event to react to can be configured by setting the [`EventToReactTo`] type.
-pub struct SpReactToEventMockTask<NT, RuntimeApi, Runtime>
+pub struct SpReactToEventMockTask<NT, Runtime>
 where
     NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
 }
 
-impl<NT, RuntimeApi, Runtime> Clone for SpReactToEventMockTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> Clone for SpReactToEventMockTask<NT, Runtime>
 where
     NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> SpReactToEventMockTask<NT, RuntimeApi, Runtime> {
+    fn clone(&self) -> SpReactToEventMockTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT, RuntimeApi, Runtime> SpReactToEventMockTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> SpReactToEventMockTask<NT, Runtime>
 where
     NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT, RuntimeApi, Runtime> EventHandler<EventToReactTo>
-    for SpReactToEventMockTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<EventToReactTo> for SpReactToEventMockTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: EventToReactTo) -> anyhow::Result<()> {

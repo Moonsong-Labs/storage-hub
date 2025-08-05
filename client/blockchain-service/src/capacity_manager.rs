@@ -10,9 +10,7 @@ use sp_core::H256;
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
 };
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{BlockNumber, StorageData};
 use shc_forest_manager::traits::ForestStorageHandler;
 

@@ -1,8 +1,6 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 use sc_client_api::{

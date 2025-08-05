@@ -28,9 +28,7 @@ use shc_common::{
     },
 };
 use shc_common::{
-    traits::{
-        ExtensionOperations, KeyTypeOperations, StorageEnableApiCollection, StorageEnableRuntimeApi,
-    },
+    traits::{ExtensionOperations, KeyTypeOperations},
     types::Tip,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};

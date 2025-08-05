@@ -1,8 +1,6 @@
 use sc_tracing::tracing::{error, trace};
 use shc_actors_framework::event_bus::EventHandler;
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     commands::FileTransferServiceCommandInterface, events::RemoteDownloadRequest,
@@ -15,41 +13,35 @@ use crate::{
 
 const LOG_TARGET: &str = "bsp-download-file-task";
 
-pub struct BspDownloadFileTask<NT, RuntimeApi, Runtime>
+pub struct BspDownloadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
 }
 
-impl<NT, RuntimeApi, Runtime> Clone for BspDownloadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> Clone for BspDownloadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> BspDownloadFileTask<NT, RuntimeApi, Runtime> {
+    fn clone(&self) -> BspDownloadFileTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT, RuntimeApi, Runtime> BspDownloadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> BspDownloadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler,
         }
@@ -60,13 +52,10 @@ where
 ///
 /// This will generate a proof for the chunk and send it back to the requester.
 /// If there is a bucket ID provided, this will also check that it matches the local file's bucket.
-impl<NT, RuntimeApi, Runtime> EventHandler<RemoteDownloadRequest>
-    for BspDownloadFileTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<RemoteDownloadRequest> for BspDownloadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: RemoteDownloadRequest) -> anyhow::Result<()> {

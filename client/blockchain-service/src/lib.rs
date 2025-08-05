@@ -13,9 +13,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use handler::BlockchainServiceConfig;
 use sc_service::RpcHandlers;
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 use sp_keystore::KeystorePtr;
 
 use capacity_manager::{CapacityConfig, CapacityRequestQueue};

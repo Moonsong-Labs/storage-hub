@@ -1,8 +1,6 @@
 use log::{error, info, warn};
 use shc_actors_framework::event_bus::EventHandler;
-use shc_common::traits::{
-    StorageEnableApiCollection, StorageEnableRuntime, StorageEnableRuntimeApi,
-};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{HashT, StorageProofsMerkleTrieLayout};
 use shc_file_transfer_service::events::RetryBucketMoveDownload;
 use std::sync::Arc;
@@ -18,27 +16,23 @@ const LOG_TARGET: &str = "retry-bucket-move-task";
 
 /// Task that handles retrying and resuming bucket move downloads
 /// that might have been interrupted.
-pub struct MspRetryBucketMoveTask<NT, RuntimeApi, Runtime>
+pub struct MspRetryBucketMoveTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
     download_state_store: Arc<DownloadStateStore>,
 }
 
-impl<NT, RuntimeApi, Runtime> MspRetryBucketMoveTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> MspRetryBucketMoveTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi, Runtime>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             download_state_store: storage_hub_handler
@@ -48,12 +42,10 @@ where
     }
 }
 
-impl<NT, RuntimeApi, Runtime> Clone for MspRetryBucketMoveTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> Clone for MspRetryBucketMoveTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> Self {
@@ -64,13 +56,10 @@ where
     }
 }
 
-impl<NT, RuntimeApi, Runtime> EventHandler<RetryBucketMoveDownload>
-    for MspRetryBucketMoveTask<NT, RuntimeApi, Runtime>
+impl<NT, Runtime> EventHandler<RetryBucketMoveDownload> for MspRetryBucketMoveTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, _event: RetryBucketMoveDownload) -> anyhow::Result<()> {
