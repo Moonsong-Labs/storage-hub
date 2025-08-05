@@ -11702,18 +11702,22 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Log the payment stream value
                 let initial_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
-                // Payment stream value is 5 because:
-                // 1. Initial bucket size is  size = 4 gigabyte units
-                // 2. price_per_giga_unit_of_data_per_block is 1
-                // 3. Price per empty bucket is 1
-                // 4. 4 * 1 + 1 = 5
-                assert_eq!(initial_payment_stream_value, Some(5));
 
+                // Calculate expected payment stream rate
+                let initial_bucket_size = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id).unwrap();
+                let value_prop = pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, &value_prop_id).unwrap();
+                let price_per_giga_unit_of_data_per_block = value_prop.price_per_giga_unit_of_data_per_block;
+                let zero_sized_bucket_rate: u128 = <Test as pallet_storage_providers::Config>::ZeroSizeBucketFixedRate::get();
+                // Convert bucket size from bytes to giga-units
+                let initial_bucket_size_in_giga_units = initial_bucket_size / (shp_constants::GIGAUNIT as u64);
+                let expected_initial_payment_stream_rate = (initial_bucket_size_in_giga_units as u128) * price_per_giga_unit_of_data_per_block + zero_sized_bucket_rate;
+
+                assert_eq!(initial_payment_stream_value, Some(expected_initial_payment_stream_rate));
                 // Create signature 
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
@@ -11770,7 +11774,7 @@ mod delete_file_tests {
                 let bsp_id = Providers::get_provider_id(&bsp).unwrap();
 
                 // Create bucket for Alice (BSP test still need valid buckets for ownership checks)
-                let (bucket_id, file_key, location, size, fingerprint, _) =
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
@@ -11867,7 +11871,7 @@ mod delete_file_tests {
                 let bsp_id = Providers::get_provider_id(&bsp).unwrap();
 
                 // Create bucket for Alice (BSP test still need valid buckets for ownership checks)
-                let (bucket_id, file_key, location, size, fingerprint, _) =
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Simulate storing 2 files
@@ -11964,17 +11968,19 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 let initial_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
-                // Payment stream value is 5 because:
-                // 1. Initial bucket size is  size = 4 gigabyte units
-                // 2. price_per_giga_unit_of_data_per_block is 1
-                // 3. Price per empty bucket is 1
-                // 4. 4 * 1 + 1 = 5
-                assert_eq!(initial_payment_stream_value, Some(5));
-
+                // Calculate expected payment stream rate
+                let initial_bucket_size = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id).unwrap();
+                let value_prop = pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, &value_prop_id).unwrap();
+                let price_per_giga_unit_of_data_per_block = value_prop.price_per_giga_unit_of_data_per_block;
+                let zero_sized_bucket_rate: u128 = <Test as pallet_storage_providers::Config>::ZeroSizeBucketFixedRate::get();
+                // Convert bucket size from bytes to giga-units
+                let initial_bucket_size_in_giga_units = initial_bucket_size / (shp_constants::GIGAUNIT as u64);
+                let expected_initial_payment_stream_rate = (initial_bucket_size_in_giga_units as u128) * price_per_giga_unit_of_data_per_block + zero_sized_bucket_rate;
+                assert_eq!(initial_payment_stream_value, Some(expected_initial_payment_stream_rate));
                 // Alice signs the deletion message
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
@@ -12030,7 +12036,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Wrong signer (Bob instead of Alice)
@@ -12065,7 +12071,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Alice signs the deletion message
@@ -12107,7 +12113,7 @@ mod delete_file_tests {
 
                 // Create bucket while Eve is solvent
                 let _guard = set_eve_insolvent(false);
-                let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&eve, &msp);
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Eve, file_key);
@@ -12147,7 +12153,7 @@ mod delete_file_tests {
                 let msp = Keyring::Charlie.to_account_id();
 
                 // Alice owns the bucket and file
-                let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Bob tries to delete Alice's file (wrong owner)
@@ -12182,7 +12188,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, _) =
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 let (signed_delete_intention, signature) =
@@ -12219,7 +12225,7 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id) =
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
 
                 // Create a different file key for the signed message
@@ -12424,6 +12430,7 @@ fn setup_file_in_msp_bucket(
     StorageDataUnit<Test>,
     crate::types::Fingerprint<Test>,
     ProviderIdFor<Test>,
+    ValuePropId<Test>,
 ) {
     let (msp_id, value_prop_id) = add_msp_to_provider_storage(msp_account);
     let bucket_name = BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
@@ -12453,7 +12460,15 @@ fn setup_file_in_msp_bucket(
     // Increase the used capacity of the MSP
     assert_ok!(<<Test as crate::Config>::Providers as MutateStorageProvidersInterface>::increase_capacity_used(&msp_id, size));
 
-    (bucket_id, file_key, location, size, fingerprint, msp_id)
+    (
+        bucket_id,
+        file_key,
+        location,
+        size,
+        fingerprint,
+        msp_id,
+        value_prop_id,
+    )
 }
 
 /// Create deletion intention and signature
