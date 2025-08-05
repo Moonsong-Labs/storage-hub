@@ -24,6 +24,7 @@ members = [
 	"client/common",
 	"client/file-manager",
 	"client/file-transfer-service",
+	"client/fisherman-service",
 	"client/forest-manager",
 	"client/indexer-db",
 	"client/indexer-service",
@@ -248,6 +249,7 @@ shc-indexer-service = { path = "client/indexer-service", default-features = fals
 shc-indexer-db = { path = "client/indexer-db", default-features = false }
 shc-common = { path = "client/common", default-features = false }
 shc-file-manager = { path = "client/file-manager", default-features = false }
+shc-fisherman-service = { path = "client/fisherman-service", default-features = false }
 shc-forest-manager = { path = "client/forest-manager", default-features = false }
 shc-rpc = { path = "client/rpc", default-features = false }
 shc-client = { path = "client", default-features = false }
