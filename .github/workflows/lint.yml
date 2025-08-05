@@ -28,6 +28,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - name: Verify Cargo.lock is up to date (before cache)
+        run: cargo update --dry-run
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -37,8 +39,6 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Verify Cargo.lock is up to date
-        run: cargo update --locked
       - run: SKIP_WASM_BUILD=1 env -u RUSTFLAGS cargo clippy --features try-runtime,runtime-benchmarks --locked
         env:
           RUSTFLAGS: -D warnings
