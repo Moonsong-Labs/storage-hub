@@ -2752,7 +2752,6 @@ where
         <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&bsp_id, size)?;
 
         // Update payment stream and manage BSP cycles after file removal
-        // Note: Payment stream logic is handled by decrease_bucket_size (via apply_delta_fixed_rate_payment_stream) in the case of MSPs.
         Self::update_bsp_payment_and_cycles_after_file_removal(
             bsp_id,
             &file_owner,
