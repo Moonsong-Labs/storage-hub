@@ -14,7 +14,7 @@ on:
 
 jobs:
   check-rust-fmt:
-    name: "Check format with rustfmt"
+    name: 'Check format with rustfmt'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,7 +23,7 @@ jobs:
         run: cargo fmt --all -- --check
 
   check-rust-lint:
-    name: "Check lint with clippy"
+    name: 'Check lint with clippy'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,12 +37,14 @@ jobs:
         uses: arduino/setup-protoc@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify Cargo.lock is up to date
+        run: cargo update --locked
       - run: SKIP_WASM_BUILD=1 env -u RUSTFLAGS cargo clippy --features try-runtime,runtime-benchmarks --locked
         env:
           RUSTFLAGS: -D warnings
 
   check-ts-fmt:
-    name: "Check format with biome"
+    name: 'Check format with biome'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,7 +53,7 @@ jobs:
       - run: pnpm fmt
 
   check-ts-lint:
-    name: "Check lint with biome"
+    name: 'Check lint with biome'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -60,7 +62,7 @@ jobs:
       - run: pnpm lint
 
   typecheck-ts:
-    name: "Typecheck with tsc"
+    name: 'Typecheck with tsc'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
