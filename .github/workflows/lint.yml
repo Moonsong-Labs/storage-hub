@@ -14,7 +14,7 @@ on:
 
 jobs:
   check-rust-fmt:
-    name: 'Check format with rustfmt'
+    name: "Check format with rustfmt"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
