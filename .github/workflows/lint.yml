@@ -23,19 +23,11 @@ jobs:
         run: cargo fmt --all -- --check
 
   check-rust-lint:
-    name: 'Check lint with clippy'
+    name: "Check lint with clippy"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify Cargo.lock is up to date
-        run: cargo update
-      - name: Show Cargo.lock diff
-        run: git diff Cargo.lock
-      - name: Upload updated Cargo.lock
-        uses: actions/upload-artifact@v4
-        with:
-          name: updated-cargo-lock
-          path: Cargo.lock
+      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
@@ -50,7 +42,7 @@ jobs:
           RUSTFLAGS: -D warnings
 
   check-ts-fmt:
-    name: 'Check format with biome'
+    name: "Check format with biome"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -59,7 +51,7 @@ jobs:
       - run: pnpm fmt
 
   check-ts-lint:
-    name: 'Check lint with biome'
+    name: "Check lint with biome"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,7 +60,7 @@ jobs:
       - run: pnpm lint
 
   typecheck-ts:
-    name: 'Typecheck with tsc'
+    name: "Typecheck with tsc"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
