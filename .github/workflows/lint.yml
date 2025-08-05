@@ -27,7 +27,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rust-lang/setup-rust-toolchain@v1.8
+      - name: Verify Cargo.lock is up to date
+        run: cargo update
+      - name: Show Cargo.lock diff
+        run: git diff Cargo.lock
+      - name: Upload updated Cargo.lock
+        uses: actions/upload-artifact@v4
+        with:
+          name: updated-cargo-lock
+          path: Cargo.lock
       - uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
