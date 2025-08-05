@@ -9,11 +9,12 @@ const walletAddressSpan = document.getElementById('walletAddress') as HTMLSpanEl
 const connectStatus = document.getElementById('connect-status') as HTMLInputElement;
 const networkStatus = document.getElementById('network-status') as HTMLInputElement;
 
-// DISABLED: Signing elements until network switching works
-// const messageInput = document.getElementById('messageInput') as HTMLInputElement;
-// const signMessageBtn = document.getElementById('signMessageBtn') as HTMLButtonElement;
-// const messageSignature = document.getElementById('messageSignature') as HTMLElement;
+// Signing elements
+const messageInput = document.getElementById('messageInput') as HTMLInputElement;
+const signMessageBtn = document.getElementById('signMessageBtn') as HTMLButtonElement;
+const messageSignature = document.getElementById('messageSignature') as HTMLElement;
 
+// DISABLED: Transaction signing elements until needed
 // const recipientInput = document.getElementById('recipientInput') as HTMLInputElement;
 // const amountInput = document.getElementById('amountInput') as HTMLInputElement;
 // const signTxnBtn = document.getElementById('signTxnBtn') as HTMLButtonElement;
@@ -90,28 +91,36 @@ switchNetworkBtn?.addEventListener('click', async () => {
     }
 });
 
-/* DISABLED: Signing handlers until network switching works
-
 // Message signing handler
 signMessageBtn?.addEventListener('click', async () => {
-    if (!wallet) {
-        showError('Please connect wallet first');
-        return;
-    }
-    
     console.log('🖊️ Signing message...');
     messageSignature.textContent = 'Signing...';
-    
+
     try {
         const message = messageInput.value || 'Hello StorageHub!';
-        const signature = await wallet.signMessage(message);
-        
+
+        let signature: string;
+
+        console.log('Wallet status:', wallet ? 'exists' : 'null');
+
+        // Use StorageHub SDK's MetamaskWallet for signing
+        if (!wallet) {
+            console.log('No wallet instance, creating new MetamaskWallet...');
+            // Create a new MetamaskWallet instance using the existing ethereum provider
+            // This ensures we use the provider that dappwright has already connected
+            wallet = new MetamaskWallet(window.ethereum as any);
+        }
+
+        console.log('Using StorageHub SDK MetamaskWallet.signMessage()...');
+        signature = await wallet.signMessage(message);
+        console.log('StorageHub SDK signMessage completed with signature length:', signature.length);
+
         console.log('✅ Message signed successfully!');
         console.log('📝 Message:', message);
         console.log('📋 Signature:', signature);
-        
+
         messageSignature.textContent = signature;
-        
+
     } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('❌ Message signing failed:', msg);
@@ -119,6 +128,8 @@ signMessageBtn?.addEventListener('click', async () => {
         messageSignature.textContent = 'Error signing message';
     }
 });
+
+/* DISABLED: Transaction signing handlers until needed
 
 // Transaction signing handler
 signTxnBtn?.addEventListener('click', async () => {

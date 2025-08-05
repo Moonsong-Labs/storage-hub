@@ -100,7 +100,19 @@
         <p>Status: <input id="connect-status" data-testid="connect-status" readonly value="disconnected"></p>
         <p>Network: <input id="network-status" data-testid="network-status" readonly value="0"></p>
 
-        <!-- DISABLED: Signing section until network switching is working -->
+        <!-- Message Signing Section -->
+        <div class="signing-section">
+            <h4>🖊️ Message Signing</h4>
+            <div class="sign-group">
+                <label for="messageInput">Message to sign:</label>
+                <input type="text" id="messageInput" data-testid="message-input" placeholder="Hello StorageHub!"
+                    value="Hello StorageHub!">
+                <button id="signMessageBtn" data-testid="sign-message">Sign Message</button>
+                <p>Signature: <code id="messageSignature" data-testid="message-signature"></code></p>
+            </div>
+        </div>
+
+        <!-- DISABLED: Transaction signing until needed -->
         <!--
         <div class="signing-section">
             <h4>🖊️ Signing Tests</h4>
