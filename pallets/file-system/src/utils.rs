@@ -2663,12 +2663,12 @@ where
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Get current bucket root
-        let bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
+        let old_bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
             .ok_or(Error::<T>::BucketNotFound)?;
 
         // Verify if the file key is part of the bucket's forest
         let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_generic_forest_proof(
-            &bucket_root,
+            &old_bucket_root,
             &[file_key],
             &forest_proof,
         )?;
@@ -2681,7 +2681,7 @@ where
 
         // Compute new root after removing file key from forest
         let new_root = <T::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
-            &bucket_root,
+            &old_bucket_root,
             &[(file_key, TrieRemoveMutation::default().into())],
             &forest_proof,
             Some(bucket_id.encode()),
@@ -2708,6 +2708,8 @@ where
             file_size: size,
             bucket_id,
             msp_id: provider_id,
+            old_root: old_bucket_root,
+            new_root,
         });
 
         Ok(())
@@ -2722,7 +2724,7 @@ where
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Get current BSP root
-        let _old_root = <T::Providers as ReadProvidersInterface>::get_root(bsp_id)
+        let old_root = <T::Providers as ReadProvidersInterface>::get_root(bsp_id)
             .ok_or(Error::<T>::NotABsp)?;
 
         // Verify that the file key is part of the BSP's forest
@@ -2765,6 +2767,8 @@ where
             file_key,
             file_size: size,
             bsp_id,
+            old_root,
+            new_root,
         });
 
         Ok(())

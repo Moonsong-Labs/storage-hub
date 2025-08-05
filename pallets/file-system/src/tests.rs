@@ -11696,6 +11696,7 @@ mod delete_file_tests {
     mod success {
         use super::*;
         use pallet_payment_streams::types::UnitsProvidedFor;
+        use shp_traits::{ProofsDealerInterface, TrieRemoveMutation};
 
         #[test]
         fn msp_can_delete_file_with_valid_forest_proof() {
@@ -11722,10 +11723,21 @@ mod delete_file_tests {
                 let (signed_delete_intention, signature) =
                     create_file_deletion_signature(&Keyring::Alice, file_key);
 
+                // Get the current bucket root before deletion
+                let old_bucket_root = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
+
                 // Create forest proof 
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
+
+                // Precalculate expected new root
+                let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+                    &old_bucket_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                    Some(bucket_id.encode()),
+                ).unwrap();
 
                 assert_ok!(FileSystem::delete_file(
                     RuntimeOrigin::signed(alice.clone()),
@@ -11748,6 +11760,8 @@ mod delete_file_tests {
                         file_size: size,
                         bucket_id,
                         msp_id,
+                        old_root: old_bucket_root,
+                        new_root: expected_new_root,
                     }
                     .into(),
                 );
@@ -11816,6 +11830,17 @@ mod delete_file_tests {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
 
+                // Get current BSP root before deletion
+                let old_bsp_root = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+
+                // Precalculate expected new root
+                let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+                    &old_bsp_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                    Some(bsp_id.encode()),
+                ).unwrap();
+
                 assert_ok!(FileSystem::delete_file(
                     RuntimeOrigin::signed(alice.clone()),
                     alice.clone(),
@@ -11836,6 +11861,8 @@ mod delete_file_tests {
                         file_key,
                         file_size: size,
                         bsp_id,
+                        old_root: old_bsp_root,
+                        new_root: expected_new_root,
                     }
                     .into(),
                 );
@@ -11916,6 +11943,17 @@ mod delete_file_tests {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
 
+                // Get current BSP root before deletion
+                let old_bsp_root = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+
+                // Precalculate expected new root
+                let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+                    &old_bsp_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                    Some(bsp_id.encode()),
+                ).unwrap();
+
                 assert_ok!(FileSystem::delete_file(
                     RuntimeOrigin::signed(alice.clone()),
                     alice.clone(),
@@ -11936,6 +11974,8 @@ mod delete_file_tests {
                         file_key,
                         file_size: size,
                         bsp_id,
+                        old_root: old_bsp_root,
+                        new_root: expected_new_root,
                     }
                     .into(),
                 );
@@ -11988,10 +12028,21 @@ mod delete_file_tests {
                 // But Bob (fisherman) calls the extrinsic
                 let bob = Keyring::Bob.to_account_id();
 
+                // Get the current bucket root before deletion
+                let old_bucket_root = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
+
                 // Create forest proof
                 let forest_proof = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
+
+                // Precalculate expected new root
+                let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+                    &old_bucket_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                    Some(bucket_id.encode()),
+                ).unwrap();
 
                 assert_ok!(FileSystem::delete_file(
                     RuntimeOrigin::signed(bob),
@@ -12014,6 +12065,8 @@ mod delete_file_tests {
                         file_size: size,
                         bucket_id,
                         msp_id,
+                        old_root: old_bucket_root,
+                        new_root: expected_new_root,
                     }
                     .into(),
                 );

@@ -552,12 +552,21 @@ declare module "@polkadot/api-base/types/events" {
        **/
       BspFileDeletionCompleted: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256, fileSize: u64, bspId: H256],
+        [
+          user: AccountId32,
+          fileKey: H256,
+          fileSize: u64,
+          bspId: H256,
+          oldRoot: H256,
+          newRoot: H256
+        ],
         {
           user: AccountId32;
           fileKey: H256;
           fileSize: u64;
           bspId: H256;
+          oldRoot: H256;
+          newRoot: H256;
         }
       >;
       BspRequestedToStopStoring: AugmentedEvent<
@@ -783,13 +792,23 @@ declare module "@polkadot/api-base/types/events" {
        **/
       MspFileDeletionCompleted: AugmentedEvent<
         ApiType,
-        [user: AccountId32, fileKey: H256, fileSize: u64, bucketId: H256, mspId: H256],
+        [
+          user: AccountId32,
+          fileKey: H256,
+          fileSize: u64,
+          bucketId: H256,
+          mspId: H256,
+          oldRoot: H256,
+          newRoot: H256
+        ],
         {
           user: AccountId32;
           fileKey: H256;
           fileSize: u64;
           bucketId: H256;
           mspId: H256;
+          oldRoot: H256;
+          newRoot: H256;
         }
       >;
       /**

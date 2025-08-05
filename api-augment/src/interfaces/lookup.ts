@@ -1703,13 +1703,17 @@ export default {
         fileKey: "H256",
         fileSize: "u64",
         bucketId: "H256",
-        mspId: "H256"
+        mspId: "H256",
+        oldRoot: "H256",
+        newRoot: "H256"
       },
       BspFileDeletionCompleted: {
         user: "AccountId32",
         fileKey: "H256",
         fileSize: "u64",
-        bspId: "H256"
+        bspId: "H256",
+        oldRoot: "H256",
+        newRoot: "H256"
       }
     }
   },

@@ -2227,6 +2227,8 @@ declare module "@polkadot/types/lookup" {
       readonly fileSize: u64;
       readonly bucketId: H256;
       readonly mspId: H256;
+      readonly oldRoot: H256;
+      readonly newRoot: H256;
     } & Struct;
     readonly isBspFileDeletionCompleted: boolean;
     readonly asBspFileDeletionCompleted: {
@@ -2234,6 +2236,8 @@ declare module "@polkadot/types/lookup" {
       readonly fileKey: H256;
       readonly fileSize: u64;
       readonly bspId: H256;
+      readonly oldRoot: H256;
+      readonly newRoot: H256;
     } & Struct;
     readonly type:
       | "NewBucket"

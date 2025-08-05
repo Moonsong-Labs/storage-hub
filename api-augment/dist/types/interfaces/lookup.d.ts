@@ -1673,12 +1673,16 @@ declare const _default: {
         fileSize: string;
         bucketId: string;
         mspId: string;
+        oldRoot: string;
+        newRoot: string;
       };
       BspFileDeletionCompleted: {
         user: string;
         fileKey: string;
         fileSize: string;
         bspId: string;
+        oldRoot: string;
+        newRoot: string;
       };
     };
   };
