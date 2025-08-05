@@ -1,20 +1,53 @@
-// DISABLED: Complex test - use basic.spec.ts instead
-// import { test, expect } from './wallet.fixture';
+import { BrowserContext, expect, test as baseTest } from "@playwright/test";
+import dappwright, { Dappwright, MetaMaskWallet } from "@tenkeylabs/dappwright";
 
-// const PAGE_URL = 'http://localhost:5173';
+export const test = baseTest.extend<{
+    context: BrowserContext;
+    wallet: Dappwright;
+}>({
+    context: async ({ }, use) => {
+        // Launch context with extension
+        const [wallet, _, context] = await dappwright.bootstrap("", {
+            wallet: "metamask",
+            version: MetaMaskWallet.recommendedVersion,
+            seed: "test test test test test test test test test test test junk", // Hardhat's default https://hardhat.org/hardhat-network/docs/reference#accounts
+            headless: false,
+        });
 
-// test('connect wallet and compute file hash', async ({ page, wallet }) => {
-//   await page.goto(PAGE_URL);
+        // Add Hardhat as a custom network
+        await wallet.addNetwork({
+            networkName: "Hardhat",
+            rpc: "http://localhost:8545", // Fixed: using 8545 (Anvil default) instead of 8546
+            chainId: 31337,
+            symbol: "ETH",
+        });
 
-//   // Click connect and then approve (NO page parameter needed)
-//   await page.getByTestId('connect').click();
-//   await wallet.approve(); // FIXED: No page parameter
+        await use(context);
+    },
 
-//   await expect(page.getByTestId('address')).not.toHaveText('');
+    wallet: async ({ context }, use) => {
+        const metamask = await dappwright.getWallet("metamask", context);
 
-//   const testFile = await page.evaluateHandle(() => {
-//     return new File([new Uint8Array([1, 2, 3, 4])], 'test.bin');
-//   });
-//   await page.getByTestId('file-input').setInputFiles(testFile);
-//   await expect(page.getByTestId('root-hash')).not.toHaveText('');
-// });
+        await use(metamask);
+    },
+});
+
+test.beforeEach(async ({ page }) => {
+    await page.goto("http://localhost:5173/basic.html"); // Using the correct URL for your setup
+});
+
+test("should be able to connect", async ({ wallet, page }) => {
+    await page.click("#connectButton");
+    await wallet.approve();
+
+    const connectStatus = page.getByTestId("connect-status");
+    await expect(connectStatus).toHaveValue("connected");
+
+    await page.click("#switch-network-button");
+
+    // Wait a moment for the network switch to complete
+    await page.waitForTimeout(2000);
+
+    const networkStatus = page.getByTestId("network-status");
+    await expect(networkStatus).toHaveValue("31337");
+});

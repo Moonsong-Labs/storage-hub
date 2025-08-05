@@ -15,6 +15,6 @@ export default defineConfig({
         viewport: { width: 1280, height: 720 },
         trace: 'retain-on-failure',
     },
-    // Run only basic test for now
-    testMatch: ['**/basic.spec.ts'],
+    // FOCUS: Run only the connect test
+    testMatch: ['**/connect.spec.ts']
 });

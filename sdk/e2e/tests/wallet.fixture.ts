@@ -2,6 +2,7 @@ import { test as base } from '@playwright/test';
 import { bootstrap, MetaMaskWallet } from '@tenkeylabs/dappwright';
 import type { BrowserContext, Page } from '@playwright/test';
 
+// Hardhat's default mnemonic: https://hardhat.org/hardhat-network/docs/reference#accounts
 const DEFAULT_MNEMONIC = 'test test test test test test test test test test test junk';
 
 export const test = base.extend<
@@ -32,9 +33,9 @@ export const test = base.extend<
         bypassWelcomeScreen: true,
       });
 
-      console.log('✅ MetaMask ready!');
+      console.log('✅ MetaMask bootstrap complete');
 
-      // Store wallet instance on context
+      // Store wallet instance on context (simple approach)
       (context as any)._walletInstance = wallet;
 
       await use(context);

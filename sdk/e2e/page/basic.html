@@ -47,6 +47,43 @@
             border-radius: 4px;
             word-break: break-all;
         }
+
+        .signing-section {
+            margin-top: 20px;
+            border-top: 1px solid #e9ecef;
+            padding-top: 20px;
+        }
+
+        .sign-group {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            background: #ffffff;
+        }
+
+        .sign-group label {
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .sign-group input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0 10px 0;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+
+        .sign-group code {
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            display: block;
+            margin-top: 5px;
+            word-break: break-all;
+            font-size: 12px;
+        }
     </style>
 </head>
 
@@ -55,10 +92,36 @@
     <p>Simple test page for MetaMask connection via dappwright</p>
 
     <button id="connectButton" data-testid="connect">Connect Wallet</button>
+    <button id="switch-network-button" class="hidden">Switch to Hardhat Network</button>
 
     <div id="walletInfo" class="hidden wallet-info">
         <h3>✅ Wallet Connected!</h3>
         <p>Address: <span id="walletAddress" data-testid="address" class="address"></span></p>
+        <p>Status: <input id="connect-status" data-testid="connect-status" readonly value="disconnected"></p>
+        <p>Network: <input id="network-status" data-testid="network-status" readonly value="0"></p>
+
+        <!-- DISABLED: Signing section until network switching is working -->
+        <!--
+        <div class="signing-section">
+            <h4>🖊️ Signing Tests</h4>
+
+            <div class="sign-group">
+                <label for="messageInput">Message to sign:</label>
+                <input type="text" id="messageInput" data-testid="message-input" placeholder="Hello StorageHub!" value="Hello StorageHub!">
+                <button id="signMessageBtn" data-testid="sign-message">Sign Message</button>
+                <p>Signature: <code id="messageSignature" data-testid="message-signature"></code></p>
+            </div>
+
+            <div class="sign-group">
+                <label for="recipientInput">Send to address:</label>
+                <input type="text" id="recipientInput" data-testid="recipient-input" placeholder="0x...">
+                <label for="amountInput">Amount (ETH):</label>
+                <input type="number" id="amountInput" data-testid="amount-input" placeholder="0.01" value="0.01" step="0.01">
+                <button id="signTxnBtn" data-testid="sign-transaction">Sign & Send Transaction</button>
+                <p>TX Signature: <code id="txSignature" data-testid="tx-signature"></code></p>
+            </div>
+        </div>
+        -->
     </div>
 
     <script type="module" src="/basic-app.ts"></script>
