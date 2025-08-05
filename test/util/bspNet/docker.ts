@@ -10,7 +10,7 @@ import { PassThrough, type Readable } from "node:stream";
 import { sleep } from "../timer";
 
 export const checkBspForFile = async (filePath: string) => {
-  const containerId = "docker-sh-bsp-1";
+  const containerId = "storage-hub-sh-bsp-1";
   const loc = path.join("/storage", filePath);
 
   for (let i = 0; i < 100; i++) {
@@ -26,7 +26,7 @@ export const checkBspForFile = async (filePath: string) => {
 };
 
 export const checkFileChecksum = async (filePath: string) => {
-  const containerId = "docker-sh-bsp-1";
+  const containerId = "storage-hub-sh-bsp-1";
   const loc = path.join("/storage", filePath);
   const output = execSync(`docker exec ${containerId} sha256sum ${loc}`);
   return output.toString().split(" ")[0];
@@ -78,12 +78,13 @@ const addContainer = async (
     })
   ).flatMap(({ Command }) => Command).length;
 
-  const p2pPort = 30350 + containerCount;
+  // Use allContainersCount for p2p port to avoid conflicts between BSPs and MSPs
+  const p2pPort = 30350 + allContainersCount;
   const rpcPort = 9888 + allContainersCount * 7;
-  const containerName = options?.name || `docker-sh-${providerType}-${containerCount + 1}`;
+  const containerName = options?.name || `storage-hub-sh-${providerType}-${containerCount + 1}`;
 
   // Get bootnode from docker args
-  const { Args } = await docker.getContainer("docker-sh-user-1").inspect();
+  const { Args } = await docker.getContainer("storage-hub-sh-user-1").inspect();
   const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
 
   assert(bootNodeArg, "No bootnode found in docker args");
@@ -95,9 +96,15 @@ const addContainer = async (
     Image: DOCKER_IMAGE,
     name: containerName,
     platform: "linux/amd64",
+    Labels: {
+      "com.docker.compose.project": "storage-hub",
+      "com.docker.compose.service": containerName,
+      "com.docker.compose.container-number": (containerCount + 1).toString(),
+      "com.docker.compose.oneoff": "False"
+    },
     NetworkingConfig: {
       EndpointsConfig: {
-        docker_default: {}
+        "storage-hub_default": {}
       }
     },
     HostConfig: {
