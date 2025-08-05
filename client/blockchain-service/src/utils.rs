@@ -368,6 +368,7 @@ where
     {
         let pub_key = Self::caller_pub_key::<S>(self.keystore.clone());
         let account_id = match S::public_to_address(&pub_key) {
+            // TODO: Once the BlockchainService is properly abstracted from the Address type, this will be removed.
             Address::Id(account_id) => account_id,
             _ => panic!("Public key is not an AccountId32"),
         };
