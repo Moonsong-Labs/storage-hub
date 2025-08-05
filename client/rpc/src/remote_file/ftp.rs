@@ -385,7 +385,7 @@ mod tests {
             follow_redirects: false,
             max_redirects: 0,
             user_agent: "Test-Agent".to_string(),
-            chunk_size: 8192,
+            chunk_size: shc_common::types::FILE_CHUNK_SIZE as usize,
             chunks_buffer: 512,
         };
         FtpFileHandler::new(config, url)

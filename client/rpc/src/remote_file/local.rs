@@ -278,7 +278,7 @@ impl RemoteFileHandler for LocalFileHandler {
 
     async fn upload_file(
         &self,
-        mut data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+        data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
         _size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
@@ -295,7 +295,11 @@ impl RemoteFileHandler for LocalFileHandler {
             .await
             .map_err(Self::map_io_error)?;
 
-        io::copy(&mut data, &mut file)
+        // Wrap the input data in a buffered reader with chunk_size * chunks_buffer for consistent chunking
+        let buffer_size = self.config.chunk_size * self.config.chunks_buffer.max(1);
+        let mut buf_reader = tokio::io::BufReader::with_capacity(buffer_size, data);
+
+        io::copy_buf(&mut buf_reader, &mut file)
             .await
             .map_err(Self::map_io_error)?;
 
