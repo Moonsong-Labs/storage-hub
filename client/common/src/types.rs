@@ -53,6 +53,8 @@ pub type StorageRequestMspAcceptedFileKeys =
     pallet_file_system::types::StorageRequestMspAcceptedFileKeys<Runtime>;
 pub type FileKeyWithProof = pallet_file_system::types::FileKeyWithProof<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
+pub type FileOperationIntention = pallet_file_system::types::FileOperationIntention<Runtime>;
+pub type FileOperation = pallet_file_system::types::FileOperation;
 pub type BucketId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
 pub type ValuePropId = pallet_storage_providers::types::ValuePropId<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
