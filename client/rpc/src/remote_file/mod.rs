@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::AsyncRead;
 use url::Url;
@@ -58,16 +59,17 @@ pub trait RemoteFileHandler: Send + Sync {
     ) -> Result<(), RemoteFileError>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteFileConfig {
     pub max_file_size: u64,
     pub connection_timeout: u64,
     pub read_timeout: u64,
     pub follow_redirects: bool,
-    pub max_redirects: u32,
+    pub max_redirects: u64,
     pub user_agent: String,
+    /// Chunk size in bytes. This is different from the FILE_CHUNK_SIZE constant in the runtime, as it only affects file upload/download. (default: 8KB)
     pub chunk_size: usize,
-    /// Number of FILE_CHUNK_SIZE chunks to buffer (minimum 1, default 512)
+    /// Number of chunks to buffer (minimum 1, default 512)
     pub chunks_buffer: usize,
 }
 
@@ -85,7 +87,7 @@ impl RemoteFileConfig {
             max_redirects: 10,
             user_agent: "StorageHub-Client/1.0".to_string(),
             chunk_size: 8192,   // 8KB default
-            chunks_buffer: 512, // 512 FILE_CHUNK_SIZE chunks default (512KB)
+            chunks_buffer: 512, // 512 chunks default (4MB)
         }
     }
 }

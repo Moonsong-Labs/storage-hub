@@ -20,7 +20,7 @@ use shc_common::{
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_forest_manager::traits::ForestStorageHandler;
-use shc_rpc::{remote_file::RemoteFileConfig, StorageHubClientRpcConfig};
+use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
@@ -226,7 +226,7 @@ where
     pub fn create_rpc_config(
         &self,
         keystore: KeystorePtr,
-        remote_file_config: RemoteFileConfig,
+        config: RpcConfig,
     ) -> StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH> {
         StorageHubClientRpcConfig::new(
             self.file_storage
@@ -236,7 +236,7 @@ where
                 .clone()
                 .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
             keystore,
-            remote_file_config,
+            config,
         )
     }
 
@@ -709,71 +709,4 @@ pub struct IndexerOptions {
     pub indexer: bool,
     /// Postgres database URL.
     pub database_url: Option<String>,
-}
-
-/// Remote file configuration options.
-#[derive(Clone, Debug, serde::Serialize, Deserialize)]
-pub struct RemoteFileOptions {
-    /// Maximum file size in bytes (default: 10GB)
-    pub max_file_size: u64,
-    /// Connection timeout in seconds (default: 30)
-    pub connection_timeout: u64,
-    /// Read timeout in seconds (default: 300)
-    pub read_timeout: u64,
-    /// Whether to follow redirects (default: true)
-    pub follow_redirects: bool,
-    /// Maximum number of redirects (default: 10)
-    pub max_redirects: u32,
-    /// User agent string (default: "StorageHub-Client/1.0")
-    pub user_agent: String,
-    /// Chunk size in bytes (default: 8192)
-    pub chunk_size: usize,
-    /// Number of FILE_CHUNK_SIZE chunks to buffer (default: 512)
-    pub chunks_buffer: usize,
-}
-
-impl Default for RemoteFileOptions {
-    fn default() -> Self {
-        let config = shc_rpc::remote_file::RemoteFileConfig::default();
-        Self {
-            max_file_size: config.max_file_size,
-            connection_timeout: config.connection_timeout,
-            read_timeout: config.read_timeout,
-            follow_redirects: config.follow_redirects,
-            max_redirects: config.max_redirects,
-            user_agent: config.user_agent,
-            chunk_size: config.chunk_size,
-            chunks_buffer: config.chunks_buffer,
-        }
-    }
-}
-
-impl From<RemoteFileOptions> for shc_rpc::remote_file::RemoteFileConfig {
-    fn from(options: RemoteFileOptions) -> Self {
-        Self {
-            max_file_size: options.max_file_size,
-            connection_timeout: options.connection_timeout,
-            read_timeout: options.read_timeout,
-            follow_redirects: options.follow_redirects,
-            max_redirects: options.max_redirects,
-            user_agent: options.user_agent,
-            chunk_size: options.chunk_size,
-            chunks_buffer: options.chunks_buffer,
-        }
-    }
-}
-
-/// RPC configuration options.
-#[derive(Clone, Debug, serde::Serialize, Deserialize)]
-pub struct RpcOptions {
-    /// Remote file configuration options
-    pub remote_file: RemoteFileOptions,
-}
-
-impl Default for RpcOptions {
-    fn default() -> Self {
-        Self {
-            remote_file: RemoteFileOptions::default(),
-        }
-    }
 }

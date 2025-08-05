@@ -46,9 +46,9 @@ max_submission_attempts = 5
 extrinsic_retry_timeout = 10
 
 # RPC configuration
-[provider.rpc]
+[provider.rpc_config]
 # Remote file configuration
-[provider.rpc.remote_file]
+[provider.rpc_config.remote_file]
 # Maximum file size in bytes (default: 10GB)
 max_file_size = 10737418240
 # Connection timeout in seconds (default: 30)
@@ -61,13 +61,13 @@ follow_redirects = true
 max_redirects = 10
 # User agent string (default: "StorageHub-Client/1.0")
 user_agent = "StorageHub-Client/1.0"
-# Chunk size in bytes (default: 8192)
+# Chunk size in bytes. This is different from the FILE_CHUNK_SIZE constant in the runtime, as it only affects file upload/download. (default: 8KB)
 chunk_size = 8192
-# Number of FILE_CHUNK_SIZE chunks to buffer (default: 512)
+# Number of chunks to buffer (default: 512)
 chunks_buffer = 512
 
 # Optional indexer configuration
 [indexer]
 # Set to true to enable the indexer
 indexer = true
-database_url = "postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+database_url = "postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
