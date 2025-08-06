@@ -403,7 +403,7 @@ where
 
     if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
+        spawn_indexer_service::<Runtime>(
             &task_spawner,
             client.clone(),
             maybe_db_pool.clone().expect(
@@ -441,7 +441,7 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
             client.clone(),
             &config,
             &mut net_config,
@@ -556,7 +556,7 @@ where
                 command_sink: command_sink.clone(),
             };
 
-            crate::rpc::create_full(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -816,7 +816,7 @@ where
 
     if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
+        spawn_indexer_service::<Runtime>(
             &task_spawner,
             client.clone(),
             maybe_db_pool.clone().expect(
@@ -850,7 +850,7 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
             client.clone(),
             &config,
             &mut net_config,
@@ -907,7 +907,7 @@ where
                 command_sink: Some(command_sink.clone()),
             };
 
-            crate::rpc::create_full(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1038,7 +1038,7 @@ where
 
     if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
+        spawn_indexer_service::<Runtime>(
             &task_spawner,
             client.clone(),
             maybe_db_pool.clone().expect(
@@ -1052,7 +1052,7 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
             client.clone(),
             &parachain_config,
             &mut net_config,
@@ -1139,7 +1139,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1303,7 +1303,7 @@ where
 
     if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
+        spawn_indexer_service::<Runtime>(
             &task_spawner,
             client.clone(),
             maybe_db_pool.clone().expect(
@@ -1317,7 +1317,7 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
             client.clone(),
             &parachain_config,
             &mut net_config,
@@ -1381,7 +1381,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
