@@ -13,7 +13,7 @@ use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{traits::Header, MultiSignature, SaturatedConversion};
+use sp_runtime::{traits::Header, SaturatedConversion};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -33,7 +33,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BlockNumber, ParachainClient, TickNumber},
+    types::{AccountId, BlockNumber, ParachainClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -527,7 +527,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::GetNodePublicKey { callback } => {
-                    let pub_key = Self::caller_pub_key::<MultiSignature>(self.keystore.clone());
+                    let pub_key = Self::caller_pub_key(self.keystore.clone());
                     match callback.send(Ok(pub_key)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Node's public key sent successfully");
@@ -949,14 +949,14 @@ where
                 } => {
                     let current_block_hash = self.client.info().best_hash;
 
-                    let node_pub_key = maybe_node_pub_key.unwrap_or_else(|| {
-                        Self::caller_pub_key::<MultiSignature>(self.keystore.clone())
-                    });
+                    let node_pub_key = maybe_node_pub_key
+                        .unwrap_or_else(|| Self::caller_pub_key(self.keystore.clone()));
+                    let node_pub_key: AccountId<Runtime> = node_pub_key.into();
 
                     let provider_id = self
                         .client
                         .runtime_api()
-                        .get_storage_provider_id(current_block_hash, &node_pub_key.into())
+                        .get_storage_provider_id(current_block_hash, &node_pub_key)
                         .map_err(|_| anyhow!("Internal API error"));
 
                     match callback.send(provider_id) {
@@ -1392,7 +1392,7 @@ where
 
         // Get events from storage.
         // TODO: Handle the `pallet-cr-randomness` events here, if/when we start using them.
-        match get_events_at_block(&self.client, block_hash) {
+        match get_events_at_block::<Runtime>(&self.client, block_hash) {
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
@@ -1449,7 +1449,7 @@ where
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
 
         // Get events from storage.
-        match get_events_at_block(&self.client, &block_hash) {
+        match get_events_at_block::<Runtime>(&self.client, &block_hash) {
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.

@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
-use shc_common::traits::StorageEnableRuntime;
+use shc_common::traits::{KeyTypeOperations, StorageEnableRuntime};
 use sp_api::ApiError;
 use sp_core::H256;
 
@@ -91,7 +91,7 @@ pub enum BlockchainServiceCommand {
     QueryEarliestChangeCapacityBlock {
         bsp_id: ProviderId,
     },
-    #[command(success_type = sp_core::sr25519::Public)]
+    #[command(success_type = <<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public)]
     GetNodePublicKey,
     #[command(success_type = Vec<ChunkId>, error_type = QueryBspConfirmChunksToProveForFileError)]
     QueryBspConfirmChunksToProveForFile {
@@ -162,7 +162,8 @@ pub enum BlockchainServiceCommand {
     },
     #[command(success_type = Option<StorageProviderId>)]
     QueryStorageProviderId {
-        maybe_node_pub_key: Option<sp_core::sr25519::Public>,
+        maybe_node_pub_key:
+            Option<<<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public>,
     },
     #[command(success_type = Vec<AccountId>, error_type = GetUsersWithDebtOverThresholdError)]
     QueryUsersWithDebt {

@@ -32,6 +32,7 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 /// Following types are shared between the client and the runtime.
 /// They are defined as generic types in the runtime and made concrete using the runtime config
 /// here to be used by the node/client.
+pub type AccountId<Runtime> = <Runtime as frame_system::Config>::AccountId;
 pub type FileKeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
 pub type FileKeyProof = <FileKeyVerifier as CommitmentVerifier>::Proof;
 pub type Hash = shp_file_metadata::Hash<H_LENGTH>;

@@ -40,9 +40,9 @@ use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
     traits::Zero,
-    AccountId32, MultiSignature, SaturatedConversion,
+    SaturatedConversion,
 };
-use storage_hub_runtime::{Address, RuntimeEvent};
+use storage_hub_runtime::RuntimeEvent;
 use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{
@@ -360,19 +360,11 @@ where
     }
 
     /// Get the current account nonce on-chain for a generic signature type.
-    pub(crate) fn account_nonce<S>(&self, block_hash: &H256) -> u32
-    where
-        S: KeyTypeOperations<Address = Address>,
-    {
-        let pub_key = Self::caller_pub_key::<S>(self.keystore.clone());
-        let account_id = match S::public_to_address(&pub_key) {
-            // TODO: Once the BlockchainService is properly abstracted from the Address type, this will be removed.
-            Address::Id(account_id) => account_id,
-            _ => panic!("Public key is not an AccountId32"),
-        };
+    pub(crate) fn account_nonce(&self, block_hash: &H256) -> u32 {
+        let pub_key = Self::caller_pub_key(self.keystore.clone());
         self.client
             .runtime_api()
-            .account_nonce(*block_hash, account_id)
+            .account_nonce(*block_hash, pub_key.into())
             .expect("Fetching account nonce works; qed")
     }
 
@@ -380,7 +372,7 @@ where
     ///
     /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
     pub(crate) fn sync_nonce(&mut self, block_hash: &H256) {
-        let latest_nonce = self.account_nonce::<MultiSignature>(block_hash);
+        let latest_nonce = self.account_nonce(block_hash);
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
         }
@@ -392,7 +384,7 @@ where
     /// different Provider IDs, this function will panic. In other words, this node doesn't support
     /// managing multiple Providers at once.
     pub(crate) fn sync_provider_id(&mut self, block_hash: &H256) {
-        let provider_id = match get_provider_id_from_keystore(
+        let provider_id = match get_provider_id_from_keystore::<Runtime>(
             &self.client,
             &self.keystore,
             block_hash,
@@ -474,7 +466,7 @@ where
         // Use the highest valid nonce.
         let nonce = max(
             options.nonce().unwrap_or(self.nonce_counter),
-            self.account_nonce::<MultiSignature>(&block_hash),
+            self.account_nonce(&block_hash),
         );
 
         // Construct the extrinsic.
@@ -559,7 +551,7 @@ where
 
         let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
-        let caller_pub_key = Self::caller_pub_key::<Runtime::Signature>(self.keystore.clone());
+        let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload
@@ -578,14 +570,18 @@ where
     }
 
     // Generic function to get signer public key for any signature type
-    pub fn caller_pub_key<S: KeyTypeOperations>(keystore: KeystorePtr) -> S::Public {
-        let caller_pub_key = S::public_keys(&keystore, BCSV_KEY_TYPE).pop().expect(
-            format!(
-                "There should be at least one key in the keystore with key type '{:?}' ; qed",
-                BCSV_KEY_TYPE
-            )
-            .as_str(),
-        );
+    pub fn caller_pub_key(
+        keystore: KeystorePtr,
+    ) -> <Runtime::Signature as KeyTypeOperations>::Public {
+        let caller_pub_key = Runtime::Signature::public_keys(&keystore, BCSV_KEY_TYPE)
+            .pop()
+            .expect(
+                format!(
+                    "There should be at least one key in the keystore with key type '{:?}' ; qed",
+                    BCSV_KEY_TYPE
+                )
+                .as_str(),
+            );
         caller_pub_key
     }
 
@@ -621,7 +617,7 @@ where
             })?;
 
         // Get the events from storage.
-        let events_in_block = get_events_at_block(&self.client, &block_hash)?;
+        let events_in_block = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
         // Filter the events for the extrinsic.
         // Each event record is composed of the `phase`, `event` and `topics` fields.
@@ -834,7 +830,7 @@ where
         }
 
         // Process the events in the block, specifically those that are related to the Forest root changes.
-        match get_events_at_block(&self.client, &block.hash) {
+        match get_events_at_block::<Runtime>(&self.client, &block.hash) {
             Ok(events) => {
                 for ev in events {
                     if let Some(managed_provider) = &self.maybe_managed_provider {
@@ -1133,11 +1129,7 @@ where
                 multiaddresses,
                 owner,
                 size,
-            }) if owner
-                == AccountId32::from(Self::caller_pub_key::<MultiSignature>(
-                    self.keystore.clone(),
-                )) =>
-            {
+            }) if owner == Self::caller_pub_key(self.keystore.clone()).into() => {
                 // This event should only be of any use if a node is run by as a user.
                 if self.maybe_managed_provider.is_none() {
                     log::info!(
