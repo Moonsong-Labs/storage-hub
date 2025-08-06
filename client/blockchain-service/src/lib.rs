@@ -36,7 +36,7 @@ pub async fn spawn_blockchain_service<FSH, Runtime>(
 ) -> ActorHandle<BlockchainService<FSH, Runtime>>
 where
     FSH: shc_forest_manager::traits::ForestStorageHandler + Clone + Send + Sync + 'static,
-    Runtime: StorageEnableRuntime + Send + 'static,
+    Runtime: StorageEnableRuntime,
 {
     let task_spawner = task_spawner
         .with_name("blockchain-service")
