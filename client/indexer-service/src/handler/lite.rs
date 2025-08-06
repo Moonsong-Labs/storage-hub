@@ -110,6 +110,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => true,
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => true,
             pallet_file_system::Event::FileDeletionRequested { .. } => true,
+            pallet_file_system::Event::MspFileDeletionCompleted { .. } => true,
+            pallet_file_system::Event::BspFileDeletionCompleted { .. } => true,
             pallet_file_system::Event::__Ignore(_, _) => true,
         };
 

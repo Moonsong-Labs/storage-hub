@@ -364,7 +364,7 @@ where
         let pub_key = Self::caller_pub_key(self.keystore.clone());
         self.client
             .runtime_api()
-            .account_nonce(*block_hash, pub_key.into())
+            .account_nonce(*block_hash, account_id)
             .expect("Fetching account nonce works; qed")
     }
 
@@ -372,7 +372,7 @@ where
     ///
     /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
     pub(crate) fn sync_nonce(&mut self, block_hash: &H256) {
-        let latest_nonce = self.account_nonce(block_hash);
+        let latest_nonce = self.account_nonce::<MultiSignature>(block_hash);
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
         }
@@ -466,11 +466,17 @@ where
         // Use the highest valid nonce.
         let nonce = max(
             options.nonce().unwrap_or(self.nonce_counter),
-            self.account_nonce(&block_hash),
+            self.account_nonce::<MultiSignature>(&block_hash),
         );
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, options.tip());
+        let extrinsic = self
+            .construct_extrinsic::<Address, RuntimeCall, MultiSignature, SignedExtra>(
+                self.client.clone(),
+                call,
+                nonce,
+                options.tip(),
+            );
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -551,7 +557,9 @@ where
 
         let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
-        let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+        let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
+
+        let caller_pub_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload

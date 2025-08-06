@@ -374,6 +374,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => {
                 // In the future we should monitor for this to detect eventual bugs in the pallets
             }
+            pallet_file_system::Event::MspFileDeletionCompleted { .. } => {}
+            pallet_file_system::Event::BspFileDeletionCompleted { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
