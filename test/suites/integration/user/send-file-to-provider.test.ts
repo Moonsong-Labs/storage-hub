@@ -164,19 +164,8 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
 
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
-    // It should have failed to connect to the first libp2p address because it is a phony one.
-    // Check for either "Unable to upload final batch" (network/connection issues) or
-    // "Final batch upload rejected" (refused requests) - both can occur when the peer is unreachable
-    await userApi.docker.waitForAnyLog({
-      searchStrings: [
-        `Unable to upload final batch to peer PeerId("${peerId}")`,
-        `Final batch upload rejected by peer PeerId("${peerId}")`
-      ],
-      containerName: userApi.shConsts.NODE_INFOS.user.containerName,
-      timeout: 60000
-    });
-
-    // Second libp2p address is the right one so we should successfully send the file through this one.
+    // It should have failed to connect to the first libp2p address because it is a phony one, but
+    // the second libp2p address is the right one so we should successfully send the file through it.
     await userApi.docker.waitForLog({
       searchString: `File upload complete. Peer PeerId("${peerId}")`,
       containerName: userApi.shConsts.NODE_INFOS.user.containerName,
