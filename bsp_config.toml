@@ -63,7 +63,7 @@ max_redirects = 10
 user_agent = "StorageHub-Client/1.0"
 # Chunk size in bytes. This is different from the FILE_CHUNK_SIZE constant in the runtime, as it only affects file upload/download. (default: 8KB)
 chunk_size = 8192
-# Number of chunks to buffer (default: 512)
+# Number of `chunk_size` chunks to buffer during upload/download. (default: 512)
 chunks_buffer = 512
 
 # Optional indexer configuration

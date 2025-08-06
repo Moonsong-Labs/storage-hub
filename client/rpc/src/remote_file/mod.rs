@@ -89,7 +89,7 @@ impl RemoteFileConfig {
             max_redirects: 10,
             user_agent: "StorageHub-Client/1.0".to_string(),
             chunk_size: 8192,   // 8KB default
-            chunks_buffer: 512, // 512 FILE_CHUNK_SIZE chunks default (512KB)
+            chunks_buffer: 512, // 512 chunks default (4MB)
         }
     }
 }

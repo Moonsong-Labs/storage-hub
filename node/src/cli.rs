@@ -213,7 +213,7 @@ pub struct ProviderConfigurations {
     #[clap(long, value_name = "BYTES", default_value = "8192")]
     pub chunk_size: Option<u64>,
 
-    /// Number of chunks to buffer (default: 512)
+    /// Number of `chunk_size` chunks to buffer during upload/download. (default: 512)
     #[clap(long, value_name = "COUNT", default_value = "512")]
     pub chunks_buffer: Option<u64>,
 

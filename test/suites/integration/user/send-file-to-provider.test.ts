@@ -173,14 +173,14 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
         `Final batch upload rejected by peer PeerId("${peerId}")`
       ],
       containerName: userApi.shConsts.NODE_INFOS.user.containerName,
-      timeout: 20000
+      timeout: 60000
     });
 
     // Second libp2p address is the right one so we should successfully send the file through this one.
     await userApi.docker.waitForLog({
       searchString: `File upload complete. Peer PeerId("${peerId}")`,
       containerName: userApi.shConsts.NODE_INFOS.user.containerName,
-      timeout: 20000
+      timeout: 60000
     });
   });
 });

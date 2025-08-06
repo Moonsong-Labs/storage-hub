@@ -268,7 +268,7 @@ mod tests {
             follow_redirects: true,
             max_redirects: 3,
             user_agent: "Test-Agent".to_string(),
-            chunk_size: shc_common::types::FILE_CHUNK_SIZE as usize,
+            chunk_size: 8096,
             chunks_buffer: 512,
         };
         HttpFileHandler::new(config, url).unwrap()
