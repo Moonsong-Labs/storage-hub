@@ -13,7 +13,6 @@ import {
   getContainerIp,
   type EnrichedBspApi,
   mspThreeKey,
-  mspThreeSeed,
   addMspContainer
 } from "../../../util";
 import type { EventRecord } from "@polkadot/types/interfaces";
@@ -110,7 +109,6 @@ describeMspNet(
       });
 
       msp3Api = await createApi(`ws://127.0.0.1:${rpcPort}`);
-      await msp3Api.rpc.storagehubclient.insertBcsvKeys(mspThreeSeed);
 
       // Give it some balance.
       const amount = 10000n * 10n ** 12n;
