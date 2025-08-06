@@ -23,6 +23,9 @@
         "clean": "node scripts/clean.js",
         "serve:e2e": "vite dev --config e2e/page/vite.config.ts",
         "test:e2e": "playwright test --config e2e/playwright.config.ts",
+        "test:e2e:headless": "HEADLESS=true playwright test --config e2e/playwright.config.ts",
+        "test:e2e:headed": "HEADLESS=false playwright test --config e2e/playwright.config.ts",
+        "test:e2e:ci": "CI=true HEADLESS=true playwright test --config e2e/playwright.config.ts",
         "node:e2e": "docker run --rm -p 8545:8545 ghcr.io/foundry-rs/foundry:latest anvil --chain-id 31337 --mnemonic \"test test test test test test test test test test test junk\""
     },
     "devDependencies": {

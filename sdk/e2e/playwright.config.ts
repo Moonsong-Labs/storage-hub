@@ -11,7 +11,7 @@ export default defineConfig({
         timeout: 30_000,
     },
     use: {
-        headless: false, // Changed to false for easier debugging
+        headless: true, // Changed to false for easier debugging
         viewport: { width: 1280, height: 720 },
         trace: 'retain-on-failure',
     },
