@@ -3,7 +3,7 @@ import { resolve as resolvePath } from 'path';
 
 export default defineConfig({
     root: __dirname,
-    publicDir: false,
+    publicDir: true, // Enable serving static files like adolphus.jpg
     server: {
         port: 5173,
         open: false,
@@ -20,6 +20,7 @@ export default defineConfig({
         rollupOptions: {
             input: {
                 main: resolvePath(__dirname, 'basic.html'),
+                fileManager: resolvePath(__dirname, 'file-manager.html'),
             },
         },
     },

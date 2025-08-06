@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>FileManager Test</title>
+    <style>
+        body {
+            font-family: Arial;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+
+        img {
+            max-width: 300px;
+            display: block;
+            margin: 20px auto;
+            border-radius: 8px;
+        }
+
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        .result {
+            background: #f8f8f8;
+            padding: 15px;
+            border-radius: 4px;
+            word-break: break-all;
+        }
+
+        .status {
+            font-size: 18px;
+            font-weight: bold;
+            color: #666;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🔢 FileManager Test</h1>
+
+        <div class="status" id="status">Loading...</div>
+
+        <img src="/adolphus.jpg" alt="Test Image">
+
+        <label>File Size:</label>
+        <input id="file-size" readonly>
+
+        <label>Merkle Root Hash:</label>
+        <input id="hash-result" readonly placeholder="Computing...">
+    </div>
+
+    <script type="module" src="/file-manager-app.ts"></script>
+</body>
+
+</html>

@@ -1,6 +1,9 @@
 import { MetamaskWallet } from '@storagehub-sdk/core';
 import { parseEther, Transaction, getBytes } from 'ethers';
 
+// Expose StorageHub SDK to window for E2E test access
+(window as any).MetamaskWallet = MetamaskWallet;
+
 // DOM elements
 const connectBtn = document.getElementById('connectButton') as HTMLButtonElement;
 const switchNetworkBtn = document.getElementById('switch-network-button') as HTMLButtonElement;
