@@ -35,6 +35,14 @@ jobs:
             sdk/e2e/pnpm-lock.yaml
             sdk/pnpm-lock.yaml
 
+      - name: Install Rust toolchain (for wasm)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
+
       - name: Install dependencies
         working-directory: sdk
         run: pnpm install
