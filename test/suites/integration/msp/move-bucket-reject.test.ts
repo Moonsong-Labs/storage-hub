@@ -47,7 +47,7 @@ describeMspNet(
 
     it("postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "docker-sh-postgres-1",
+        containerName: "storage-hub-sh-postgres-1",
         searchString: "database system is ready to accept connections",
         timeout: 5000
       });
@@ -332,7 +332,7 @@ describeMspNet(
     it("MSP 2 rejects move request when indexer postgres DB is down", async () => {
       // Pause the postgres container - this preserves the state
       const docker = new Docker();
-      const postgresContainer = docker.getContainer("docker-sh-postgres-1");
+      const postgresContainer = docker.getContainer("storage-hub-sh-postgres-1");
       await postgresContainer.pause();
 
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
@@ -380,7 +380,7 @@ describeMspNet(
       await postgresContainer.unpause();
 
       await userApi.docker.waitForLog({
-        containerName: "docker-sh-postgres-1",
+        containerName: "storage-hub-sh-postgres-1",
         searchString: "database system is ready to accept connections",
         timeout: 5000
       });
