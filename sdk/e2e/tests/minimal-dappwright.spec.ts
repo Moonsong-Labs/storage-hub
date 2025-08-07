@@ -36,18 +36,18 @@ export const test = baseTest.extend<{
             console.log('✅ Wallet setup with seed phrase');
 
             try {
-                // Add Anvil network (like ZKSync adds Hardhat)
-                await wallet.addNetwork({
-                    networkName: "Anvil Testnet",
-                    rpc: "http://127.0.0.1:8545",
-                    chainId: 31337,
-                    symbol: "ETH",
-                });
-                console.log('✅ Anvil network added');
+                // // Add Anvil network (like ZKSync adds Hardhat)
+                // await wallet.addNetwork({
+                //     networkName: "Anvil Testnet",
+                //     rpc: "http://127.0.0.1:8545",
+                //     chainId: 31337,
+                //     symbol: "ETH",
+                // });
+                // console.log('✅ Anvil network added');
 
-                // Switch to Anvil network
-                await wallet.switchNetwork("Anvil Testnet");
-                console.log('✅ Switched to Anvil network');
+                // // Switch to Anvil network
+                // await wallet.switchNetwork("Anvil Testnet");
+                // console.log('✅ Switched to Anvil network');
             } catch (e) {
                 console.error('❌ Network setup failed:', e);
                 throw new Error("Please verify there's an Anvil node running at http://localhost:8545");
