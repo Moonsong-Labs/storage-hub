@@ -751,6 +751,25 @@ pub mod pallet {
             signed_delete_intention: FileOperationIntention<T>,
             signature: T::OffchainSignature,
         },
+        /// Notifies that a file deletion has been completed successfully for an MSP.
+        MspFileDeletionCompleted {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            file_size: StorageDataUnit<T>,
+            bucket_id: BucketIdFor<T>,
+            msp_id: ProviderIdFor<T>,
+            old_root: MerkleHash<T>,
+            new_root: MerkleHash<T>,
+        },
+        /// Notifies that a file deletion has been completed successfully for a BSP.
+        BspFileDeletionCompleted {
+            user: T::AccountId,
+            file_key: MerkleHash<T>,
+            file_size: StorageDataUnit<T>,
+            bsp_id: ProviderIdFor<T>,
+            old_root: MerkleHash<T>,
+            new_root: MerkleHash<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -921,6 +940,14 @@ pub mod pallet {
         FailedToCreateFileMetadata,
         /// Invalid signature provided for file operation
         InvalidSignature,
+        /// Forest proof verification failed.
+        ForestProofVerificationFailed,
+        /// Provider is not storing the file.
+        ProviderNotStoringFile,
+        /// Invalid provider ID provided.
+        InvalidProviderID,
+        /// Invalid signed operation provided.
+        InvalidSignedOperation,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1438,6 +1465,43 @@ pub mod pallet {
                 signed_delete_intention: signed_intention,
                 signature,
             });
+
+            Ok(())
+        }
+
+        /// Deletes a file from a provider's forest, changing its root
+        ///
+        /// This extrinsic allows any actor to execute file deletion based on signed intentions
+        /// from the `FileDeletionRequested` event. It requires a valid forest proof showing that the
+        /// file exists in the specified provider's forest before allowing deletion.
+        #[pallet::call_index(17)]
+        #[pallet::weight(Weight::zero())]
+        pub fn delete_file(
+            origin: OriginFor<T>,
+            file_owner: T::AccountId,
+            signed_intention: FileOperationIntention<T>,
+            signature: T::OffchainSignature,
+            bucket_id: BucketIdFor<T>,
+            location: FileLocation<T>,
+            size: StorageDataUnit<T>,
+            fingerprint: Fingerprint<T>,
+            provider_id: ProviderIdFor<T>,
+            forest_proof: ForestProof<T>,
+        ) -> DispatchResult {
+            // TODO: We need to reward the caller of delete_file
+            let _caller = ensure_signed(origin)?;
+
+            Self::do_delete_file(
+                file_owner,
+                signed_intention,
+                signature,
+                bucket_id,
+                location,
+                size,
+                fingerprint,
+                provider_id,
+                forest_proof,
+            )?;
 
             Ok(())
         }
