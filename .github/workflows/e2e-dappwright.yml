@@ -36,10 +36,28 @@ jobs:
             sdk/pnpm-lock.yaml
 
       - name: Install dependencies
+        working-directory: sdk
+        run: pnpm install
+
+      - name: Install e2e deps (sdk/e2e)
         run: pnpm install
 
       - name: Install Playwright Chromium with system deps
         run: pnpm playwright install --with-deps chromium
+
+      - name: Setup Foundry (for Anvil)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Start Anvil
+        run: |
+          nohup anvil --chain-id 31337 --port 8545 --block-time 1 --silent > /dev/null 2>&1 &
+          echo "Waiting for Anvil on http://127.0.0.1:8545 ..."
+          for i in {1..60}; do
+            if curl -sSf http://127.0.0.1:8545 > /dev/null; then echo "Anvil is up"; break; fi
+            sleep 1
+          done
 
       - name: Start minimal dApp server
         run: |
