@@ -83,6 +83,16 @@ pub struct StorageRequestMetadata<T: Config> {
     /// This is used to pay for the cost of the BSPs volunteering for the storage request in case it either expires
     /// or gets revoked by the user. If the storage request is fulfilled, the deposit will be refunded to the user.
     pub deposit_paid: BalanceOf<T>,
+
+    /// Boolean field to track if the storage request has been rejected. Either by the MSP or as if it expired without an MSP having confirmed it.
+    ///
+    /// This is used to validate if a caller (e.g. Fisherman) can delete the file from the confirmed BSPs
+    pub rejected: bool,
+
+    /// Boolean field to track if the storage request has been revoked.
+    ///
+    /// This is used to validate if a caller (e.g. Fisherman) can delete the file from the confirmed BSPs
+    pub revoked: bool,
 }
 
 impl<T: Config> StorageRequestMetadata<T> {
