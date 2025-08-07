@@ -10,10 +10,6 @@ env:
   FORCE_COLOR: 1
   HEADLESS: true
 
-defaults:
-  run:
-    working-directory: sdk/e2e
-
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest
@@ -24,7 +20,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 9
+          version: 8.12.1
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,15 +39,20 @@ jobs:
       - name: Install wasm-pack
         run: curl -sSf https://rustwasm.github.io/wasm-pack/installer/init.sh | sh
 
-      - name: Install dependencies
+      - name: Install dependencies (sdk)
         working-directory: sdk
         run: pnpm install
 
       - name: Install e2e deps (sdk/e2e)
-        run: pnpm install
+        working-directory: sdk/e2e
+        run: pnpm install --ignore-workspace
 
-      - name: Install Playwright Chromium with system deps
-        run: pnpm playwright install --with-deps chromium
+      - name: Install Playwright Chromium with system deps (sdk/e2e)
+        working-directory: sdk/e2e
+        run: |
+          ls -la
+          ls -la node_modules/.bin || true
+          pnpm exec playwright install --with-deps chromium
 
       - name: Setup Foundry (for Anvil)
         uses: foundry-rs/foundry-toolchain@v1
@@ -59,6 +60,7 @@ jobs:
           version: nightly
 
       - name: Start Anvil
+        working-directory: .
         run: |
           nohup anvil --chain-id 31337 --port 8545 --block-time 1 --silent > /dev/null 2>&1 &
           echo "Waiting for Anvil on http://127.0.0.1:8545 ..."
@@ -67,7 +69,8 @@ jobs:
             sleep 1
           done
 
-      - name: Start minimal dApp server
+      - name: Start minimal dApp server (sdk/e2e)
+        working-directory: sdk/e2e
         run: |
           nohup python3 -m http.server 3000 --directory page > /dev/null 2>&1 &
           echo "Waiting for http://localhost:3000 ..."
@@ -76,8 +79,12 @@ jobs:
             sleep 1
           done
 
-      - name: Run Playwright tests (headless via xvfb)
-        run: xvfb-run -a pnpm playwright test
+      - name: Run Playwright tests (headless via xvfb) (sdk/e2e)
+        working-directory: sdk/e2e
+        run: |
+          ls -la
+          ls -la node_modules/.bin || true
+          xvfb-run -a pnpm exec playwright test
 
       - name: Upload Playwright report
         if: ${{ always() }}
