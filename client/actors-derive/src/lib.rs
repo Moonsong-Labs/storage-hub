@@ -405,9 +405,12 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
     // Register this event with the actor
     get_registry().register_event(&actor_id, &name.to_string());
 
-    // Generate the implementation of EventBusMessage
+    // Generate the implementation of EventBusMessage with proper generic support
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
     let expanded = quote! {
-        impl ::shc_actors_framework::event_bus::EventBusMessage for #name {}
+        impl #impl_generics ::shc_actors_framework::event_bus::EventBusMessage for #name #ty_generics #where_clause {}
     };
 
     TokenStream::from(expanded)
