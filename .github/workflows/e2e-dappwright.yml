@@ -1,0 +1,64 @@
+name: E2E DappWright (MetaMask)
+
+on:
+  pull_request:
+  push:
+    branches: [ main, develop, feat/** ]
+  workflow_dispatch:
+
+env:
+  FORCE_COLOR: 1
+  HEADLESS: true
+
+defaults:
+  run:
+    working-directory: sdk/e2e
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23
+          cache: 'pnpm'
+          cache-dependency-path: |
+            sdk/e2e/pnpm-lock.yaml
+            sdk/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Install Playwright Chromium with system deps
+        run: pnpm playwright install --with-deps chromium
+
+      - name: Start minimal dApp server
+        run: |
+          nohup python3 -m http.server 3000 --directory page > /dev/null 2>&1 &
+          echo "Waiting for http://localhost:3000 ..."
+          for i in {1..60}; do
+            if curl -sSf http://localhost:3000 > /dev/null; then echo "Server is up"; break; fi
+            sleep 1
+          done
+
+      - name: Run Playwright tests (headless via xvfb)
+        run: xvfb-run -a pnpm playwright test
+
+      - name: Upload Playwright report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: sdk/e2e/playwright-report/
+          retention-days: 14
+
+
