@@ -76,7 +76,7 @@ export const extendFork = async (
 
     // TODO replace with something smarter eventually
     await waitForLog({
-      containerName: "docker-sh-user-1", // we can only produce blocks via the user node for now
+      containerName: "storage-hub-sh-user-1", // we can only produce blocks via the user node for now
       searchString: "💤 Idle",
       timeout: 5000
     });

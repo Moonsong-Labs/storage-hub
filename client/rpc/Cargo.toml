@@ -10,14 +10,24 @@ edition = { workspace = true }
 
 [dependencies]
 array-bytes = { workspace = true }
-serde = { workspace = true }
-log = { workspace = true }
+async-trait = "0.1"
+bytes = "1.5"
+futures = "0.3"
+futures-util = "0.3"
 jsonrpsee = { features = [
 	"client-core",
 	"macros",
 	"server-core",
 ], workspace = true }
+log = { workspace = true }
+mime_guess = "2.0"
+reqwest = { version = "0.12", features = ["stream", "rustls-tls"], default-features = false }
+serde = { workspace = true }
+suppaftp = { version = "6.0", features = ["async", "rustls"] }
+thiserror = "1.0"
 tokio = { workspace = true }
+tokio-util = { version = "0.7", features = ["io"] }
+url = "2.5"
 
 # Substrate
 sp-api = { workspace = true }
@@ -39,6 +49,12 @@ shc-forest-manager = { workspace = true }
 [features]
 default = ["std"]
 std = []
+
+[dev-dependencies]
+mockito = "1.7"
+percent-encoding = "2"
+serial_test = "2"
+tempfile = "3.0"
 
 [lints]
 workspace = true

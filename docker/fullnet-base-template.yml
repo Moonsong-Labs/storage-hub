@@ -1,7 +1,7 @@
 services:
   sh-bsp:
     image: storage-hub:local
-    container_name: docker-sh-bsp-1
+    container_name: storage-hub-sh-bsp-1
     platform: linux/amd64
     ports:
       - "9666:9944"
@@ -28,7 +28,7 @@ services:
       ]
   sh-msp-1:
     image: storage-hub:local
-    container_name: docker-sh-msp-1
+    container_name: storage-hub-sh-msp-1
     platform: linux/amd64
     ports:
       - "9777:9944"
@@ -57,7 +57,7 @@ services:
       ]
   sh-msp-2:
     image: storage-hub:local
-    container_name: docker-sh-msp-2
+    container_name: storage-hub-sh-msp-2
     platform: linux/amd64
     ports:
       - "9778:9944"
@@ -87,7 +87,7 @@ services:
   sh-user:
     image: storage-hub:local
     platform: linux/amd64
-    container_name: docker-sh-user-1
+    container_name: storage-hub-sh-user-1
     ports:
       - "9888:9944"
       - "30444:30444"
@@ -114,7 +114,7 @@ services:
 
   sh-postgres:
     image: postgres:15
-    container_name: docker-sh-postgres-1
+    container_name: storage-hub-sh-postgres-1
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres

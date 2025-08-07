@@ -1,20 +1,20 @@
 export const NODE_INFOS = {
   user: {
-    containerName: "docker-sh-user-1",
+    containerName: "storage-hub-sh-user-1",
     port: 9888,
     p2pPort: 30444,
     AddressId: "5CombC1j5ZmdNMEpWYpeEWcKPPYcKsC1WgMPgzGLU72SLa4o",
     expectedPeerId: "12D3KooWMvbhtYjbhgjoDzbnf71SFznJAKBBkSGYEUtnpES1y9tM"
   },
   bsp: {
-    containerName: "docker-sh-bsp-1",
+    containerName: "storage-hub-sh-bsp-1",
     port: 9666,
     p2pPort: 30350,
     AddressId: "5FHSHEFWHVGDnyiw66DoRUpLyh5RouWkXo9GT1Sjk8qw7MAg",
     expectedPeerId: "12D3KooWNEZ8PGNydcdXTYy1SPHvkP9mbxdtTqGGFVrhorDzeTfU"
   },
   msp1: {
-    containerName: "docker-sh-msp-1",
+    containerName: "storage-hub-sh-msp-1",
     port: 9777,
     p2pPort: 30555,
     AddressId: "5E1rPv1M2mheg6pM57QqU7TZ6eCwbVpiYfyYkrugpBdEzDiU",
@@ -22,7 +22,7 @@ export const NODE_INFOS = {
     expectedPeerId: "12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV"
   },
   msp2: {
-    containerName: "docker-sh-msp-2",
+    containerName: "storage-hub-sh-msp-2",
     port: 9778,
     p2pPort: 30556,
     AddressId: "5CMDKyadzWu6MUwCzBB93u32Z1PPPsV8A1qAy4ydyVWuRzWR",
@@ -30,7 +30,7 @@ export const NODE_INFOS = {
     expectedPeerId: "12D3KooWAFJGBhD5NxgcGatAdzs1Zuh6XWqTzKr6S4BdQbTuZRzo"
   },
   collator: {
-    containerName: "docker-sh-collator-1",
+    containerName: "storage-hub-sh-collator-1",
     port: 9955,
     p2pPort: 30333,
     AddressId: "5C8NC6YuAivp3knYC58Taycx2scQoDcDd3MCEEgyw36Gh1R4"
