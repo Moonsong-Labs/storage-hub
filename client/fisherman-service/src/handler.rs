@@ -1,10 +1,7 @@
 use futures::stream::{self, StreamExt};
 use log::{debug, error, info, warn};
 use sc_client_api::BlockchainEvents;
-use shc_common::{
-    blockchain_utils::EventsRetrievalError,
-    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
-};
+use shc_common::{blockchain_utils::EventsRetrievalError, traits::StorageEnableRuntime};
 use sp_runtime::traits::Header;
 use std::sync::Arc;
 use thiserror::Error;
@@ -37,18 +34,18 @@ pub enum FishermanServiceError {
 /// This service monitors the StorageHub blockchain for file deletion requests,
 /// constructs proofs of inclusion from Bucket/BSP forests, and submits these proofs
 /// to the StorageHub protocol to permissionlessly mutate (delete the file key) the merkle forest on chain.
-pub struct FishermanService<RuntimeApi> {
+pub struct FishermanService<Runtime: StorageEnableRuntime> {
     /// Substrate client for blockchain interaction
-    client: Arc<ParachainClient<RuntimeApi>>,
+    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// Last processed block number to avoid reprocessing
     last_processed_block: Option<BlockNumber>,
     /// Event bus provider for emitting fisherman events
     event_bus_provider: FishermanServiceEventBusProvider,
 }
 
-impl<RuntimeApi> FishermanService<RuntimeApi> {
+impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// Create a new FishermanService instance
-    pub fn new(client: Arc<ParachainClient<RuntimeApi>>) -> Self {
+    pub fn new(client: Arc<ParachainClient<Runtime::RuntimeApi>>) -> Self {
         Self {
             client,
             last_processed_block: None,
@@ -72,13 +69,9 @@ impl<RuntimeApi> FishermanService<RuntimeApi> {
 }
 
 /// Implement the Actor trait for FishermanService
-impl<RuntimeApi> Actor for FishermanService<RuntimeApi>
-where
-    RuntimeApi: StorageEnableRuntimeApi + Send + 'static,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection + Send,
-{
+impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
     type Message = FishermanServiceCommand;
-    type EventLoop = FishermanServiceEventLoop<RuntimeApi>;
+    type EventLoop = FishermanServiceEventLoop<Runtime>;
     type EventBusProvider = FishermanServiceEventBusProvider;
 
     fn handle_message(
@@ -109,19 +102,16 @@ where
 /// This runs the main monitoring logic of the fisherman service,
 /// watching for file deletion requests and processing them by
 /// starting [`ProcessFileDeletionRequest`] tasks.
-pub struct FishermanServiceEventLoop<RuntimeApi> {
-    service: FishermanService<RuntimeApi>,
+pub struct FishermanServiceEventLoop<Runtime: StorageEnableRuntime> {
+    service: FishermanService<Runtime>,
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand>,
 }
 
-impl<RuntimeApi> ActorEventLoop<FishermanService<RuntimeApi>>
-    for FishermanServiceEventLoop<RuntimeApi>
-where
-    RuntimeApi: StorageEnableRuntimeApi + Send + 'static,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection + Send,
+impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
+    for FishermanServiceEventLoop<Runtime>
 {
     fn new(
-        actor: FishermanService<RuntimeApi>,
+        actor: FishermanService<Runtime>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand>,
     ) -> Self {
         Self {

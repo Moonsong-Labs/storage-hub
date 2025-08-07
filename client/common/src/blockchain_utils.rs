@@ -12,7 +12,7 @@ use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 
 use crate::{
-    traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi},
+    traits::{KeyTypeOperations, StorageEnableRuntime},
     types::{
         Multiaddresses, ParachainClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
     },
@@ -44,13 +44,10 @@ pub enum EventsRetrievalError {
 }
 
 /// Get the events storage element for a given block.
-pub fn get_events_at_block<RuntimeApi: StorageEnableRuntimeApi>(
-    client: &Arc<ParachainClient<RuntimeApi>>,
+pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
+    client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
     block_hash: &H256,
-) -> Result<StorageHubEventsVec, EventsRetrievalError>
-where
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-{
+) -> Result<StorageHubEventsVec, EventsRetrievalError> {
     // Get the events storage.
     let raw_storage_opt = client.storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?;
 
@@ -108,19 +105,17 @@ pub enum GetProviderIdError {
 /// - `Ok(Some(provider_id))` if exactly one Provider ID is found
 /// - `Err(GetProviderIdError::MultipleProviderIds)` if multiple Provider IDs are found
 /// - `Err(GetProviderIdError::RuntimeApiError)` if there's an error calling the runtime API
-pub fn get_provider_id_from_keystore<RuntimeApi, K>(
-    client: &Arc<ParachainClient<RuntimeApi>>,
-    keystore: &K,
+pub fn get_provider_id_from_keystore<Runtime>(
+    client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
+    keystore: &sp_keystore::KeystorePtr,
     block_hash: &H256,
 ) -> Result<Option<StorageProviderId>, GetProviderIdError>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    K: ReadOnlyKeystore + ?Sized,
+    Runtime: StorageEnableRuntime,
 {
     let mut provider_ids_found = Vec::new();
 
-    for key in keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
+    for key in Runtime::Signature::public_keys(keystore, BCSV_KEY_TYPE) {
         let maybe_provider_id = client
             .runtime_api()
             .get_storage_provider_id(*block_hash, &key.into())

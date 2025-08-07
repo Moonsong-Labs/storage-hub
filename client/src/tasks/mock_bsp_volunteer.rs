@@ -9,7 +9,7 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, events::NewStorageRequest,
     types::SendExtrinsicOptions,
 };
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 
 use crate::{
     handler::StorageHubHandler,
@@ -18,50 +18,46 @@ use crate::{
 
 const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
-pub struct BspVolunteerMockTask<NT, RuntimeApi>
+pub struct BspVolunteerMockTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
 }
 
-impl<NT, RuntimeApi> Clone for BspVolunteerMockTask<NT, RuntimeApi>
+impl<NT, Runtime> Clone for BspVolunteerMockTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> BspVolunteerMockTask<NT, RuntimeApi> {
+    fn clone(&self) -> BspVolunteerMockTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT, RuntimeApi> BspVolunteerMockTask<NT, RuntimeApi>
+impl<NT, Runtime> BspVolunteerMockTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<NewStorageRequest> for BspVolunteerMockTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<NewStorageRequest> for BspVolunteerMockTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -79,7 +75,7 @@ where
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(
-                call,
+                call.into(),
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config

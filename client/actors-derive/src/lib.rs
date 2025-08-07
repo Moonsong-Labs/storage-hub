@@ -830,6 +830,91 @@ fn to_snake_case(s: &str) -> String {
     result
 }
 
+/// Generate generics for enum and trait declarations from additional generics
+fn generate_additional_generics_for_declaration(
+    additional_generics: &[syn::WherePredicate],
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    if additional_generics.is_empty() {
+        return (quote! {}, quote! {});
+    }
+
+    let param_names: Vec<syn::Ident> = additional_generics
+        .iter()
+        .filter_map(|pred| {
+            if let syn::WherePredicate::Type(type_pred) = pred {
+                if let syn::Type::Path(type_path) = &type_pred.bounded_ty {
+                    if let Some(first_segment) = type_path.path.segments.first() {
+                        return Some(first_segment.ident.clone());
+                    }
+                }
+            }
+            None
+        })
+        .collect();
+
+    let generics_params = quote! { <#(#param_names),*> };
+    let where_clause = quote! { where #(#additional_generics),* };
+
+    (generics_params, where_clause)
+}
+
+/// Merge and deduplicate generics from service type and additional generics
+fn merge_and_deduplicate_generics(
+    service_generics: &[syn::Ident],
+    service_bounds: &[proc_macro2::TokenStream],
+    additional_generics: &[syn::WherePredicate],
+) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
+    let service_param_names: std::collections::HashSet<String> = service_generics
+        .iter()
+        .map(|ident| ident.to_string())
+        .collect();
+
+    // Filter additional generics to exclude duplicates
+    let mut filtered_additional_params = Vec::new();
+    let mut filtered_additional_bounds = Vec::new();
+
+    for predicate in additional_generics {
+        if let syn::WherePredicate::Type(type_pred) = predicate {
+            if let syn::Type::Path(type_path) = &type_pred.bounded_ty {
+                if let Some(first_segment) = type_path.path.segments.first() {
+                    let param_name = first_segment.ident.to_string();
+                    if !service_param_names.contains(&param_name) {
+                        filtered_additional_params.push(first_segment.ident.clone());
+                        filtered_additional_bounds.push(quote!(#predicate));
+                    }
+                }
+            }
+        }
+    }
+
+    // Combine all parameters and bounds
+    let all_params: Vec<syn::Ident> = service_generics
+        .iter()
+        .cloned()
+        .chain(filtered_additional_params.into_iter())
+        .collect();
+
+    let all_bounds: Vec<proc_macro2::TokenStream> = service_bounds
+        .iter()
+        .cloned()
+        .chain(filtered_additional_bounds.into_iter())
+        .collect();
+
+    let impl_generics = if !all_params.is_empty() {
+        quote! { <#(#all_params),*> }
+    } else {
+        quote! {}
+    };
+
+    let where_clause = if !all_bounds.is_empty() {
+        quote! { where #(#all_bounds),* }
+    } else {
+        quote! {}
+    };
+
+    (impl_generics, where_clause)
+}
+
 /// Parser for the `#[actor_command(...)]` attribute macro
 ///
 /// # Usage
@@ -839,7 +924,8 @@ fn to_snake_case(s: &str) -> String {
 ///     service = ServiceType,
 ///     default_mode = "ImmediateResponse",
 ///     default_error_type = CustomError,
-///     default_inner_channel_type = "futures::channel::oneshot::Receiver"
+///     default_inner_channel_type = "futures::channel::oneshot::Receiver",
+///     generics(T: SomeTrait, U: AnotherTrait)
 /// )]
 /// pub enum CommandEnum {
 ///     // command variants
@@ -850,6 +936,7 @@ struct ActorCommandArgs {
     default_mode: String,
     default_error_type: Option<Type>,
     default_inner_channel_type: Option<Type>,
+    additional_generics: Vec<syn::WherePredicate>,
 }
 
 impl Parse for ActorCommandArgs {
@@ -858,27 +945,45 @@ impl Parse for ActorCommandArgs {
         let mut default_mode = String::from("ImmediateResponse");
         let mut default_error_type = None;
         let mut default_inner_channel_type = None;
+        let mut additional_generics = Vec::new();
 
         while !input.is_empty() {
             let key: Ident = input.parse()?;
-            let _: Token![=] = input.parse()?;
 
-            if key == "service" {
-                // Parse the service type with its bounds
-                let service_type: Type = input.parse()?;
-                service = Some(service_type);
-            } else if key == "default_mode" {
-                let mode: LitStr = input.parse()?;
-                default_mode = mode.value();
-            } else if key == "default_error_type" {
-                default_error_type = Some(input.parse()?);
-            } else if key == "default_inner_channel_type" {
-                default_inner_channel_type = Some(input.parse()?);
+            if key == "generics" {
+                // Parse generics(T: SomeTrait, U: AnotherTrait)
+                let content;
+                let _ = syn::parenthesized!(content in input);
+
+                while !content.is_empty() {
+                    let predicate: syn::WherePredicate = content.parse()?;
+                    additional_generics.push(predicate);
+
+                    // Parse comma if there are more predicates
+                    if content.peek(Token![,]) {
+                        let _: Token![,] = content.parse()?;
+                    }
+                }
             } else {
-                return Err(syn::Error::new(
-                    key.span(),
-                    format!("Unknown parameter: {}", key),
-                ));
+                let _: Token![=] = input.parse()?;
+
+                if key == "service" {
+                    // Parse the service type with its bounds
+                    let service_type: Type = input.parse()?;
+                    service = Some(service_type);
+                } else if key == "default_mode" {
+                    let mode: LitStr = input.parse()?;
+                    default_mode = mode.value();
+                } else if key == "default_error_type" {
+                    default_error_type = Some(input.parse()?);
+                } else if key == "default_inner_channel_type" {
+                    default_inner_channel_type = Some(input.parse()?);
+                } else {
+                    return Err(syn::Error::new(
+                        key.span(),
+                        format!("Unknown parameter: {}", key),
+                    ));
+                }
             }
 
             // Parse comma if there are more fields
@@ -896,6 +1001,7 @@ impl Parse for ActorCommandArgs {
             default_mode,
             default_error_type,
             default_inner_channel_type,
+            additional_generics,
         })
     }
 }
@@ -1300,6 +1406,7 @@ fn generate_method_impl(
 /// - `default_mode`: (Optional) Default command mode, one of: "FireAndForget", "ImmediateResponse", "AsyncResponse"
 /// - `default_error_type`: (Optional) Default error type for command responses
 /// - `default_inner_channel_type`: (Optional) Default channel type for AsyncResponse mode
+/// - `generics`: (Optional) Additional generic parameters and their bounds to add to the enum and trait
 ///
 /// # Command Mode Options
 ///
@@ -1314,6 +1421,7 @@ fn generate_method_impl(
 ///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
 ///     default_mode = "ImmediateResponse",
 ///     default_inner_channel_type = tokio::sync::oneshot::Receiver,
+///     generics(Runtime: StorageEnableRuntime, OtherType: SomeTrait)
 /// )]
 /// pub enum BlockchainServiceCommand {
 ///     #[command(success_type = SubmittedTransaction)]
@@ -1361,9 +1469,14 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let default_mode = args.default_mode;
     let default_error_type = args.default_error_type;
     let default_inner_channel_type = args.default_inner_channel_type;
+    let additional_generics = &args.additional_generics;
 
     // Generate interface trait name
     let interface_name = Ident::new(&format!("{}Interface", enum_name), Span::call_site());
+
+    // Generate additional generics for enum and trait declarations
+    let (additional_generics_params, additional_where_clause) =
+        generate_additional_generics_for_declaration(additional_generics);
 
     // Generate each variant with callback field if needed
     let mut updated_variants = Vec::new();
@@ -1512,19 +1625,55 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let generics = &input.generics;
 
     // Process the service type
-    let (service_type_path, impl_generics, _type_generics, where_clause) =
-        process_service_type(service_type);
+    let (
+        service_type_path,
+        _service_impl_generics,
+        _type_generics,
+        _service_where_clause,
+        service_generic_params,
+        service_where_bounds,
+    ) = process_service_type(service_type);
+
+    // Merge and deduplicate generics for the impl block
+    let (merged_impl_generics, merged_where_clause) = merge_and_deduplicate_generics(
+        &service_generic_params,
+        &service_where_bounds,
+        additional_generics,
+    );
+
+    // Extract type parameter names for the trait implementation
+    let additional_type_params: Vec<syn::Ident> = additional_generics
+        .iter()
+        .filter_map(|pred| {
+            if let syn::WherePredicate::Type(type_pred) = pred {
+                if let syn::Type::Path(type_path) = &type_pred.bounded_ty {
+                    if let Some(first_segment) = type_path.path.segments.first() {
+                        return Some(first_segment.ident.clone());
+                    }
+                }
+            }
+            None
+        })
+        .collect();
+
+    let trait_type_params = if additional_type_params.is_empty() {
+        quote! {}
+    } else {
+        quote! { <#(#additional_type_params),*> }
+    };
 
     // Generate the interface trait and implementation
     let trait_def = quote! {
         #[async_trait::async_trait]
-        pub trait #interface_name {
+        pub trait #interface_name #additional_generics_params
+        #additional_where_clause
+        {
             #(#trait_method_signatures)*
         }
 
         #[async_trait::async_trait]
-        impl #impl_generics #interface_name for shc_actors_framework::actor::ActorHandle<#service_type_path>
-        #where_clause
+        impl #merged_impl_generics #interface_name #trait_type_params for shc_actors_framework::actor::ActorHandle<#service_type_path>
+        #merged_where_clause
         {
             #(#trait_method_implementations)*
         }
@@ -1532,7 +1681,9 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Output the result
     let result = quote! {
-        #vis enum #enum_name #generics {
+        #vis enum #enum_name #generics #additional_generics_params
+        #additional_where_clause
+        {
             #(#updated_variants,)*
         }
 
@@ -1550,9 +1701,18 @@ fn process_service_type(
     proc_macro2::TokenStream,
     proc_macro2::TokenStream,
     proc_macro2::TokenStream,
+    Vec<syn::Ident>,               // service generic parameters
+    Vec<proc_macro2::TokenStream>, // service where bounds
 ) {
     // Default values for when we have no generics
-    let default_result = (quote! { #service_type }, quote! {}, quote! {}, quote! {});
+    let default_result = (
+        quote! { #service_type },
+        quote! {},
+        quote! {},
+        quote! {},
+        Vec::new(),
+        Vec::new(),
+    );
 
     // Parse the service type to extract its parts
     match service_type {
@@ -1677,6 +1837,8 @@ fn process_service_type(
                                 impl_generics,
                                 type_generics,
                                 where_clause,
+                                generic_params,
+                                where_bounds,
                             );
                         }
                     }
@@ -1686,7 +1848,14 @@ fn process_service_type(
                 }
 
                 // For path with no angle brackets (simple types)
-                _ => (quote! { #service_type }, quote! {}, quote! {}, quote! {}),
+                _ => (
+                    quote! { #service_type },
+                    quote! {},
+                    quote! {},
+                    quote! {},
+                    Vec::new(),
+                    Vec::new(),
+                ),
             }
         }
         // Fallback for any other type - just use it as is

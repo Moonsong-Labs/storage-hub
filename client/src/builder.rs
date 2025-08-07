@@ -13,10 +13,8 @@ use shc_blockchain_service::{
     capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
     BlockchainService,
 };
-use shc_common::{
-    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
-    types::ParachainClient,
-};
+use shc_common::traits::StorageEnableRuntime;
+use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -42,17 +40,16 @@ use super::{
 ///
 /// Abstracted over [`ShRole`] `R` and [`ShStorageLayer`] `S` to avoid any callers from having to know the internals of the
 /// StorageHub system, such as the right storage layers to use for a given role.
-pub struct StorageHubBuilder<R, S, RuntimeApi>
+pub struct StorageHubBuilder<R, S, Runtime>
 where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService>>,
-    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH, RuntimeApi>>>,
+    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH, Runtime>>>,
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
     forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
@@ -71,11 +68,10 @@ where
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
-impl<R: ShRole, S: ShStorageLayer, RuntimeApi> StorageHubBuilder<R, S, RuntimeApi>
+impl<R: ShRole, S: ShStorageLayer, Runtime> StorageHubBuilder<R, S, Runtime>
 where
     (R, S): ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     pub fn new(task_spawner: TaskSpawner) -> Self {
         Self {
@@ -146,7 +142,7 @@ where
     /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
     pub async fn with_blockchain(
         &mut self,
-        client: Arc<ParachainClient<RuntimeApi>>,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
@@ -168,7 +164,7 @@ where
         let blockchain_service_config = self.blockchain_service_config.clone().unwrap_or_default();
 
         let blockchain_service_handle =
-            spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH, RuntimeApi>(
+            spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH, Runtime>(
                 self.task_spawner
                     .as_ref()
                     .expect("Task spawner is not set."),
@@ -336,11 +332,9 @@ pub trait StorageLayerBuilder {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<BspProvider, InMemoryStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
@@ -351,11 +345,9 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<BspProvider, RocksDbStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
         self.storage_path = storage_path.clone();
@@ -374,11 +366,9 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<MspProvider, InMemoryStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemoryStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
@@ -389,11 +379,9 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<MspProvider, RocksDbStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
         let storage_path = storage_path.expect("Storage path not set");
@@ -411,10 +399,9 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
@@ -429,23 +416,18 @@ where
 /// This trait is implemented by the different [`StorageHubBuilder`] variants,
 /// and build a [`StorageHubHandler`] with the required configuration for the
 /// corresponding [`ShRole`].
-pub trait Buildable<
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>,
->
-{
-    fn build(self) -> StorageHubHandler<NT, RuntimeApi>;
+pub trait Buildable<NT: ShNodeType, Runtime: StorageEnableRuntime> {
+    fn build(self) -> StorageHubHandler<NT, Runtime>;
 }
 
-impl<S: ShStorageLayer, RuntimeApi> Buildable<(BspProvider, S), RuntimeApi>
-    for StorageHubBuilder<BspProvider, S, RuntimeApi>
+impl<S: ShStorageLayer, Runtime> Buildable<(BspProvider, S), Runtime>
+    for StorageHubBuilder<BspProvider, S, Runtime>
 where
     (BspProvider, S): ShNodeType,
     <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn build(self) -> StorageHubHandler<(BspProvider, S), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(BspProvider, S), Runtime> {
         StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
@@ -483,15 +465,14 @@ where
     }
 }
 
-impl<S: ShStorageLayer, RuntimeApi> Buildable<(MspProvider, S), RuntimeApi>
-    for StorageHubBuilder<MspProvider, S, RuntimeApi>
+impl<S: ShStorageLayer, Runtime> Buildable<(MspProvider, S), Runtime>
+    for StorageHubBuilder<MspProvider, S, Runtime>
 where
     (MspProvider, S): ShNodeType,
     <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn build(self) -> StorageHubHandler<(MspProvider, S), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(MspProvider, S), Runtime> {
         StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
@@ -529,16 +510,15 @@ where
     }
 }
 
-impl<RuntimeApi> Buildable<(UserRole, NoStorageLayer), RuntimeApi>
-    for StorageHubBuilder<UserRole, NoStorageLayer, RuntimeApi>
+impl<Runtime> Buildable<(UserRole, NoStorageLayer), Runtime>
+    for StorageHubBuilder<UserRole, NoStorageLayer, Runtime>
 where
     (UserRole, NoStorageLayer): ShNodeType,
     <(UserRole, NoStorageLayer) as ShNodeType>::FSH:
         ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer), Runtime> {
         StorageHubHandler::new(
             self.task_spawner
                 .as_ref()

@@ -25,7 +25,7 @@ use sp_core::H256;
 
 // Local Runtime Types
 use storage_hub_runtime::opaque::Block;
-use storage_hub_runtime::{apis::RuntimeApi, opaque::Hash};
+use storage_hub_runtime::{apis::RuntimeApi, opaque::Hash, Runtime};
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
@@ -216,14 +216,14 @@ async fn init_sh_builder<R, S>(
     keystore: KeystorePtr,
     maybe_db_pool: Option<DbPool>,
 ) -> Option<(
-    StorageHubBuilder<R, S, RuntimeApi>,
+    StorageHubBuilder<R, S, Runtime>,
     StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH>,
 )>
 where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder,
+    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
     match provider_options {
         Some(ProviderOptions {
@@ -249,7 +249,7 @@ where
 
             // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "sh-builder");
-            let mut storage_hub_builder = StorageHubBuilder::<R, S, RuntimeApi>::new(task_spawner);
+            let mut storage_hub_builder = StorageHubBuilder::<R, S, Runtime>::new(task_spawner);
 
             // Setup and spawn the File Transfer Service.
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =
@@ -301,7 +301,7 @@ where
 }
 
 async fn finish_sh_builder_and_run_tasks<R, S>(
-    mut sh_builder: StorageHubBuilder<R, S, RuntimeApi>,
+    mut sh_builder: StorageHubBuilder<R, S, Runtime>,
     client: Arc<ParachainClient>,
     rpc_handlers: RpcHandlers,
     keystore: KeystorePtr,
@@ -312,8 +312,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
-    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
+    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
+    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
 {
     let rocks_db_path = rocksdb_root_path.into();
 
@@ -353,8 +353,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
-    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
+    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
+    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     use async_io::Timer;
@@ -405,7 +405,7 @@ where
 
     if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
+        spawn_indexer_service::<Runtime>(
             &task_spawner,
             client.clone(),
             maybe_db_pool.clone().expect(
@@ -443,7 +443,7 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
             client.clone(),
             &config,
             &mut net_config,
@@ -558,7 +558,7 @@ where
                 command_sink: command_sink.clone(),
             };
 
-            crate::rpc::create_full(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -786,8 +786,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
-    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
+    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
+    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let sc_service::PartialComponents {
@@ -818,7 +818,7 @@ where
 
     if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
+        spawn_indexer_service::<Runtime>(
             &task_spawner,
             client.clone(),
             maybe_db_pool.clone().expect(
@@ -852,7 +852,7 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
             client.clone(),
             &config,
             &mut net_config,
@@ -909,7 +909,7 @@ where
                 command_sink: Some(command_sink.clone()),
             };
 
-            crate::rpc::create_full(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -982,8 +982,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
-    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
+    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
+    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     // Check if we're in maintenance mode and build the node in maintenance mode if so
@@ -1040,7 +1040,7 @@ where
 
     if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
+        spawn_indexer_service::<Runtime>(
             &task_spawner,
             client.clone(),
             maybe_db_pool.clone().expect(
@@ -1054,7 +1054,7 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
             client.clone(),
             &parachain_config,
             &mut net_config,
@@ -1141,7 +1141,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1265,8 +1265,8 @@ where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    StorageHubBuilder<R, S, RuntimeApi>: StorageLayerBuilder + Buildable<(R, S), RuntimeApi>,
-    StorageHubHandler<(R, S), RuntimeApi>: RunnableTasks,
+    StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
+    StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
 {
     let parachain_config = prepare_node_config(parachain_config);
@@ -1305,7 +1305,7 @@ where
 
     if indexer_config.indexer {
         let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "indexer-service");
-        spawn_indexer_service(
+        spawn_indexer_service::<Runtime>(
             &task_spawner,
             client.clone(),
             maybe_db_pool.clone().expect(
@@ -1319,7 +1319,7 @@ where
     // If we are a provider we update the network configuration with the file transfer protocol.
     let mut file_transfer_request_protocol = None;
     if provider_options.is_some() {
-        file_transfer_request_protocol = Some(configure_file_transfer_network(
+        file_transfer_request_protocol = Some(configure_file_transfer_network::<_, Runtime>(
             client.clone(),
             &parachain_config,
             &mut net_config,
@@ -1383,7 +1383,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 

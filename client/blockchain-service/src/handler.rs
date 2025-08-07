@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
+use shc_common::traits::StorageEnableRuntime;
+use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 use sc_client_api::{
     BlockImportNotification, BlockchainEvents, FinalityNotification, HeaderBackend,
@@ -13,7 +13,7 @@ use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{traits::Header, MultiSignature, SaturatedConversion};
+use sp_runtime::{traits::Header, SaturatedConversion};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -33,7 +33,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BlockNumber, ParachainClient, TickNumber},
+    types::{AccountId, BlockNumber, ParachainClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -60,18 +60,17 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// This actor is responsible for sending extrinsics to the runtime and handling block import notifications.
 /// For such purposes, it uses the [`ParachainClient<RuntimeApi>`] to interact with the runtime, the [`RpcHandlers`] to send
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
-pub struct BlockchainService<FSH, RuntimeApi>
+pub struct BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     /// The configuration for the BlockchainService.
     pub(crate) config: BlockchainServiceConfig,
     /// The event bus provider.
     pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
     /// The parachain client. Used to interact with the runtime.
-    pub(crate) client: Arc<ParachainClient<RuntimeApi>>,
+    pub(crate) client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
     /// The RPC handlers. Used to send extrinsics.
@@ -111,6 +110,8 @@ where
     pub(crate) capacity_manager: Option<CapacityRequestQueue>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
+    /// Phantom data for the Runtime type.
+    _runtime: PhantomData<Runtime>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -146,37 +147,36 @@ impl Default for BlockchainServiceConfig {
 }
 
 /// Event loop for the BlockchainService actor.
-pub struct BlockchainServiceEventLoop<FSH, RuntimeApi>
+pub struct BlockchainServiceEventLoop<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
-    actor: BlockchainService<FSH, RuntimeApi>,
+    receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
+    actor: BlockchainService<FSH, Runtime>,
 }
 
 /// Merged event loop message for the BlockchainService actor.
-enum MergedEventLoopMessage<Block>
+enum MergedEventLoopMessage<Block, Runtime>
 where
     Block: cumulus_primitives_core::BlockT,
+    Runtime: StorageEnableRuntime,
 {
-    Command(BlockchainServiceCommand),
+    Command(BlockchainServiceCommand<Runtime>),
     BlockImportNotification(BlockImportNotification<Block>),
     FinalityNotification(FinalityNotification<Block>),
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
-impl<FSH, RuntimeApi> ActorEventLoop<BlockchainService<FSH, RuntimeApi>>
-    for BlockchainServiceEventLoop<FSH, RuntimeApi>
+impl<FSH, Runtime> ActorEventLoop<BlockchainService<FSH, Runtime>>
+    for BlockchainServiceEventLoop<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime + Send + Sync + 'static,
 {
     fn new(
-        actor: BlockchainService<FSH, RuntimeApi>,
-        receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand>,
+        actor: BlockchainService<FSH, Runtime>,
+        receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
     ) -> Self {
         Self { actor, receiver }
     }
@@ -196,12 +196,14 @@ where
 
         // Merging notification streams with command stream.
         let mut merged_stream = stream::select_all(vec![
-            self.receiver.map(MergedEventLoopMessage::Command).boxed(),
+            self.receiver
+                .map(MergedEventLoopMessage::<_, Runtime>::Command)
+                .boxed(),
             block_import_notification_stream
-                .map(MergedEventLoopMessage::BlockImportNotification)
+                .map(MergedEventLoopMessage::<_, Runtime>::BlockImportNotification)
                 .boxed(),
             finality_notification_stream
-                .map(MergedEventLoopMessage::FinalityNotification)
+                .map(MergedEventLoopMessage::<_, Runtime>::FinalityNotification)
                 .boxed(),
         ]);
 
@@ -225,14 +227,13 @@ where
 }
 
 /// Implement the Actor trait for the BlockchainService actor.
-impl<FSH, RuntimeApi> Actor for BlockchainService<FSH, RuntimeApi>
+impl<FSH, Runtime> Actor for BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    type Message = BlockchainServiceCommand;
-    type EventLoop = BlockchainServiceEventLoop<FSH, RuntimeApi>;
+    type Message = BlockchainServiceCommand<Runtime>;
+    type EventLoop = BlockchainServiceEventLoop<FSH, Runtime>;
     type EventBusProvider = BlockchainServiceEventBusProvider;
 
     fn handle_message(
@@ -526,7 +527,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::GetNodePublicKey { callback } => {
-                    let pub_key = Self::caller_pub_key::<MultiSignature>(self.keystore.clone());
+                    let pub_key = Self::caller_pub_key(self.keystore.clone());
                     match callback.send(Ok(pub_key)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Node's public key sent successfully");
@@ -948,14 +949,14 @@ where
                 } => {
                     let current_block_hash = self.client.info().best_hash;
 
-                    let node_pub_key = maybe_node_pub_key.unwrap_or_else(|| {
-                        Self::caller_pub_key::<MultiSignature>(self.keystore.clone())
-                    });
+                    let node_pub_key = maybe_node_pub_key
+                        .unwrap_or_else(|| Self::caller_pub_key(self.keystore.clone()));
+                    let node_pub_key: AccountId<Runtime> = node_pub_key.into();
 
                     let provider_id = self
                         .client
                         .runtime_api()
-                        .get_storage_provider_id(current_block_hash, &node_pub_key.into())
+                        .get_storage_provider_id(current_block_hash, &node_pub_key)
                         .map_err(|_| anyhow!("Internal API error"));
 
                     match callback.send(provider_id) {
@@ -1150,16 +1151,15 @@ where
     }
 }
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     /// Create a new [`BlockchainService`].
     pub fn new(
         config: BlockchainServiceConfig,
-        client: Arc<ParachainClient<RuntimeApi>>,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         forest_storage_handler: FSH,
@@ -1184,6 +1184,7 @@ where
             notify_period,
             capacity_manager: capacity_request_queue,
             maintenance_mode,
+            _runtime: PhantomData,
         }
     }
 
@@ -1391,7 +1392,7 @@ where
 
         // Get events from storage.
         // TODO: Handle the `pallet-cr-randomness` events here, if/when we start using them.
-        match get_events_at_block(&self.client, block_hash) {
+        match get_events_at_block::<Runtime>(&self.client, block_hash) {
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
@@ -1448,7 +1449,7 @@ where
         info!(target: LOG_TARGET, "📨 Finality notification #{}: {}", block_number, block_hash);
 
         // Get events from storage.
-        match get_events_at_block(&self.client, &block_hash) {
+        match get_events_at_block::<Runtime>(&self.client, &block_hash) {
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.

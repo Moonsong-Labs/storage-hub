@@ -1,19 +1,20 @@
-use crate::types::*;
-use codec::Encode;
+use std::fmt::Debug;
+
+use codec::{Decode, Encode};
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
-use polkadot_primitives::AccountId;
 use polkadot_primitives::Nonce;
-
 use sc_service::TFullClient;
+use scale_info::StaticTypeInfo;
 use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
-use sp_core::{crypto::KeyTypeId, sr25519, H256};
-use sp_runtime::traits::Dispatchable;
-use sp_runtime::traits::TransactionExtension;
+use sp_core::{crypto::KeyTypeId, H256};
+use sp_runtime::traits::{Dispatchable, IdentifyAccount, Member, TransactionExtension, Verify};
+
+use crate::types::*;
 
 /// A trait bundle that ensures a runtime API includes all storage-related capabilities.
 ///
@@ -75,9 +76,9 @@ use sp_runtime::traits::TransactionExtension;
 /// required runtime APIs. This means runtime developers don't need to explicitly
 /// implement this trait - it's automatically available when all component APIs
 /// are implemented.
-pub trait StorageEnableApiCollection:
+pub trait StorageEnableApiCollection<Runtime>:
     pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-    + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+    + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
     + BlockBuilder<Block>
     + ProofsDealerRuntimeApi<
         Block,
@@ -101,7 +102,7 @@ pub trait StorageEnableApiCollection:
         BackupStorageProviderId,
         BackupStorageProviderInfo,
         MainStorageProviderId,
-        AccountId,
+        AccountId<Runtime>,
         ProviderId,
         StorageProviderId,
         StorageData,
@@ -109,13 +110,16 @@ pub trait StorageEnableApiCollection:
         BucketId,
         Multiaddresses,
         ValuePropositionWithId,
-    > + PaymentStreamsRuntimeApi<Block, ProviderId, Balance, AccountId>
+    > + PaymentStreamsRuntimeApi<Block, ProviderId, Balance, AccountId<Runtime>>
+where
+    Runtime: frame_system::Config,
 {
 }
 
-impl<T> StorageEnableApiCollection for T where
+impl<T, Runtime> StorageEnableApiCollection<Runtime> for T
+where
     T: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-        + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+        + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
         + BlockBuilder<Block>
         + ProofsDealerRuntimeApi<
             Block,
@@ -139,7 +143,7 @@ impl<T> StorageEnableApiCollection for T where
             BackupStorageProviderId,
             BackupStorageProviderInfo,
             MainStorageProviderId,
-            AccountId,
+            AccountId<Runtime>,
             ProviderId,
             StorageProviderId,
             StorageData,
@@ -147,7 +151,8 @@ impl<T> StorageEnableApiCollection for T where
             BucketId,
             Multiaddresses,
             ValuePropositionWithId,
-        > + PaymentStreamsRuntimeApi<Block, ProviderId, Balance, AccountId>
+        > + PaymentStreamsRuntimeApi<Block, ProviderId, Balance, AccountId<Runtime>>,
+    Runtime: frame_system::Config,
 {
 }
 
@@ -169,48 +174,64 @@ impl<T> StorageEnableRuntimeApi for T where
 {
 }
 
-/// A read-only keystore trait that provides access to public keys without signing capabilities.
+/// Trait defining the runtime types required for StorageHub Client operations.
 ///
-/// This trait is designed for services that only need to query public keys from the keystore
-/// without the ability to generate signatures. It provides a type-safe way to restrict
-/// keystore access to read-only operations.
+/// This trait establishes the core types needed for interacting with a StorageHub-enabled
+/// runtime, including address formats, call types, signatures, and transaction extensions.
 ///
-/// # Purpose
+/// # Associated Types
 ///
-/// The indexer service needs to detect provider IDs by querying sr25519 public keys
-/// from the keystore, but it never needs to sign anything. This trait enforces that
-/// restriction at the type level, making the code more secure and its intentions clearer.
-///
-/// # Usage
-///
-/// ```ignore
-/// fn get_provider_id_from_keystore<K: ReadOnlyKeystore>(
-///     keystore: &K,
-///     block_hash: &H256,
-/// ) -> Result<Option<StorageProviderId>, GetProviderIdError> {
-///     let keys = keystore.sr25519_public_keys(BCSV_KEY_TYPE);
-///     // ... process keys
-/// }
-/// ```
-pub trait ReadOnlyKeystore: Send + Sync {
-    /// Returns all sr25519 public keys for the given key type.
-    ///
-    /// This is the only operation the indexer service needs from the keystore.
-    fn sr25519_public_keys(&self, key_type: KeyTypeId) -> Vec<sr25519::Public>;
-}
-
-/// Blanket implementation for any type that implements the full Keystore trait.
-///
-/// This allows existing `KeystorePtr` instances to be used wherever `ReadOnlyKeystore`
-/// is required, maintaining backward compatibility while enforcing read-only access
-/// at the type level.
-impl<T> ReadOnlyKeystore for T
-where
-    T: sp_keystore::Keystore + ?Sized,
+/// - `Address` - The account address format used by the runtime
+/// - `Call` - The dispatchable call type for submitting extrinsics
+/// - `Signature` - The signature type used for signing transactions
+/// - `Extension` - The transaction extension type for additional transaction logic
+pub trait StorageEnableRuntime:
+    // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
+    // TODO: If we don't do this now, in `utils.rs` we cannot compare the `owner` field of the `AcceptedBspVolunteer` event with the caller's public key.
+    frame_system::Config<AccountId = sp_runtime::AccountId32> + Send + Sync + 'static
 {
-    fn sr25519_public_keys(&self, key_type: KeyTypeId) -> Vec<sr25519::Public> {
-        sp_keystore::Keystore::sr25519_public_keys(self, key_type)
-    }
+    /// The address format used to identify accounts in the runtime.
+    /// Must support type information, encoding/decoding, and debug formatting.
+    type Address: StaticTypeInfo + Decode + Encode + core::fmt::Debug + Send;
+
+    /// The dispatchable call type representing extrinsics that can be submitted to the runtime.
+    /// Must be a member type that supports encoding/decoding and dispatching.
+    type Call: StaticTypeInfo
+        + Decode
+        + Encode
+        + Member
+        + Dispatchable
+        // TODO: Remove these once we create an abstraction trait to convert `StorageEnableCalls` to `RuntimeCall`.
+        + From<storage_hub_runtime::RuntimeCall>
+        + Into<storage_hub_runtime::RuntimeCall>;
+
+    /// The signature type used for signing transactions.
+    /// Must support verification and key operations that produce the associated `Address` type.
+    type Signature: StaticTypeInfo
+        + Decode
+        + Encode
+        + Member
+        + Verify<Signer: IdentifyAccount<AccountId = <Self as frame_system::Config>::AccountId>>
+        + KeyTypeOperations<
+            Address = Self::Address,
+            Public: Into<<Self as frame_system::Config>::AccountId>,
+        >;
+
+    /// The transaction extension type for additional validation and transaction logic.
+    /// Extensions can modify transaction behaviour and must support the runtime's call type.
+    type Extension: StaticTypeInfo
+        + Decode
+        + Encode
+        + TransactionExtension<Self::Call>
+        // TODO: Consider removing the `Hash` constraint.
+        + ExtensionOperations<Self::Call, Hash = H256>
+        + Clone
+        + core::fmt::Debug;
+
+    /// The runtime API type that provides access to all StorageHub-specific runtime functions.
+    /// Must support construction and provide complete access to all required runtime APIs
+    /// including file system, storage providers, proofs dealer, and payment streams functionality.
+    type RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection<Self>>;
 }
 
 /// Trait for abstracting key type operations to support multiple cryptographic schemes.
@@ -242,20 +263,6 @@ where
 ///
 /// # Usage
 ///
-/// ## Generic Extrinsic Construction
-/// ```ignore
-/// pub fn construct_extrinsic<Signature>(&self, function: Call) -> UncheckedExtrinsic
-/// where
-///     Signature: KeyTypeOperations<Address = Address>,
-/// {
-///     let public_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
-///     let signature = Signature::sign(&self.keystore, BCSV_KEY_TYPE, &public_key, &payload)?;
-///     let address = Signature::public_to_address(&public_key);
-///     
-///     generic::UncheckedExtrinsic::new_signed(function, address, signature, extra)
-/// }
-/// ```
-///
 /// ## Getting Public Keys
 /// ```ignore
 /// pub fn caller_pub_key<S: KeyTypeOperations>(keystore: KeystorePtr) -> S::Public {
@@ -269,7 +276,7 @@ pub trait KeyTypeOperations: Sized {
     /// For example:
     /// - `sr25519::Public` for sr25519 signatures
     /// - `ecdsa::Public` for ECDSA signatures
-    type Public;
+    type Public: Debug + Send;
 
     /// The address type used to identify accounts on-chain.
     ///
@@ -355,7 +362,7 @@ pub trait KeyTypeOperations: Sized {
 ///
 /// # Required Traits
 ///
-/// Implementors must also implement `TransactionExtension<Call>` which provides the core
+/// Implementers must also implement `TransactionExtension<Call>` which provides the core
 /// extension functionality including validation and metadata generation.
 ///
 /// # Usage
