@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StorageHub MetaMask Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 50px;
+        }
+
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin: 20px 0;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>StorageHub MetaMask Test</h1>
+
+    <button id="connect">Connect Wallet</button>
+    <button id="sign" disabled>Sign Message</button>
+
+    <div id="status">Ready to connect</div>
+    <div id="account"></div>
+    <div id="signature"></div>
+
+    <script>
+        let connectedAccount = null;
+
+        document.getElementById('connect').onclick = async () => {
+            try {
+                const accounts = await window.ethereum.request({
+                    method: 'eth_requestAccounts'
+                });
+                connectedAccount = accounts[0];
+                document.getElementById('status').textContent = '✅ Connected to MetaMask';
+                document.getElementById('account').textContent = `Account: ${connectedAccount}`;
+                document.getElementById('sign').disabled = false;
+            } catch (error) {
+                document.getElementById('status').textContent = '❌ Connection failed';
+                console.error(error);
+            }
+        };
+
+        document.getElementById('sign').onclick = async () => {
+            try {
+                const message = "StorageHub rocks!";
+                document.getElementById('status').textContent = '⏳ Signing message...';
+
+                const signature = await window.ethereum.request({
+                    method: 'personal_sign',
+                    params: [message, connectedAccount],
+                });
+
+                document.getElementById('status').textContent = '✅ Message signed successfully!';
+                console.log('Signature:', signature);
+                // Expose signature for Playwright to read
+                window.__lastSignature = signature;
+                const sigEl = document.getElementById('signature');
+                if (sigEl) sigEl.textContent = `Signature: ${signature}`;
+            } catch (error) {
+                document.getElementById('status').textContent = '❌ Signing failed';
+                console.error(error);
+            }
+        };
+    </script>
+</body>
+
+</html>
