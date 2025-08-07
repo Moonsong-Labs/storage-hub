@@ -85,7 +85,7 @@ where
     }
 
     pub fn with_remote_file_config(mut self, config: RemoteFileConfig) -> Self {
-        self.remote_file_config = config;
+        self.config.remote_file = config;
         self
     }
 }

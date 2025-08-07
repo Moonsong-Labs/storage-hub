@@ -240,7 +240,6 @@ where
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
-            remote_file,
             ..
         }) => {
             info!(

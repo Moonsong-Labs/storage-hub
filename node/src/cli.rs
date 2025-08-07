@@ -480,7 +480,7 @@ impl ProviderConfigurations {
             storage_path: self.storage_path.clone(),
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
-            rpc_config: Some(rpc_config),
+            rpc_config: rpc_config,
             msp_charging_period: self.msp_charging_period,
             msp_charge_fees,
             msp_move_bucket,
@@ -490,7 +490,6 @@ impl ProviderConfigurations {
             bsp_submit_proof,
             blockchain_service,
             maintenance_mode: self.maintenance_mode,
-            remote_file: Default::default(),
         }
     }
 }
