@@ -104,7 +104,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
 
     // Wait until the BSP detects that it has to increase its capacity to be able to volunteer.
     await userApi.docker.waitForLog({
-      containerName: "docker-sh-bsp-1",
+      containerName: "storage-hub-sh-bsp-1",
       searchString: "Insufficient storage capacity to volunteer for file key"
     });
 
@@ -282,7 +282,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
 
     // Wait until the BSP first detects that it has to increase its capacity to be able to volunteer.
     await userApi.docker.waitForLog({
-      containerName: "docker-sh-bsp-1",
+      containerName: "storage-hub-sh-bsp-1",
       searchString: "Insufficient storage capacity to volunteer for file key"
     });
 
@@ -348,7 +348,7 @@ describeBspNet("BSPNet: Change capacity tests.", ({ before, it, createUserApi })
     await userApi.wait.bspCatchUpToChainTip(bspTwoApi);
 
     // Stop the other BSP so it doesn't volunteer for the files.
-    await userApi.docker.pauseContainer("docker-sh-bsp-1");
+    await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
 
     // Issue the first storage request. The new BSP should have enough capacity to volunteer for it.
     const source1 = "res/cloud.jpg";

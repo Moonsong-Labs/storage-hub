@@ -5,41 +5,46 @@ use std::{cmp::max, sync::Arc, vec};
 
 use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
-use polkadot_runtime_common::BlockHashCount;
-use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
-use sc_network::Multiaddr;
-use sp_api::ProvideRuntimeApi;
-use sp_blockchain::{HashAndNumber, TreeRoute};
-use sp_core::{Blake2Hasher, Hasher, H256};
-use sp_keystore::KeystorePtr;
-use sp_runtime::{
-    generic::{self, SignedPayload},
-    traits::Zero,
-    AccountId32, SaturatedConversion,
-};
-use substrate_frame_rpc_system::AccountNonceApi;
-
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
 };
+use polkadot_runtime_common::BlockHashCount;
+use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
+use sc_network::Multiaddr;
 use shc_actors_framework::actor::Actor;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
         get_provider_id_from_keystore, GetProviderIdError,
     },
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
+        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, ParachainClient,
+        ProofsDealerProviderId, StorageProviderId, TrieAddMutation, TrieMutation,
+        TrieRemoveMutation, BCSV_KEY_TYPE,
     },
+};
+use shc_common::{
+    traits::{
+        ExtensionOperations, KeyTypeOperations, StorageEnableApiCollection, StorageEnableRuntimeApi,
+    },
+    types::Tip,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
-use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
+use sp_api::ProvideRuntimeApi;
+use sp_blockchain::{HashAndNumber, TreeRoute};
+use sp_core::{Blake2Hasher, Hasher, H256};
+use sp_keystore::KeystorePtr;
+use sp_runtime::{
+    generic::{self, SignedPayload},
+    traits::{Dispatchable, TransactionExtension, Zero},
+    AccountId32, MultiSignature, SaturatedConversion,
+};
+use storage_hub_runtime::{Address, RuntimeCall, RuntimeEvent, SignedExtra};
+use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{
     events::{
@@ -49,7 +54,7 @@ use crate::{
     handler::LOG_TARGET,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
-        NewBlockNotificationKind, SendExtrinsicOptions, Tip,
+        NewBlockNotificationKind, SendExtrinsicOptions,
     },
     BlockchainService,
 };
@@ -356,12 +361,20 @@ where
         }
     }
 
-    /// Get the current account nonce on-chain.
-    pub(crate) fn account_nonce(&mut self, block_hash: &H256) -> u32 {
-        let pub_key = Self::caller_pub_key(self.keystore.clone());
+    /// Get the current account nonce on-chain for a generic signature type.
+    pub(crate) fn account_nonce<S>(&self, block_hash: &H256) -> u32
+    where
+        S: KeyTypeOperations<Address = Address>,
+    {
+        let pub_key = Self::caller_pub_key::<S>(self.keystore.clone());
+        let account_id = match S::public_to_address(&pub_key) {
+            // TODO: Once the BlockchainService is properly abstracted from the Address type, this will be removed.
+            Address::Id(account_id) => account_id,
+            _ => panic!("Public key is not an AccountId32"),
+        };
         self.client
             .runtime_api()
-            .account_nonce(*block_hash, pub_key.into())
+            .account_nonce(*block_hash, account_id)
             .expect("Fetching account nonce works; qed")
     }
 
@@ -369,7 +382,7 @@ where
     ///
     /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
     pub(crate) fn sync_nonce(&mut self, block_hash: &H256) {
-        let latest_nonce = self.account_nonce(block_hash);
+        let latest_nonce = self.account_nonce::<MultiSignature>(block_hash);
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
         }
@@ -463,11 +476,17 @@ where
         // Use the highest valid nonce.
         let nonce = max(
             options.nonce().unwrap_or(self.nonce_counter),
-            self.account_nonce(&block_hash),
+            self.account_nonce::<MultiSignature>(&block_hash),
         );
 
         // Construct the extrinsic.
-        let extrinsic = self.construct_extrinsic(self.client.clone(), call, nonce, options.tip());
+        let extrinsic = self
+            .construct_extrinsic::<Address, RuntimeCall, MultiSignature, SignedExtra>(
+                self.client.clone(),
+                call,
+                nonce,
+                options.tip(),
+            );
 
         // Generate a unique ID for this query.
         let id_hash = Blake2Hasher::hash(&extrinsic.encode());
@@ -513,14 +532,21 @@ where
         })
     }
 
-    /// Construct an extrinsic that can be applied to the runtime.
-    pub fn construct_extrinsic(
+    /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
+    pub fn construct_extrinsic<Address, Call, Signature, Extension>(
         &self,
         client: Arc<ParachainClient<RuntimeApi>>,
-        function: impl Into<storage_hub_runtime::RuntimeCall>,
+        function: impl Into<Call>,
         nonce: u32,
         tip: Tip,
-    ) -> UncheckedExtrinsic {
+    ) -> generic::UncheckedExtrinsic<Address, Call, Signature, Extension>
+    where
+        Signature: KeyTypeOperations<Address = Address>,
+        // TODO: Consider removing the `Hash` constraint from `ExtensionOperations`.
+        Extension:
+            TransactionExtension<Call> + ExtensionOperations<Call, Hash = H256> + Encode + Clone,
+        Call: Encode + Dispatchable + Clone,
+    {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
         let current_block = client.info().best_number.saturated_into();
@@ -532,65 +558,36 @@ where
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
-        let extra: SignedExtra = (
-            frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(generic::Era::mortal(
-                period,
-                current_block,
-            )),
-            frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(nonce),
-            frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
-            tip,
-            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
-                storage_hub_runtime::Runtime,
-            >::new(),
-            frame_metadata_hash_extension::CheckMetadataHash::new(false),
-        );
 
-        let raw_payload = SignedPayload::from_raw(
-            function.clone(),
-            extra.clone(),
-            (
-                (),
-                storage_hub_runtime::VERSION.spec_version,
-                storage_hub_runtime::VERSION.transaction_version,
-                genesis_block,
-                current_block_hash,
-                (),
-                (),
-                (),
-                (),
-                None,
-            ),
-        );
+        let minimal_extra =
+            MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
+        let extra: Extension = Extension::from_minimal_extension(minimal_extra);
+        let implicit =
+            <Extension as ExtensionOperations<Call>>::implicit(genesis_block, current_block_hash);
 
-        let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
+        let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
+
+        let caller_pub_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload
-            .using_encoded(|e| self.keystore.sr25519_sign(BCSV_KEY_TYPE, &caller_pub_key, e))
-            .expect("The payload is always valid and should be possible to sign; qed")
-            .expect("They key type and public key are valid because we just extracted them from the keystore; qed");
+            .using_encoded(|e| Signature::sign(&self.keystore, BCSV_KEY_TYPE, &caller_pub_key, e))
+            .expect("The payload is always valid and should be possible to sign; qed");
 
         // Construct the extrinsic.
-        UncheckedExtrinsic::new_signed(
-            function.clone(),
-            storage_hub_runtime::Address::Id(<sp_core::sr25519::Public as Into<
-                storage_hub_runtime::AccountId,
-            >>::into(caller_pub_key)),
-            polkadot_primitives::Signature::Sr25519(signature),
-            extra.clone(),
+        generic::UncheckedExtrinsic::new_signed(
+            function,
+            Signature::public_to_address(&caller_pub_key),
+            signature,
+            extra,
         )
     }
 
-    // Getting signer public key.
-    pub fn caller_pub_key(keystore: KeystorePtr) -> sp_core::sr25519::Public {
-        let caller_pub_key = keystore.sr25519_public_keys(BCSV_KEY_TYPE).pop().expect(
+    // Generic function to get signer public key for any signature type
+    pub fn caller_pub_key<S: KeyTypeOperations>(keystore: KeystorePtr) -> S::Public {
+        let caller_pub_key = S::public_keys(&keystore, BCSV_KEY_TYPE).pop().expect(
             format!(
-                "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
+                "There should be at least one key in the keystore with key type '{:?}' ; qed",
                 BCSV_KEY_TYPE
             )
             .as_str(),
@@ -1142,7 +1139,11 @@ where
                 multiaddresses,
                 owner,
                 size,
-            }) if owner == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) => {
+            }) if owner
+                == AccountId32::from(Self::caller_pub_key::<MultiSignature>(
+                    self.keystore.clone(),
+                )) =>
+            {
                 // This event should only be of any use if a node is run by as a user.
                 if self.maybe_managed_provider.is_none() {
                     log::info!(

@@ -246,8 +246,8 @@ impl RemoteFileHandler for FtpFileHandler {
     }
 
     async fn download_file(&self) -> Result<Box<dyn AsyncRead + Send + Unpin>, RemoteFileError> {
-        // Create channel with buffer based on configured chunks_buffer
-        let buffered_chunks = self.config.chunks_buffer.max(1);
+        // Create channel with buffer size based on the config
+        let buffered_chunks = self.config.calculate_buffer_size();
         let (tx, rx) = mpsc::channel(buffered_chunks);
         let (error_tx, error_rx) = oneshot::channel();
 

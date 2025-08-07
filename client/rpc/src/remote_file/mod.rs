@@ -1,7 +1,15 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io::AsyncRead;
 use url::Url;
+
+pub mod factory;
+pub mod ftp;
+pub mod http;
+pub mod local;
+
+pub use factory::RemoteFileHandlerFactory;
 
 #[derive(Debug, Error)]
 pub enum RemoteFileError {
@@ -51,16 +59,19 @@ pub trait RemoteFileHandler: Send + Sync {
     ) -> Result<(), RemoteFileError>;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoteFileConfig {
     pub max_file_size: u64,
     pub connection_timeout: u64,
     pub read_timeout: u64,
     pub follow_redirects: bool,
-    pub max_redirects: u32,
+    pub max_redirects: u64,
     pub user_agent: String,
+    /// The size in bytes for reading/writing data over the wire.
+    /// This is different from the FILE_CHUNK_SIZE constant in the runtime, as it only affects file upload/download. (default: 8KB)
     pub chunk_size: usize,
-    /// Number of FILE_CHUNK_SIZE chunks to buffer (minimum 1, default 512)
+    /// Buffer size multiplier. The actual buffer size used will be chunk_size * chunks_buffer.
+    /// This allows efficient buffering of multiple chunks (minimum 1, default 512).
     pub chunks_buffer: usize,
 }
 
@@ -78,8 +89,14 @@ impl RemoteFileConfig {
             max_redirects: 10,
             user_agent: "StorageHub-Client/1.0".to_string(),
             chunk_size: 8192,   // 8KB default
-            chunks_buffer: 512, // 512 FILE_CHUNK_SIZE chunks default (512KB)
+            chunks_buffer: 512, // 512 chunks default (4MB)
         }
+    }
+
+    /// Calculate the buffer size based on chunk_size and chunks_buffer
+    /// Ensures chunk_size and chunks_buffer are at least 1 to avoid zero buffer size
+    pub fn calculate_buffer_size(&self) -> usize {
+        self.chunk_size.max(1) * self.chunks_buffer.max(1)
     }
 }
 
@@ -88,10 +105,3 @@ impl Default for RemoteFileConfig {
         Self::new(Self::DEFAULT_MAX_FILE_SIZE)
     }
 }
-
-pub mod factory;
-pub mod ftp;
-pub mod http;
-pub mod local;
-
-pub use factory::RemoteFileHandlerFactory;

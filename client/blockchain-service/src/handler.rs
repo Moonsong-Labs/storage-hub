@@ -13,7 +13,7 @@ use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{traits::Header, SaturatedConversion};
+use sp_runtime::{traits::Header, MultiSignature, SaturatedConversion};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -526,7 +526,7 @@ where
                     }
                 }
                 BlockchainServiceCommand::GetNodePublicKey { callback } => {
-                    let pub_key = Self::caller_pub_key(self.keystore.clone());
+                    let pub_key = Self::caller_pub_key::<MultiSignature>(self.keystore.clone());
                     match callback.send(Ok(pub_key)) {
                         Ok(_) => {
                             trace!(target: LOG_TARGET, "Node's public key sent successfully");
@@ -948,8 +948,9 @@ where
                 } => {
                     let current_block_hash = self.client.info().best_hash;
 
-                    let node_pub_key = maybe_node_pub_key
-                        .unwrap_or_else(|| Self::caller_pub_key(self.keystore.clone()));
+                    let node_pub_key = maybe_node_pub_key.unwrap_or_else(|| {
+                        Self::caller_pub_key::<MultiSignature>(self.keystore.clone())
+                    });
 
                     let provider_id = self
                         .client

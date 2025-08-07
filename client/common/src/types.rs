@@ -12,11 +12,13 @@ pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
 use shp_opaque::Block;
 use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
-use sp_runtime::{traits::Block as BlockT, KeyTypeId};
+use sp_runtime::{generic, traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use storage_hub_runtime::Runtime;
 use trie_db::TrieLayout;
+
+use crate::traits::ExtensionOperations;
 
 /// Size of each batch in bytes (2 MiB)
 /// This is the maximum size of a batch of chunks that can be uploaded in a single call
@@ -51,6 +53,8 @@ pub type StorageRequestMspAcceptedFileKeys =
     pallet_file_system::types::StorageRequestMspAcceptedFileKeys<Runtime>;
 pub type FileKeyWithProof = pallet_file_system::types::FileKeyWithProof<Runtime>;
 pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
+pub type FileOperationIntention = pallet_file_system::types::FileOperationIntention<Runtime>;
+pub type FileOperation = pallet_file_system::types::FileOperation;
 pub type BucketId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
 pub type ValuePropId = pallet_storage_providers::types::ValuePropId<Runtime>;
 pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
@@ -83,6 +87,7 @@ pub type StorageRequestMetadata = pallet_file_system::types::StorageRequestMetad
 pub type MaxBatchConfirmStorageRequests =
     <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
 pub type ValuePropositionWithId = pallet_storage_providers::types::ValuePropositionWithId<Runtime>;
+pub type Tip = pallet_transaction_payment::ChargeTransactionPayment<Runtime>;
 
 /// Type alias for the events vector.
 ///
@@ -213,5 +218,53 @@ impl UploadRequestId {
     pub fn next(&self) -> Self {
         static COUNTER: AtomicU64 = AtomicU64::new(1);
         UploadRequestId(COUNTER.fetch_add(1, Ordering::SeqCst))
+    }
+}
+
+pub struct MinimalExtension {
+    pub era: generic::Era,
+    pub nonce: u32,
+    pub tip: Tip,
+}
+
+impl MinimalExtension {
+    pub fn new(era: generic::Era, nonce: u32, tip: Tip) -> Self {
+        Self { era, nonce, tip }
+    }
+}
+
+//TODO: This should be moved to the runtime crate once the SH Client is abstracted
+//TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
+impl ExtensionOperations<storage_hub_runtime::RuntimeCall> for storage_hub_runtime::SignedExtra {
+    type Hash = storage_hub_runtime::Hash;
+
+    fn from_minimal_extension(minimal: MinimalExtension) -> Self {
+        (
+            frame_system::CheckNonZeroSender::<Runtime>::new(),
+            frame_system::CheckSpecVersion::<Runtime>::new(),
+            frame_system::CheckTxVersion::<Runtime>::new(),
+            frame_system::CheckGenesis::<Runtime>::new(),
+            frame_system::CheckEra::<Runtime>::from(minimal.era),
+            frame_system::CheckNonce::<Runtime>::from(minimal.nonce),
+            frame_system::CheckWeight::<Runtime>::new(),
+            minimal.tip,
+            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<Runtime>::new(),
+            frame_metadata_hash_extension::CheckMetadataHash::new(false),
+        )
+    }
+
+    fn implicit(genesis_block_hash: Self::Hash, current_block_hash: Self::Hash) -> Self::Implicit {
+        (
+            (),
+            storage_hub_runtime::VERSION.spec_version,
+            storage_hub_runtime::VERSION.transaction_version,
+            genesis_block_hash,
+            current_block_hash,
+            (),
+            (),
+            (),
+            (),
+            None,
+        )
     }
 }

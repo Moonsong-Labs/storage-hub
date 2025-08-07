@@ -224,6 +224,15 @@ impl LocalFileHandler {
 
     // TODO: This might be used when we do pagination, remove if it's not needed
     #[allow(dead_code)]
+    /// Downloads a specific portion of the file for pagination purposes.
+    ///
+    /// Note: This function uses `read_exact` because we expect the request parameters
+    /// to be correct. If the requested chunk extends beyond the available data, we
+    /// intentionally error rather than returning partial data. This ensures callers
+    /// are aware when they've requested invalid ranges.
+    ///
+    /// The "chunk" here refers to a paginated portion of the file content, not to be
+    /// confused with file trie chunks used in the storage protocol.
     async fn download_chunk(&self, offset: u64, length: u64) -> Result<Bytes, RemoteFileError> {
         self.check_file_valid()?;
 
@@ -257,9 +266,8 @@ impl RemoteFileHandler for LocalFileHandler {
 
         let file = File::open(&self.absolute_file_path).await?;
 
-        // Wrap file in a buffered reader with buffer size based on chunks_buffer
-        let buffer_size =
-            self.config.chunks_buffer.max(1) * shc_common::types::FILE_CHUNK_SIZE as usize;
+        // Wrap file in a buffered reader with buffer size based on the config
+        let buffer_size = self.config.calculate_buffer_size();
         let buffered_reader = tokio::io::BufReader::with_capacity(buffer_size, file);
         Ok(Box::new(buffered_reader))
     }
@@ -270,7 +278,7 @@ impl RemoteFileHandler for LocalFileHandler {
 
     async fn upload_file(
         &self,
-        mut data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
+        data: Box<dyn tokio::io::AsyncRead + Send + Unpin>,
         _size: u64,
         _content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
@@ -287,7 +295,11 @@ impl RemoteFileHandler for LocalFileHandler {
             .await
             .map_err(Self::map_io_error)?;
 
-        io::copy(&mut data, &mut file)
+        // Wrap the input data in a buffered reader for consistent chunking
+        let buffer_size = self.config.calculate_buffer_size();
+        let mut buf_reader = tokio::io::BufReader::with_capacity(buffer_size, data);
+
+        io::copy_buf(&mut buf_reader, &mut file)
             .await
             .map_err(Self::map_io_error)?;
 

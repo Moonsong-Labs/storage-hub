@@ -36,7 +36,6 @@ impl RemoteFileHandlerFactory {
     ) -> Result<(Arc<dyn RemoteFileHandler>, Url), RemoteFileError> {
         // Try to parse as URL
         if let Ok(url) = Url::parse(url_str) {
-            // It's a valid URL, use the normal create() method
             let handler = Self::create(&url, config)?;
             return Ok((handler, url));
         }

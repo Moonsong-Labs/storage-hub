@@ -155,7 +155,7 @@ export const addCopypartyContainer = async (options?: {
 };
 
 export const checkBspForFile = async (filePath: string) => {
-  const containerId = "docker-sh-bsp-1";
+  const containerId = "storage-hub-sh-bsp-1";
   const loc = path.join("/storage", filePath);
 
   for (let i = 0; i < 100; i++) {
@@ -171,7 +171,7 @@ export const checkBspForFile = async (filePath: string) => {
 };
 
 export const checkFileChecksum = async (filePath: string) => {
-  const containerId = "docker-sh-bsp-1";
+  const containerId = "storage-hub-sh-bsp-1";
   const loc = path.join("/storage", filePath);
   const output = execSync(`docker exec ${containerId} sha256sum ${loc}`);
   return output.toString().split(" ")[0];
@@ -223,12 +223,13 @@ const addContainer = async (
     })
   ).flatMap(({ Command }) => Command).length;
 
-  const p2pPort = 30350 + containerCount;
+  // Use allContainersCount for p2p port to avoid conflicts between BSPs and MSPs
+  const p2pPort = 30350 + allContainersCount;
   const rpcPort = 9888 + allContainersCount * 7;
-  const containerName = options?.name || `docker-sh-${providerType}-${containerCount + 1}`;
+  const containerName = options?.name || `storage-hub-sh-${providerType}-${containerCount + 1}`;
 
   // Get bootnode from docker args
-  const { Args } = await docker.getContainer("docker-sh-user-1").inspect();
+  const { Args } = await docker.getContainer("storage-hub-sh-user-1").inspect();
   const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
 
   assert(bootNodeArg, "No bootnode found in docker args");
@@ -240,9 +241,15 @@ const addContainer = async (
     Image: DOCKER_IMAGE,
     name: containerName,
     platform: "linux/amd64",
+    Labels: {
+      "com.docker.compose.project": "storage-hub",
+      "com.docker.compose.service": containerName,
+      "com.docker.compose.container-number": (containerCount + 1).toString(),
+      "com.docker.compose.oneoff": "False"
+    },
     NetworkingConfig: {
       EndpointsConfig: {
-        docker_default: {}
+        "storage-hub_default": {}
       }
     },
     HostConfig: {
@@ -453,6 +460,79 @@ export const waitForLog = async (options: {
             reject(
               new Error(
                 `Timeout of ${options.timeout}ms exceeded while waiting for log ${options.searchString}`
+              )
+            );
+          }, options.timeout);
+        }
+      }
+    );
+  });
+};
+
+export const waitForAnyLog = async (options: {
+  searchStrings: string[];
+  containerName: string;
+  timeout?: number;
+  tail?: number;
+}): Promise<{ log: string; matchedString: string }> => {
+  return new Promise((resolve, reject) => {
+    const docker = new Docker();
+    const container = docker.getContainer(options.containerName);
+
+    container.logs(
+      { follow: true, stdout: true, stderr: true, tail: options.tail, timestamps: false },
+      (err, stream) => {
+        if (err) {
+          return reject(err);
+        }
+
+        if (stream === undefined) {
+          return reject(new Error("No stream returned."));
+        }
+
+        const stdout = new PassThrough();
+        const stderr = new PassThrough();
+
+        docker.modem.demuxStream(stream, stdout, stderr);
+
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+        const cleanup = () => {
+          (stream as Readable).destroy();
+          stdout.destroy();
+          stderr.destroy();
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+        };
+
+        const onData = (chunk: Buffer) => {
+          const log = chunk.toString("utf8");
+
+          // Check if any of the search strings match
+          for (const searchString of options.searchStrings) {
+            if (log.includes(searchString)) {
+              cleanup();
+              resolve({ log, matchedString: searchString });
+              return;
+            }
+          }
+        };
+
+        stdout.on("data", onData);
+        stderr.on("data", onData);
+
+        stream.on("error", (err) => {
+          cleanup();
+          reject(err);
+        });
+
+        if (options.timeout) {
+          timeoutHandle = setTimeout(() => {
+            cleanup();
+            reject(
+              new Error(
+                `Timeout of ${options.timeout}ms exceeded while waiting for any of these logs: ${options.searchStrings.join(", ")}`
               )
             );
           }, options.timeout);

@@ -53,20 +53,13 @@ impl HttpFileHandler {
         }
     }
 
-    fn get_content_length(response: &reqwest::Response) -> Result<u64, RemoteFileError> {
+    fn get_content_length(response: &reqwest::Response) -> Option<u64> {
         // We need to access the header directly as the `content_length` method determines it from the response body
-        match response
+        response
             .headers()
             .get("content-length")
-            .ok_or_else(|| RemoteFileError::Other("Content-Length header missing".to_string()))?
-            .to_str()
-            .map(|val| val.parse::<u64>())
-        {
-            Ok(Ok(val)) => Ok(val),
-            _ => Err(RemoteFileError::Other(
-                "Invalid Content-Length header value".to_string(),
-            )),
-        }
+            .and_then(|val| val.to_str().ok())
+            .and_then(|val| val.parse::<u64>().ok())
     }
 
     fn validate_file_size(&self, size: u64) -> Result<(), RemoteFileError> {
@@ -97,10 +90,7 @@ impl HttpFileHandler {
         // Optionally verify the Content-Range header
         if let Some(content_range) = response.headers().get(header::CONTENT_RANGE) {
             let content_range_str = content_range.to_str().unwrap_or("");
-            if let Err(e) = self.parse_and_validate_content_range(content_range_str, offset, length)
-            {
-                return Err(e);
-            }
+            self.parse_and_validate_content_range(content_range_str, offset, length)?;
         }
         // Note: We don't error if Content-Range header is missing as some servers
         // may return 206 without it
@@ -191,11 +181,8 @@ impl RemoteFileHandler for HttpFileHandler {
             .map_err(Self::map_request_error)?;
 
         match response.status() {
-            status if status.is_success() => {
-                let content_length = Self::get_content_length(&response)?;
-
-                Ok(content_length)
-            }
+            status if status.is_success() => Self::get_content_length(&response)
+                .ok_or_else(|| RemoteFileError::Other("Content-Length header missing".to_string())),
             status => Err(Self::status_to_error(status)),
         }
     }
@@ -210,17 +197,16 @@ impl RemoteFileHandler for HttpFileHandler {
 
         match response.status() {
             status if status.is_success() => {
-                Self::get_content_length(&response)
-                    .and_then(|size| self.validate_file_size(size))?;
+                // Only validate file size if content-length header is present
+                if let Some(size) = Self::get_content_length(&response) {
+                    self.validate_file_size(size)?;
+                }
 
                 let stream = response.bytes_stream();
-                let reader = StreamReader::new(
-                    stream.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)),
-                );
+                let reader = StreamReader::new(stream.map_err(std::io::Error::other));
 
-                // Wrap the reader in a buffered reader with buffer size based on chunks_buffer
-                let buffer_size =
-                    self.config.chunks_buffer.max(1) * shc_common::types::FILE_CHUNK_SIZE as usize;
+                // Wrap the reader in a buffered reader with buffer size based on the config
+                let buffer_size = self.config.calculate_buffer_size();
                 let buffered_reader = tokio::io::BufReader::with_capacity(buffer_size, reader);
 
                 Ok(Box::new(buffered_reader) as Box<dyn AsyncRead + Send + Unpin>)
@@ -239,7 +225,8 @@ impl RemoteFileHandler for HttpFileHandler {
         size: u64,
         content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        let stream = ReaderStream::new(data);
+        let buffer_size = self.config.calculate_buffer_size();
+        let stream = ReaderStream::with_capacity(data, buffer_size);
         let body = Body::wrap_stream(stream);
 
         // Upload to the configured base URL
@@ -405,6 +392,35 @@ mod tests {
         let data = handler.download().await.unwrap();
 
         assert_eq!(data.as_ref(), content);
+    }
+
+    #[tokio::test]
+    async fn test_download_file_without_content_length() {
+        let mut server = Server::new_async().await;
+        let content = b"Streaming content without size";
+
+        // Mock a response without content-length header using chunked body
+        // This ensures mockito doesn't auto-add content-length
+        let _m = server
+            .mock("GET", "/stream.txt")
+            .with_status(200)
+            .with_header("transfer-encoding", "chunked")
+            .with_chunked_body(move |w| {
+                w.write_all(content)?;
+                Ok(())
+            })
+            .create();
+
+        let url = Url::parse(&format!("{}/stream.txt", server.url())).unwrap();
+        let handler = create_test_handler(&url);
+
+        // download_file should succeed without content-length
+        let mut reader = handler.download_file().await.unwrap();
+
+        let mut buffer = Vec::new();
+        reader.read_to_end(&mut buffer).await.unwrap();
+
+        assert_eq!(&buffer, content);
     }
 
     #[tokio::test]

@@ -227,6 +227,7 @@ where
 {
     match provider_options {
         Some(ProviderOptions {
+            rpc_config,
             provider_type,
             storage_path,
             max_storage_capacity,
@@ -291,11 +292,10 @@ where
             }
 
             // Get the RPC configuration to use for this StorageHub node client.
-            let rpc_config = storage_hub_builder
-                .create_rpc_config(keystore)
-                .with_remote_file_config(remote_file.clone().into());
+            let storage_hub_client_rpc_config = storage_hub_builder
+                .create_rpc_config(keystore, rpc_config.clone().unwrap_or_default());
 
-            Some((storage_hub_builder, rpc_config))
+            Some((storage_hub_builder, storage_hub_client_rpc_config))
         }
         None => None,
     }

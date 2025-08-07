@@ -45,3 +45,4 @@ config.toml
 .worktrees/
 .cursorindexingignore
 .specstory/
+.claude/

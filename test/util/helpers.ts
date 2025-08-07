@@ -98,7 +98,7 @@ export const cleanupEnvironment = async (verbose = false) => {
   );
 
   const postgresContainer = allContainers.find((container) =>
-    container.Names.some((name) => name.includes("docker-sh-postgres-1"))
+    container.Names.some((name) => name.includes("storage-hub-sh-postgres-1"))
   );
 
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
