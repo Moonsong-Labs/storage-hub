@@ -31,6 +31,8 @@ frame-benchmarking = { workspace = true }
 frame-metadata-hash-extension = { workspace = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
+pallet-balances = { workspace = true }
+pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-client-api = { workspace = true }
 sc-executor = { workspace = true }
@@ -76,7 +78,6 @@ pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
-pallet-transaction-payment = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -103,6 +104,7 @@ std = [
 	"shp-file-metadata/std",
 	"shp-forest-verifier/std",
 	"shp-traits/std",
+	"pallet-balances/std",
 	"pallet-file-system/std",
 	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
@@ -112,6 +114,7 @@ std = [
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
+	"pallet-balances/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",

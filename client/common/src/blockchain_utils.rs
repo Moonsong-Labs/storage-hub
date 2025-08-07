@@ -61,7 +61,12 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
 /// Attempt to convert BoundedVec of BoundedVecs of bytes.
 ///
 /// Returns a list of [`Multiaddr`] objects that have successfully been parsed from the raw bytes.
-pub fn convert_raw_multiaddresses_to_multiaddr(multiaddresses: Multiaddresses) -> Vec<Multiaddr> {
+pub fn convert_raw_multiaddresses_to_multiaddr<Runtime>(
+    multiaddresses: Multiaddresses<Runtime>,
+) -> Vec<Multiaddr>
+where
+    Runtime: StorageEnableRuntime,
+{
     let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
     for raw_multiaddr in multiaddresses.into_iter() {
         if let Some(multiaddress) = convert_raw_multiaddress_to_multiaddr(&raw_multiaddr) {
@@ -109,7 +114,7 @@ pub fn get_provider_id_from_keystore<Runtime>(
     client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
     keystore: &sp_keystore::KeystorePtr,
     block_hash: &H256,
-) -> Result<Option<StorageProviderId>, GetProviderIdError>
+) -> Result<Option<StorageProviderId<Runtime>>, GetProviderIdError>
 where
     Runtime: StorageEnableRuntime,
 {

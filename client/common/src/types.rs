@@ -1,5 +1,6 @@
 use std::{
     fmt::Debug,
+    marker::PhantomData,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -10,12 +11,10 @@ use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
 use shp_opaque::Block;
-use shp_traits::CommitmentVerifier;
 use sp_core::Hasher;
 use sp_runtime::{generic, traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
-use storage_hub_runtime::Runtime;
 use trie_db::TrieLayout;
 
 use crate::traits::{ExtensionOperations, StorageEnableRuntime};
@@ -29,71 +28,89 @@ pub const BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE: usize = 2 * 1024 * 1024;
 pub type HashT<T> = <T as TrieLayout>::Hash;
 pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
-/// Following types are shared between the client and the runtime.
-/// They are defined as generic types in the runtime and made concrete using the runtime config
-/// here to be used by the node/client.
-pub type AccountId<Runtime> = <Runtime as frame_system::Config>::AccountId;
-pub type FileKeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
-pub type FileKeyProof = <FileKeyVerifier as CommitmentVerifier>::Proof;
+// The following are concrete types that are defined in the pallets/primitives.
+// These are type aliases for convenience to use in the SH Client.
 pub type Hash = shp_file_metadata::Hash<H_LENGTH>;
 pub type Fingerprint = shp_file_metadata::Fingerprint<H_LENGTH>;
 pub type FileMetadata =
     shp_file_metadata::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
 pub type FileKey = shp_file_metadata::FileKey<H_LENGTH>;
-pub type BlockNumber = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
-pub type TickNumber = pallet_file_system::types::TickNumber<Runtime>;
-pub type StorageData = pallet_file_system::types::StorageDataUnit<Runtime>;
-pub type FileLocation = pallet_file_system::types::FileLocation<Runtime>;
-pub type StorageRequestMspBucketResponse =
-    pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;
-pub type StorageRequestMspResponse = pallet_file_system::types::StorageRequestMspResponse<Runtime>;
-pub type MaxUsersToCharge = pallet_payment_streams::types::MaxUsersToChargeFor<Runtime>;
 pub type RejectedStorageRequestReason = pallet_file_system::types::RejectedStorageRequestReason;
-pub type RejectedStorageRequest = pallet_file_system::types::RejectedStorageRequest<Runtime>;
-pub type StorageRequestMspAcceptedFileKeys =
-    pallet_file_system::types::StorageRequestMspAcceptedFileKeys<Runtime>;
-pub type FileKeyWithProof = pallet_file_system::types::FileKeyWithProof<Runtime>;
-pub type PeerIds = pallet_file_system::types::PeerIds<Runtime>;
-pub type FileOperationIntention = pallet_file_system::types::FileOperationIntention<Runtime>;
 pub type FileOperation = pallet_file_system::types::FileOperation;
-pub type BucketId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
-pub type ValuePropId = pallet_storage_providers::types::ValuePropId<Runtime>;
-pub type StorageProviderId = pallet_storage_providers::types::StorageProviderId<Runtime>;
-pub type BackupStorageProviderId =
-    pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
-pub type BackupStorageProviderInfo =
-    pallet_storage_providers::types::BackupStorageProvider<Runtime>;
-pub type MainStorageProviderId = pallet_storage_providers::types::MainStorageProviderId<Runtime>;
-pub type ProviderId = pallet_storage_providers::types::ProviderIdFor<Runtime>;
-pub type ProofsDealerProviderId = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
-pub type Multiaddresses = pallet_storage_providers::types::Multiaddresses<Runtime>;
-pub type MultiAddress = pallet_storage_providers::types::MultiAddress<Runtime>;
-pub type RandomnessOutput = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
-pub type ForestLeaf = pallet_proofs_dealer::types::KeyFor<Runtime>;
-pub type ForestRoot = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
-pub type CustomChallenge = pallet_proofs_dealer::types::CustomChallenge<Runtime>;
 pub type TrieMutation = shp_traits::TrieMutation;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
 pub type TrieAddMutation = shp_traits::TrieAddMutation;
-pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
-pub type StorageProof = pallet_proofs_dealer::types::Proof<Runtime>;
-pub type ForestVerifierProof = pallet_proofs_dealer::types::ForestVerifierProofFor<Runtime>;
-pub type KeyProof = pallet_proofs_dealer::types::KeyProof<Runtime>;
-pub type KeyProofs = BTreeMap<ForestLeaf, KeyProof>;
-pub type Balance = pallet_storage_providers::types::BalanceOf<Runtime>;
+// TODO: Remove dependency from `storage_hub_runtime` here. Maybe move it to primitives.
 pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
 pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
-pub type PeerId = pallet_file_system::types::PeerId<Runtime>;
-pub type StorageRequestMetadata = pallet_file_system::types::StorageRequestMetadata<Runtime>;
-pub type MaxBatchConfirmStorageRequests =
+pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
+pub type FileKeyVerifier = shp_file_key_verifier::FileKeyVerifier<
+    StorageProofsMerkleTrieLayout,
+    H_LENGTH,
+    FILE_CHUNK_SIZE,
+    FILE_SIZE_TO_CHALLENGES,
+>;
+pub type FileKeyProof =
+    shp_file_key_verifier::types::FileKeyProof<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
+pub type ForestVerifierProof =
+    shp_forest_verifier::ForestVerifier<StorageProofsMerkleTrieLayout, H_LENGTH>;
+
+// The following are abstracted types that depend on a runtime implementing the `Config`
+// traits of the various pallets.
+// These are type aliases for convenience to use in the SH Client.
+pub type AccountId<Runtime> = <Runtime as frame_system::Config>::AccountId;
+pub type BlockNumber<Runtime> = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
+pub type TickNumber<Runtime> = pallet_file_system::types::TickNumber<Runtime>;
+pub type StorageDataUnit<Runtime> = pallet_file_system::types::StorageDataUnit<Runtime>;
+pub type FileLocation<Runtime> = pallet_file_system::types::FileLocation<Runtime>;
+pub type StorageRequestMspBucketResponse<Runtime> =
+    pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;
+pub type StorageRequestMspResponse<Runtime> =
+    pallet_file_system::types::StorageRequestMspResponse<Runtime>;
+pub type MaxUsersToCharge<Runtime> = pallet_payment_streams::types::MaxUsersToChargeFor<Runtime>;
+pub type RejectedStorageRequest<Runtime> =
+    pallet_file_system::types::RejectedStorageRequest<Runtime>;
+pub type StorageRequestMspAcceptedFileKeys<Runtime> =
+    pallet_file_system::types::StorageRequestMspAcceptedFileKeys<Runtime>;
+pub type FileKeyWithProof<Runtime> = pallet_file_system::types::FileKeyWithProof<Runtime>;
+pub type PeerIds<Runtime> = pallet_file_system::types::PeerIds<Runtime>;
+pub type FileOperationIntention<Runtime> =
+    pallet_file_system::types::FileOperationIntention<Runtime>;
+pub type BucketId<Runtime> = pallet_storage_providers::types::ProviderIdFor<Runtime>;
+pub type ValuePropId<Runtime> = pallet_storage_providers::types::ValuePropId<Runtime>;
+pub type StorageProviderId<Runtime> = pallet_storage_providers::types::StorageProviderId<Runtime>;
+pub type BackupStorageProviderId<Runtime> =
+    pallet_storage_providers::types::BackupStorageProviderId<Runtime>;
+pub type BackupStorageProviderInfo<Runtime> =
+    pallet_storage_providers::types::BackupStorageProvider<Runtime>;
+pub type MainStorageProviderId<Runtime> =
+    pallet_storage_providers::types::MainStorageProviderId<Runtime>;
+pub type ProviderId<Runtime> = pallet_storage_providers::types::ProviderIdFor<Runtime>;
+pub type ProofsDealerProviderId<Runtime> = pallet_proofs_dealer::types::ProviderIdFor<Runtime>;
+pub type Multiaddresses<Runtime> = pallet_storage_providers::types::Multiaddresses<Runtime>;
+pub type MultiAddress<Runtime> = pallet_storage_providers::types::MultiAddress<Runtime>;
+pub type RandomnessOutput<Runtime> = pallet_proofs_dealer::types::RandomnessOutputFor<Runtime>;
+pub type ForestLeaf<Runtime> = pallet_proofs_dealer::types::KeyFor<Runtime>;
+pub type ForestRoot<Runtime> = pallet_proofs_dealer::types::ForestRootFor<Runtime>;
+pub type CustomChallenge<Runtime> = pallet_proofs_dealer::types::CustomChallenge<Runtime>;
+pub type StorageProof<Runtime> = pallet_proofs_dealer::types::Proof<Runtime>;
+pub type KeyProof<Runtime> = pallet_proofs_dealer::types::KeyProof<Runtime>;
+pub type KeyProofs<Runtime> = BTreeMap<ForestLeaf<Runtime>, KeyProof<Runtime>>;
+pub type Balance<Runtime> = <Runtime as pallet_balances::Config>::Balance;
+pub type PeerId<Runtime> = pallet_file_system::types::PeerId<Runtime>;
+pub type StorageRequestMetadata<Runtime> =
+    pallet_file_system::types::StorageRequestMetadata<Runtime>;
+pub type MaxBatchConfirmStorageRequests<Runtime> =
     <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
-pub type ValuePropositionWithId = pallet_storage_providers::types::ValuePropositionWithId<Runtime>;
-pub type Tip = pallet_transaction_payment::ChargeTransactionPayment<Runtime>;
+pub type ValuePropositionWithId<Runtime> =
+    pallet_storage_providers::types::ValuePropositionWithId<Runtime>;
+pub type Tip<Runtime> = pallet_transaction_payment::ChargeTransactionPayment<Runtime>;
 
 /// Type alias for the events vector.
 ///
 /// The events vector is a storage element in the FRAME system pallet, which stores all the events
 /// that have occurred in a block. This is syntactic sugar to make the code more readable.
+/// TODO: Remove dependency from `storage_hub_runtime` here.
 pub type StorageHubEventsVec = Vec<
     Box<
         EventRecord<
@@ -165,14 +182,22 @@ impl<T: TrieLayout> ForestProof<T> {
 }
 
 #[derive(Clone, Encode, Decode)]
-pub struct FileProof {
+pub struct FileProof<Runtime>
+where
+    Runtime: Clone,
+{
     /// The compact proof.
     pub proof: CompactProof,
     /// The root hash of the trie, also known as the fingerprint of the file.
     pub fingerprint: Fingerprint,
+
+    _runtime: PhantomData<Runtime>,
 }
 
-impl FileProof {
+impl<Runtime> FileProof<Runtime>
+where
+    Runtime: pallet_proofs_dealer::Config,
+{
     pub fn to_file_key_proof(
         &self,
         file_metadata: FileMetadata,
@@ -222,14 +247,20 @@ impl UploadRequestId {
     }
 }
 
-pub struct MinimalExtension {
+pub struct MinimalExtension<Runtime>
+where
+    Runtime: pallet_transaction_payment::Config,
+{
     pub era: generic::Era,
     pub nonce: u32,
-    pub tip: Tip,
+    pub tip: Tip<Runtime>,
 }
 
-impl MinimalExtension {
-    pub fn new(era: generic::Era, nonce: u32, tip: Tip) -> Self {
+impl<Runtime> MinimalExtension<Runtime>
+where
+    Runtime: pallet_transaction_payment::Config,
+{
+    pub fn new(era: generic::Era, nonce: u32, tip: Tip<Runtime>) -> Self {
         Self { era, nonce, tip }
     }
 }
@@ -246,20 +277,24 @@ impl StorageEnableRuntime for storage_hub_runtime::Runtime {
 
 //TODO: This should be moved to the runtime crate once the SH Client is abstracted
 //TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
-impl ExtensionOperations<storage_hub_runtime::RuntimeCall> for storage_hub_runtime::SignedExtra {
+impl ExtensionOperations<storage_hub_runtime::RuntimeCall, storage_hub_runtime::Runtime>
+    for storage_hub_runtime::SignedExtra
+{
     type Hash = storage_hub_runtime::Hash;
 
-    fn from_minimal_extension(minimal: MinimalExtension) -> Self {
+    fn from_minimal_extension(minimal: MinimalExtension<storage_hub_runtime::Runtime>) -> Self {
         (
-            frame_system::CheckNonZeroSender::<Runtime>::new(),
-            frame_system::CheckSpecVersion::<Runtime>::new(),
-            frame_system::CheckTxVersion::<Runtime>::new(),
-            frame_system::CheckGenesis::<Runtime>::new(),
-            frame_system::CheckEra::<Runtime>::from(minimal.era),
-            frame_system::CheckNonce::<Runtime>::from(minimal.nonce),
-            frame_system::CheckWeight::<Runtime>::new(),
+            frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
+            frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(minimal.era),
+            frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(minimal.nonce),
+            frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
             minimal.tip,
-            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<Runtime>::new(),
+            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
+                storage_hub_runtime::Runtime,
+            >::new(),
             frame_metadata_hash_extension::CheckMetadataHash::new(false),
         )
     }

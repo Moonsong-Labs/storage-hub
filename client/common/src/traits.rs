@@ -12,7 +12,9 @@ use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
-use sp_runtime::traits::{Dispatchable, IdentifyAccount, Member, TransactionExtension, Verify};
+use sp_runtime::traits::{
+    Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension, Verify,
+};
 
 use crate::types::*;
 
@@ -77,82 +79,90 @@ use crate::types::*;
 /// implement this trait - it's automatically available when all component APIs
 /// are implemented.
 pub trait StorageEnableApiCollection<Runtime>:
-    pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
+    pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
     + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
     + BlockBuilder<Block>
     + ProofsDealerRuntimeApi<
         Block,
-        ProofsDealerProviderId,
-        BlockNumber,
-        ForestLeaf,
-        RandomnessOutput,
-        CustomChallenge,
+        ProofsDealerProviderId<Runtime>,
+        BlockNumber<Runtime>,
+        ForestLeaf<Runtime>,
+        RandomnessOutput<Runtime>,
+        CustomChallenge<Runtime>,
     > + FileSystemRuntimeApi<
         Block,
-        BackupStorageProviderId,
-        MainStorageProviderId,
-        H256,
-        BlockNumber,
+        BackupStorageProviderId<Runtime>,
+        MainStorageProviderId<Runtime>,
+        Runtime::Hash,
+        BlockNumber<Runtime>,
         ChunkId,
-        BucketId,
-        StorageRequestMetadata,
+        BucketId<Runtime>,
+        StorageRequestMetadata<Runtime>,
     > + StorageProvidersRuntimeApi<
         Block,
-        BlockNumber,
-        BackupStorageProviderId,
-        BackupStorageProviderInfo,
-        MainStorageProviderId,
+        BlockNumber<Runtime>,
+        BackupStorageProviderId<Runtime>,
+        BackupStorageProviderInfo<Runtime>,
+        MainStorageProviderId<Runtime>,
         AccountId<Runtime>,
-        ProviderId,
-        StorageProviderId,
-        StorageData,
-        Balance,
-        BucketId,
-        Multiaddresses,
-        ValuePropositionWithId,
-    > + PaymentStreamsRuntimeApi<Block, ProviderId, Balance, AccountId<Runtime>>
+        ProviderId<Runtime>,
+        StorageProviderId<Runtime>,
+        StorageDataUnit<Runtime>,
+        Balance<Runtime>,
+        BucketId<Runtime>,
+        Multiaddresses<Runtime>,
+        ValuePropositionWithId<Runtime>,
+    > + PaymentStreamsRuntimeApi<Block, ProviderId<Runtime>, Balance<Runtime>, AccountId<Runtime>>
 where
-    Runtime: frame_system::Config,
+    Runtime: frame_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_file_system::Config
+        + pallet_balances::Config<Balance: MaybeDisplay>,
 {
 }
 
 impl<T, Runtime> StorageEnableApiCollection<Runtime> for T
 where
-    T: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
+    T: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
         + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
         + BlockBuilder<Block>
         + ProofsDealerRuntimeApi<
             Block,
-            ProofsDealerProviderId,
-            BlockNumber,
-            ForestLeaf,
-            RandomnessOutput,
-            CustomChallenge,
+            ProofsDealerProviderId<Runtime>,
+            BlockNumber<Runtime>,
+            ForestLeaf<Runtime>,
+            RandomnessOutput<Runtime>,
+            CustomChallenge<Runtime>,
         > + FileSystemRuntimeApi<
             Block,
-            BackupStorageProviderId,
-            MainStorageProviderId,
-            H256,
-            BlockNumber,
+            BackupStorageProviderId<Runtime>,
+            MainStorageProviderId<Runtime>,
+            Runtime::Hash,
+            BlockNumber<Runtime>,
             ChunkId,
-            BucketId,
-            StorageRequestMetadata,
+            BucketId<Runtime>,
+            StorageRequestMetadata<Runtime>,
         > + StorageProvidersRuntimeApi<
             Block,
-            BlockNumber,
-            BackupStorageProviderId,
-            BackupStorageProviderInfo,
-            MainStorageProviderId,
+            BlockNumber<Runtime>,
+            BackupStorageProviderId<Runtime>,
+            BackupStorageProviderInfo<Runtime>,
+            MainStorageProviderId<Runtime>,
             AccountId<Runtime>,
-            ProviderId,
-            StorageProviderId,
-            StorageData,
-            Balance,
-            BucketId,
-            Multiaddresses,
-            ValuePropositionWithId,
-        > + PaymentStreamsRuntimeApi<Block, ProviderId, Balance, AccountId<Runtime>>,
-    Runtime: frame_system::Config,
+            ProviderId<Runtime>,
+            StorageProviderId<Runtime>,
+            StorageDataUnit<Runtime>,
+            Balance<Runtime>,
+            BucketId<Runtime>,
+            Multiaddresses<Runtime>,
+            ValuePropositionWithId<Runtime>,
+        > + PaymentStreamsRuntimeApi<Block, ProviderId<Runtime>, Balance<Runtime>, AccountId<Runtime>>,
+    Runtime: frame_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_file_system::Config
+        + pallet_balances::Config<Balance: MaybeDisplay>,
 {
 }
 
@@ -188,7 +198,16 @@ impl<T> StorageEnableRuntimeApi for T where
 pub trait StorageEnableRuntime:
     // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
     // TODO: If we don't do this now, in `utils.rs` we cannot compare the `owner` field of the `AcceptedBspVolunteer` event with the caller's public key.
-    frame_system::Config<AccountId = sp_runtime::AccountId32> + Send + Sync + 'static
+    frame_system::Config<AccountId = sp_runtime::AccountId32>
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_file_system::Config
+        + pallet_transaction_payment::Config
+        + pallet_balances::Config<Balance: MaybeDisplay>
+        + Copy
+        + Send
+        + Sync
+        + 'static
 {
     /// The address format used to identify accounts in the runtime.
     /// Must support type information, encoding/decoding, and debug formatting.
@@ -224,7 +243,7 @@ pub trait StorageEnableRuntime:
         + Encode
         + TransactionExtension<Self::Call>
         // TODO: Consider removing the `Hash` constraint.
-        + ExtensionOperations<Self::Call, Hash = H256>
+        + ExtensionOperations<Self::Call, Self, Hash = H256>
         + Clone
         + core::fmt::Debug;
 
@@ -389,7 +408,11 @@ pub trait KeyTypeOperations: Sized {
 ///     )
 /// }
 /// ```
-pub trait ExtensionOperations<Call: Encode + Dispatchable>: TransactionExtension<Call> {
+pub trait ExtensionOperations<
+    Call: Encode + Dispatchable,
+    Runtime: pallet_transaction_payment::Config,
+>: TransactionExtension<Call>
+{
     /// The block hash type used by this extension.
     ///
     /// This is typically `H256` for most Substrate chains, but could vary
@@ -407,7 +430,7 @@ pub trait ExtensionOperations<Call: Encode + Dispatchable>: TransactionExtension
     ///
     /// # Returns
     /// A fully constructed extension ready for use in transaction signing
-    fn from_minimal_extension(minimal: MinimalExtension) -> Self;
+    fn from_minimal_extension(minimal: MinimalExtension<Runtime>) -> Self;
 
     /// Generates the implicit data required by this extension.
     ///
