@@ -399,7 +399,7 @@ describeBspNet(
 
       // Wait for confirmation line in docker logs.
       await bspApi.docker.waitForLog({
-        containerName: "docker-sh-bsp-1",
+        containerName: "storage-hub-sh-bsp-1",
         searchString: "New local Forest root matches the one in the block for BSP"
       });
       // Check that the file is included in the BSP's local Forest.

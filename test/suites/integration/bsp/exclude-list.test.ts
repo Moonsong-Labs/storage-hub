@@ -22,7 +22,7 @@ describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, createBsp
 
     await bspApi.assert.log({
       searchString: "Key added to the exclude list",
-      containerName: "docker-sh-bsp-1"
+      containerName: "storage-hub-sh-bsp-1"
     });
 
     const { file_metadata: FileMetadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
@@ -53,7 +53,7 @@ describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, createBsp
 
     await bspApi.assert.log({
       searchString: "Bucket is in the exclude list",
-      containerName: "docker-sh-bsp-1"
+      containerName: "storage-hub-sh-bsp-1"
     });
   });
 });
