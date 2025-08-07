@@ -205,8 +205,8 @@ impl RemoteFileHandler for HttpFileHandler {
                 let stream = response.bytes_stream();
                 let reader = StreamReader::new(stream.map_err(std::io::Error::other));
 
-                // Wrap the reader in a buffered reader with buffer size based on chunks_buffer
-                let buffer_size = self.config.chunks_buffer.max(1) * self.config.chunk_size;
+                // Wrap the reader in a buffered reader with buffer size based on the config
+                let buffer_size = self.config.calculate_buffer_size();
                 let buffered_reader = tokio::io::BufReader::with_capacity(buffer_size, reader);
 
                 Ok(Box::new(buffered_reader) as Box<dyn AsyncRead + Send + Unpin>)
@@ -225,7 +225,7 @@ impl RemoteFileHandler for HttpFileHandler {
         size: u64,
         content_type: Option<String>,
     ) -> Result<(), RemoteFileError> {
-        let buffer_size = self.config.chunk_size * self.config.chunks_buffer.max(1);
+        let buffer_size = self.config.calculate_buffer_size();
         let stream = ReaderStream::with_capacity(data, buffer_size);
         let body = Body::wrap_stream(stream);
 

@@ -92,6 +92,12 @@ impl RemoteFileConfig {
             chunks_buffer: 512, // 512 chunks default (4MB)
         }
     }
+
+    /// Calculate the buffer size based on chunk_size and chunks_buffer
+    /// Ensures chunk_size and chunks_buffer are at least 1 to avoid zero buffer size
+    pub fn calculate_buffer_size(&self) -> usize {
+        self.chunk_size.max(1) * self.chunks_buffer.max(1)
+    }
 }
 
 impl Default for RemoteFileConfig {

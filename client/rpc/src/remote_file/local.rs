@@ -266,8 +266,8 @@ impl RemoteFileHandler for LocalFileHandler {
 
         let file = File::open(&self.absolute_file_path).await?;
 
-        // Wrap file in a buffered reader with buffer size based on chunks_buffer
-        let buffer_size = self.config.chunks_buffer.max(1) * self.config.chunk_size;
+        // Wrap file in a buffered reader with buffer size based on the config
+        let buffer_size = self.config.calculate_buffer_size();
         let buffered_reader = tokio::io::BufReader::with_capacity(buffer_size, file);
         Ok(Box::new(buffered_reader))
     }
@@ -295,8 +295,8 @@ impl RemoteFileHandler for LocalFileHandler {
             .await
             .map_err(Self::map_io_error)?;
 
-        // Wrap the input data in a buffered reader with chunk_size * chunks_buffer for consistent chunking
-        let buffer_size = self.config.chunk_size * self.config.chunks_buffer.max(1);
+        // Wrap the input data in a buffered reader for consistent chunking
+        let buffer_size = self.config.calculate_buffer_size();
         let mut buf_reader = tokio::io::BufReader::with_capacity(buffer_size, data);
 
         io::copy_buf(&mut buf_reader, &mut file)
