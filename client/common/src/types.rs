@@ -104,7 +104,6 @@ pub type MaxBatchConfirmStorageRequests<Runtime> =
     <Runtime as pallet_file_system::Config>::MaxBatchConfirmStorageRequests;
 pub type ValuePropositionWithId<Runtime> =
     pallet_storage_providers::types::ValuePropositionWithId<Runtime>;
-pub type Tip<Runtime> = pallet_transaction_payment::ChargeTransactionPayment<Runtime>;
 
 /// Type alias for the events vector.
 ///
@@ -247,20 +246,14 @@ impl UploadRequestId {
     }
 }
 
-pub struct MinimalExtension<Runtime>
-where
-    Runtime: pallet_transaction_payment::Config,
-{
+pub struct MinimalExtension {
     pub era: generic::Era,
     pub nonce: u32,
-    pub tip: Tip<Runtime>,
+    pub tip: u128,
 }
 
-impl<Runtime> MinimalExtension<Runtime>
-where
-    Runtime: pallet_transaction_payment::Config,
-{
-    pub fn new(era: generic::Era, nonce: u32, tip: Tip<Runtime>) -> Self {
+impl MinimalExtension {
+    pub fn new(era: generic::Era, nonce: u32, tip: u128) -> Self {
         Self { era, nonce, tip }
     }
 }
@@ -277,12 +270,13 @@ impl StorageEnableRuntime for storage_hub_runtime::Runtime {
 
 //TODO: This should be moved to the runtime crate once the SH Client is abstracted
 //TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
+//TODO: When that is done, remove `pallet_transaction_payment` from the `common` crate.
 impl ExtensionOperations<storage_hub_runtime::RuntimeCall, storage_hub_runtime::Runtime>
     for storage_hub_runtime::SignedExtra
 {
     type Hash = storage_hub_runtime::Hash;
 
-    fn from_minimal_extension(minimal: MinimalExtension<storage_hub_runtime::Runtime>) -> Self {
+    fn from_minimal_extension(minimal: MinimalExtension) -> Self {
         (
             frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
             frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
@@ -291,7 +285,9 @@ impl ExtensionOperations<storage_hub_runtime::RuntimeCall, storage_hub_runtime::
             frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(minimal.era),
             frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(minimal.nonce),
             frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
-            minimal.tip,
+            pallet_transaction_payment::ChargeTransactionPayment::<storage_hub_runtime::Runtime>::from(
+                minimal.tip,
+            ),
             cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
                 storage_hub_runtime::Runtime,
             >::new(),

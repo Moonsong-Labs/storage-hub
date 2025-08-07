@@ -430,7 +430,7 @@ pub trait ExtensionOperations<
     ///
     /// # Returns
     /// A fully constructed extension ready for use in transaction signing
-    fn from_minimal_extension(minimal: MinimalExtension<Runtime>) -> Self;
+    fn from_minimal_extension(minimal: MinimalExtension) -> Self;
 
     /// Generates the implicit data required by this extension.
     ///
