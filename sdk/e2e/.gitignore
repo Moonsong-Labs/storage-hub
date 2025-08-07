@@ -1,0 +1,5 @@
+# Local Playwright artifacts (package-level)
+playwright-report/
+test-results/
+
+

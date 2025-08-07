@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MetaMask + SDK Test</title>
+    <script type="importmap">
+    {
+      "imports": {
+        "@storagehub-sdk/core": "/core/dist/index.js",
+        "@storagehub/wasm": "/core/wasm/pkg/storagehub_wasm.js",
+        "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm"
+      }
+    }
+    </script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 50px;
+        }
+
+        button {
+            background: #0066cc;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            margin: 10px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        #status {
+            margin: 20px 0;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>MetaMask + SDK Test</h1>
+
+    <button id="connect">Connect Wallet</button>
+    <button id="sign" disabled>Sign Message</button>
+    <button id="sign-tx" disabled>Sign Transaction</button>
+
+    <div id="status">Ready</div>
+    <div id="account"></div>
+    <div id="signature"></div>
+
+    <script>
+        let connectedAccount = null;
+        const statusEl = document.getElementById('status');
+
+        document.getElementById('connect').onclick = async () => {
+            try {
+                document.getElementById('status').textContent = 'Connecting...';
+                const mod = await import('/core/dist/index.js');
+                const wallet = await mod.MetamaskWallet.connect();
+                const address = await wallet.getAddress();
+                connectedAccount = address;
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('account').textContent = `Account: ${address}`;
+                document.getElementById('sign').disabled = false;
+                document.getElementById('sign-tx').disabled = false;
+            } catch (error) {
+                document.getElementById('status').textContent = 'Connection failed';
+                console.error(error);
+            }
+        };
+
+        document.getElementById('sign').onclick = async () => {
+            try {
+                const message = "StorageHub rocks!";
+                document.getElementById('status').textContent = 'Signing...';
+
+                // Use SDK MetamaskWallet instead of direct window.ethereum
+                const mod = await import('/core/dist/index.js');
+                const wallet = await mod.MetamaskWallet.connect();
+                const signature = await wallet.signMessage(message);
+
+                document.getElementById('status').textContent = 'Signed';
+                // Expose signature for Playwright to read
+                window.__lastSignature = signature;
+                const sigEl = document.getElementById('signature');
+                if (sigEl) sigEl.textContent = `Signature: ${signature}`;
+            } catch (error) {
+                document.getElementById('status').textContent = '❌ Signing failed';
+                console.error(error);
+            }
+        };
+
+        document.getElementById('sign-tx').onclick = async () => {
+            try {
+                statusEl.textContent = 'Signing transaction...';
+                const [mod, ethers] = await Promise.all([
+                    import('/core/dist/index.js'),
+                    import('ethers'),
+                ]);
+                const wallet = await mod.MetamaskWallet.connect();
+                const from = await wallet.getAddress();
+                const unsigned = {
+                    to: from,
+                    value: ethers.parseEther('0.001').toString(),
+                    gasLimit: 21000,
+                };
+                const tx = ethers.Transaction.from(unsigned);
+                const raw = ethers.getBytes(tx.unsignedSerialized);
+                window.__lastTxSig = undefined;
+                window.__lastTxErr = undefined;
+                wallet.signTxn(raw)
+                    .then((sig) => { window.__lastTxSig = sig; statusEl.textContent = 'Tx signed'; })
+                    .catch((e) => { window.__lastTxErr = e?.message || String(e); statusEl.textContent = 'Tx failed'; });
+            } catch (error) {
+                statusEl.textContent = 'Tx failed';
+                console.error(error);
+            }
+        };
+    </script>
+</body>
+
+</html>
