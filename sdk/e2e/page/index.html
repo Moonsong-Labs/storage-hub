@@ -5,6 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StorageHub MetaMask Test</title>
+    <script type="importmap">
+    {
+      "imports": {
+        "@storagehub-sdk/core": "/core/dist/index.js",
+        "@storagehub/wasm": "/core/wasm/pkg/storagehub_wasm.js",
+        "ethers": "https://cdn.jsdelivr.net/npm/ethers@6.15.0/+esm"
+      }
+    }
+    </script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -68,10 +77,10 @@
                 const message = "StorageHub rocks!";
                 document.getElementById('status').textContent = '⏳ Signing message...';
 
-                const signature = await window.ethereum.request({
-                    method: 'personal_sign',
-                    params: [message, connectedAccount],
-                });
+                // Use SDK MetamaskWallet instead of direct window.ethereum
+                const mod = await import('/core/dist/index.js');
+                const wallet = await mod.MetamaskWallet.connect();
+                const signature = await wallet.signMessage(message);
 
                 document.getElementById('status').textContent = '✅ Message signed successfully!';
                 console.log('Signature:', signature);

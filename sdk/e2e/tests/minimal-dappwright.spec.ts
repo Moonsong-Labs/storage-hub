@@ -64,9 +64,9 @@ export const test = baseTest.extend<{
     },
 
     page: async ({ context }, use) => {
-        // Create a fresh page and go to our local basic dApp
+        // Create a fresh page and go to our local basic dApp (served from sdk root)
         const page = await context.newPage();
-        await page.goto("http://localhost:3000");
+        await page.goto("http://localhost:3000/e2e/page/index.html");
         await use(page);
     },
 
@@ -79,6 +79,18 @@ export const test = baseTest.extend<{
 test("Minimal MetaMask + Anvil Test", async ({ page, wallet, context }) => {
     console.log('🎯 Starting minimal test...');
 
+    // Mirror browser console logs and errors to the terminal for easier debugging
+    const attachLogging = (p: Page, label: string) => {
+        p.on('console', (msg) => {
+            console.log(`[${label} console:${msg.type()}] ${msg.text()}`);
+        });
+        p.on('pageerror', (err) => {
+            console.log(`[${label} pageerror] ${err.message}`);
+        });
+    };
+    attachLogging(page, 'dapp');
+    context.on('page', (p) => attachLogging(p, 'popup'));
+
     // Ensure provider is injected
     await page.waitForLoadState();
     await page.waitForFunction(() => (window as any).ethereum !== undefined, { timeout: 15000 });
@@ -90,15 +102,15 @@ test("Minimal MetaMask + Anvil Test", async ({ page, wallet, context }) => {
     await wallet.approve();
     console.log('✅ Connection approved');
 
-    // Wait for Sign button to be enabled (basic dApp enables it after connection)
+    // Trigger signing via the dApp's SDK handler by clicking the button
     await page.waitForSelector('#sign:not([disabled])', { timeout: 15000 });
     await page.click('#sign');
 
-    // Add a 3 seconds delay to allow the MetaMask signature popup to fully render
-    // await new Promise((resolve) => setTimeout(resolve, 3000));
-
+    // Add a 2 second delay before signing
+    // await new Promise((resolve) => setTimeout(resolve, 2000));
     // Approve signature in MetaMask
     await wallet.sign();
+
     // Wait until the dApp exposes the signature and log it
     const signature = await page.waitForFunction(() => (window as any).__lastSignature, { timeout: 15000 });
     const value = await signature.jsonValue();

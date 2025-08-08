@@ -9,7 +9,7 @@
         "test:headless": "HEADLESS=true playwright test",
         "test:ui": "playwright test --ui",
         "test:debug": "HEADLESS=false playwright test --debug",
-        "dev": "python3 -m http.server 3000 --directory page",
+        "dev": "python3 -m http.server 3000 --directory ..",
         "install-deps": "npm install && npx playwright install chromium"
     },
     "devDependencies": {
