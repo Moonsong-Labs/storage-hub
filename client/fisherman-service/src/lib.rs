@@ -15,6 +15,7 @@ pub mod handler;
 
 use std::sync::Arc;
 
+use log::info;
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
 use shc_common::types::ParachainClient;
@@ -46,5 +47,8 @@ where
     let fisherman_service = FishermanService::new(client);
 
     // Spawn the actor and return the handle
-    task_spawner.spawn_actor(fisherman_service)
+    let actor = task_spawner.spawn_actor(fisherman_service);
+
+    info!("🎣 Fisherman service started successfully");
+    actor
 }
