@@ -12,9 +12,7 @@ export const test = baseTest.extend<{
 }>({
     context: async ({ }, use) => {
         if (!sharedBrowserContext) {
-            console.log('🚀 Launching dappwright with MetaMask...');
-
-            // Use the exact ZKSync pattern - dappwright.launch instead of bootstrap
+            console.log('🚀 Launching browser with MetaMask...');
             const { browserContext } = await dappwright.launch("", {
                 wallet: "metamask",
                 version: MetaMaskWallet.recommendedVersion,
@@ -24,37 +22,12 @@ export const test = baseTest.extend<{
             const wallet = await dappwright.getWallet("metamask", browserContext);
             console.log('✅ MetaMask wallet obtained');
 
-            // Override waitForTimeout to speed up setup (ZKSync approach)
-            const originalWaitForTimeout = wallet.page.waitForTimeout;
-            wallet.page.waitForTimeout = async (_ms: number) => { };
-
             // Setup wallet with seed phrase
             await wallet.setup({
                 seed: "test test test test test test test test test test test junk",
                 password: "password123",
             });
             console.log('✅ Wallet setup with seed phrase');
-
-            try {
-                // // Add Anvil network (like ZKSync adds Hardhat)
-                // await wallet.addNetwork({
-                //     networkName: "Anvil Testnet",
-                //     rpc: "http://127.0.0.1:8545",
-                //     chainId: 31337,
-                //     symbol: "ETH",
-                // });
-                // console.log('✅ Anvil network added');
-
-                // // Switch to Anvil network
-                // await wallet.switchNetwork("Anvil Testnet");
-                // console.log('✅ Switched to Anvil network');
-            } catch (e) {
-                console.error('❌ Network setup failed:', e);
-                throw new Error("Please verify there's an Anvil node running at http://localhost:8545");
-            }
-
-            // Restore original waitForTimeout
-            wallet.page.waitForTimeout = originalWaitForTimeout;
 
             // Cache context
             sharedBrowserContext = browserContext;
@@ -76,7 +49,7 @@ export const test = baseTest.extend<{
     },
 });
 
-test("Minimal MetaMask + Anvil Test", async ({ page, wallet, context }) => {
+test("MetaMask + SDK", async ({ page, wallet, context }) => {
     console.log('🎯 Starting minimal test...');
 
     // Mirror browser console logs and errors to the terminal for easier debugging
