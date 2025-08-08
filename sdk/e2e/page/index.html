@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StorageHub MetaMask Test</title>
+    <title>MetaMask + SDK Test</title>
     <script type="importmap">
     {
       "imports": {
@@ -45,12 +45,12 @@
 </head>
 
 <body>
-    <h1>StorageHub MetaMask Test</h1>
+    <h1>MetaMask + SDK Test</h1>
 
     <button id="connect">Connect Wallet</button>
     <button id="sign" disabled>Sign Message</button>
 
-    <div id="status">Ready to connect</div>
+    <div id="status">Ready</div>
     <div id="account"></div>
     <div id="signature"></div>
 
@@ -59,15 +59,16 @@
 
         document.getElementById('connect').onclick = async () => {
             try {
-                const accounts = await window.ethereum.request({
-                    method: 'eth_requestAccounts'
-                });
-                connectedAccount = accounts[0];
-                document.getElementById('status').textContent = '✅ Connected to MetaMask';
-                document.getElementById('account').textContent = `Account: ${connectedAccount}`;
+                document.getElementById('status').textContent = 'Connecting...';
+                const mod = await import('/core/dist/index.js');
+                const wallet = await mod.MetamaskWallet.connect();
+                const address = await wallet.getAddress();
+                connectedAccount = address;
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('account').textContent = `Account: ${address}`;
                 document.getElementById('sign').disabled = false;
             } catch (error) {
-                document.getElementById('status').textContent = '❌ Connection failed';
+                document.getElementById('status').textContent = 'Connection failed';
                 console.error(error);
             }
         };
@@ -75,15 +76,14 @@
         document.getElementById('sign').onclick = async () => {
             try {
                 const message = "StorageHub rocks!";
-                document.getElementById('status').textContent = '⏳ Signing message...';
+                document.getElementById('status').textContent = 'Signing...';
 
                 // Use SDK MetamaskWallet instead of direct window.ethereum
                 const mod = await import('/core/dist/index.js');
                 const wallet = await mod.MetamaskWallet.connect();
                 const signature = await wallet.signMessage(message);
 
-                document.getElementById('status').textContent = '✅ Message signed successfully!';
-                console.log('Signature:', signature);
+                document.getElementById('status').textContent = 'Signed';
                 // Expose signature for Playwright to read
                 window.__lastSignature = signature;
                 const sigEl = document.getElementById('signature');
