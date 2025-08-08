@@ -49,6 +49,7 @@
 
     <button id="connect">Connect Wallet</button>
     <button id="sign" disabled>Sign Message</button>
+    <button id="sign-tx" disabled>Sign Transaction</button>
 
     <div id="status">Ready</div>
     <div id="account"></div>
@@ -56,6 +57,7 @@
 
     <script>
         let connectedAccount = null;
+        const statusEl = document.getElementById('status');
 
         document.getElementById('connect').onclick = async () => {
             try {
@@ -67,6 +69,7 @@
                 document.getElementById('status').textContent = 'Connected';
                 document.getElementById('account').textContent = `Account: ${address}`;
                 document.getElementById('sign').disabled = false;
+                document.getElementById('sign-tx').disabled = false;
             } catch (error) {
                 document.getElementById('status').textContent = 'Connection failed';
                 console.error(error);
@@ -90,6 +93,33 @@
                 if (sigEl) sigEl.textContent = `Signature: ${signature}`;
             } catch (error) {
                 document.getElementById('status').textContent = '❌ Signing failed';
+                console.error(error);
+            }
+        };
+
+        document.getElementById('sign-tx').onclick = async () => {
+            try {
+                statusEl.textContent = 'Signing transaction...';
+                const [mod, ethers] = await Promise.all([
+                    import('/core/dist/index.js'),
+                    import('ethers'),
+                ]);
+                const wallet = await mod.MetamaskWallet.connect();
+                const from = await wallet.getAddress();
+                const unsigned = {
+                    to: from,
+                    value: ethers.parseEther('0.001').toString(),
+                    gasLimit: 21000,
+                };
+                const tx = ethers.Transaction.from(unsigned);
+                const raw = ethers.getBytes(tx.unsignedSerialized);
+                window.__lastTxSig = undefined;
+                window.__lastTxErr = undefined;
+                wallet.signTxn(raw)
+                    .then((sig) => { window.__lastTxSig = sig; statusEl.textContent = 'Tx signed'; })
+                    .catch((e) => { window.__lastTxErr = e?.message || String(e); statusEl.textContent = 'Tx failed'; });
+            } catch (error) {
+                statusEl.textContent = 'Tx failed';
                 console.error(error);
             }
         };

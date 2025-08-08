@@ -74,6 +74,14 @@ test("MetaMask + SDK", async ({ page, wallet, context }) => {
     const signature = await page.waitForFunction(() => (window as any).__lastSignature, { timeout: 15000 });
     const value = await signature.jsonValue();
     console.log(`✅ Message signed: ${value}`);
+
+    // --- Transaction signing via dApp button (may fail due to insufficient balance) ---
+    await page.waitForSelector('#sign-tx:not([disabled])', { timeout: 15000 });
+    await page.click('#sign-tx');
+
+    // Reject the transaction in MetaMask (simplified flow)
+    await wallet.reject();
+    console.log('ℹ️ Transaction rejected (expected without funds)');
 });
 
 
