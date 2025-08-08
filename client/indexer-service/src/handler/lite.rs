@@ -116,6 +116,7 @@ where
             pallet_file_system::Event::FileDeletionRequested { .. } => true,
             pallet_file_system::Event::MspFileDeletionCompleted { .. } => true,
             pallet_file_system::Event::BspFileDeletionCompleted { .. } => true,
+            pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => true,
             pallet_file_system::Event::__Ignore(_, _) => true,
         };
 

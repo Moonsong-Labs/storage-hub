@@ -384,6 +384,7 @@ where
             }
             pallet_file_system::Event::MspFileDeletionCompleted { .. } => {}
             pallet_file_system::Event::BspFileDeletionCompleted { .. } => {}
+            pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => {}
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
         Ok(())
