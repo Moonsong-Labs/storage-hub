@@ -192,4 +192,22 @@ impl MspFile {
 
         Ok(updated_count)
     }
+
+    pub async fn get_msp_for_file_key<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: &[u8],
+    ) -> Result<Option<String>, diesel::result::Error> {
+        use crate::schema::{file, msp};
+
+        let msp_id: Option<String> = file::table
+            .filter(file::file_key.eq(file_key))
+            .inner_join(msp_file::table.on(file::id.eq(msp_file::file_id)))
+            .inner_join(msp::table.on(msp_file::msp_id.eq(msp::id)))
+            .select(msp::onchain_msp_id)
+            .first(conn)
+            .await
+            .optional()?;
+
+        Ok(msp_id)
+    }
 }
