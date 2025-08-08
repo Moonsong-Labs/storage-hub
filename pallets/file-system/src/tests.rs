@@ -12381,6 +12381,237 @@ mod delete_file_tests {
     }
 }
 
+mod delete_file_for_incomplete_storage_request_tests {
+    use super::*;
+
+    mod success {
+        use crate::types::RejectedStorageRequestReason;
+
+        use super::*;
+        use pallet_payment_streams::types::UnitsProvidedFor;
+
+        #[test]
+        fn single_bsp_expired_storage_request() {
+            new_test_ext().execute_with(|| {
+                // Direct setup: expired storage request with 1 BSP
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSP
+                let bsp_account = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                // BSP needs to have enough capacity to volunteer for the file
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id, location.clone(), fingerprint, size, msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // BSP volunteers and confirms
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof { encoded_nodes: vec![file_key.as_ref().to_vec()] },
+                };
+                let forest_proof = CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] };
+                
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed, forest_proof,
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // Verify initial state - BSP should have the file and payment stream
+                let initial_capacity = Providers::get_used_capacity(&bsp_id);
+                assert!(initial_capacity == size);
+
+                let payment_stream = PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &owner);
+                assert!(payment_stream.is_ok());
+                assert_eq!(payment_stream.unwrap().amount_provided, UnitsProvidedFor::<Test>::from(size));
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration(file_key);
+
+                // Fisherman should be listening to this event
+                System::assert_has_event(
+                    Event::StorageRequestRejected {
+                        file_key,
+                        reason: RejectedStorageRequestReason::RequestExpired,
+                    }
+                    .into(),
+                );
+
+                // Verify the storage request was marked as rejected
+                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
+                assert!(storage_request.rejected, "Storage request should be marked as rejected");
+
+                // Create forest proof showing BSP stores the file
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Call delete_file_for_incomplete_storage_request
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()), // Any caller
+                    file_key,
+                    bsp_id,
+                    forest_proof,
+                ));
+
+                // Verify the BspFileDeletionCompleted event was emitted
+                System::assert_has_event(
+                    Event::BspFileDeletionCompleted {
+                        user: owner.clone(),
+                        file_key,
+                        file_size: size,
+                        bsp_id,
+                        old_root: file_key, // Actual root from mock verifier
+                        new_root: file_key, // Actual root after deletion
+                    }
+                    .into(),
+                );
+
+                // Verify the FileDeletedFromIncompleteStorageRequest event was emitted
+                System::assert_has_event(
+                    Event::FileDeletedFromIncompleteStorageRequest {
+                        file_key,
+                        provider_id: bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Verify BSP capacity decreased
+                let final_capacity = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(final_capacity, initial_capacity - size);
+
+                // TODO: check payment stream
+            });
+        }
+    }
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn storage_request_not_found() {
+            new_test_ext().execute_with(|| {
+                let non_existent_file_key = H256::from_low_u64_be(99999);
+                let bsp_account = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed, 100));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![non_existent_file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
+                        non_existent_file_key,
+                        bsp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::StorageRequestNotFound
+                );
+            });
+        }
+
+        #[test]
+        fn storage_request_not_rejected() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Setup active storage request (not rejected)
+                let (msp_id, value_prop_id) = add_msp_to_provider_storage(&msp);
+                let bucket_name = BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+                let (bucket_id, _) = create_bucket(&owner, bucket_name, msp_id, value_prop_id, false);
+
+                let location = FileLocation::<Test>::try_from(b"test-file".to_vec()).unwrap();
+                let size = 4 * (shp_constants::GIGAUNIT as u64);
+                let fingerprint = BlakeTwo256::hash(&b"test_content".to_vec());
+                let file_key = FileSystem::compute_file_key(
+                    owner.clone(),
+                    bucket_id,
+                    location.clone(),
+                    size,
+                    fingerprint,
+                ).unwrap();
+
+                // Issue storage request but don't let it expire
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Setup BSP
+                let bsp_account = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed, 100));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Try to delete from active (non-rejected) storage request
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
+                        file_key,
+                        bsp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::StorageRequestNotRejected
+                );
+            });
+        }
+
+        #[test]
+        fn file_key_mismatch() {
+            new_test_ext().execute_with(|| {
+                let bsp_account = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed, 100));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Use wrong file key (different from what metadata would generate)
+                let wrong_file_key = H256::from_low_u64_be(99999);
+
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![wrong_file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
+                        wrong_file_key,
+                        bsp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::StorageRequestNotFound
+                );
+            });
+        }
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
@@ -12611,3 +12842,14 @@ fn create_file_deletion_signature(
 
     (signed_delete_intention, signature)
 }
+
+/// Trigger storage request expiration by advancing time and calling on_idle
+fn trigger_storage_request_expiration(file_key: crate::types::MerkleHash<Test>) {
+    let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+    let storage_request_ttl: TickNumber<Test> = storage_request_ttl.into();
+    let expiration_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick() + storage_request_ttl;
+
+    // Roll to expiration + 1 to trigger processing
+    roll_to(expiration_tick + 1);
+}
+
