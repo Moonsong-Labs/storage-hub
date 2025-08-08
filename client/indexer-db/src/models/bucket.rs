@@ -84,6 +84,18 @@ impl Bucket {
         Ok(bucket)
     }
 
+    pub async fn unset_msp<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: Vec<u8>,
+    ) -> Result<(), diesel::result::Error> {
+        diesel::update(bucket::table)
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .set(bucket::msp_id.eq(None::<i64>))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
     pub async fn update_merkle_root<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: Vec<u8>,

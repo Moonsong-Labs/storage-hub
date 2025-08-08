@@ -15,6 +15,7 @@ use crate::{
 pub enum FileStorageRequestStep {
     Requested = 0,
     Stored = 1,
+    Expired = 2,
 }
 
 /// Table that holds the Files (both ongoing requests and completed).
