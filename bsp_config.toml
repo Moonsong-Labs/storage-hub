@@ -69,4 +69,4 @@ chunks_buffer = 512
 # Optional indexer configuration
 # Presence of this section enables the indexer
 [indexer]
-database_url = "postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+indexer_database_url = "postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"

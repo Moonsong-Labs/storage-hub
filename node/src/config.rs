@@ -12,8 +12,8 @@ use crate::command::ProviderOptions;
 #[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub provider: ProviderOptions,
-    pub indexer: Option<IndexerOptions>,
-    pub fisherman: Option<FishermanOptions>,
+    pub indexer: IndexerOptions,
+    pub fisherman: FishermanOptions,
 }
 
 pub fn read_config(path: &str) -> Option<Config> {

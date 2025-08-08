@@ -403,7 +403,7 @@ where
     RuntimeApi::RuntimeApi: StorageEnableApiCollection,
 {
     fn start_fisherman_tasks(&self) {
-        log::info!("Starting Fisherman tasks");
+        log::info!("🎣 Starting Fisherman tasks");
 
         // Subscribe to FileDeletionRequest events from the BlockchainService
         // The fisherman monitors and processes file deletion requests
@@ -416,5 +416,7 @@ where
                 FileDeletionRequest => FishermanProcessFileDeletionTask,
             ]
         );
+
+        log::info!("🎣 Fisherman service started");
     }
 }

@@ -21,6 +21,7 @@ use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStora
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 use shc_forest_manager::traits::ForestStorageHandler;
+use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
 
 use crate::tasks::{
@@ -789,13 +790,21 @@ impl Into<BlockchainServiceConfig> for BlockchainServiceOptions {
 /// Configuration for the indexer.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct IndexerOptions {
+    /// Indexing mode
+    pub indexer_mode: IndexerMode,
     /// Postgres database URL.
-    pub database_url: Option<String>,
+    ///
+    /// Deserializing as "indexer_database_url" to match the expected field name in the toml file.
+    #[serde(rename = "indexer_database_url")]
+    pub database_url: String,
 }
 
 /// Configuration for the fisherman.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct FishermanOptions {
     /// Postgres database URL.
-    pub database_url: Option<String>,
+    ///
+    /// Deserializing as "fisherman_database_url" to match the expected field name in the toml file.
+    #[serde(rename = "fisherman_database_url")]
+    pub database_url: String,
 }

@@ -287,8 +287,8 @@ pub fn run() -> Result<()> {
                 let config = config::read_config(&provider_config_file);
                 if let Some(c) = config {
                     provider_options = Some(c.provider);
-                    indexer_options = c.indexer;
-                    fisherman_options = c.fisherman;
+                    indexer_options = Some(c.indexer);
+                    fisherman_options = Some(c.fisherman);
                 };
             };
 
@@ -297,25 +297,12 @@ pub fn run() -> Result<()> {
                 provider_options = Some(cli.provider_config.provider_options());
             };
 
-            // Convert IndexerOptions to IndexerConfigurations if available
-            let indexer_config = if let Some(opts) = indexer_options {
-                // Presence of indexer section means it's enabled
-                Some(crate::cli::IndexerConfigurations {
-                    database_url: opts.database_url,
-                    indexer_mode: Default::default(),
-                })
-            } else {
-                cli.indexer_config
+            if cli.indexer_config.indexer {
+                indexer_options = cli.indexer_config.indexer_options();
             };
 
-            // Convert FishermanOptions to FishermanConfigurations if available
-            let fisherman_config = if let Some(opts) = fisherman_options {
-                // Presence of fisherman section means it's enabled
-                Some(crate::cli::FishermanConfigurations {
-                    database_url: opts.database_url,
-                })
-            } else {
-                cli.fisherman_config
+            if cli.fisherman_config.fisherman {
+                fisherman_options = cli.fisherman_config.fisherman_options();
             };
 
             runner.run_node_until_exit(|config| async move {
@@ -344,8 +331,8 @@ pub fn run() -> Result<()> {
 							crate::service::start_dev_node::<sc_network::NetworkWorker<_, _>>(
 								config,
 								provider_options,
-								indexer_config,
-								fisherman_config.clone(),
+								indexer_options,
+								fisherman_options.clone(),
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -367,8 +354,8 @@ pub fn run() -> Result<()> {
 								polkadot_config,
 								collator_options,
 								provider_options,
-								indexer_config,
-								fisherman_config.clone(),
+								indexer_options,
+								fisherman_options.clone(),
 								id,
 								hwbench,
 							)
@@ -382,8 +369,8 @@ pub fn run() -> Result<()> {
 							crate::service::start_dev_node::<sc_network::Litep2pNetworkBackend>(
 								config,
 								provider_options,
-								indexer_config,
-								fisherman_config.clone(),
+								indexer_options,
+								fisherman_options.clone(),
 								hwbench,
 								id,
 								cli.run.sealing,
@@ -405,8 +392,8 @@ pub fn run() -> Result<()> {
 								polkadot_config,
 								collator_options,
 								provider_options,
-								indexer_config,
-								fisherman_config.clone(),
+								indexer_options,
+								fisherman_options.clone(),
 								id,
 								hwbench,
 							)

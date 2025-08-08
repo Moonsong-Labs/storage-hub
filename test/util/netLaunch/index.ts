@@ -124,6 +124,12 @@ export class NetworkLauncher {
       delete composeYaml.services.toxiproxy;
     }
 
+    // Remove fisherman service if not enabled
+    if (!this.config.fisherman || this.type !== "fullnet") {
+      // biome-ignore lint/performance/noDelete: to ensure compose file is valid
+      delete composeYaml.services["sh-fisherman"];
+    }
+
     if (this.config.extrinsicRetryTimeout) {
       composeYaml.services["sh-bsp"].command.push(
         `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
@@ -152,18 +158,18 @@ export class NetworkLauncher {
     if (this.config.indexer) {
       composeYaml.services["sh-user"].command.push("--indexer");
       composeYaml.services["sh-user"].command.push(
-        "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+        "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
       );
       if (this.type === "fullnet") {
         composeYaml.services["sh-msp-1"].command.push(
-          "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
         composeYaml.services["sh-msp-2"].command.push(
-          "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
       }
     }
-
+    
     const cwd = path.resolve(process.cwd(), "..", "docker");
     const entries = Object.entries(composeYaml.services).map(([key, value]: any) => {
       let remappedValue: any;
@@ -371,7 +377,7 @@ export class NetworkLauncher {
   }
 
   public async getApi(serviceName = "sh-user") {
-    return BspNetTestApi.create(`ws://127.0.0.1:${await this.getPort(serviceName)}`);
+    return BspNetTestApi.create(`ws://127.0.0.1:${this.getPort(serviceName)}`);
   }
 
   public async setupBsp(api: EnrichedBspApi, who: string, multiaddress: string, bspId?: string) {

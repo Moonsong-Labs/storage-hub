@@ -7,7 +7,8 @@ use crate::command::ProviderOptions;
 
 use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
-    BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
+    BspUploadFileOptions, FishermanOptions, IndexerOptions, MspChargeFeesOptions,
+    MspMoveBucketOptions,
 };
 use shc_indexer_service::IndexerMode;
 use shc_rpc::RpcConfig;
@@ -496,6 +497,10 @@ impl ProviderConfigurations {
 
 #[derive(Debug, Parser, Clone)]
 pub struct IndexerConfigurations {
+    /// Enable the indexer service.
+    #[clap(long)]
+    pub indexer: bool,
+
     /// The mode in which the indexer runs.
     ///
     /// - `full`: Indexes all blockchain data
@@ -508,18 +513,61 @@ pub struct IndexerConfigurations {
     ///
     /// If not provided, the indexer will use the `INDEXER_DATABASE_URL` environment variable. If the
     /// environment variable is not set, the node will abort.
-    #[arg(long)]
-    pub database_url: Option<String>,
+    #[clap(
+        long("indexer-database-url"),
+        env = "INDEXER_DATABASE_URL",
+        required_if_eq("indexer", "true")
+    )]
+    pub indexer_database_url: Option<String>,
+}
+
+impl IndexerConfigurations {
+    pub fn indexer_options(&self) -> Option<IndexerOptions> {
+        if self.indexer {
+            Some(IndexerOptions {
+                indexer_mode: self.indexer_mode,
+                database_url: self
+                    .indexer_database_url
+                    .clone()
+                    .expect("Indexer database URL is required"),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Parser, Clone)]
 pub struct FishermanConfigurations {
+    /// Enable the fisherman service.
+    #[clap(long)]
+    pub fisherman: bool,
+
     /// Postgres database URL for the fisherman service.
     ///
     /// If not provided, the fisherman will use the `FISHERMAN_DATABASE_URL` environment variable.
     /// If the environment variable is not set, the node will abort.
-    #[arg(long)]
-    pub database_url: Option<String>,
+    #[clap(
+        long("fisherman-database-url"),
+        env = "FISHERMAN_DATABASE_URL",
+        required_if_eq("fisherman", "true")
+    )]
+    pub fisherman_database_url: Option<String>,
+}
+
+impl FishermanConfigurations {
+    pub fn fisherman_options(&self) -> Option<FishermanOptions> {
+        if self.fisherman {
+            Some(FishermanOptions {
+                database_url: self
+                    .fisherman_database_url
+                    .clone()
+                    .expect("Fisherman database URL is required"),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 /// Block authoring scheme to be used by the dev service.
@@ -609,11 +657,11 @@ pub struct Cli {
 
     /// Indexer configurations
     #[command(flatten)]
-    pub indexer_config: Option<IndexerConfigurations>,
+    pub indexer_config: IndexerConfigurations,
 
     /// Fisherman configurations
     #[command(flatten)]
-    pub fisherman_config: Option<FishermanConfigurations>,
+    pub fisherman_config: FishermanConfigurations,
 }
 
 #[derive(Debug, Parser)]
