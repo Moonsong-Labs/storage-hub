@@ -205,6 +205,7 @@ pub trait StorageEnableRuntime:
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: MaybeDisplay>
         + Copy
+        + Debug
         + Send
         + Sync
         + 'static

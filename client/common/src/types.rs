@@ -11,6 +11,7 @@ use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
 use shp_opaque::Block;
+use shp_traits::ProofsDealerInterface;
 use sp_core::Hasher;
 use sp_runtime::{generic, traits::Block as BlockT, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
@@ -60,7 +61,8 @@ pub type ForestVerifierProof =
 // These are type aliases for convenience to use in the SH Client.
 pub type AccountId<Runtime> = <Runtime as frame_system::Config>::AccountId;
 pub type BlockNumber<Runtime> = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
-pub type TickNumber<Runtime> = pallet_file_system::types::TickNumber<Runtime>;
+pub type TickNumber<Runtime> =
+    <pallet_proofs_dealer::Pallet<Runtime> as ProofsDealerInterface>::TickNumber;
 pub type StorageDataUnit<Runtime> = pallet_file_system::types::StorageDataUnit<Runtime>;
 pub type FileLocation<Runtime> = pallet_file_system::types::FileLocation<Runtime>;
 pub type StorageRequestMspBucketResponse<Runtime> =
