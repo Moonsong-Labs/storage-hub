@@ -14,7 +14,7 @@ export const addCopypartyContainer = async (options?: {
   name?: string;
 }) => {
   const docker = new Docker();
-  const containerName = options?.name || "docker-sh-copyparty-test";
+  const containerName = options?.name || "storage-hub-sh-copyparty";
   const imageName = "copyparty/min:latest";
 
   // Remove any existing container with same name
@@ -46,6 +46,12 @@ export const addCopypartyContainer = async (options?: {
   const container = await docker.createContainer({
     Image: "copyparty/min:latest",
     name: containerName,
+    Labels: {
+      "com.docker.compose.project": "storage-hub",
+      "com.docker.compose.service": containerName,
+      "com.docker.compose.container-number": "1",
+      "com.docker.compose.oneoff": "False"
+    },
     Cmd: [
       "--ftp",
       "3921", // Enable FTP on port 3921
@@ -56,7 +62,7 @@ export const addCopypartyContainer = async (options?: {
     ],
     NetworkingConfig: {
       EndpointsConfig: {
-        docker_default: {}
+        "storage-hub_default": {}
       }
     },
     ExposedPorts: {
@@ -68,10 +74,7 @@ export const addCopypartyContainer = async (options?: {
         "3923/tcp": [{ HostPort: "0" }], // Random available port
         "3921/tcp": [{ HostPort: "0" }] // Random available port
       },
-      Binds: [
-        `${process.cwd()}/../docker/resource:/res:ro`,
-        `${process.cwd()}/../docker/tmp:/uploads:rw`
-      ]
+      Binds: [`${process.cwd()}/../docker/resource:/res:ro`]
     }
   });
 
@@ -79,7 +82,7 @@ export const addCopypartyContainer = async (options?: {
 
   // Get container info
   const containerInfo = await container.inspect();
-  const containerIp = containerInfo.NetworkSettings.Networks.docker_default.IPAddress;
+  const containerIp = containerInfo.NetworkSettings.Networks["storage-hub_default"]?.IPAddress;
 
   // Also get the mapped ports
   const httpHostPort = containerInfo.NetworkSettings.Ports["3923/tcp"]?.[0]?.HostPort || "3923";
