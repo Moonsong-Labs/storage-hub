@@ -1,15 +1,26 @@
 import assert, { strictEqual } from "node:assert";
 import { describeBspNet, type EnrichedBspApi, addCopypartyContainer } from "../../../util";
-import type Docker from "dockerode";
 
-describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
-  let userApi: EnrichedBspApi;
+describeBspNet(
+  "User: Load File Into Storage",
+  { only: true },
+  ({ before, createUserApi, it }) => {
+    let userApi: EnrichedBspApi;
+    let containerName: string | undefined;
+    let httpPort: number | undefined;
+    let ftpPort: number | undefined;
 
-  before(async () => {
-    userApi = await createUserApi();
-  });
+    before(async () => {
+      userApi = await createUserApi();
 
-  it("loadFileInStorage works", async () => {
+      // Setup Copyparty server for remote tests
+      const copypartyInfo = await addCopypartyContainer();
+      containerName = copypartyInfo.containerName;
+      httpPort = copypartyInfo.httpPort;
+      ftpPort = copypartyInfo.ftpPort;
+    });
+
+    it("loadFileInStorage works", async () => {
     const source = "res/adolphus.jpg";
     const destination = "test/adolphus.jpg";
     const bucketName = "bucket-0";
@@ -151,107 +162,71 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
       "Error message should be 'File not found'"
     );
   });
-});
 
-describeBspNet(
-  "User: Load File Into Storage - Remote URLs",
-  ({ before, after, createUserApi, it }) => {
-    let userApi: EnrichedBspApi;
-    let copypartyContainer: Docker.Container;
-    let containerName: string;
-    let httpPort: number;
-    let ftpPort: number;
+  it("loadFileInStorage works with HTTP URL", async () => {
+    assert(containerName, "Container name not initialized");
+    assert(httpPort, "HTTP port not initialized");
 
-    before(async () => {
-      userApi = await createUserApi();
+    const source = `http://${containerName}:${httpPort}/res/adolphus.jpg`;
+    const destination = "test/adolphus-http.jpg";
+    const bucketName = "bucket-http-remote";
 
-      // Setup Copyparty server
-      const copypartyInfo = await addCopypartyContainer();
-      copypartyContainer = copypartyInfo.container;
-      containerName = copypartyInfo.containerName;
-      httpPort = copypartyInfo.httpPort;
-      ftpPort = copypartyInfo.ftpPort;
+    const newBucketEventEvent = await userApi.createBucket(bucketName);
+    const newBucketEventDataBlob =
+      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-      // Clean up uploads directory to ensure tests start fresh
-      await copypartyContainer
-        .exec({
-          Cmd: ["sh", "-c", "rm -rf /uploads/* 2>/dev/null || true"],
-          AttachStdout: true,
-          AttachStderr: true
-        })
-        .then((exec) => exec.start({}));
-    });
+    if (!newBucketEventDataBlob) {
+      throw new Error("Event doesn't match Type");
+    }
 
-    after(async () => {
-      if (copypartyContainer) {
-        try {
-          await copypartyContainer.stop();
-          await copypartyContainer.remove();
-        } catch (e: any) {
-          // Container might already be removed
-          console.log("Error cleaning up copyparty container:", e.message);
-        }
-      }
-    });
+    const {
+      file_metadata: { location, fingerprint, file_size }
+    } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      source,
+      destination,
+      userApi.shConsts.NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
+    );
 
-    it("loadFileInStorage works with HTTP URL", async () => {
-      const source = `http://${containerName}:${httpPort}/res/adolphus.jpg`;
-      const destination = "test/adolphus-http.jpg";
-      const bucketName = "bucket-http-remote";
+    strictEqual(location.toHuman(), destination);
+    strictEqual(
+      fingerprint.toString(),
+      userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint
+    );
+    strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].size);
+  });
 
-      const newBucketEventEvent = await userApi.createBucket(bucketName);
-      const newBucketEventDataBlob =
-        userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
+  it("loadFileInStorage works with FTP URL", async () => {
+    assert(containerName, "Container name not initialized");
+    assert(ftpPort, "FTP port not initialized");
 
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
+    const source = `ftp://${containerName}:${ftpPort}/res/smile.jpg`;
+    const destination = "test/smile-ftp.jpg";
+    const bucketName = "bucket-ftp-remote";
 
-      const {
-        file_metadata: { location, fingerprint, file_size }
-      } = await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
+    const newBucketEventEvent = await userApi.createBucket(bucketName);
+    const newBucketEventDataBlob =
+      userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
 
-      strictEqual(location.toHuman(), destination);
-      strictEqual(
-        fingerprint.toString(),
-        userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint
-      );
-      strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS["res/adolphus.jpg"].size);
-    });
+    if (!newBucketEventDataBlob) {
+      throw new Error("Event doesn't match Type");
+    }
 
-    it("loadFileInStorage works with FTP URL", async () => {
-      const source = `ftp://${containerName}:${ftpPort}/res/smile.jpg`;
-      const destination = "test/smile-ftp.jpg";
-      const bucketName = "bucket-ftp-remote";
+    const {
+      file_metadata: { location, fingerprint, file_size }
+    } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      source,
+      destination,
+      userApi.shConsts.NODE_INFOS.user.AddressId,
+      newBucketEventDataBlob.bucketId
+    );
 
-      const newBucketEventEvent = await userApi.createBucket(bucketName);
-      const newBucketEventDataBlob =
-        userApi.events.fileSystem.NewBucket.is(newBucketEventEvent) && newBucketEventEvent.data;
-
-      if (!newBucketEventDataBlob) {
-        throw new Error("Event doesn't match Type");
-      }
-
-      const {
-        file_metadata: { location, fingerprint, file_size }
-      } = await userApi.rpc.storagehubclient.loadFileInStorage(
-        source,
-        destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
-        newBucketEventDataBlob.bucketId
-      );
-
-      strictEqual(location.toHuman(), destination);
-      strictEqual(
-        fingerprint.toString(),
-        userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint
-      );
-      strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size);
-    });
+    strictEqual(location.toHuman(), destination);
+    strictEqual(
+      fingerprint.toString(),
+      userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].fingerprint
+    );
+    strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size);
+  });
   }
 );
