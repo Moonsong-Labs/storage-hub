@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
     testDir: './tests',
-    testMatch: '**/minimal-dappwright.spec.ts', // Only run the minimal test
+    testMatch: '**/metamask-sdk-sign.spec.ts',
     timeout: 45000, // Reduced timeout per request
     fullyParallel: false, // MetaMask tests should run sequentially
     forbidOnly: !!process.env.CI,

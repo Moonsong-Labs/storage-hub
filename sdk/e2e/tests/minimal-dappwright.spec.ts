@@ -50,19 +50,7 @@ export const test = baseTest.extend<{
 });
 
 test("MetaMask + SDK", async ({ page, wallet, context }) => {
-    console.log('🎯 Starting minimal test...');
-
-    // Mirror browser console logs and errors to the terminal for easier debugging
-    const attachLogging = (p: Page, label: string) => {
-        p.on('console', (msg) => {
-            console.log(`[${label} console:${msg.type()}] ${msg.text()}`);
-        });
-        p.on('pageerror', (err) => {
-            console.log(`[${label} pageerror] ${err.message}`);
-        });
-    };
-    attachLogging(page, 'dapp');
-    context.on('page', (p) => attachLogging(p, 'popup'));
+    console.log('🎯 Starting test...');
 
     // Ensure provider is injected
     await page.waitForLoadState();
@@ -79,8 +67,6 @@ test("MetaMask + SDK", async ({ page, wallet, context }) => {
     await page.waitForSelector('#sign:not([disabled])', { timeout: 15000 });
     await page.click('#sign');
 
-    // Add a 2 second delay before signing
-    // await new Promise((resolve) => setTimeout(resolve, 2000));
     // Approve signature in MetaMask
     await wallet.sign();
 
