@@ -1,4 +1,4 @@
-import { type BrowserContext, type Page, test as baseTest } from "@playwright/test";
+import { type BrowserContext, type Page, test as baseTest, expect } from "@playwright/test";
 import dappwright, { type Dappwright, MetaMaskWallet } from "@tenkeylabs/dappwright";
 
 export { expect } from "@playwright/test";
@@ -82,6 +82,15 @@ test("MetaMask + SDK", async ({ page, wallet, context }) => {
     // Reject the transaction in MetaMask (simplified flow)
     await wallet.reject();
     console.log('ℹ️ Transaction rejected (expected without funds)');
+
+    // --- File fingerprint computation ---
+    await page.waitForSelector('#fingerprint-btn', { timeout: 15000 });
+    await page.click('#fingerprint-btn');
+    // Wait for the fingerprint result
+    const fpHandle = await page.waitForFunction(() => (window as any).__lastFingerprint, { timeout: 15000 });
+    const fp = await fpHandle.jsonValue();
+    console.log(`✅ Fingerprint computed: ${fp}`);
+    expect(fp).toBe('0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970');
 });
 
 

@@ -50,14 +50,26 @@
     <button id="connect">Connect Wallet</button>
     <button id="sign" disabled>Sign Message</button>
     <button id="sign-tx" disabled>Sign Transaction</button>
+    <button id="fingerprint-btn">Compute Fingerprint</button>
 
     <div id="status">Ready</div>
     <div id="account"></div>
     <div id="signature"></div>
+    <div id="fingerprint"></div>
 
     <script>
         let connectedAccount = null;
         const statusEl = document.getElementById('status');
+        // Initialize WASM once on load so FileManager can work
+        (async () => {
+            try {
+                const initWasm = (await import('/core/wasm/pkg/storagehub_wasm.js')).default;
+                await initWasm();
+                console.log('WASM ready');
+            } catch (e) {
+                console.error('WASM init failed', e);
+            }
+        })();
 
         document.getElementById('connect').onclick = async () => {
             try {
@@ -121,6 +133,32 @@
             } catch (error) {
                 statusEl.textContent = 'Tx failed';
                 console.error(error);
+            }
+        };
+
+        // Compute fingerprint for adolphus.jpg using SDK FileManager
+        document.getElementById('fingerprint-btn').onclick = async () => {
+            const fpEl = document.getElementById('fingerprint');
+            try {
+                statusEl.textContent = 'Computing fingerprint...';
+                const mod = await import('/core/dist/index.js');
+                const url = '/e2e/page/adolphus.jpg';
+                const res = await fetch(url);
+                if (!res.ok) throw new Error('Failed to fetch adolphus.jpg');
+                const blob = await res.blob();
+                const fm = new mod.FileManager({
+                    size: blob.size,
+                    stream: () => blob.stream(),
+                });
+                const fp = await fm.getFingerprint();
+                const hex = typeof fp?.toHex === 'function' ? fp.toHex() : String(fp);
+                window.__lastFingerprint = hex;
+                fpEl.textContent = `Fingerprint: ${hex}`;
+                statusEl.textContent = 'Fingerprint ready';
+            } catch (e) {
+                statusEl.textContent = 'Fingerprint failed';
+                fpEl.textContent = '';
+                console.error(e);
             }
         };
     </script>
