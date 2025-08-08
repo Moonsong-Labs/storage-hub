@@ -83,6 +83,11 @@ where
             config,
         }
     }
+
+    pub fn with_remote_file_config(mut self, config: RemoteFileConfig) -> Self {
+        self.config.remote_file = config;
+        self
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -361,32 +366,51 @@ where
         // If `ErrorKind::Interrupted` is found, the operation is simply retried, as per
         // https://doc.rust-lang.org/std/io/trait.Read.html#errors-1
         // Build the actual [`FileDataTrie`] by inserting each chunk into it.
-        loop {
+        //
+        // We need to ensure we read exactly FILE_CHUNK_SIZE bytes per chunk (except the last one)
+        // to ensure consistent fingerprints regardless of how the underlying stream returns data.
+        'read: loop {
             let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
+            let mut offset = 0;
 
-            match stream.read(&mut chunk).await {
-                Ok(0) => {
-                    // Reached EOF, break loop.
-                    debug!(target: LOG_TARGET, "Finished reading file");
-                    break;
-                }
-                Ok(bytes_read) => {
-                    // Haven't reached EOF yet, continue loop.
-                    debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
+            // Keep reading until we fill the chunk or hit EOF
+            while offset < FILE_CHUNK_SIZE as usize {
+                match stream.read(&mut chunk[offset..]).await {
+                    Ok(0) => {
+                        // EOF reached
+                        if offset > 0 {
+                            // We have a partial chunk
+                            chunk.truncate(offset);
+                            debug!(target: LOG_TARGET, "Read final partial chunk of {} bytes", offset);
 
-                    chunk.truncate(bytes_read);
+                            file_data_trie
+                                .write_chunk(&ChunkId::new(chunk_id), &chunk)
+                                .map_err(into_rpc_error)?;
+                        }
+                        debug!(target: LOG_TARGET, "Finished reading file");
+                        break 'read;
+                    }
+                    Ok(bytes_read) => {
+                        offset += bytes_read;
+                        if offset == FILE_CHUNK_SIZE as usize {
+                            // Full chunk
+                            debug!(target: LOG_TARGET, "Read full chunk {} of {} bytes", chunk_id, FILE_CHUNK_SIZE);
 
-                    file_data_trie
-                        .write_chunk(&ChunkId::new(chunk_id), &chunk)
-                        .map_err(into_rpc_error)?;
-                    chunk_id += 1;
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
-                    return Err(into_rpc_error(format!(
-                        "Error reading file stream: {:?}",
-                        e
-                    )));
+                            file_data_trie
+                                .write_chunk(&ChunkId::new(chunk_id), &chunk)
+                                .map_err(into_rpc_error)?;
+                            chunk_id += 1;
+                            break; // Move to next chunk
+                        }
+                        // Continue reading to fill the chunk
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
+                        return Err(into_rpc_error(format!(
+                            "Error reading file stream: {:?}",
+                            e
+                        )));
+                    }
                 }
             }
         }

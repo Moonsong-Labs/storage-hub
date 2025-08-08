@@ -1,6 +1,7 @@
 import Docker from "dockerode";
 import { execSync } from "node:child_process";
 import path from "node:path";
+import net from "node:net";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import * as NodeBspNet from "./node";
@@ -8,6 +9,153 @@ import { BspNetTestApi } from "./test-api";
 import assert from "node:assert";
 import { PassThrough, type Readable } from "node:stream";
 import { sleep } from "../timer";
+
+export const addCopypartyContainer = async (options?: {
+  name?: string;
+}) => {
+  const docker = new Docker();
+  const containerName = options?.name || "storage-hub-sh-copyparty";
+  const imageName = "copyparty/min:latest";
+
+  // Remove any existing container with same name
+  try {
+    const oldContainer = docker.getContainer(containerName);
+    await oldContainer.remove({ force: true });
+  } catch (e) {
+    // Container doesn't exist, that's fine
+  }
+
+  // Check if image exists, pull if it doesn't
+  try {
+    await docker.getImage(imageName).inspect();
+  } catch (e) {
+    // Image doesn't exist, pull it
+    console.log(`Pulling ${imageName}...`);
+    const stream = await docker.pull(imageName);
+    await new Promise<void>((resolve, reject) => {
+      docker.modem.followProgress(stream, (err: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  const container = await docker.createContainer({
+    Image: "copyparty/min:latest",
+    name: containerName,
+    Labels: {
+      "com.docker.compose.project": "storage-hub",
+      "com.docker.compose.service": containerName,
+      "com.docker.compose.container-number": "1",
+      "com.docker.compose.oneoff": "False"
+    },
+    Cmd: [
+      "--ftp",
+      "3921", // Enable FTP on port 3921
+      "-v",
+      "/res:res:r", // Read-only access to resources at /res path
+      "-v",
+      "/uploads:uploads:rw" // Read-write for uploads at /uploads path
+    ],
+    NetworkingConfig: {
+      EndpointsConfig: {
+        "storage-hub_default": {}
+      }
+    },
+    ExposedPorts: {
+      "3923/tcp": {},
+      "3921/tcp": {}
+    },
+    HostConfig: {
+      PortBindings: {
+        "3923/tcp": [{ HostPort: "0" }], // Random available port
+        "3921/tcp": [{ HostPort: "0" }] // Random available port
+      },
+      Binds: [`${process.cwd()}/../docker/resource:/res:ro`]
+    }
+  });
+
+  await container.start();
+
+  // Get container info
+  const containerInfo = await container.inspect();
+  const containerIp = containerInfo.NetworkSettings.Networks["storage-hub_default"]?.IPAddress;
+
+  // Also get the mapped ports
+  const httpHostPort = containerInfo.NetworkSettings.Ports["3923/tcp"]?.[0]?.HostPort || "3923";
+  const ftpHostPort = containerInfo.NetworkSettings.Ports["3921/tcp"]?.[0]?.HostPort || "3921";
+
+  // Wait for server to be ready by checking both HTTP and FTP endpoints
+  const maxRetries = 30;
+  let httpReady = false;
+  let ftpReady = false;
+
+  for (let i = 0; i < maxRetries; i++) {
+    // Check HTTP endpoint
+    if (!httpReady) {
+      try {
+        const response = await fetch(`http://localhost:${httpHostPort}/`);
+        if (response.ok || response.status === 403) {
+          httpReady = true;
+          console.log(`Copyparty HTTP server ready on http://localhost:${httpHostPort}`);
+        }
+      } catch (e) {
+        // HTTP not ready yet
+      }
+    }
+
+    // Check FTP endpoint by trying to connect
+    if (!ftpReady) {
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const client = net.createConnection(
+            { port: Number(ftpHostPort), host: "localhost" },
+            () => {
+              client.end();
+              resolve();
+            }
+          );
+          client.on("error", reject);
+          client.setTimeout(1000, () => {
+            client.destroy();
+            reject(new Error("Timeout"));
+          });
+        });
+        ftpReady = true;
+        console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
+      } catch (e) {
+        // FTP not ready yet
+      }
+    }
+
+    // Both ready, we can proceed
+    if (httpReady && ftpReady) {
+      break;
+    }
+
+    if (i === maxRetries - 1) {
+      throw new Error(
+        `Copyparty server failed to start after ${maxRetries} attempts (HTTP: ${httpReady}, FTP: ${ftpReady})`
+      );
+    }
+
+    // Server not ready yet, wait and retry
+    await sleep(1000);
+  }
+
+  return {
+    container,
+    containerName,
+    containerIp,
+    httpPort: 3923,
+    ftpPort: 3921,
+    httpHostPort: Number.parseInt(httpHostPort),
+    ftpHostPort: Number.parseInt(ftpHostPort)
+  };
+};
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "storage-hub-sh-bsp-1";

@@ -101,6 +101,10 @@ export const cleanupEnvironment = async (verbose = false) => {
     container.Names.some((name) => name.includes("storage-hub-sh-postgres-1"))
   );
 
+  const copypartyContainers = allContainers.filter((container) =>
+    container.Names.some((name) => name.includes("storage-hub-sh-copyparty"))
+  );
+
   const tmpDir = tmp.dirSync({ prefix: "bsp-logs-", unsafeCleanup: true });
 
   const logPromises = existingNodes.map(async (node) => {
@@ -142,6 +146,15 @@ export const cleanupEnvironment = async (verbose = false) => {
     promises.push(docker.getContainer(postgresContainer.Id).remove({ force: true }));
   } else {
     verbose && console.log("No postgres container found, skipping");
+  }
+
+  if (copypartyContainers.length > 0) {
+    console.log(`Stopping ${copypartyContainers.length} copyparty container(s)`);
+    for (const container of copypartyContainers) {
+      promises.push(docker.getContainer(container.Id).remove({ force: true }));
+    }
+  } else {
+    verbose && console.log("No copyparty containers found, skipping");
   }
 
   await Promise.all(promises);
