@@ -53,9 +53,8 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     // Initialize tracing
-    let filter = EnvFilter::from_default_env();
     tracing_subscriber::registry()
-        .with(filter)
+        .with(EnvFilter::from_default_env())
         .with(tracing_subscriber::fmt::layer())
         .init();
 

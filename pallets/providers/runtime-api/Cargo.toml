@@ -22,4 +22,4 @@ sp-runtime = { workspace = true }
 
 [features]
 default = ["std"]
-std = ["codec/std", "sp-api/std", "sp-runtime/std"]
+std = ["codec/std", "scale-info/std", "sp-api/std", "sp-runtime/std"]
