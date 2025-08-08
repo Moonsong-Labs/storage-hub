@@ -1,26 +1,23 @@
 import assert, { strictEqual } from "node:assert";
 import { describeBspNet, type EnrichedBspApi, addCopypartyContainer } from "../../../util";
 
-describeBspNet(
-  "User: Load File Into Storage",
-  { only: true },
-  ({ before, createUserApi, it }) => {
-    let userApi: EnrichedBspApi;
-    let containerName: string | undefined;
-    let httpPort: number | undefined;
-    let ftpPort: number | undefined;
+describeBspNet("User: Load File Into Storage", { only: true }, ({ before, createUserApi, it }) => {
+  let userApi: EnrichedBspApi;
+  let containerName: string | undefined;
+  let httpPort: number | undefined;
+  let ftpPort: number | undefined;
 
-    before(async () => {
-      userApi = await createUserApi();
+  before(async () => {
+    userApi = await createUserApi();
 
-      // Setup Copyparty server for remote tests
-      const copypartyInfo = await addCopypartyContainer();
-      containerName = copypartyInfo.containerName;
-      httpPort = copypartyInfo.httpPort;
-      ftpPort = copypartyInfo.ftpPort;
-    });
+    // Setup Copyparty server for remote tests
+    const copypartyInfo = await addCopypartyContainer();
+    containerName = copypartyInfo.containerName;
+    httpPort = copypartyInfo.httpPort;
+    ftpPort = copypartyInfo.ftpPort;
+  });
 
-    it("loadFileInStorage works", async () => {
+  it("loadFileInStorage works", async () => {
     const source = "res/adolphus.jpg";
     const destination = "test/adolphus.jpg";
     const bucketName = "bucket-0";
@@ -228,5 +225,4 @@ describeBspNet(
     );
     strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS["res/smile.jpg"].size);
   });
-  }
-);
+});
