@@ -5,6 +5,7 @@ pub mod config;
 pub mod constants;
 pub mod data;
 pub mod error;
+pub mod models;
 pub mod services;
 
 pub use api::create_app;
