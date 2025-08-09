@@ -9,8 +9,9 @@ use sc_tracing::tracing::error;
 
 use shc_actors_derive::actor_command;
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::types::{
-    BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{BucketId, ChunkId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId},
 };
 
 use super::{schema, FileTransferService};
@@ -56,9 +57,10 @@ pub enum RequestError {
 
 /// Messages understood by the FileTransfer service actor
 #[actor_command(
-    service = FileTransferService,
+    service = FileTransferService<Runtime: StorageEnableRuntime>,
     default_mode = "ImmediateResponse",
-    default_error_type = RequestError
+    default_error_type = RequestError,
+    generics(Runtime: StorageEnableRuntime)
 )]
 pub enum FileTransferServiceCommand {
     #[command(
@@ -81,7 +83,7 @@ pub enum FileTransferServiceCommand {
         /// it needs to be provided by the caller to pass the allow list check.
         /// Note: The task that handles the event is responsible for checking if the file is
         /// part of the specified bucket.
-        bucket_id: Option<BucketId>,
+        bucket_id: Option<BucketId<Runtime>>,
     },
     UploadResponse {
         /// The request ID used to send back the response through the FileTransferService
@@ -108,7 +110,7 @@ pub enum FileTransferServiceCommand {
         /// it needs to be provided by the caller to pass the allow list check.
         /// Note: The task that handles the event is responsible for checking if the file is
         /// part of the specified bucket.
-        bucket_id: Option<BucketId>,
+        bucket_id: Option<BucketId<Runtime>>,
     },
     DownloadResponse {
         request_id: DownloadRequestId,
@@ -127,10 +129,10 @@ pub enum FileTransferServiceCommand {
     },
     RegisterNewBucketPeer {
         peer_id: PeerId,
-        bucket_id: BucketId,
+        bucket_id: BucketId<Runtime>,
     },
     ScheduleUnregisterBucket {
-        bucket_id: BucketId,
+        bucket_id: BucketId<Runtime>,
         grace_period_seconds: Option<u64>,
     },
 }
@@ -154,7 +156,9 @@ pub trait FileTransferServiceCommandInterfaceExt {
 }
 
 #[async_trait]
-impl FileTransferServiceCommandInterfaceExt for ActorHandle<FileTransferService> {
+impl<Runtime: StorageEnableRuntime> FileTransferServiceCommandInterfaceExt
+    for ActorHandle<FileTransferService<Runtime>>
+{
     fn parse_remote_upload_data_response(
         &self,
         data: &Vec<u8>,
