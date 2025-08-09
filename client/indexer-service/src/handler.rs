@@ -11,14 +11,11 @@ use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
-use shc_common::{
-    blockchain_utils::get_events_at_block,
-    types::{BlockNumber, ParachainClient},
-};
+use shc_common::{blockchain_utils::get_events_at_block, types::ParachainClient};
 use shc_indexer_db::{models::*, DbConnection, DbPool};
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
-use sp_runtime::traits::Header;
+use sp_runtime::traits::{Header, NumberFor, SaturatedConversion};
 use storage_hub_runtime::RuntimeEvent;
 
 mod lite;
@@ -79,10 +76,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     ) -> Result<(), HandleFinalityNotificationError>
     where
         Block: sp_runtime::traits::Block<Hash = H256>,
-        Block::Header: Header<Number = BlockNumber>,
+        Block::Header: Header,
     {
         let finalized_block_hash = notification.hash;
-        let finalized_block_number = *notification.header.number();
+        let finalized_block_number: u64 = (*notification.header.number()).saturated_into();
 
         info!(target: LOG_TARGET, "Finality notification (#{}): {}", finalized_block_number, finalized_block_hash);
 
@@ -90,15 +87,18 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         let service_state = ServiceState::get(&mut db_conn).await?;
 
-        for block_number in
-            (service_state.last_processed_block as BlockNumber + 1)..=finalized_block_number
-        {
+        let mut next_block = service_state.last_processed_block as u64;
+        next_block = next_block.saturating_add(1);
+
+        while next_block <= finalized_block_number {
             let block_hash = self
                 .client
-                .block_hash(block_number)?
+                .block_hash(next_block.saturated_into())?
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
-            self.index_block(&mut db_conn, block_number as BlockNumber, block_hash)
+            let next_block_rt: NumberFor<Runtime::Block> = next_block.saturated_into();
+            self.index_block(&mut db_conn, next_block_rt, block_hash)
                 .await?;
+            next_block = next_block.saturating_add(1);
         }
 
         Ok(())
@@ -107,7 +107,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     async fn index_block<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        block_number: BlockNumber,
+        block_number: NumberFor<Runtime::Block>,
         block_hash: H256,
     ) -> Result<(), IndexBlockError> {
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
@@ -116,7 +116,9 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
 
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
-                ServiceState::update(conn, block_number as i64).await?;
+                let block_number_u64: u64 = block_number.saturated_into();
+                let block_number_i64: i64 = block_number_u64 as i64;
+                ServiceState::update(conn, block_number_i64).await?;
 
                 for ev in block_events {
                     self.route_event(conn, &ev.event, block_hash).await?;
