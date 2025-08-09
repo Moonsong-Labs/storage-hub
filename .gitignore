@@ -41,6 +41,7 @@ config.toml
 .vscode/
 .zed/
 .idea/
+.cursor/
 .cursorignore
 .worktrees/
 .cursorindexingignore
