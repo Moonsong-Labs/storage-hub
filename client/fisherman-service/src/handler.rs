@@ -49,7 +49,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         Self {
             client,
             last_processed_block: None,
-            event_bus_provider: FishermanServiceEventBusProvider::new(),
+            event_bus_provider: FishermanServiceEventBusProvider::<Runtime>::new(),
         }
     }
 
