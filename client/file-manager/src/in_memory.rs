@@ -1,8 +1,6 @@
 use codec::{Decode, Encode};
 use log::info;
-use sp_trie::{
-    recorder::Recorder, CompactProof, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut,
-};
+use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use std::collections::{HashMap, HashSet};
 use trie_db::TrieDBMutBuilder;
 
