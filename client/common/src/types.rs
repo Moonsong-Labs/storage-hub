@@ -63,7 +63,7 @@ pub type AccountId<Runtime> = <Runtime as frame_system::Config>::AccountId;
 pub type BlockNumber<Runtime> = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
 pub type TickNumber<Runtime> =
     <pallet_proofs_dealer::Pallet<Runtime> as ProofsDealerInterface>::TickNumber;
-pub type StorageDataUnit<Runtime> = pallet_file_system::types::StorageDataUnit<Runtime>;
+pub type StorageDataUnit<Runtime> = <Runtime as pallet_storage_providers::Config>::StorageDataUnit;
 pub type FileLocation<Runtime> = pallet_file_system::types::FileLocation<Runtime>;
 pub type StorageRequestMspBucketResponse<Runtime> =
     pallet_file_system::types::StorageRequestMspBucketResponse<Runtime>;
