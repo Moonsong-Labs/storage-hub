@@ -11,9 +11,8 @@ use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde::Deserialize;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
-use sp_core::H256;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{traits::Header, SaturatedConversion};
+use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -66,10 +65,11 @@ where
     Runtime: StorageEnableRuntime,
 {
     /// The configuration for the BlockchainService.
-    pub(crate) config: BlockchainServiceConfig,
+    pub(crate) config: BlockchainServiceConfig<Runtime>,
     /// The event bus provider.
-    pub(crate) event_bus_provider: BlockchainServiceEventBusProvider,
+    pub(crate) event_bus_provider: BlockchainServiceEventBusProvider<Runtime>,
     /// The parachain client. Used to interact with the runtime.
+    /// TODO: Consider not using `ParachainClient` here.
     pub(crate) client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// The keystore. Used to sign extrinsics.
     pub(crate) keystore: KeystorePtr,
@@ -84,20 +84,20 @@ where
     ///
     /// This is used to detect when the BlockchainService gets out of syncing mode and should therefore
     /// run some initialisation tasks. Also used to detect reorgs.
-    pub(crate) best_block: MinimalBlockInfo,
+    pub(crate) best_block: MinimalBlockInfo<Runtime>,
     /// Nonce counter for the extrinsics.
     pub(crate) nonce_counter: u32,
     /// A registry of waiters for a block number.
     pub(crate) wait_for_block_request_by_number:
-        BTreeMap<BlockNumber, Vec<tokio::sync::oneshot::Sender<anyhow::Result<()>>>>,
+        BTreeMap<BlockNumber<Runtime>, Vec<tokio::sync::oneshot::Sender<anyhow::Result<()>>>>,
     /// A registry of waiters for a tick number.
     pub(crate) wait_for_tick_request_by_number:
-        BTreeMap<TickNumber, Vec<tokio::sync::oneshot::Sender<Result<(), ApiError>>>>,
+        BTreeMap<TickNumber<Runtime>, Vec<tokio::sync::oneshot::Sender<Result<(), ApiError>>>>,
     /// The Provider ID that this node is managing.
     ///
     /// Can be a BSP or an MSP.
     /// This is initialised when the node is in sync.
-    pub(crate) maybe_managed_provider: Option<ManagedProvider>,
+    pub(crate) maybe_managed_provider: Option<ManagedProvider<Runtime>>,
     /// A persistent state store for the BlockchainService actor.
     pub(crate) persistent_state: BlockchainServiceStateStore,
     /// Notify period value to know when to trigger the NotifyPeriod event.
@@ -107,7 +107,7 @@ where
     /// Efficiently manages the capacity changes of storage providers.
     ///
     /// Only required if the node is running as a provider.
-    pub(crate) capacity_manager: Option<CapacityRequestQueue>,
+    pub(crate) capacity_manager: Option<CapacityRequestQueue<Runtime>>,
     /// Whether the node is running in maintenance mode.
     pub(crate) maintenance_mode: bool,
     /// Phantom data for the Runtime type.
@@ -115,33 +115,39 @@ where
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct BlockchainServiceConfig {
+pub struct BlockchainServiceConfig<Runtime>
+where
+    Runtime: StorageEnableRuntime,
+{
     /// Extrinsic retry timeout in seconds.
     pub extrinsic_retry_timeout: u64,
     /// The minimum number of blocks behind the current best block to consider the node out of sync.
     ///
     /// This triggers a catch-up of proofs and Forest root changes in the blockchain service, before
     /// continuing to process incoming events.
-    pub sync_mode_min_blocks_behind: BlockNumber,
+    pub sync_mode_min_blocks_behind: BlockNumber<Runtime>,
 
     /// On blocks that are multiples of this number, the blockchain service will trigger the catch
     /// up of proofs (see [`BlockchainService::proof_submission_catch_up`]).
-    pub check_for_pending_proofs_period: BlockNumber,
+    pub check_for_pending_proofs_period: BlockNumber<Runtime>,
 
     /// The maximum number of blocks from the past that will be processed for catching up the root
     /// changes (see [`BlockchainService::forest_root_changes_catchup`]). This constant determines
     /// the maximum size of the `tree_route` in the [`NewBlockNotificationKind::NewBestBlock`] enum
     /// variant.
-    pub max_blocks_behind_to_catch_up_root_changes: BlockNumber,
+    pub max_blocks_behind_to_catch_up_root_changes: BlockNumber<Runtime>,
 }
 
-impl Default for BlockchainServiceConfig {
+impl<Runtime> Default for BlockchainServiceConfig<Runtime>
+where
+    Runtime: StorageEnableRuntime,
+{
     fn default() -> Self {
         Self {
             extrinsic_retry_timeout: 30,
-            sync_mode_min_blocks_behind: 5,
-            check_for_pending_proofs_period: 4,
-            max_blocks_behind_to_catch_up_root_changes: 10,
+            sync_mode_min_blocks_behind: 5u32.into(),
+            check_for_pending_proofs_period: 4u32.into(),
+            max_blocks_behind_to_catch_up_root_changes: 10u32.into(),
         }
     }
 }
@@ -234,7 +240,7 @@ where
 {
     type Message = BlockchainServiceCommand<Runtime>;
     type EventLoop = BlockchainServiceEventLoop<FSH, Runtime>;
-    type EventBusProvider = BlockchainServiceEventBusProvider;
+    type EventBusProvider = BlockchainServiceEventBusProvider<Runtime>;
 
     fn handle_message(
         &mut self,
@@ -355,7 +361,7 @@ where
 
                     let (tx, rx) = tokio::sync::oneshot::channel();
 
-                    if current_block_number >= block_number {
+                    if current_block_number >= block_number.saturated_into() {
                         match tx.send(Ok(())) {
                             Ok(_) => {}
                             Err(_) => {
@@ -387,7 +393,7 @@ where
                     let (tx, rx) = tokio::sync::oneshot::channel();
 
                     self.wait_for_block_request_by_number
-                        .entry(current_block_number + number_of_blocks)
+                        .entry(number_of_blocks.saturating_add(current_block_number.into()))
                         .or_insert_with(Vec::new)
                         .push(tx);
 
@@ -607,7 +613,7 @@ where
                             error!(target: LOG_TARGET, "Failed to query provider multiaddresses");
                             Err(QueryProviderMultiaddressesError::InternalError)
                         })
-                        .map(convert_raw_multiaddresses_to_multiaddr);
+                        .map(convert_raw_multiaddresses_to_multiaddr::<Runtime>);
 
                     match callback.send(multiaddresses) {
                         Ok(_) => {
@@ -830,7 +836,7 @@ where
                         let state_store_context =
                             self.persistent_state.open_rw_context_with_overlay();
                         state_store_context
-                            .pending_confirm_storing_request_deque()
+                            .pending_confirm_storing_request_deque::<Runtime>()
                             .push_back(request);
                         state_store_context.commit();
                         // We check right away if we can process the request so we don't waste time.
@@ -1158,14 +1164,14 @@ where
 {
     /// Create a new [`BlockchainService`].
     pub fn new(
-        config: BlockchainServiceConfig,
+        config: BlockchainServiceConfig<Runtime>,
         client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         forest_storage_handler: FSH,
         rocksdb_root_path: impl Into<PathBuf>,
         notify_period: Option<u32>,
-        capacity_request_queue: Option<CapacityRequestQueue>,
+        capacity_request_queue: Option<CapacityRequestQueue<Runtime>>,
         maintenance_mode: bool,
     ) -> Self {
         Self {
@@ -1192,7 +1198,7 @@ where
         &mut self,
         notification: BlockImportNotification<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
     {
         // If the node is running in maintenance mode, we don't process block imports.
         if self.maintenance_mode {
@@ -1234,12 +1240,15 @@ where
         // Check if we just came out of syncing mode.
         // We use saturating_sub because in a reorg, there is a potential scenario where the last
         // block processed is higher than the current block number.
-        if block_number.saturating_sub(last_block_processed.number)
-            > self.config.sync_mode_min_blocks_behind
-        {
+        let sync_mode_min_blocks_behind = self
+            .config
+            .sync_mode_min_blocks_behind
+            .saturated_into::<u128>();
+        if block_number.saturating_sub(last_block_processed.number) > sync_mode_min_blocks_behind {
             self.handle_initial_sync(notification).await;
         }
 
+        let block_number = block_number.saturated_into();
         self.process_block_import(&block_hash, &block_number, tree_route)
             .await;
     }
@@ -1251,7 +1260,7 @@ where
     /// 1. Sync the latest nonce, used to sign extrinsics (see [`Self::sync_nonce`]).
     /// 2. Get the Provider ID linked to keys in this node's keystore, and set it as
     /// the Provider ID that this node is managing (see [`Self::sync_provider_id`]).
-    fn init_block_processing(&mut self, block_hash: &H256) {
+    fn init_block_processing(&mut self, block_hash: &Runtime::Hash) {
         // We query the [`BlockchainService`] account nonce at this height
         // and update our internal counter if it's smaller than the result.
         self.sync_nonce(&block_hash);
@@ -1264,10 +1273,10 @@ where
     /// Handle the situation after the node comes out of syncing mode (i.e. hasn't processed many of the last blocks).
     async fn handle_initial_sync<Block>(&mut self, notification: BlockImportNotification<Block>)
     where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
     {
-        let block_hash: H256 = notification.hash;
-        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+        let block_hash = notification.hash;
+        let block_number = *notification.header.number();
 
         // If this is the first block import notification, we might need to catch up.
         info!(target: LOG_TARGET, "🥱 Handling coming out of sync mode (synced to #{}: {})", block_number, block_hash);
@@ -1278,7 +1287,9 @@ where
         // Check if there was an ongoing process confirm storing task.
         // Note: This would only exist if the node was running as a BSP.
         let maybe_ongoing_process_confirm_storing_request = state_store_context
-            .access_value(&OngoingProcessConfirmStoringRequestCf)
+            .access_value(&OngoingProcessConfirmStoringRequestCf::<Runtime> {
+                phantom: Default::default(),
+            })
             .read();
 
         // If there was an ongoing process confirm storing task, we need to re-queue the requests.
@@ -1286,7 +1297,7 @@ where
         {
             for request in process_confirm_storing_request.confirm_storing_requests {
                 state_store_context
-                    .pending_confirm_storing_request_deque()
+                    .pending_confirm_storing_request_deque::<Runtime>()
                     .push_back(request);
             }
         }
@@ -1310,7 +1321,11 @@ where
 
         // Check if there was an ongoing process stop storing task.
         let maybe_ongoing_process_stop_storing_for_insolvent_user_request = state_store_context
-            .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+            .access_value(
+                &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
+                    phantom: Default::default(),
+                },
+            )
             .read();
 
         // If there was an ongoing process stop storing task, we need to re-queue the requests.
@@ -1342,11 +1357,11 @@ where
 
     async fn process_block_import<Block>(
         &mut self,
-        block_hash: &H256,
-        block_number: &BlockNumber,
+        block_hash: &Runtime::Hash,
+        block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
     {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
@@ -1425,7 +1440,9 @@ where
 
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
         state_store_context
-            .access_value(&LastProcessedBlockNumberCf)
+            .access_value(&LastProcessedBlockNumberCf::<Runtime> {
+                phantom: Default::default(),
+            })
             .write(block_number);
         state_store_context.commit();
     }
@@ -1435,10 +1452,10 @@ where
         &mut self,
         notification: FinalityNotification<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
     {
-        let block_hash: H256 = notification.hash;
-        let block_number: BlockNumber = (*notification.header.number()).saturated_into();
+        let block_hash = notification.hash;
+        let block_number = *notification.header.number();
 
         // If the node is running in maintenance mode, we don't process finality notifications.
         if self.maintenance_mode {

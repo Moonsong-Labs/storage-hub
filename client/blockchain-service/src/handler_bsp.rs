@@ -6,7 +6,7 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::{Get, H256};
+use sp_core::{Get, H256, U256};
 use sp_runtime::traits::Zero;
 
 use pallet_proofs_dealer_runtime_api::{
@@ -60,14 +60,15 @@ where
     /// 2. In blocks that are a multiple of `BlockchainServiceConfig::check_for_pending_proofs_period`, catch up to proof submissions for the current tick.
     pub(crate) async fn bsp_init_block_processing<Block>(
         &self,
-        block_hash: &H256,
-        block_number: &BlockNumber,
+        block_hash: &Runtime::Hash,
+        block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
     {
         self.forest_root_changes_catchup(&tree_route).await;
-        if block_number % self.config.check_for_pending_proofs_period == BlockNumber::zero() {
+        let block_number: U256 = (*block_number).into();
+        if block_number % self.config.check_for_pending_proofs_period == Zero::zero() {
             self.proof_submission_catch_up(block_hash);
         }
     }
@@ -91,7 +92,7 @@ where
                 if self.should_provider_submit_proof(
                     &block_hash,
                     managed_bsp_id,
-                    &challenges_ticker,
+                    &challenges_ticker.into(),
                 ) {
                     self.proof_submission_catch_up(&block_hash);
                 } else {
@@ -219,7 +220,8 @@ where
         let client_best_number = self.client.info().best_number;
 
         // Skip if the latest processed block doesn't match the current best block
-        if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
+        if self.best_block.hash != client_best_hash
+            || self.best_block.number != client_best_number.into()
         {
             trace!(target: LOG_TARGET, "Skipping Forest root write lock assignment because latest processed block does not match current best block (local block hash and number [{}, {}], best block hash and number [{}, {}])", self.best_block.hash, self.best_block.number, client_best_hash, client_best_number);
             return;
@@ -259,10 +261,16 @@ where
 
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessConfirmStoringRequestCf)
+                    .access_value(&OngoingProcessConfirmStoringRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .delete();
                 state_store_context
-                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .access_value(
+                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
+                            phantom: Default::default(),
+                        },
+                    )
                     .delete();
                 state_store_context.commit();
             } else {
@@ -329,13 +337,13 @@ where
 
         // If we have no pending submit proof requests, we can also check for pending confirm storing requests.
         if next_event_data.is_none() {
-            let max_batch_confirm = <MaxBatchConfirmStorageRequests as Get<u32>>::get();
+            let max_batch_confirm = <MaxBatchConfirmStorageRequests<Runtime> as Get<u32>>::get();
 
             // Batch multiple confirm file storing taking the runtime maximum.
             let mut confirm_storing_requests = Vec::new();
             for _ in 0..max_batch_confirm {
                 if let Some(request) = state_store_context
-                    .pending_confirm_storing_request_deque()
+                    .pending_confirm_storing_request_deque::<Runtime>()
                     .pop_front()
                 {
                     trace!(target: LOG_TARGET, "Processing confirm storing request for file [{:?}]", request.file_key);
@@ -543,7 +551,7 @@ where
         }
     }
 
-    fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
+    fn bsp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
         // Get the BSP's Forest root write lock.
         let forest_root_write_lock = match &mut self.maybe_managed_provider {
             Some(ManagedProvider::Bsp(bsp_handler)) => &mut bsp_handler.forest_root_write_lock,
@@ -564,14 +572,20 @@ where
             ForestWriteLockTaskData::ConfirmStoringRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessConfirmStoringRequestCf)
+                    .access_value(&OngoingProcessConfirmStoringRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .write(data);
                 state_store_context.commit();
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .access_value(
+                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
+                            phantom: Default::default(),
+                        },
+                    )
                     .write(data);
                 state_store_context.commit();
             }

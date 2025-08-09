@@ -13,7 +13,7 @@ use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
 use sp_runtime::traits::{
-    Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension, Verify,
+    ConstU32, Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension, Verify,
 };
 
 use crate::types::*;
@@ -198,12 +198,56 @@ impl<T> StorageEnableRuntimeApi for T where
 pub trait StorageEnableRuntime:
     // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
     // TODO: If we don't do this now, in `utils.rs` we cannot compare the `owner` field of the `AcceptedBspVolunteer` event with the caller's public key.
-    frame_system::Config<AccountId = sp_runtime::AccountId32>
-        + pallet_storage_providers::Config
-        + pallet_proofs_dealer::Config
-        + pallet_file_system::Config
+    // TODO:
+    // TODO: Remove the restriction that `StorageDataUnit = u64` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
+    // TODO: If we don't do this now, in `handler_msp.rs` we receive a `RuntimeEvent` with a `file_size` field of type `u64` (already concrete type) instead of `StorageDataUnit`.
+    // TODO:
+    // TODO: Remove the restriction that `MaxFilePathSize = ConstU32<512>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
+    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `location` field of type that includes `MaxFilePathSize = ConstU32<512>` 
+    // TODO: (already concrete type) instead of `MaxFilePathSize<Runtime>`.
+    // TODO:
+    // TODO: Remove the restriction that `MaxNumberOfPeerIds = ConstU32<5>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
+    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `user_peer_ids` field of type that includes `MaxNumberOfPeerIds = ConstU32<5>` 
+    // TODO: (already concrete type) instead of `MaxNumberOfPeerIds<Runtime>`.
+    // TODO:
+    // TODO: Remove the restriction that `MaxPeerIdSize = ConstU32<100>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
+    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `user_peer_ids` field of type that includes `MaxPeerIdSize = ConstU32<100>` 
+    // TODO: (already concrete type) instead of `MaxPeerIdSize<Runtime>`.
+    // TODO:
+    // TODO: Remove the restriction that `Balance = u128` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
+    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `last_chargeable_price_index` field of type that includes `Balance = u128` 
+    // TODO: (already concrete type) instead of `Balance<Runtime>`.
+    // TODO:
+    // TODO: Remove the restriction that `MaxMultiAddressSize = ConstU32<100>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
+    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `multiaddresses` field of type that includes `MaxMultiAddressSize = ConstU32<100>` 
+    // TODO: (already concrete type) instead of `MaxMultiAddressSize<Runtime>`.
+    // TODO:
+    // TODO: Remove the restriction that `MaxMultiAddressAmount = ConstU32<5>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
+    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `multiaddresses` field of type that includes `MaxMultiAddressAmount = ConstU32<5>` 
+    // TODO: (already concrete type) instead of `MaxMultiAddressAmount<Runtime>`.
+    // TODO:
+    // TODO: Consider removing the restriction that `Hash = H256`, `MerkleTrieHash = H256`, `ProviderId = H256`, `MerklePatriciaRoot = H256`.
+    frame_system::Config<Hash = H256, AccountId = sp_runtime::AccountId32>
+        + pallet_storage_providers::Config<
+            ProviderId = H256,
+            MerklePatriciaRoot = H256,
+            StorageDataUnit = u64,
+            MaxMultiAddressSize = ConstU32<100>,
+            MaxMultiAddressAmount = ConstU32<5>,
+        >
+        + pallet_proofs_dealer::Config<
+            ProvidersPallet = pallet_storage_providers::Pallet<Self>,
+            MerkleTrieHash = H256,
+        >
+        + pallet_file_system::Config<
+            Providers = pallet_storage_providers::Pallet<Self>,
+            ProofDealer = pallet_proofs_dealer::Pallet<Self>,
+            MaxFilePathSize = ConstU32<512>,
+            MaxNumberOfPeerIds = ConstU32<5>,
+            MaxPeerIdSize = ConstU32<100>
+        >
         + pallet_transaction_payment::Config
-        + pallet_balances::Config<Balance: MaybeDisplay>
+        + pallet_balances::Config<Balance = u128>
         + Copy
         + Debug
         + Send

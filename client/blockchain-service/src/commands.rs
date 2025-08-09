@@ -5,7 +5,6 @@ use sc_network::Multiaddr;
 use serde_json::Number;
 use shc_common::traits::{KeyTypeOperations, StorageEnableRuntime};
 use sp_api::ApiError;
-use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
     IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -23,12 +22,11 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_derive::actor_command;
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf, MainStorageProviderId,
-    ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId,
-    TickNumber,
+    AccountId, Balance, BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf,
+    MainStorageProviderId, ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageDataUnit,
+    StorageHubEventsVec, StorageProviderId, TickNumber,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use crate::{
     capacity_manager::CapacityRequestData,
@@ -51,64 +49,64 @@ const LOG_TARGET: &str = "blockchain-service-interface";
     generics(Runtime: StorageEnableRuntime)
 )]
 pub enum BlockchainServiceCommand {
-    #[command(success_type = SubmittedTransaction)]
+    #[command(success_type = SubmittedTransaction<Runtime>)]
     SendExtrinsic {
         call: Runtime::Call,
         options: SendExtrinsicOptions,
     },
     #[command(success_type = Extrinsic)]
     GetExtrinsicFromBlock {
-        block_hash: H256,
-        extrinsic_hash: H256,
+        block_hash: Runtime::Hash,
+        extrinsic_hash: Runtime::Hash,
     },
     UnwatchExtrinsic {
         subscription_id: Number,
     },
-    #[command(success_type = MinimalBlockInfo)]
+    #[command(success_type = MinimalBlockInfo<Runtime>)]
     GetBestBlockInfo,
     #[command(mode = "AsyncResponse")]
     WaitForBlock {
-        block_number: BlockNumber,
+        block_number: BlockNumber<Runtime>,
     },
     #[command(mode = "AsyncResponse")]
     WaitForNumBlocks {
-        number_of_blocks: BlockNumber,
+        number_of_blocks: BlockNumber<Runtime>,
     },
     #[command(mode = "AsyncResponse", error_type = ApiError)]
     WaitForTick {
-        tick_number: TickNumber,
+        tick_number: TickNumber<Runtime>,
     },
     #[command(success_type = bool, error_type = IsStorageRequestOpenToVolunteersError)]
     IsStorageRequestOpenToVolunteers {
-        file_key: H256,
+        file_key: Runtime::Hash,
     },
-    #[command(success_type = BlockNumber, error_type = QueryFileEarliestVolunteerTickError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = QueryFileEarliestVolunteerTickError)]
     QueryFileEarliestVolunteerTick {
-        bsp_id: ProviderId,
-        file_key: H256,
+        bsp_id: ProviderId<Runtime>,
+        file_key: Runtime::Hash,
     },
-    #[command(success_type = BlockNumber, error_type = QueryEarliestChangeCapacityBlockError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = QueryEarliestChangeCapacityBlockError)]
     QueryEarliestChangeCapacityBlock {
-        bsp_id: ProviderId,
+        bsp_id: ProviderId<Runtime>,
     },
     #[command(success_type = <<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public)]
     GetNodePublicKey,
     #[command(success_type = Vec<ChunkId>, error_type = QueryBspConfirmChunksToProveForFileError)]
     QueryBspConfirmChunksToProveForFile {
-        bsp_id: ProofsDealerProviderId,
-        file_key: H256,
+        bsp_id: ProofsDealerProviderId<Runtime>,
+        file_key: Runtime::Hash,
     },
     #[command(success_type = Vec<ChunkId>, error_type = QueryMspConfirmChunksToProveForFileError)]
     QueryMspConfirmChunksToProveForFile {
-        msp_id: ProofsDealerProviderId,
-        file_key: H256,
+        msp_id: ProofsDealerProviderId<Runtime>,
+        file_key: Runtime::Hash,
     },
     #[command(success_type = Vec<Multiaddr>, error_type = QueryProviderMultiaddressesError)]
     QueryProviderMultiaddresses {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
     QueueSubmitProofRequest {
-        request: SubmitProofRequest,
+        request: SubmitProofRequest<Runtime>,
     },
     QueueConfirmBspRequest {
         request: ConfirmStoringRequest,
@@ -119,81 +117,81 @@ pub enum BlockchainServiceCommand {
     QueueStopStoringForInsolventUserRequest {
         request: StopStoringForInsolventUserRequest,
     },
-    #[command(success_type = Vec<ForestLeaf>, error_type = ApiError)]
+    #[command(success_type = Vec<ForestLeaf<Runtime>>, error_type = ApiError)]
     QueryChallengesFromSeed {
-        seed: RandomnessOutput,
-        provider_id: ProofsDealerProviderId,
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
         count: u32,
     },
-    #[command(success_type = Vec<ForestLeaf>, error_type = ApiError)]
+    #[command(success_type = Vec<ForestLeaf<Runtime>>, error_type = ApiError)]
     QueryForestChallengesFromSeed {
-        seed: RandomnessOutput,
-        provider_id: ProofsDealerProviderId,
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
     },
-    #[command(success_type = BlockNumber, error_type = GetProofSubmissionRecordError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = GetProofSubmissionRecordError)]
     QueryLastTickProviderSubmittedProof {
-        provider_id: ProofsDealerProviderId,
+        provider_id: ProofsDealerProviderId<Runtime>,
     },
-    #[command(success_type = BlockNumber, error_type = GetChallengePeriodError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = GetChallengePeriodError)]
     QueryChallengePeriod {
-        provider_id: ProofsDealerProviderId,
+        provider_id: ProofsDealerProviderId<Runtime>,
     },
-    #[command(success_type = BlockNumber, error_type = GetProofSubmissionRecordError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = GetProofSubmissionRecordError)]
     QueryNextChallengeTickForProvider {
-        provider_id: ProofsDealerProviderId,
+        provider_id: ProofsDealerProviderId<Runtime>,
     },
-    #[command(success_type = BlockNumber, error_type = ApiError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = ApiError)]
     QueryLastCheckpointChallengeTick,
-    #[command(success_type = Vec<CustomChallenge>, error_type = GetCheckpointChallengesError)]
+    #[command(success_type = Vec<CustomChallenge<Runtime>>, error_type = GetCheckpointChallengesError)]
     QueryLastCheckpointChallenges {
-        tick: BlockNumber,
+        tick: BlockNumber<Runtime>,
     },
-    #[command(success_type = H256, error_type = GetBspInfoError)]
+    #[command(success_type = Runtime::Hash, error_type = GetBspInfoError)]
     QueryProviderForestRoot {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = StorageDataUnit, error_type = QueryStorageProviderCapacityError)]
+    #[command(success_type = StorageDataUnit<Runtime>, error_type = QueryStorageProviderCapacityError)]
     QueryStorageProviderCapacity {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = StorageDataUnit, error_type = QueryAvailableStorageCapacityError)]
+    #[command(success_type = StorageDataUnit<Runtime>, error_type = QueryAvailableStorageCapacityError)]
     QueryAvailableStorageCapacity {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = Option<StorageProviderId>)]
+    #[command(success_type = Option<StorageProviderId<Runtime>>)]
     QueryStorageProviderId {
         maybe_node_pub_key:
             Option<<<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public>,
     },
-    #[command(success_type = Vec<AccountId>, error_type = GetUsersWithDebtOverThresholdError)]
+    #[command(success_type = Vec<AccountId<Runtime>>, error_type = GetUsersWithDebtOverThresholdError)]
     QueryUsersWithDebt {
-        provider_id: ProviderId,
-        min_debt: Balance,
+        provider_id: ProviderId<Runtime>,
+        min_debt: Balance<Runtime>,
     },
-    #[command(success_type = Option<Balance>)]
+    #[command(success_type = Option<Balance<Runtime>>)]
     QueryWorstCaseScenarioSlashableAmount {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = Balance)]
+    #[command(success_type = Balance<Runtime>)]
     QuerySlashAmountPerMaxFileSize,
-    #[command(success_type = Option<MainStorageProviderId>, error_type = QueryMspIdOfBucketIdError)]
+    #[command(success_type = Option<MainStorageProviderId<Runtime>>, error_type = QueryMspIdOfBucketIdError)]
     QueryMspIdOfBucketId {
-        bucket_id: BucketId,
+        bucket_id: BucketId<Runtime>,
     },
     ReleaseForestRootWriteLock {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
     },
     QueueFileDeletionRequest {
-        request: FileDeletionRequest,
+        request: FileDeletionRequest<Runtime>,
     },
     #[command(mode = "AsyncResponse")]
     IncreaseCapacity {
-        request: CapacityRequestData,
+        request: CapacityRequestData<Runtime>,
     },
-    #[command(success_type = Vec<BucketId>, error_type = QueryBucketsOfUserStoredByMspError)]
+    #[command(success_type = Vec<BucketId<Runtime>>, error_type = QueryBucketsOfUserStoredByMspError)]
     QueryBucketsOfUserStoredByMsp {
-        msp_id: ProviderId,
-        user: AccountId,
+        msp_id: ProviderId<Runtime>,
+        user: AccountId<Runtime>,
     },
 }
 
