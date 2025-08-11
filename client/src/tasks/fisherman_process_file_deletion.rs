@@ -45,14 +45,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<ProcessFileDeletionRequest>
+impl<NT, Runtime> EventHandler<ProcessFileDeletionRequest<Runtime>>
     for FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: ProcessFileDeletionRequest<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for file key: {:?}",

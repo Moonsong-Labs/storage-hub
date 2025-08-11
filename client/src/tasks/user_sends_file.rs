@@ -59,14 +59,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<NewStorageRequest> for UserSendsFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for UserSendsFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
     /// It generates the file metadata and sends it to the BSPs volunteering to store the file.
-    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
         let node_pub_key = self
             .storage_hub_handler
             .blockchain
@@ -74,7 +74,7 @@ where
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get node public key: {:?}", e))?;
 
-        if event.who != node_pub_key.into() {
+        if AccountId32::from(event.who.clone()) != node_pub_key.into() {
             // Skip if the storage request was not created by this user node.
             return Ok(());
         }
@@ -151,7 +151,7 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<AcceptedBspVolunteer<Runtime>> for UserSendsFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     Runtime: StorageEnableRuntime,
@@ -160,7 +160,7 @@ where
     /// establishes a connection to each BSPs through the p2p network and sends the file.
     /// At this point we assume that the file is merkleised and already in file storage, and
     /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails.
-    async fn handle_event(&mut self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: AcceptedBspVolunteer<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Handling BSP volunteering to store a file from user [{:?}], with location [{:?}]",
@@ -359,7 +359,7 @@ where
                             // Wait a bit for the MSP to be online
                             self.storage_hub_handler
                                 .blockchain
-                                .wait_for_num_blocks(5)
+                                .wait_for_num_blocks(5u32.into())
                                 .await?;
                         }
                         Err(RequestFailure::Refused)
@@ -482,7 +482,7 @@ where
                             // Wait a bit for the MSP to be online
                             self.storage_hub_handler
                                 .blockchain
-                                .wait_for_num_blocks(5)
+                                .wait_for_num_blocks(5u32.into())
                                 .await?;
                         }
                         Err(RequestFailure::Refused)

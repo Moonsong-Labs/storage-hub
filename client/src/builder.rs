@@ -5,6 +5,7 @@ use sc_service::RpcHandlers;
 use serde::Deserialize;
 use shc_indexer_db::DbPool;
 use sp_keystore::KeystorePtr;
+use sp_runtime::traits::SaturatedConversion;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -48,12 +49,12 @@ where
     Runtime: StorageEnableRuntime,
 {
     task_spawner: Option<TaskSpawner>,
-    file_transfer: Option<ActorHandle<FileTransferService>>,
+    file_transfer: Option<ActorHandle<FileTransferService<Runtime>>>,
     blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH, Runtime>>>,
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
     forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
-    capacity_config: Option<CapacityConfig>,
+    capacity_config: Option<CapacityConfig<Runtime>>,
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
     // Configuration options for tasks and services
@@ -63,7 +64,7 @@ where
     bsp_move_bucket_config: Option<BspMoveBucketConfig>,
     bsp_charge_fees_config: Option<BspChargeFeesConfig>,
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
-    blockchain_service_config: Option<BlockchainServiceConfig>,
+    blockchain_service_config: Option<BlockchainServiceConfig<Runtime>>,
     peer_manager: Option<Arc<BspPeerManager>>,
 }
 
@@ -120,7 +121,10 @@ where
     ///
     /// The node will not increase its on-chain capacity above this value.
     /// This is meant to reflect the actual physical storage capacity of the node.
-    pub fn with_capacity_config(&mut self, capacity_config: Option<CapacityConfig>) -> &mut Self {
+    pub fn with_capacity_config(
+        &mut self,
+        capacity_config: Option<CapacityConfig<Runtime>>,
+    ) -> &mut Self {
         self.capacity_config = capacity_config;
         self
     }
@@ -300,19 +304,20 @@ where
         }
 
         if let Some(sync_mode_min_blocks_behind) = config.sync_mode_min_blocks_behind {
-            blockchain_service_config.sync_mode_min_blocks_behind = sync_mode_min_blocks_behind;
+            blockchain_service_config.sync_mode_min_blocks_behind =
+                sync_mode_min_blocks_behind.saturated_into();
         }
 
         if let Some(check_for_pending_proofs_period) = config.check_for_pending_proofs_period {
             blockchain_service_config.check_for_pending_proofs_period =
-                check_for_pending_proofs_period;
+                check_for_pending_proofs_period.saturated_into();
         }
 
         if let Some(max_blocks_behind_to_catch_up_root_changes) =
             config.max_blocks_behind_to_catch_up_root_changes
         {
             blockchain_service_config.max_blocks_behind_to_catch_up_root_changes =
-                max_blocks_behind_to_catch_up_root_changes;
+                max_blocks_behind_to_catch_up_root_changes.saturated_into();
         }
 
         self.blockchain_service_config = Some(blockchain_service_config);
@@ -665,17 +670,24 @@ pub struct BlockchainServiceOptions {
     pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
 }
 
-impl Into<BlockchainServiceConfig> for BlockchainServiceOptions {
-    fn into(self) -> BlockchainServiceConfig {
+impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
+    for BlockchainServiceOptions
+{
+    fn into(self) -> BlockchainServiceConfig<Runtime> {
         BlockchainServiceConfig {
             extrinsic_retry_timeout: self.extrinsic_retry_timeout.unwrap_or_default(),
-            sync_mode_min_blocks_behind: self.sync_mode_min_blocks_behind.unwrap_or_default(),
+            sync_mode_min_blocks_behind: self
+                .sync_mode_min_blocks_behind
+                .unwrap_or_default()
+                .saturated_into(),
             check_for_pending_proofs_period: self
                 .check_for_pending_proofs_period
-                .unwrap_or_default(),
+                .unwrap_or_default()
+                .saturated_into(),
             max_blocks_behind_to_catch_up_root_changes: self
                 .max_blocks_behind_to_catch_up_root_changes
-                .unwrap_or_default(),
+                .unwrap_or_default()
+                .saturated_into(),
         }
     }
 }

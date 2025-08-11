@@ -91,13 +91,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<LastChargeableInfoUpdated<Runtime>>
+    for BspChargeFeesTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: LastChargeableInfoUpdated) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: LastChargeableInfoUpdated<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
 
         // Retrieves users with debt over the min_debt threshold from config
@@ -117,7 +121,7 @@ where
         // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
         // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
         // Logs an error in case of failure and continues.
-        let user_chunk_size = <MaxUsersToCharge as Get<u32>>::get();
+        let user_chunk_size = <MaxUsersToCharge<Runtime> as Get<u32>>::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
             let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
                 pallet_payment_streams::Call::charge_multiple_users_payment_streams {
@@ -145,13 +149,13 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<UserWithoutFunds> for BspChargeFeesTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<UserWithoutFunds<Runtime>> for BspChargeFeesTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: UserWithoutFunds) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing UserWithoutFunds for user {:?}",
@@ -193,13 +197,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<SpStopStoringInsolventUser> for BspChargeFeesTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<SpStopStoringInsolventUser<Runtime>>
+    for BspChargeFeesTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: SpStopStoringInsolventUser) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: SpStopStoringInsolventUser<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing SpStopStoringForInsolventUser for user {:?}",
@@ -245,7 +253,7 @@ where
 ///
 /// This event is triggered whenever a Forest write-lock can be acquired to process a `StopStoringForInsolventUserRequest`
 /// after receiving either a `UserWithoutFunds` or `SpStopStoringInsolventUser` event.
-impl<NT, Runtime> EventHandler<ProcessStopStoringForInsolventUserRequest>
+impl<NT, Runtime> EventHandler<ProcessStopStoringForInsolventUserRequest<Runtime>>
     for BspChargeFeesTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
@@ -254,7 +262,7 @@ where
 {
     async fn handle_event(
         &mut self,
-        event: ProcessStopStoringForInsolventUserRequest,
+        event: ProcessStopStoringForInsolventUserRequest<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,

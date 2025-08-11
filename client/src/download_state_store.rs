@@ -1,9 +1,10 @@
 use anyhow::Result;
 use log::*;
 use rocksdb::{ColumnFamilyDescriptor, Options, DB};
-use std::path::PathBuf;
+use std::{marker::PhantomData, path::PathBuf};
 
 use shc_common::{
+    traits::StorageEnableRuntime,
     typed_store::{
         BufferedWriteSupport, CFRangeMapAPI, CompositeKey, ProvidesDbContext,
         ProvidesTypedDbAccess, ScaleDbCodec, ScaleEncodedCf, TypedCf, TypedDbContext, TypedRocksDB,
@@ -78,16 +79,20 @@ pub struct FileMetadataCf;
 ///
 /// This CF is used to track which buckets are being downloaded so that
 /// downloads can be resumed if interrupted.
-pub struct PendingBucketDownloadsCf;
+pub struct PendingBucketDownloadsCf<Runtime: StorageEnableRuntime> {
+    pub phantom: PhantomData<Runtime>,
+}
 
-impl Default for PendingBucketDownloadsCf {
+impl<Runtime: StorageEnableRuntime> Default for PendingBucketDownloadsCf<Runtime> {
     fn default() -> Self {
-        Self
+        Self {
+            phantom: PhantomData,
+        }
     }
 }
 
-impl ScaleEncodedCf for PendingBucketDownloadsCf {
-    type Key = BucketId; // Bucket ID
+impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingBucketDownloadsCf<Runtime> {
+    type Key = BucketId<Runtime>; // Bucket ID
     type Value = bool; // Download in progress flag
 
     const SCALE_ENCODED_NAME: &'static str = "pending_bucket_downloads";
@@ -110,7 +115,8 @@ impl ScaleEncodedCf for FileMetadataCf {
 const ALL_COLUMN_FAMILIES: &[&str] = &[
     MissingChunksCompositeCf::NAME,
     FileMetadataCf::SCALE_ENCODED_NAME,
-    PendingBucketDownloadsCf::SCALE_ENCODED_NAME,
+    // TODO: Remove the dependency on `storage_hub_runtime` here.
+    PendingBucketDownloadsCf::<storage_hub_runtime::Runtime>::SCALE_ENCODED_NAME,
 ];
 
 /// Persistent store for file download state using RocksDB.
@@ -121,12 +127,13 @@ const ALL_COLUMN_FAMILIES: &[&str] = &[
 ///
 /// The store uses separate column families to store different types of data
 /// and provides a context-based API for reading and writing data.
-pub struct DownloadStateStore {
+pub struct DownloadStateStore<Runtime: StorageEnableRuntime> {
     /// The RocksDB database
     rocks: TypedRocksDB,
+    phantom: PhantomData<Runtime>,
 }
 
-impl DownloadStateStore {
+impl<Runtime: StorageEnableRuntime> DownloadStateStore<Runtime> {
     pub fn new(root_path: PathBuf) -> Result<Self> {
         let mut path = root_path;
         path.push("storagehub/download_state/");
@@ -148,12 +155,13 @@ impl DownloadStateStore {
 
         Ok(DownloadStateStore {
             rocks: TypedRocksDB { db },
+            phantom: PhantomData,
         })
     }
 
     /// Starts a read/write interaction with the DB
-    pub fn open_rw_context(&self) -> DownloadStateStoreRwContext<'_> {
-        DownloadStateStoreRwContext::new(TypedDbContext::new(
+    pub fn open_rw_context(&self) -> DownloadStateStoreRwContext<'_, Runtime> {
+        DownloadStateStoreRwContext::<Runtime>::new(TypedDbContext::new(
             &self.rocks,
             BufferedWriteSupport::new(&self.rocks),
         ))
@@ -169,16 +177,20 @@ impl DownloadStateStore {
 ///
 /// Changes are not persisted until the `commit()` method is called, which flushes
 /// all pending changes to the database.
-pub struct DownloadStateStoreRwContext<'a> {
+pub struct DownloadStateStoreRwContext<'a, Runtime: StorageEnableRuntime> {
     /// The RocksDB database context
     db_context: TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+    phantom: PhantomData<Runtime>,
 }
 
-impl<'a> DownloadStateStoreRwContext<'a> {
+impl<'a, Runtime: StorageEnableRuntime> DownloadStateStoreRwContext<'a, Runtime> {
     pub fn new(
         db_context: TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
     ) -> Self {
-        Self { db_context }
+        Self {
+            db_context,
+            phantom: PhantomData,
+        }
     }
 
     pub fn missing_chunks_map(&'a self) -> MissingChunksMap<'a> {
@@ -199,37 +211,37 @@ impl<'a> DownloadStateStoreRwContext<'a> {
     }
 
     // Methods to store and retrieve pending bucket downloads
-    pub fn mark_bucket_download_started(&self, bucket_id: &BucketId) {
+    pub fn mark_bucket_download_started(&self, bucket_id: &BucketId<Runtime>) {
         self.db_context
-            .cf(&PendingBucketDownloadsCf::default())
+            .cf(&PendingBucketDownloadsCf::<Runtime>::default())
             .put(bucket_id, &true);
         self.db_context.flush();
     }
 
-    pub fn mark_bucket_download_completed(&self, bucket_id: &BucketId) {
+    pub fn mark_bucket_download_completed(&self, bucket_id: &BucketId<Runtime>) {
         self.db_context
-            .cf(&PendingBucketDownloadsCf::default())
+            .cf(&PendingBucketDownloadsCf::<Runtime>::default())
             .delete(bucket_id);
         self.db_context.flush();
     }
 
-    pub fn is_bucket_download_in_progress(&self, bucket_id: &BucketId) -> bool {
+    pub fn is_bucket_download_in_progress(&self, bucket_id: &BucketId<Runtime>) -> bool {
         self.db_context
-            .cf(&PendingBucketDownloadsCf::default())
+            .cf(&PendingBucketDownloadsCf::<Runtime>::default())
             .get(bucket_id)
             .is_some()
     }
 
-    pub fn get_all_pending_bucket_downloads(&self) -> Vec<BucketId> {
+    pub fn get_all_pending_bucket_downloads(&self) -> Vec<BucketId<Runtime>> {
         self.db_context
-            .cf(&PendingBucketDownloadsCf::default())
+            .cf(&PendingBucketDownloadsCf::<Runtime>::default())
             .iterate_with_range(..)
             .map(|(bucket_id, _)| bucket_id)
             .collect()
     }
 
     /// Get all file keys that need to be downloaded for a specific bucket
-    pub fn get_missing_files_for_bucket(&self, bucket_id: &BucketId) -> Vec<H256> {
+    pub fn get_missing_files_for_bucket(&self, bucket_id: &BucketId<Runtime>) -> Vec<H256> {
         // If the bucket is not in progress, return empty list
         if !self.is_bucket_download_in_progress(bucket_id) {
             return Vec::new();
@@ -246,13 +258,18 @@ impl<'a> DownloadStateStoreRwContext<'a> {
     }
 }
 
-impl<'a> ProvidesDbContext for DownloadStateStoreRwContext<'a> {
+impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
+    for DownloadStateStoreRwContext<'a, Runtime>
+{
     fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
         &self.db_context
     }
 }
 
-impl<'a> ProvidesTypedDbAccess for DownloadStateStoreRwContext<'a> {}
+impl<'a, Runtime: StorageEnableRuntime> ProvidesTypedDbAccess
+    for DownloadStateStoreRwContext<'a, Runtime>
+{
+}
 
 /// Map-like interface for tracking missing chunks per file.
 ///
@@ -319,7 +336,7 @@ impl<'a> MissingChunksMap<'a> {
 }
 
 // Methods to store and retrieve file metadata
-impl<'a> DownloadStateStoreRwContext<'a> {
+impl<'a, Runtime: StorageEnableRuntime> DownloadStateStoreRwContext<'a, Runtime> {
     pub fn store_file_metadata(&self, file_key: &H256, metadata: &FileMetadata) {
         self.db_context
             .cf(&FileMetadataCf::default())

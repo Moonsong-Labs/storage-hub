@@ -59,7 +59,7 @@ where
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
-    pending_bucket_id: Option<BucketId>,
+    pending_bucket_id: Option<BucketId<Runtime>>,
     file_storage_inserted_file_keys: Vec<H256>,
     /// Configuration for this task
     config: MspMoveBucketConfig,
@@ -97,13 +97,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<MoveBucketRequestedForMsp> for MspRespondMoveBucketTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketRequestedForMsp<Runtime>>
+    for MspRespondMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketRequestedForMsp) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: MoveBucketRequestedForMsp<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: user requested to move bucket {:?} to us",
@@ -124,13 +128,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<StartMovedBucketDownload> for MspRespondMoveBucketTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<StartMovedBucketDownload<Runtime>>
+    for MspRespondMoveBucketTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: StartMovedBucketDownload) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: StartMovedBucketDownload<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "StartMovedBucketDownload: Starting download process for bucket {:?}",
@@ -251,7 +259,7 @@ where
     /// If it returns an error, the caller (handle_event) will reject the bucket move request.
     async fn handle_move_bucket_request(
         &mut self,
-        event: MoveBucketRequestedForMsp,
+        event: MoveBucketRequestedForMsp<Runtime>,
     ) -> anyhow::Result<()> {
         let indexer_db_pool = if let Some(indexer_db_pool) =
             self.storage_hub_handler.indexer_db_pool.clone()
@@ -405,7 +413,7 @@ where
     /// Returns an error if:
     /// - Failed to send or confirm the rejection extrinsic
     /// Note: Cleanup errors are logged but don't prevent the rejection from being sent
-    async fn reject_bucket_move(&mut self, bucket_id: BucketId) -> anyhow::Result<()> {
+    async fn reject_bucket_move(&mut self, bucket_id: BucketId<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: rejecting move bucket request for bucket {:?}",
@@ -468,7 +476,7 @@ where
         Ok(())
     }
 
-    async fn accept_bucket_move(&self, bucket_id: BucketId) -> anyhow::Result<()> {
+    async fn accept_bucket_move(&self, bucket_id: BucketId<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: accepting move bucket request for bucket {:?}",
@@ -518,7 +526,7 @@ where
     async fn check_and_increase_capacity(
         &self,
         required_size: u64,
-        own_msp_id: ProviderId,
+        own_msp_id: ProviderId<Runtime>,
     ) -> anyhow::Result<()> {
         let available_capacity = self
             .storage_hub_handler

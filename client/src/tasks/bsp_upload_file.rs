@@ -121,13 +121,13 @@ where
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<NT, Runtime> EventHandler<NewStorageRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP volunteer for file_key {:x}, location 0x{}, fingerprint {:x}",
@@ -150,13 +150,13 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<NT, Runtime> EventHandler<RemoteUploadRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<RemoteUploadRequest<Runtime>> for BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
@@ -412,7 +412,7 @@ where
 {
     async fn handle_new_storage_request_event(
         &mut self,
-        event: NewStorageRequest,
+        event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
         if event.size == 0 {
             let err_msg = "File size cannot be 0";
@@ -577,7 +577,8 @@ where
         // Calculate the tick in which the BSP should send the extrinsic. It's one less that the tick
         // in which the BSP can volunteer for the file because that way it the extrinsic will get included
         // in the tick where the BSP can actually volunteer for the file.
-        let tick_to_wait_to_submit_volunteer = earliest_volunteer_tick.saturating_sub(1);
+        use sp_runtime::Saturating;
+        let tick_to_wait_to_submit_volunteer = earliest_volunteer_tick.saturating_sub(1u32.into());
 
         info!(
             target: LOG_TARGET,
@@ -716,7 +717,7 @@ where
     /// Returns `true` if the file is complete, `false` if the file is incomplete.
     async fn handle_remote_upload_request_event(
         &mut self,
-        event: RemoteUploadRequest,
+        event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
@@ -880,7 +881,7 @@ where
         Ok(file_complete)
     }
 
-    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
+    async fn is_allowed(&self, event: &NewStorageRequest<Runtime>) -> anyhow::Result<bool> {
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut is_allowed = read_file_storage
             .is_allowed(

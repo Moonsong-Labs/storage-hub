@@ -121,7 +121,8 @@ where
         // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
         // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
         // Logs an error in case of failure and continues.
-        let user_chunk_size: u32 = MaxUsersToCharge::get();
+        let user_chunk_size: u32 =
+            <Runtime as pallet_payment_streams::Config>::MaxUsersToCharge::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
             let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
                 pallet_payment_streams::Call::charge_multiple_users_payment_streams {

@@ -52,12 +52,12 @@ where
 /// Handles the [`SlashableProvider`] event.
 ///
 /// This event is triggered by the runtime when a provider is marked as slashable.
-impl<NT, Runtime> EventHandler<SlashableProvider> for SlashProviderTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<SlashableProvider<Runtime>> for SlashProviderTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: SlashableProvider) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: SlashableProvider<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Slashing provider {:?}",
@@ -75,7 +75,7 @@ where
 {
     async fn handle_slashable_provider_event(
         &mut self,
-        event: SlashableProvider,
+        event: SlashableProvider<Runtime>,
     ) -> anyhow::Result<()> {
         // Build extrinsic.
         let call =

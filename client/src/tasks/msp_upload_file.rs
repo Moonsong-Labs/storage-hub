@@ -105,13 +105,13 @@ where
 /// - Check if the MSP has enough storage capacity to store the file and increase it if necessary (up to a maximum).
 /// - Register the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<NT, Runtime> EventHandler<NewStorageRequest> for MspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Registering user peer for file_key {:x}, location 0x{}, fingerprint {:x}",
@@ -134,13 +134,13 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the MSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<NT, Runtime> EventHandler<RemoteUploadRequest> for MspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<RemoteUploadRequest<Runtime>> for MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
@@ -376,7 +376,7 @@ where
 {
     async fn handle_new_storage_request_event(
         &mut self,
-        event: NewStorageRequest,
+        event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
         if event.size == 0 {
             let err_msg = "File size cannot be 0";
@@ -612,7 +612,7 @@ where
 
     async fn handle_remote_upload_request_event(
         &mut self,
-        event: RemoteUploadRequest,
+        event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
         let file_key = event.file_key.into();
         let bucket_id = match self

@@ -84,13 +84,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<UserWithoutFunds> for MspStopStoringInsolventUserTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<UserWithoutFunds<Runtime>>
+    for MspStopStoringInsolventUserTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: UserWithoutFunds) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing UserWithoutFunds for user {:?}. Stopping storing all buckets for the insolvent user.",
@@ -216,7 +217,7 @@ where
 /// This task will:
 /// - Delete the bucket from the MSP's storage.
 /// - Delete all the files in the bucket.
-impl<NT, Runtime> EventHandler<FinalisedMspStopStoringBucketInsolventUser>
+impl<NT, Runtime> EventHandler<FinalisedMspStopStoringBucketInsolventUser<Runtime>>
     for MspStopStoringInsolventUserTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
@@ -225,7 +226,7 @@ where
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedMspStopStoringBucketInsolventUser,
+        event: FinalisedMspStopStoringBucketInsolventUser<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
