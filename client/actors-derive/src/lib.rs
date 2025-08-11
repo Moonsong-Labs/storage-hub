@@ -94,12 +94,13 @@ use once_cell::sync::Lazy;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{quote, ToTokens};
-use std::sync::Mutex;
+use std::{any::Any, sync::Mutex};
 use syn::{
-    parse::{Parse, ParseStream},
+    parse::{self, Parse, ParseStream},
     parse_macro_input,
     spanned::Spanned,
-    Attribute, DeriveInput, Ident, LitStr, Token, Type,
+    token::Comma,
+    Attribute, DeriveInput, Generics, Ident, LitStr, Token, Type, TypePath,
 };
 
 /// Parser for the `#[actor(actor = "...")]` attribute that accompanies the `ActorEvent` derive macro.
@@ -1471,12 +1472,51 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let default_inner_channel_type = args.default_inner_channel_type;
     let additional_generics = &args.additional_generics;
 
+    let service_token_stream: proc_macro::TokenStream = service_type.into_token_stream().into();
+    let service = parse_macro_input!(service_token_stream as syn::TypePath);
+
+    let empty: proc_macro::TokenStream = quote! {< >}.into();
+    let mut impl_merged_generics: syn::AngleBracketedGenericArguments =
+        parse_macro_input!(empty as syn::AngleBracketedGenericArguments);
+
+    // Getting segments[0] means we only accept simple struct (e.g FileTransferService and not something::FileTransferService)
+    if !service.path.segments[0].arguments.is_empty() {
+        let args: proc_macro::TokenStream = service.path.segments[0]
+            .arguments
+            .clone()
+            .into_token_stream()
+            .into();
+        impl_merged_generics = parse_macro_input!(args as syn::AngleBracketedGenericArguments);
+    }
+
+    // Merging generics from the service and the one define in the enum
+    let generics_yay: Generics = input.generics.clone();
+
+    if !generics_yay.params.is_empty() {
+        let generics: proc_macro::TokenStream =
+            input.generics.clone().params.into_token_stream().into();
+        // let (impl_generics, ty_generics, where_clause) = generics_yay.split_for_impl();
+
+        // let extension = parse_macro_input!(generics as syn::GenericArgument);
+
+        for generic in input.generics.clone().params {
+            let generic_token_stream: proc_macro::TokenStream = generic.into_token_stream().into();
+            let generic_arg = parse_macro_input!(generic_token_stream as syn::GenericArgument);
+            let found = impl_merged_generics
+                .args
+                .clone()
+                .into_iter()
+                .find(|g| g == &generic_arg);
+
+            if found.is_none() {
+                impl_merged_generics.args.push_punct(Comma::default());
+                impl_merged_generics.args.push_value(generic_arg);
+            }
+        }
+    }
+
     // Generate interface trait name
     let interface_name = Ident::new(&format!("{}Interface", enum_name), Span::call_site());
-
-    // Generate additional generics for enum and trait declarations
-    let (additional_generics_params, additional_where_clause) =
-        generate_additional_generics_for_declaration(additional_generics);
 
     // Generate each variant with callback field if needed
     let mut updated_variants = Vec::new();
@@ -1622,7 +1662,7 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Build the updated enum
     let vis = &input.vis;
-    let generics = &input.generics;
+    let generics: &Generics = &input.generics;
 
     // Process the service type
     let (
@@ -1634,46 +1674,20 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
         service_where_bounds,
     ) = process_service_type(service_type);
 
-    // Merge and deduplicate generics for the impl block
-    let (merged_impl_generics, merged_where_clause) = merge_and_deduplicate_generics(
-        &service_generic_params,
-        &service_where_bounds,
-        additional_generics,
-    );
-
-    // Extract type parameter names for the trait implementation
-    let additional_type_params: Vec<syn::Ident> = additional_generics
-        .iter()
-        .filter_map(|pred| {
-            if let syn::WherePredicate::Type(type_pred) = pred {
-                if let syn::Type::Path(type_path) = &type_pred.bounded_ty {
-                    if let Some(first_segment) = type_path.path.segments.first() {
-                        return Some(first_segment.ident.clone());
-                    }
-                }
-            }
-            None
-        })
-        .collect();
-
-    let trait_type_params = if additional_type_params.is_empty() {
-        quote! {}
-    } else {
-        quote! { <#(#additional_type_params),*> }
-    };
+    let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Generate the interface trait and implementation
     let trait_def = quote! {
         #[async_trait::async_trait]
-        pub trait #interface_name #additional_generics_params
-        #additional_where_clause
+        pub trait #interface_name #generics
+        #where_clause
         {
             #(#trait_method_signatures)*
         }
 
         #[async_trait::async_trait]
-        impl #merged_impl_generics #interface_name #trait_type_params for shc_actors_framework::actor::ActorHandle<#service_type_path>
-        #merged_where_clause
+        impl #impl_merged_generics #interface_name #ty_generics for shc_actors_framework::actor::ActorHandle<#service_type_path>
+        #where_clause
         {
             #(#trait_method_implementations)*
         }
@@ -1681,8 +1695,7 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Output the result
     let result = quote! {
-        #vis enum #enum_name #generics #additional_generics_params
-        #additional_where_clause
+        #vis enum #enum_name #generics
         {
             #(#updated_variants,)*
         }
