@@ -130,13 +130,13 @@ pub enum RemoveFilesFromForestStorageResult {
 /// TODO: After adding maintenance mode, make some RPC calls (such as `remove_files_from_file_storage`)
 /// only available in maintenance mode.
 #[rpc(server, namespace = "storagehubclient")]
-pub trait StorageHubClientApi<Runtime: StorageEnableRuntime> {
+pub trait StorageHubClientApi {
     #[method(name = "loadFileInStorage", with_extensions)]
     async fn load_file_in_storage(
         &self,
         file_path: String,
         location: String,
-        owner: Runtime::AccountId,
+        account_id: &[u8],
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult>;
 
@@ -309,7 +309,7 @@ where
 // file uploads, even if the file is not in its storage. So we need a way to inform the task
 // to only react to its file.
 #[async_trait]
-impl<FL, FSH, Runtime> StorageHubClientApiServer<Runtime>
+impl<FL, FSH, Runtime> StorageHubClientApiServer
     for StorageHubClientRpc<FL, FSH, Runtime, OpaqueBlock>
 where
     Runtime: StorageEnableRuntime,
@@ -321,11 +321,14 @@ where
         ext: &Extensions,
         file_path: String,
         location: String,
-        owner: Runtime::AccountId,
+        owner_account_id: &[u8],
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
+
+        // Decode the AccountId sent as bytes.
+        let owner = Runtime::AccountId::try_from(owner_account_id).map_err(into_rpc_error)?;
 
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;

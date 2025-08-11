@@ -14294,6 +14294,7 @@ dependencies = [
  "frame-system 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "lazy_static",
  "log",
+ "pallet-balances 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
  "pallet-payment-streams",
@@ -14518,6 +14519,8 @@ dependencies = [
  "shc-common",
  "shc-file-manager",
  "shc-forest-manager",
+ "shp-constants",
+ "shp-traits",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-blockchain",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -14525,6 +14528,7 @@ dependencies = [
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime-interface 29.0.0",
  "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "storage-hub-runtime",
  "tokio",
 ]
 

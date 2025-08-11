@@ -556,7 +556,7 @@ where
                 command_sink: command_sink.clone(),
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -907,7 +907,7 @@ where
                 command_sink: Some(command_sink.clone()),
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1139,7 +1139,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1381,7 +1381,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
