@@ -89,8 +89,7 @@ export const addCopypartyContainer = async (options?: {
   const ftpHostPort = containerInfo.NetworkSettings.Ports["3921/tcp"]?.[0]?.HostPort || "3921";
 
   // Wait for server to be ready by checking both HTTP and FTP endpoints
-  const waitForServer = async (timeout = 30000): Promise<void> => {
-    const startTime = Date.now();
+  const waitForServer = async (maxRetries = 50, delayMs = 300): Promise<void> => {
     let httpReady = false;
     let ftpReady = false;
 
@@ -125,8 +124,9 @@ export const addCopypartyContainer = async (options?: {
       });
     };
 
-    // Use Promise.race with a timeout and continuous polling
-    while (Date.now() - startTime < timeout) {
+    // Poll with iterations and delay between checks
+    for (let i = 0; i < maxRetries; i++) {
+      // Check both endpoints concurrently
       const results = await Promise.all([
         httpReady ? Promise.resolve(true) : checkHttp(),
         ftpReady ? Promise.resolve(true) : checkFtp()
@@ -139,12 +139,14 @@ export const addCopypartyContainer = async (options?: {
         return;
       }
 
-      // Small delay to avoid hammering the server, but much shorter than before
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Wait before next iteration (except on the last iteration)
+      if (i < maxRetries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
     }
 
     throw new Error(
-      `Copyparty server failed to start within ${timeout}ms (HTTP: ${httpReady}, FTP: ${ftpReady})`
+      `Copyparty server failed to start after ${maxRetries} attempts (HTTP: ${httpReady}, FTP: ${ftpReady})`
     );
   };
 

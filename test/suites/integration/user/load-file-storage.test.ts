@@ -3,11 +3,13 @@ import { describeBspNet, type EnrichedBspApi, addCopypartyContainer } from "../.
 
 describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
-  let remoteServerInfo: {
-    containerName: string;
-    httpPort: number;
-    ftpPort: number;
-  } | undefined;
+  let remoteServerInfo:
+    | {
+        containerName: string;
+        httpPort: number;
+        ftpPort: number;
+      }
+    | undefined;
 
   before(async () => {
     userApi = await createUserApi();
@@ -114,7 +116,6 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
       "Should reject with FileIsEmpty error"
     );
   });
-
 
   it("loadFileInStorage fails when loading the same file twice", async () => {
     const source = "res/one-chunk-file";
