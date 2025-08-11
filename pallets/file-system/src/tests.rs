@@ -12556,6 +12556,184 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // TODO: Check that the challenge cycles stop (we need a proper implementation of apply_delta to be able to test this)
             });
         }
+
+        #[test]
+        fn single_bsp_expired_storage_request_with_two_files() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp_account = Keyring::Bob.to_account_id();
+
+                // Setup MSP and bucket for first file
+                let (bucket_id, file_key1, location1, size, fingerprint1, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup second file
+                let location2 = FileLocation::<Test>::try_from(b"test2".to_vec()).unwrap();
+                let fingerprint2 = BlakeTwo256::hash(&b"test_content2".to_vec());
+                let file_key2 = FileSystem::compute_file_key(
+                    owner.clone(),
+                    bucket_id,
+                    location2.clone(),
+                    size,
+                    fingerprint2,
+                )
+                .unwrap();
+
+                // Setup BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 3));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Issue and complete first storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location1.clone(),
+                    fingerprint1,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Issue second storage request that will expire
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location2.clone(),
+                    fingerprint2,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key1));
+                let file_key1_with_proof = FileKeyWithProof {
+                    file_key: file_key1,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key1.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof1 = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    forest_proof1,
+                    BoundedVec::try_from(vec![file_key1_with_proof]).unwrap(),
+                ));
+
+                // BSP volunteers and confirms second file
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key2));
+                let file_key2_with_proof = FileKeyWithProof {
+                    file_key: file_key2,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key2.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof2 = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed,
+                    forest_proof2,
+                    BoundedVec::try_from(vec![file_key2_with_proof]).unwrap(),
+                ));
+
+                // Verify BSP now has 2 files and correct payment stream
+                let capacity_with_two_files = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    capacity_with_two_files,
+                    size * 2,
+                    "BSP should store 2 files"
+                );
+
+                let payment_stream_before =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &owner);
+                assert!(payment_stream_before.is_ok(), "Payment stream should exist");
+                let amount_provided_file = UnitsProvidedFor::<Test>::from(size);
+                let total_amount_before_deletion = amount_provided_file * 2;
+                assert_eq!(
+                    payment_stream_before.unwrap().amount_provided,
+                    total_amount_before_deletion,
+                    "Payment stream should reflect both files"
+                );
+
+                // Verify storage reques has 1 confirmed BSP
+                let storage_request = StorageRequests::<Test>::get(&file_key2).unwrap();
+                assert!(!storage_request.rejected);
+                assert_eq!(storage_request.bsps_confirmed, 1);
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration();
+
+                // Verify second storage request was marked as rejected
+                System::assert_has_event(
+                    Event::StorageRequestRejected {
+                        file_key: file_key2,
+                        reason: RejectedStorageRequestReason::RequestExpired,
+                    }
+                    .into(),
+                );
+
+                // Delete the expired storage request (we only do it for file 2)
+                let forest_proof_delete = CompactProof {
+                    encoded_nodes: vec![file_key2.as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                    file_key2,
+                    bsp_id,
+                    forest_proof_delete,
+                ));
+
+                // Verify deletion events
+                System::assert_has_event(
+                    Event::BspFileDeletionCompleted {
+                        user: owner.clone(),
+                        file_key: file_key2,
+                        file_size: size,
+                        bsp_id,
+                        old_root: file_key2,
+                        new_root: file_key2,
+                    }
+                    .into(),
+                );
+
+                System::assert_has_event(
+                    Event::FileDeletedFromIncompleteStorageRequest {
+                        file_key: file_key2,
+                        provider_id: bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Check capacity decreased by second file size (from 2 files to 1 file)
+                let final_capacity = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    final_capacity, size,
+                    "BSP capacity should be back to 1 file after deleting expired file"
+                );
+
+                // Verify payment stream still exists but is updated (back to 1 file worth)
+                let payment_stream_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &owner);
+                assert!(
+                    payment_stream_after.is_ok(),
+                    "Payment stream should still exist after deleting one of two files"
+                );
+                assert_eq!(
+                    payment_stream_after.unwrap().amount_provided,
+                    amount_provided_file,
+                    "Payment stream should be updated to reflect remaining file"
+                );
+            });
+        }
     }
 
     mod failure {
