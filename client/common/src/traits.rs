@@ -238,6 +238,8 @@ pub trait StorageEnableRuntime:
         + pallet_proofs_dealer::Config<
             ProvidersPallet = pallet_storage_providers::Pallet<Self>,
             MerkleTrieHash = H256,
+            ForestVerifier = ForestVerifier,
+            KeyVerifier = FileKeyVerifier,
         >
         + pallet_file_system::Config<
             Providers = pallet_storage_providers::Pallet<Self>,

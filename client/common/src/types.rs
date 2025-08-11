@@ -53,8 +53,9 @@ pub type FileKeyVerifier = shp_file_key_verifier::FileKeyVerifier<
 >;
 pub type FileKeyProof =
     shp_file_key_verifier::types::FileKeyProof<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
-pub type ForestVerifierProof =
+pub type ForestVerifier =
     shp_forest_verifier::ForestVerifier<StorageProofsMerkleTrieLayout, H_LENGTH>;
+pub type ForestVerifierProof = <ForestVerifier as shp_traits::CommitmentVerifier>::Proof;
 
 // The following are abstracted types that depend on a runtime implementing the `Config`
 // traits of the various pallets.
