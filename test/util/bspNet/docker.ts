@@ -127,7 +127,7 @@ export const addCopypartyContainer = async (options?: {
     // Poll with iterations and delay between checks
     for (let i = 0; i < maxRetries; i++) {
       // Check both endpoints concurrently
-      const results = await Promise.all([
+      const results: [boolean, boolean] = await Promise.all([
         httpReady ? Promise.resolve(true) : checkHttp(),
         ftpReady ? Promise.resolve(true) : checkFtp()
       ]);
