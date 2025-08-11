@@ -12472,6 +12472,11 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert!(!storage_request.rejected, "Storage request should not be marked as rejected");
                 assert_eq!(storage_request.bsps_confirmed, 1);
 
+                // Verify BSP is in StorageRequestBsps
+                let initial_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert_eq!(initial_bsps.len(), 1, "Should have 1 BSP associated with storage request initially");
+                assert_eq!(initial_bsps[0].0, bsp_id, "BSP should be associated with storage request");
+
                 // Trigger storage request expiration
                 trigger_storage_request_expiration();
 
@@ -12551,6 +12556,25 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert!(
                     payment_stream_after.is_err(),
                     "Payment stream should be removed after file deletion"
+                );
+
+                // 1. Storage request should be completely removed
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be completely removed"
+                );
+
+                // 2. Storage request should be removed from bucket associations
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+
+                // 3. All BSPs should be removed from storage request associations
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
                 );
 
                 // TODO: Check that the challenge cycles stop (we need a proper implementation of apply_delta to be able to test this)
@@ -12663,10 +12687,23 @@ mod delete_file_for_incomplete_storage_request_tests {
                     "Payment stream should reflect both files"
                 );
 
-                // Verify storage reques has 1 confirmed BSP
+                // Verify storage request has 1 confirmed BSP
                 let storage_request = StorageRequests::<Test>::get(&file_key2).unwrap();
                 assert!(!storage_request.rejected);
                 assert_eq!(storage_request.bsps_confirmed, 1);
+
+                // Verify BSP is in StorageRequestBsps for file2
+                let initial_bsps_file2: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key2).collect();
+                assert_eq!(
+                    initial_bsps_file2.len(),
+                    1,
+                    "Should have 1 BSP associated with file2 storage request initially"
+                );
+                assert_eq!(
+                    initial_bsps_file2[0].0, bsp_id,
+                    "BSP should be associated with file2 storage request"
+                );
 
                 // Trigger storage request expiration
                 trigger_storage_request_expiration();
@@ -12731,6 +12768,27 @@ mod delete_file_for_incomplete_storage_request_tests {
                     payment_stream_after.unwrap().amount_provided,
                     amount_provided_file,
                     "Payment stream should be updated to reflect remaining file"
+                );
+
+                // 1. Storage request for file2 should be completely removed
+                assert!(
+                    StorageRequests::<Test>::get(&file_key2).is_none(),
+                    "Storage request for file2 should be completely removed"
+                );
+
+                // 2. Storage request for file2 should be removed from bucket associations
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key2)
+                        .is_none(),
+                    "Storage request for file2 should be removed from bucket associations"
+                );
+
+                // 3. All BSPs should be removed from file2's storage request associations
+                let final_bsps_file2: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key2).collect();
+                assert!(
+                    final_bsps_file2.is_empty(),
+                    "No BSPs should remain associated with file2's storage request after deletion"
                 );
             });
         }
