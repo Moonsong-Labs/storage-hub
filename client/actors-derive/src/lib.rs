@@ -674,11 +674,6 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     let task_spawner = args.task_spawner;
     let service = args.service;
 
-    // Generate a unique variable name based on the event type
-    let type_str = event_type.to_token_stream().to_string();
-    let var_name = format!("{}_event_bus_listener", to_snake_case(&type_str));
-    let var_ident = syn::Ident::new(&var_name, Span::call_site());
-
     // Determine if the event is critical
     let critical = args.critical.map_or(false, |lit| lit.value);
     let critical_lit = syn::LitBool::new(critical, Span::call_site());
@@ -686,21 +681,21 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     // If a task instance is provided, use it
     // Otherwise, create a new task using the task type and context
     let result = if let Some(task) = args.task_instance {
-        quote! {
-            let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
+        quote! {{
+            let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
                 #task.subscribe_to(#task_spawner, #service, #critical_lit);
-            #var_ident.start();
-        }
+            event_bus_listener.start();
+        }}
     } else {
         let task_type = args.task_type;
 
         if let Some(context) = args.context {
-            quote! {
+            quote! {{
                 let task = #task_type::new(#context.clone());
-                let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
+                let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
                     task.subscribe_to(#task_spawner, #service, #critical_lit);
-                #var_ident.start();
-            }
+                event_bus_listener.start();
+            }}
         } else {
             // This shouldn't happen due to validation in the Parse implementation
             syn::Error::new(
