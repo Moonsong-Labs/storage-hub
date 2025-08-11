@@ -1308,8 +1308,8 @@ where
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Fetch storage request metadata
-        let mut storage_request_metadata = StorageRequests::<T>::get(&file_key)
-            .ok_or(Error::<T>::StorageRequestNotFound)?;
+        let mut storage_request_metadata =
+            StorageRequests::<T>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
 
         // Ensure the storage request is rejected
         ensure!(
@@ -1327,10 +1327,7 @@ where
         )
         .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
 
-        ensure!(
-            computed_file_key == file_key,
-            Error::<T>::FileKeyMismatch
-        );
+        ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
 
         // Determine if provider is MSP or BSP and perform specific validations
         if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
@@ -1340,7 +1337,7 @@ where
                     // MSP has accepted and should be storing the file
                     // This can only happen if the user revoked the storage as
                     // Expired or rejected flows deleting files means that the MSP is not storing the file.
-                },
+                }
                 _ => return Err(Error::<T>::ProviderNotStoringFile.into()),
             }
 
@@ -1362,14 +1359,13 @@ where
                 .ok_or(Error::<T>::ProviderNotStoringFile)?;
 
             // Ensure the BSP has confirmed storing the file
-            ensure!(
-                bsp_metadata.confirmed,
-                Error::<T>::BspNotConfirmed
-            );
+            ensure!(bsp_metadata.confirmed, Error::<T>::BspNotConfirmed);
 
             // Sanity check: Get number of BSPs that have confirmed storing the file
             let bsps_confirmed = StorageRequestBsps::<T>::iter_prefix(&file_key)
-                .fold(T::ReplicationTargetType::zero(), |acc, _| acc.saturating_add(One::one()));
+                .fold(T::ReplicationTargetType::zero(), |acc, _| {
+                    acc.saturating_add(One::one())
+                });
 
             ensure!(
                 bsps_confirmed == storage_request_metadata.bsps_confirmed,
@@ -1386,7 +1382,9 @@ where
 
             // Remove the BSP from the storage request after successful deletion
             StorageRequestBsps::<T>::remove(&file_key, &provider_id);
-            storage_request_metadata.bsps_confirmed = storage_request_metadata.bsps_confirmed.saturating_sub(One::one());
+            storage_request_metadata.bsps_confirmed = storage_request_metadata
+                .bsps_confirmed
+                .saturating_sub(One::one());
             StorageRequests::<T>::insert(&file_key, &storage_request_metadata);
         } else {
             return Err(Error::<T>::InvalidProviderID.into());
@@ -1399,7 +1397,9 @@ where
         });
 
         // If the file has been deleted from all providers, cleanup the storage request.
-        if storage_request_metadata.bsps_confirmed.is_zero() && storage_request_metadata.msp.is_none() {
+        if storage_request_metadata.bsps_confirmed.is_zero()
+            && storage_request_metadata.msp.is_none()
+        {
             Self::cleanup_expired_storage_request(&file_key, &storage_request_metadata);
         }
 
@@ -2879,7 +2879,6 @@ where
 
         Ok(())
     }
-
 
     /// Updates the BSP payment stream and manages BSP cycles after file removal.
     ///
