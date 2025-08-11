@@ -1351,7 +1351,7 @@ where
             )?;
 
             // Remove the MSP from the storage request after successful deletion
-            storage_request_metadata.msp = None;
+            storage_request_metadata.msp = Some((provider_id, false));
             StorageRequests::<T>::insert(&file_key, &storage_request_metadata);
         } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
             // Verify this BSP has confirmed storing the file
@@ -1398,7 +1398,7 @@ where
 
         // If the file has been deleted from all providers, cleanup the storage request.
         if storage_request_metadata.bsps_confirmed.is_zero()
-            && storage_request_metadata.msp.is_none()
+            && matches!(storage_request_metadata.msp, Some((_, false)))
         {
             Self::cleanup_expired_storage_request(&file_key, &storage_request_metadata);
         }
