@@ -248,6 +248,7 @@ pub trait StorageEnableRuntime:
             MaxNumberOfPeerIds = ConstU32<5>,
             MaxPeerIdSize = ConstU32<100>
         >
+        + pallet_payment_streams::Config
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance = u128>
         + Copy
