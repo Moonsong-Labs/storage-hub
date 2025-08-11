@@ -67,15 +67,15 @@ where
         );
 
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                file_key: H256(event.file_key.into()),
-            });
+        let call: Runtime::Call = pallet_file_system::Call::<Runtime>::bsp_volunteer {
+            file_key: H256(event.file_key.into()),
+        }
+        .into();
 
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(
-                call.into(),
+                call.clone(),
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config

@@ -443,12 +443,12 @@ where
                 .await;
         }
 
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::msp_respond_move_bucket_request {
+        let call: Runtime::Call =
+            pallet_file_system::Call::<Runtime>::msp_respond_move_bucket_request {
                 bucket_id,
                 response: BucketMoveRequestResponse::Rejected,
-            },
-        );
+            }
+            .into();
 
         self.storage_hub_handler
             .blockchain
@@ -483,12 +483,11 @@ where
             bucket_id.as_ref(),
         );
 
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::msp_respond_move_bucket_request {
-                bucket_id,
-                response: BucketMoveRequestResponse::Accepted,
-            },
-        );
+        let call: Runtime::Call = pallet_file_system::Call::msp_respond_move_bucket_request {
+            bucket_id,
+            response: BucketMoveRequestResponse::Accepted,
+        }
+        .into();
 
         info!(
             target: LOG_TARGET,

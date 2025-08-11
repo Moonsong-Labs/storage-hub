@@ -123,16 +123,16 @@ where
         // Logs an error in case of failure and continues.
         let user_chunk_size = <MaxUsersToCharge<Runtime> as Get<u32>>::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
-            let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                pallet_payment_streams::Call::charge_multiple_users_payment_streams {
+            let call: Runtime::Call =
+                pallet_payment_streams::Call::<Runtime>::charge_multiple_users_payment_streams {
                     user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),
-                },
-            );
+                }
+                .into();
 
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call.into(), Default::default())
+                .send_extrinsic(call, Default::default())
                 .await;
 
             match charging_result {
@@ -320,8 +320,8 @@ where
                 .proof;
 
             // Build the extrinsic to stop storing for an insolvent user.
-            let stop_storing_for_insolvent_user_call = storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::stop_storing_for_insolvent_user {
+            let stop_storing_for_insolvent_user_call: Runtime::Call =
+                pallet_file_system::Call::<Runtime>::stop_storing_for_insolvent_user {
                     file_key: *file_key,
                     bucket_id,
                     location,
@@ -329,15 +329,15 @@ where
                     fingerprint,
                     size,
                     inclusion_forest_proof,
-                },
-            );
+                }
+                .into();
 
             // Send the confirmation transaction and wait for it to be included in the block and
             // continue only if it is successful.
             self.storage_hub_handler
                 .blockchain
                 .send_extrinsic(
-                    stop_storing_for_insolvent_user_call.into(),
+                    stop_storing_for_insolvent_user_call,
                     SendExtrinsicOptions::new(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
@@ -351,16 +351,16 @@ where
 
             // If that was the last file of the user then charge the user for the debt they have.
             if user_files.len() == 1 {
-                let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                    pallet_payment_streams::Call::charge_payment_streams {
+                let call: Runtime::Call =
+                    pallet_payment_streams::Call::<Runtime>::charge_payment_streams {
                         user_account: insolvent_user,
-                    },
-                );
+                    }
+                    .into();
 
                 let charging_result = self
                     .storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call.into(), Default::default())
+                    .send_extrinsic(call, Default::default())
                     .await;
 
                 match charging_result {

@@ -78,16 +78,16 @@ where
         event: SlashableProvider<Runtime>,
     ) -> anyhow::Result<()> {
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::Providers(pallet_storage_providers::Call::slash {
-                provider_id: event.provider,
-            });
+        let call: Runtime::Call = pallet_storage_providers::Call::<Runtime>::slash {
+            provider_id: event.provider,
+        }
+        .into();
 
         // Send extrinsic and wait for it to be included in the block.
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(
-                call.into(),
+                call,
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config

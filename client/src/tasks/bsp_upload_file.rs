@@ -358,16 +358,15 @@ where
         let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
 
         // Build extrinsic.
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::bsp_confirm_storing {
+        let call: Runtime::Call =
+            pallet_file_system::Call::<Runtime>::bsp_confirm_storing {
                 non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
                 file_keys_and_proofs: BoundedVec::try_from(file_keys_and_proofs)
                 .map_err(|_| {
                     error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");
                     anyhow!("Failed to convert file keys and proofs to BoundedVec.")
                 })?,
-            },
-        );
+            }.into();
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
@@ -643,17 +642,17 @@ where
         }
 
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                file_key: H256(file_key.into()),
-            });
+        let call: Runtime::Call = pallet_file_system::Call::<Runtime>::bsp_volunteer {
+            file_key: H256(file_key.into()),
+        }
+        .into();
 
         // Send extrinsic and wait for it to be included in the block.
         let result = self
             .storage_hub_handler
             .blockchain
             .send_extrinsic(
-                call.clone().into(),
+                call.clone(),
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config

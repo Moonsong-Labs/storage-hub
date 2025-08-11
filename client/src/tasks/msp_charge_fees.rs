@@ -123,17 +123,17 @@ where
         let user_chunk_size: u32 =
             <Runtime as pallet_payment_streams::Config>::MaxUsersToCharge::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
-            let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                pallet_payment_streams::Call::charge_multiple_users_payment_streams {
+            let call: Runtime::Call =
+                pallet_payment_streams::Call::<Runtime>::charge_multiple_users_payment_streams {
                     user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),
-                },
-            );
+                }
+            .into();
 
             // TODO: watch for success (we might want to do it for BSP too)
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call.into(), Default::default())
+                .send_extrinsic(call, Default::default())
                 .await;
 
             match charging_result {

@@ -321,9 +321,8 @@ where
             capacity_manager_ref.calculate_new_capacity(current_capacity, required_capacity);
 
         // Send the extrinsic to change the provider's capacity and wait for it to succeed.
-        let call = storage_hub_runtime::RuntimeCall::Providers(
-            pallet_storage_providers::Call::change_capacity { new_capacity },
-        );
+        let call: Runtime::Call =
+            pallet_storage_providers::Call::<Runtime>::change_capacity { new_capacity }.into();
 
         let extrinsic_retry_timeout = Duration::from_secs(self.config.extrinsic_retry_timeout);
 

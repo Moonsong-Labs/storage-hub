@@ -241,14 +241,16 @@ pub trait StorageEnableRuntime:
             ForestVerifier = ForestVerifier,
             KeyVerifier = FileKeyVerifier,
         >
+        + pallet_payment_streams::Config
         + pallet_file_system::Config<
             Providers = pallet_storage_providers::Pallet<Self>,
             ProofDealer = pallet_proofs_dealer::Pallet<Self>,
+            PaymentStreams = pallet_payment_streams::Pallet<Self>,
             MaxFilePathSize = ConstU32<512>,
             MaxNumberOfPeerIds = ConstU32<5>,
-            MaxPeerIdSize = ConstU32<100>
+            MaxPeerIdSize = ConstU32<100>,
+            Fingerprint = H256,
         >
-        + pallet_payment_streams::Config
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance = u128>
         + Copy
@@ -268,9 +270,11 @@ pub trait StorageEnableRuntime:
         + Encode
         + Member
         + Dispatchable
-        // TODO: Remove these once we create an abstraction trait to convert `StorageEnableCalls` to `RuntimeCall`.
-        + From<storage_hub_runtime::RuntimeCall>
-        + Into<storage_hub_runtime::RuntimeCall>;
+        + From<frame_system::Call<Self>>
+        + From<pallet_storage_providers::Call<Self>>
+        + From<pallet_proofs_dealer::Call<Self>>
+        + From<pallet_payment_streams::Call<Self>>
+        + From<pallet_file_system::Call<Self>>;
 
     /// The signature type used for signing transactions.
     /// Must support verification and key operations that produce the associated `Address` type.

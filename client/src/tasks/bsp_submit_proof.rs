@@ -270,12 +270,10 @@ where
 
         // Submit proof to the runtime.
         // Provider is `None` since we're submitting with the account linked to the BSP.
-        let call = storage_hub_runtime::RuntimeCall::ProofsDealer(
-            pallet_proofs_dealer::Call::submit_proof {
-                proof,
-                provider: None,
-            },
-        )
+        let call: Runtime::Call = pallet_proofs_dealer::Call::<Runtime>::submit_proof {
+            proof,
+            provider: None,
+        }
         .into();
 
         // We consider that the maximum tip we're willing to pay for the submission of the proof is

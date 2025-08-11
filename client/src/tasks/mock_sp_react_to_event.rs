@@ -66,17 +66,17 @@ where
         );
 
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::System(frame_system::Call::remark_with_event {
-                remark: "Remark as a mock for testing events emitted by the BlockchainService."
-                    .as_bytes()
-                    .to_vec(),
-            });
+        let call: Runtime::Call = frame_system::Call::<Runtime>::remark_with_event {
+            remark: "Remark as a mock for testing events emitted by the BlockchainService."
+                .as_bytes()
+                .to_vec(),
+        }
+        .into();
 
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(
-                call.into(),
+                call,
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config
