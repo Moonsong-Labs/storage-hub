@@ -89,62 +89,66 @@ export const addCopypartyContainer = async (options?: {
   const ftpHostPort = containerInfo.NetworkSettings.Ports["3921/tcp"]?.[0]?.HostPort || "3921";
 
   // Wait for server to be ready by checking both HTTP and FTP endpoints
-  const maxRetries = 30;
-  let httpReady = false;
-  let ftpReady = false;
+  const waitForServer = async (timeout = 30000): Promise<void> => {
+    const startTime = Date.now();
+    let httpReady = false;
+    let ftpReady = false;
 
-  for (let i = 0; i < maxRetries; i++) {
-    // Check HTTP endpoint
-    if (!httpReady) {
+    const checkHttp = async (): Promise<boolean> => {
       try {
         const response = await fetch(`http://localhost:${httpHostPort}/`);
         if (response.ok || response.status === 403) {
-          httpReady = true;
           console.log(`Copyparty HTTP server ready on http://localhost:${httpHostPort}`);
+          return true;
         }
       } catch (e) {
         // HTTP not ready yet
       }
-    }
+      return false;
+    };
 
-    // Check FTP endpoint by trying to connect
-    if (!ftpReady) {
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const client = net.createConnection(
-            { port: Number(ftpHostPort), host: "localhost" },
-            () => {
-              client.end();
-              resolve();
-            }
-          );
-          client.on("error", reject);
-          client.setTimeout(1000, () => {
-            client.destroy();
-            reject(new Error("Timeout"));
-          });
+    const checkFtp = async (): Promise<boolean> => {
+      return new Promise<boolean>((resolve) => {
+        const client = net.createConnection(
+          { port: Number(ftpHostPort), host: "localhost" },
+          () => {
+            client.end();
+            console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
+            resolve(true);
+          }
+        );
+        client.on("error", () => resolve(false));
+        client.setTimeout(500, () => {
+          client.destroy();
+          resolve(false);
         });
-        ftpReady = true;
-        console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
-      } catch (e) {
-        // FTP not ready yet
+      });
+    };
+
+    // Use Promise.race with a timeout and continuous polling
+    while (Date.now() - startTime < timeout) {
+      const results = await Promise.all([
+        httpReady ? Promise.resolve(true) : checkHttp(),
+        ftpReady ? Promise.resolve(true) : checkFtp()
+      ]);
+
+      httpReady = results[0];
+      ftpReady = results[1];
+
+      if (httpReady && ftpReady) {
+        return;
       }
+
+      // Small delay to avoid hammering the server, but much shorter than before
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    // Both ready, we can proceed
-    if (httpReady && ftpReady) {
-      break;
-    }
+    throw new Error(
+      `Copyparty server failed to start within ${timeout}ms (HTTP: ${httpReady}, FTP: ${ftpReady})`
+    );
+  };
 
-    if (i === maxRetries - 1) {
-      throw new Error(
-        `Copyparty server failed to start after ${maxRetries} attempts (HTTP: ${httpReady}, FTP: ${ftpReady})`
-      );
-    }
-
-    // Server not ready yet, wait and retry
-    await sleep(1000);
-  }
+  await waitForServer();
 
   return {
     container,

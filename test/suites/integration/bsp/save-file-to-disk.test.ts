@@ -10,7 +10,6 @@ import {
 
 describeBspNet(
   "BSP: Save File To Disk",
-  { only: true },
   ({ before, createBspApi, createUserApi, it }) => {
     let bspApi: EnrichedBspApi;
     let userApi: EnrichedBspApi;
