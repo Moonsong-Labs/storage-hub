@@ -2,8 +2,7 @@ use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{MaxUsersToCharge, StorageProviderId};
+use shc_common::{traits::StorageEnableRuntime, types::StorageProviderId};
 use sp_core::Get;
 
 use crate::{

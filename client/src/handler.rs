@@ -239,7 +239,7 @@ where
             [
                 // Override critical for NewStorageRequest to make it non-critical
                 NewStorageRequest<Runtime> => { task: UserSendsFileTask, critical: false },
-                AcceptedBspVolunteer => UserSendsFileTask,
+                AcceptedBspVolunteer<Runtime> => UserSendsFileTask,
             ]
         );
     }
@@ -267,7 +267,7 @@ where
             critical: false,
             [
                 RemoteUploadRequest<Runtime> => MspUploadFileTask,
-                RetryBucketMoveDownload<Runtime> => MspRetryBucketMoveTask,
+                RetryBucketMoveDownload => MspRetryBucketMoveTask,
             ]
         );
 
@@ -280,14 +280,14 @@ where
                 FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
                 NewStorageRequest<Runtime> => MspUploadFileTask,
-                ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
+                ProcessMspRespondStoringRequest => MspUploadFileTask,
                 MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,
                 StartMovedBucketDownload<Runtime> => MspRespondMoveBucketTask,
                 // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
                 UserWithoutFunds<Runtime> => MspStopStoringInsolventUserTask,
                 FinalisedMspStopStoringBucketInsolventUser<Runtime> =>
                     MspStopStoringInsolventUserTask,
-                NotifyPeriod<Runtime> => MspChargeFeesTask,
+                NotifyPeriod => MspChargeFeesTask,
             ]
         );
     }
@@ -328,7 +328,7 @@ where
             critical: true,
             [
                 NewStorageRequest<Runtime> => BspUploadFileTask,
-                ProcessConfirmStoringRequest<Runtime> => BspUploadFileTask,
+                ProcessConfirmStoringRequest => BspUploadFileTask,
                 // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
                 // It responds by computing challenges derived from the seeds, taking also into account
                 // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.
