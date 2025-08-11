@@ -35,6 +35,9 @@ pallet-proofs-dealer-runtime-api = { workspace = true }
 shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }
+shp-traits = { workspace = true }
+shp-constants = { workspace = true }
+storage-hub-runtime = { workspace = true }
 
 [features]
 default = ["std"]
