@@ -227,7 +227,12 @@ pub trait StorageEnableRuntime:
     // TODO: (already concrete type) instead of `MaxMultiAddressAmount<Runtime>`.
     // TODO:
     // TODO: Consider removing the restriction that `Hash = H256`, `MerkleTrieHash = H256`, `ProviderId = H256`, `MerklePatriciaRoot = H256`.
-    frame_system::Config<Hash = H256, AccountId = sp_runtime::AccountId32>
+    frame_system::Config<
+        Hash = H256,
+        AccountId = sp_runtime::AccountId32,
+        RuntimeEvent:
+            Into<StorageEnableEvents<Self>>,
+    >
         + pallet_storage_providers::Config<
             ProviderId = H256,
             MerklePatriciaRoot = H256,

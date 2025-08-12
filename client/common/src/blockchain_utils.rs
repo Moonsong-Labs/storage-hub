@@ -47,13 +47,13 @@ pub enum EventsRetrievalError {
 pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
     client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
     block_hash: &H256,
-) -> Result<StorageHubEventsVec, EventsRetrievalError> {
+) -> Result<StorageHubEventsVec<Runtime>, EventsRetrievalError> {
     // Get the events storage.
     let raw_storage_opt = client.storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?;
 
     // Decode the events storage.
     raw_storage_opt
-        .map(|raw_storage| StorageHubEventsVec::decode(&mut raw_storage.0.as_slice()))
+        .map(|raw_storage| StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()))
         .transpose()?
         .ok_or(EventsRetrievalError::StorageNotFound)
 }

@@ -5,7 +5,6 @@ use std::{
 };
 
 use codec::{Decode, Encode};
-use frame_system::EventRecord;
 use sc_executor::WasmExecutor;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
@@ -112,12 +111,11 @@ pub type ValuePropositionWithId<Runtime> =
 ///
 /// The events vector is a storage element in the FRAME system pallet, which stores all the events
 /// that have occurred in a block. This is syntactic sugar to make the code more readable.
-/// TODO: Remove dependency from `storage_hub_runtime` here.
-pub type StorageHubEventsVec = Vec<
+pub type StorageHubEventsVec<Runtime> = Vec<
     Box<
-        EventRecord<
-            <storage_hub_runtime::Runtime as frame_system::Config>::RuntimeEvent,
-            <storage_hub_runtime::Runtime as frame_system::Config>::Hash,
+        frame_system::EventRecord<
+            <Runtime as frame_system::Config>::RuntimeEvent,
+            <Runtime as frame_system::Config>::Hash,
         >,
     >,
 >;
@@ -261,6 +259,29 @@ impl MinimalExtension {
     }
 }
 
+// TODO: DOCUMENT THIS
+#[derive(Debug, Clone)]
+pub enum StorageEnableEvents<Runtime>
+where
+    Runtime: frame_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_payment_streams::Config
+        + pallet_file_system::Config
+        + pallet_transaction_payment::Config
+        + pallet_balances::Config,
+{
+    System(frame_system::Event<Runtime>),
+    StorageProviders(pallet_storage_providers::Event<Runtime>),
+    ProofsDealer(pallet_proofs_dealer::Event<Runtime>),
+    PaymentStreams(pallet_payment_streams::Event<Runtime>),
+    FileSystem(pallet_file_system::Event<Runtime>),
+    TransactionPayment(pallet_transaction_payment::Event<Runtime>),
+    Balances(pallet_balances::Event<Runtime>),
+    /// Catch-all for events that we do not care in the SH Client.
+    Other(<Runtime as frame_system::Config>::RuntimeEvent),
+}
+
 //TODO: This should be moved to the runtime crate once the SH Client is abstracted
 //TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
 impl StorageEnableRuntime for storage_hub_runtime::Runtime {
@@ -273,7 +294,6 @@ impl StorageEnableRuntime for storage_hub_runtime::Runtime {
 
 //TODO: This should be moved to the runtime crate once the SH Client is abstracted
 //TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
-//TODO: When that is done, remove `pallet_transaction_payment` from the `common` crate.
 impl ExtensionOperations<storage_hub_runtime::RuntimeCall, storage_hub_runtime::Runtime>
     for storage_hub_runtime::SignedExtra
 {
@@ -311,5 +331,34 @@ impl ExtensionOperations<storage_hub_runtime::RuntimeCall, storage_hub_runtime::
             (),
             None,
         )
+    }
+}
+
+//TODO: This should be moved to the runtime crate once the SH Client is abstracted
+//TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
+impl Into<StorageEnableEvents<storage_hub_runtime::Runtime>> for storage_hub_runtime::RuntimeEvent {
+    fn into(self) -> StorageEnableEvents<storage_hub_runtime::Runtime> {
+        match self {
+            storage_hub_runtime::RuntimeEvent::System(event) => StorageEnableEvents::System(event),
+            storage_hub_runtime::RuntimeEvent::Providers(event) => {
+                StorageEnableEvents::StorageProviders(event)
+            }
+            storage_hub_runtime::RuntimeEvent::ProofsDealer(event) => {
+                StorageEnableEvents::ProofsDealer(event)
+            }
+            storage_hub_runtime::RuntimeEvent::PaymentStreams(event) => {
+                StorageEnableEvents::PaymentStreams(event)
+            }
+            storage_hub_runtime::RuntimeEvent::FileSystem(event) => {
+                StorageEnableEvents::FileSystem(event)
+            }
+            storage_hub_runtime::RuntimeEvent::TransactionPayment(event) => {
+                StorageEnableEvents::TransactionPayment(event)
+            }
+            storage_hub_runtime::RuntimeEvent::Balances(event) => {
+                StorageEnableEvents::Balances(event)
+            }
+            _ => StorageEnableEvents::Other(self),
+        }
     }
 }
