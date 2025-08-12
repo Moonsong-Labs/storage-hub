@@ -3210,7 +3210,8 @@ mod hooks {
             <BucketsWithStorageRequests<T>>::remove(&storage_request_metadata.bucket_id, file_key);
 
             // Remove BSPs that volunteered for the storage request.
-            let _ = <StorageRequestBsps<T>>::drain_prefix(file_key);
+            // We consume the iterator so the drain actually happens.
+            let _ = <StorageRequestBsps<T>>::drain_prefix(file_key).count();
 
             // Remove storage request.
             <StorageRequests<T>>::remove(file_key);
