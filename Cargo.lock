@@ -14510,6 +14510,7 @@ name = "shc-rpc"
 version = "0.1.0"
 dependencies = [
  "array-bytes",
+ "hex",
  "jsonrpsee 0.24.9",
  "log",
  "pallet-file-system-runtime-api",

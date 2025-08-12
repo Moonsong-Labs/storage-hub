@@ -10,13 +10,14 @@ edition = { workspace = true }
 
 [dependencies]
 array-bytes = { workspace = true }
-serde = { workspace = true }
-log = { workspace = true }
+hex = { workspace = true }
 jsonrpsee = { features = [
 	"client-core",
 	"macros",
 	"server-core",
 ], workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
 tokio = { workspace = true }
 
 # Substrate
