@@ -8,20 +8,17 @@ name = "backend"
 path = "src/main.rs"
 
 [dependencies]
-# Local dependencies
-sh-msp-backend-lib = { path = "../lib" }
-
-# Workspace dependencies
-tokio = { workspace = true, features = ["full"] }
-axum = { workspace = true }
-toml = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 anyhow = { workspace = true }
+axum = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["full"] }
+toml = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
-# CLI
-clap = { workspace = true }
+# Local dependencies
+sh-msp-backend-lib = { path = "../lib" }
 
 [features]
 default = ["mocks"]
