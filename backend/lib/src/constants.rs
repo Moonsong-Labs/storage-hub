@@ -47,6 +47,8 @@ pub mod api {
 }
 
 /// Counter service constants
+/// TODO(SCAFFOLDING): Counter constants are for demonstration only
+/// Remove this entire module when implementing real MSP features
 pub mod counter {
     /// Default counter increment value
     pub const DEFAULT_INCREMENT: i64 = 1;

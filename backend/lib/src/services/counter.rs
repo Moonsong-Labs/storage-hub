@@ -1,9 +1,14 @@
+//! TODO(SCAFFOLDING): This counter service is example code for demonstration.
+//! Replace with actual MSP business logic when implementing real features.
+//! This entire module should be removed once real MSP services are implemented.
+
 use std::sync::Arc;
 
 use crate::constants::counter::{DEFAULT_COUNTER_KEY, DEFAULT_INCREMENT};
 use crate::data::storage::BoxedStorage;
 use crate::error::Result;
 
+// TODO(SCAFFOLDING): Example service for demonstration - remove when implementing real MSP features
 pub struct CounterService {
     storage: Arc<dyn BoxedStorage>,
 }

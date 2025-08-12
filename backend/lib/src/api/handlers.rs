@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 use crate::services::{health, Services};
 
+// TODO(SCAFFOLDING): Counter handlers are example endpoints for demonstration.
+// Replace with actual MSP API endpoints when implementing real features.
+
 /// Response for counter operations
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CounterResponse {

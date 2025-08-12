@@ -1,6 +1,8 @@
 //! Services module for StorageHub backend
 use std::sync::Arc;
 
+// TODO(SCAFFOLDING): Counter module is for demonstration only
+// Remove when implementing real MSP services
 pub mod counter;
 pub mod health;
 
@@ -14,6 +16,8 @@ use crate::data::storage::BoxedStorage;
 /// Container for all backend services
 #[derive(Clone)]
 pub struct Services {
+    // TODO(SCAFFOLDING): Counter service field is for demonstration only
+    // Remove when implementing real MSP services
     pub counter: Arc<CounterService>,
     pub health: Arc<HealthService>,
     pub storage: Arc<dyn BoxedStorage>,

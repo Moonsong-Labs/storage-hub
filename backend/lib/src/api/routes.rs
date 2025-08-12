@@ -11,6 +11,8 @@ pub fn routes(services: Services) -> Router {
     Router::new()
         // Health check endpoint
         .route("/health", get(handlers::health_check_detailed))
+        // TODO(SCAFFOLDING): Remove counter routes when real MSP endpoints are implemented.
+        // These are example endpoints for demonstration purposes only.
         // Counter endpoints
         .route("/counter", get(handlers::get_counter))
         .route("/counter/inc", post(handlers::increment_counter))

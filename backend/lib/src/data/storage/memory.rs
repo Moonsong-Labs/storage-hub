@@ -1,5 +1,8 @@
 //! In-memory storage implementation
 //!
+//! TODO(SCAFFOLDING): This in-memory storage is for development/testing only.
+//! Production MSP should use persistent storage (PostgreSQL, Redis, etc.)
+//!
 //! This module provides a thread-safe in-memory implementation of the Storage trait,
 //! suitable for development and testing environments.
 
@@ -20,6 +23,9 @@ pub enum InMemoryStorageError {
 }
 
 /// In-memory storage implementation using Arc<RwLock<HashMap>>
+///
+/// TODO(SCAFFOLDING): Example storage implementation for demonstration.
+/// Replace with actual persistent storage in production.
 ///
 /// This implementation is thread-safe and suitable for development environments.
 /// All data is lost when the process terminates.
