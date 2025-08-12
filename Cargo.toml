@@ -43,6 +43,7 @@ async-channel = "1.8.0"
 async-io = "2.3.2"
 async-trait = "0.1.42"
 axum = "0.7"
+axum-test = "15"
 bigdecimal = { version = "0.4.5", features = ["serde"] }
 bincode = "1.3.3"
 clap = { version = "4.5.3", features = ["derive"] }
@@ -84,6 +85,7 @@ strum = { version = "0.26.3", features = ["derive"] }
 thiserror = "1.0.48"
 tokio = "1.36.0"
 toml = "0.8.19"
+tower-http = { version = "0.5", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 trie-db = { version = "0.29", default-features = false }

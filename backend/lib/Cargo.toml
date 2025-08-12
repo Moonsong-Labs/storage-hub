@@ -9,7 +9,7 @@ shc-indexer-db = { path = "../../client/indexer-db" }
 
 # Web framework
 axum = { workspace = true }
-tower-http = { version = "0.5", features = ["cors"] }
+tower-http = { workspace = true }
 
 # Async runtime
 tokio = { workspace = true, features = ["full"] }
@@ -39,7 +39,7 @@ jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
 parking_lot = { workspace = true }
 
 [dev-dependencies]
-axum-test = "15"
+axum-test = { workspace = true }
 
 [features]
 default = ["mocks"]
