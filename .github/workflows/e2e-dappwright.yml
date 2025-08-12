@@ -3,7 +3,7 @@ name: E2E DappWright (MetaMask)
 on:
   pull_request:
   push:
-    branches: [ main, develop, feat/** ]
+    branches: [ main ]
   workflow_dispatch:
 
 env:
