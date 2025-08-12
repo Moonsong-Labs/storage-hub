@@ -108,18 +108,42 @@ export const addCopypartyContainer = async (options?: {
 
     const checkFtp = async (): Promise<boolean> => {
       return new Promise<boolean>((resolve) => {
+        let resolved = false;
         const client = net.createConnection(
           { port: Number(ftpHostPort), host: "localhost" },
           () => {
-            client.end();
-            console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
-            resolve(true);
+            // Wait for FTP 220 greeting
+            client.once("data", (data) => {
+              if (!resolved) {
+                resolved = true;
+                const response = data.toString();
+                if (response.includes("220")) {
+                  console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
+                  client.end();
+                  resolve(true);
+                } else {
+                  // Got data but not a 220 greeting, server not ready
+                  client.destroy();
+                  resolve(false);
+                }
+              }
+            });
           }
         );
-        client.on("error", () => resolve(false));
-        client.setTimeout(500, () => {
-          client.destroy();
-          resolve(false);
+        
+        client.on("error", () => {
+          if (!resolved) {
+            resolved = true;
+            resolve(false);
+          }
+        });
+        
+        client.setTimeout(250, () => {
+          if (!resolved) {
+            resolved = true;
+            client.destroy();
+            resolve(false);
+          }
         });
       });
     };
