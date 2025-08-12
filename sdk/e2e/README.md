@@ -90,4 +90,3 @@ docker run --rm -it -p 3000:3000 storagehub-e2e
 - Message signed via SDK; signature logged
 - Transaction request initiated via SDK and rejected; rejection logged
 
-This gives you a lean, reproducible E2E that exercises real MetaMask + SDK flows. 🚀
