@@ -45,9 +45,6 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-// TODO #[cfg(feature = "runtime-benchmarks")]
-// TODO mod benchmarking;
-
 #[frame_support::pallet]
 pub mod pallet {
     use super::{types::*, weights::WeightInfo};
