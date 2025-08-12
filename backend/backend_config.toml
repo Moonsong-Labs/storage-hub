@@ -7,6 +7,15 @@ host = "127.0.0.1"
 # The port to bind the HTTP server to (default: 8080)
 port = 8080
 
+# API configuration for pagination and request handling
+[api]
+# Default number of items per page in paginated API responses (default: 20)
+# This value is used when clients don't specify a limit
+default_page_size = 20
+# Maximum allowed page size for paginated API responses (default: 100)
+# Requests exceeding this limit will be capped to this value
+max_page_size = 100
+
 # StorageHub RPC configuration
 [storage_hub]
 # WebSocket RPC endpoint for the StorageHub node

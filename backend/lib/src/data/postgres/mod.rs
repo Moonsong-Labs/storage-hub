@@ -22,24 +22,16 @@ pub use connection::{
     AnyDbConnection, ConnectionProvider, DbConfig, DbConnection, DbConnectionError,
 };
 pub use pg_connection::PgConnection;
-use serde::{Deserialize, Serialize};
 use shc_indexer_db::models::{Bucket, File, FileStorageRequestStep, Msp};
 
 use crate::error::Result;
-
-/// Pagination parameters for database queries
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PaginationParams {
-    /// Number of items to return
-    pub limit: Option<i64>,
-    /// Number of items to skip
-    pub offset: Option<i64>,
-}
 
 /// Trait defining PostgreSQL client operations
 ///
 /// This trait allows for mock implementations during testing
 /// while maintaining the same interface as the real PostgreSQL client.
+/// 
+/// Pagination parameters (limit, offset) use the values from ApiConfig.
 #[async_trait]
 pub trait PostgresClientTrait: Send + Sync {
     /// Test the database connection
@@ -52,7 +44,8 @@ pub trait PostgresClientTrait: Send + Sync {
     async fn get_files_by_user(
         &self,
         user_account: &[u8],
-        pagination: Option<PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<File>>;
 
     /// Get files for a user stored by a specific MSP
@@ -60,14 +53,16 @@ pub trait PostgresClientTrait: Send + Sync {
         &self,
         user_account: &[u8],
         msp_id: i64,
-        pagination: Option<PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<File>>;
 
     /// Get all files in a bucket
     async fn get_files_by_bucket_id(
         &self,
         bucket_id: i64,
-        pagination: Option<PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<File>>;
 
     /// Create a new file record
@@ -86,14 +81,15 @@ pub trait PostgresClientTrait: Send + Sync {
     async fn get_buckets_by_user(
         &self,
         user_account: &[u8],
-        pagination: Option<PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> Result<Vec<Bucket>>;
 
     /// Get an MSP by its ID
     async fn get_msp_by_id(&self, msp_id: i64) -> Result<Msp>;
 
     /// Get all MSPs
-    async fn get_all_msps(&self, pagination: Option<PaginationParams>) -> Result<Vec<Msp>>;
+    async fn get_all_msps(&self, limit: Option<i64>, offset: Option<i64>) -> Result<Vec<Msp>>;
 
     /// Execute a raw SQL query (for advanced use cases)
     async fn execute_raw_query(&self, query: &str) -> Result<Vec<serde_json::Value>>;

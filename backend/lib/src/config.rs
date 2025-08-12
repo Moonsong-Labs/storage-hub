@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::constants::api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE};
 use crate::constants::database::DEFAULT_DATABASE_URL;
 use crate::constants::rpc::{
     DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
@@ -10,8 +11,22 @@ use crate::constants::server::DEFAULT_PORT;
 pub struct Config {
     pub host: String,
     pub port: u16,
+    pub api: ApiConfig,
     pub storage_hub: StorageHubConfig,
     pub database: DatabaseConfig,
+}
+
+/// API configuration for unified pagination and request handling
+///
+/// These values are used directly by database query methods in the postgres module
+/// to enforce consistent pagination limits across all queries. When implementing
+/// API endpoints, use these values to set defaults and enforce limits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApiConfig {
+    /// Default number of items per page in paginated responses
+    pub default_page_size: usize,
+    /// Maximum allowed page size for paginated responses
+    pub max_page_size: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +53,10 @@ impl Default for Config {
         Self {
             host: "127.0.0.1".to_string(),
             port: DEFAULT_PORT,
+            api: ApiConfig {
+                default_page_size: DEFAULT_PAGE_SIZE,
+                max_page_size: MAX_PAGE_SIZE,
+            },
             storage_hub: StorageHubConfig {
                 rpc_url: DEFAULT_RPC_URL.to_string(),
                 timeout_secs: Some(DEFAULT_TIMEOUT_SECS),

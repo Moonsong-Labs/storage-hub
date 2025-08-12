@@ -87,7 +87,8 @@ impl super::PostgresClientTrait for PostgresClient {
     async fn get_files_by_user(
         &self,
         user_account: &[u8],
-        pagination: Option<super::PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::File>> {
         use diesel::prelude::*;
         use diesel_async::RunQueryDsl;
@@ -102,13 +103,11 @@ impl super::PostgresClientTrait for PostgresClient {
         let account = user_account.to_vec();
         let mut query = file::table.filter(file::account.eq(account)).into_boxed();
 
-        if let Some(params) = pagination {
-            if let Some(limit) = params.limit {
-                query = query.limit(limit);
-            }
-            if let Some(offset) = params.offset {
-                query = query.offset(offset);
-            }
+        if let Some(limit) = limit {
+            query = query.limit(limit);
+        }
+        if let Some(offset) = offset {
+            query = query.offset(offset);
         }
 
         query
@@ -121,7 +120,8 @@ impl super::PostgresClientTrait for PostgresClient {
         &self,
         user_account: &[u8],
         msp_id: i64,
-        pagination: Option<super::PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::File>> {
         use diesel::prelude::*;
         use diesel_async::RunQueryDsl;
@@ -141,13 +141,11 @@ impl super::PostgresClientTrait for PostgresClient {
             .select(file::all_columns)
             .into_boxed();
 
-        if let Some(params) = pagination {
-            if let Some(limit) = params.limit {
-                query = query.limit(limit);
-            }
-            if let Some(offset) = params.offset {
-                query = query.offset(offset);
-            }
+        if let Some(limit) = limit {
+            query = query.limit(limit);
+        }
+        if let Some(offset) = offset {
+            query = query.offset(offset);
         }
 
         query
@@ -159,7 +157,8 @@ impl super::PostgresClientTrait for PostgresClient {
     async fn get_files_by_bucket_id(
         &self,
         bucket_id: i64,
-        pagination: Option<super::PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::File>> {
         use diesel::prelude::*;
         use diesel_async::RunQueryDsl;
@@ -175,13 +174,11 @@ impl super::PostgresClientTrait for PostgresClient {
             .filter(file::bucket_id.eq(bucket_id))
             .into_boxed();
 
-        if let Some(params) = pagination {
-            if let Some(limit) = params.limit {
-                query = query.limit(limit);
-            }
-            if let Some(offset) = params.offset {
-                query = query.offset(offset);
-            }
+        if let Some(limit) = limit {
+            query = query.limit(limit);
+        }
+        if let Some(offset) = offset {
+            query = query.offset(offset);
         }
 
         query
@@ -250,7 +247,8 @@ impl super::PostgresClientTrait for PostgresClient {
     async fn get_buckets_by_user(
         &self,
         user_account: &[u8],
-        pagination: Option<super::PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::Bucket>> {
         use diesel::prelude::*;
         use diesel_async::RunQueryDsl;
@@ -268,13 +266,11 @@ impl super::PostgresClientTrait for PostgresClient {
             .filter(bucket::account.eq(account))
             .into_boxed();
 
-        if let Some(params) = pagination {
-            if let Some(limit) = params.limit {
-                query = query.limit(limit);
-            }
-            if let Some(offset) = params.offset {
-                query = query.offset(offset);
-            }
+        if let Some(limit) = limit {
+            query = query.limit(limit);
+        }
+        if let Some(offset) = offset {
+            query = query.offset(offset);
         }
 
         query
@@ -311,7 +307,8 @@ impl super::PostgresClientTrait for PostgresClient {
 
     async fn get_all_msps(
         &self,
-        pagination: Option<super::PaginationParams>,
+        limit: Option<i64>,
+        offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::Msp>> {
         use diesel::prelude::*;
         use diesel_async::RunQueryDsl;
@@ -325,13 +322,11 @@ impl super::PostgresClientTrait for PostgresClient {
 
         let mut query = msp::table.into_boxed();
 
-        if let Some(params) = pagination {
-            if let Some(limit) = params.limit {
-                query = query.limit(limit);
-            }
-            if let Some(offset) = params.offset {
-                query = query.offset(offset);
-            }
+        if let Some(limit) = limit {
+            query = query.limit(limit);
+        }
+        if let Some(offset) = offset {
+            query = query.offset(offset);
         }
 
         query
