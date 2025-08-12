@@ -54,8 +54,6 @@ jobs:
       - name: Install Playwright Chromium with system deps (sdk/e2e)
         working-directory: sdk/e2e
         run: |
-          ls -la
-          ls -la node_modules/.bin || true
           pnpm exec playwright install --with-deps chromium
 
       - name: Start dApp server (sdk root)
