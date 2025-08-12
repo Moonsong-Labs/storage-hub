@@ -90,7 +90,7 @@ describe('LocalWallet', () => {
             const txObj = Transaction.from(unsignedTx);
             const rawUnsigned = getBytes(txObj.unsignedSerialized);
 
-            const signedTxHex = await wallet.signTxn(rawUnsigned);
+            const signedTxHex = await wallet.signTransaction(rawUnsigned);
 
             const parsed = Transaction.from(signedTxHex);
             expect(parsed.from?.toLowerCase()).toBe(TEST_ADDRESS_12.toLowerCase());

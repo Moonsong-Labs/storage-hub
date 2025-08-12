@@ -111,24 +111,22 @@
 
         document.getElementById('sign-tx').onclick = async () => {
             try {
-                statusEl.textContent = 'Signing transaction...';
+                statusEl.textContent = 'Sending transaction...';
                 const [mod, ethers] = await Promise.all([
                     import('/core/dist/index.js'),
                     import('ethers'),
                 ]);
                 const wallet = await mod.MetamaskWallet.connect();
                 const from = await wallet.getAddress();
-                const unsigned = {
+                const txRequest = {
                     to: from,
                     value: ethers.parseEther('0.001').toString(),
                     gasLimit: 21000,
                 };
-                const tx = ethers.Transaction.from(unsigned);
-                const raw = ethers.getBytes(tx.unsignedSerialized);
-                window.__lastTxSig = undefined;
+                window.__lastTxHash = undefined;
                 window.__lastTxErr = undefined;
-                wallet.signTxn(raw)
-                    .then((sig) => { window.__lastTxSig = sig; statusEl.textContent = 'Tx signed'; })
+                wallet.sendTransaction(txRequest)
+                    .then((hash) => { window.__lastTxHash = hash; statusEl.textContent = 'Tx sent'; })
                     .catch((e) => { window.__lastTxErr = e?.message || String(e); statusEl.textContent = 'Tx failed'; });
             } catch (error) {
                 statusEl.textContent = 'Tx failed';

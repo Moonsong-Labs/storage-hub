@@ -1,4 +1,10 @@
-import { Wallet as EthersWallet, Transaction, hexlify } from 'ethers';
+import {
+  Wallet as EthersWallet,
+  Transaction,
+  hexlify,
+  type Provider,
+  type TransactionRequest,
+} from 'ethers';
 import { WalletBase } from './base.js';
 
 /**
@@ -9,7 +15,10 @@ import { WalletBase } from './base.js';
  * where secure key management is required.
  */
 export class LocalWallet extends WalletBase {
-  private constructor(private readonly wallet: EthersWallet) {
+  private constructor(
+    private readonly wallet: EthersWallet,
+    private readonly provider?: Provider,
+  ) {
     super();
   }
 
@@ -19,8 +28,8 @@ export class LocalWallet extends WalletBase {
    * @param privateKey - A 0x-prefixed hex string containing the private key.
    * @returns A new `LocalWallet` that can sign on behalf of the keyʼs address.
    */
-  public static fromPrivateKey(privateKey: string): LocalWallet {
-    return new LocalWallet(new EthersWallet(privateKey));
+  public static fromPrivateKey(privateKey: string, provider?: Provider): LocalWallet {
+    return new LocalWallet(new EthersWallet(privateKey, provider), provider);
   }
 
   /**
@@ -30,9 +39,9 @@ export class LocalWallet extends WalletBase {
    * @returns A new `LocalWallet` bound to the first account derived from the
    *          mnemonic.
    */
-  public static fromMnemonic(mnemonic: string): LocalWallet {
+  public static fromMnemonic(mnemonic: string, provider?: Provider): LocalWallet {
     const wallet = EthersWallet.fromPhrase(mnemonic);
-    return new LocalWallet(new EthersWallet(wallet.privateKey));
+    return new LocalWallet(new EthersWallet(wallet.privateKey, provider), provider);
   }
 
   /**
@@ -40,9 +49,9 @@ export class LocalWallet extends WalletBase {
    *
    * @returns A freshly generated `LocalWallet` with a random private key.
    */
-  public static createRandom(): LocalWallet {
+  public static createRandom(provider?: Provider): LocalWallet {
     const wallet = EthersWallet.createRandom();
-    return new LocalWallet(new EthersWallet(wallet.privateKey));
+    return new LocalWallet(new EthersWallet(wallet.privateKey, provider), provider);
   }
 
   /** @inheritdoc */
@@ -51,9 +60,19 @@ export class LocalWallet extends WalletBase {
   }
 
   /** @inheritdoc */
-  public signTxn(tx: Uint8Array): Promise<string> {
+  public signTransaction(tx: Uint8Array): Promise<string> {
     const hexTx = hexlify(tx);
     return this.wallet.signTransaction(Transaction.from(hexTx));
+  }
+
+  /** @inheritdoc */
+  public async sendTransaction(tx: TransactionRequest): Promise<string> {
+    if (!this.provider) {
+      throw new Error('No provider configured for LocalWallet; cannot send transaction');
+    }
+    const connected = this.wallet.connect(this.provider);
+    const response = await connected.sendTransaction(tx);
+    return response.hash;
   }
 
   /** @inheritdoc */

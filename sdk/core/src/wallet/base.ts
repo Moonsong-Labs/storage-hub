@@ -6,6 +6,8 @@
  * for retrieving the active account address and for signing transactions or
  * arbitrary messages.
  */
+import type { TransactionRequest } from 'ethers';
+
 export abstract class WalletBase {
   /**
    * Return the public address for the currently selected account.
@@ -16,14 +18,12 @@ export abstract class WalletBase {
   public abstract getAddress(): Promise<string>;
 
   /**
-   * Sign a blockchain transaction and return the resulting signature.
+   * Send a transaction through the wallet and return the transaction hash.
    *
-   * @param tx  Raw transaction payload as a `Uint8Array`. The exact encoding
-   *            depends on the target network and should match what the wallet
-   *            expects (for example an RLP-encoded Ethereum transaction).
-   * @returns   A signature string, typically hex-encoded.
+   * This is the primary operation for most EIP-1193 compatible wallets which
+   * do not support producing detached transaction signatures.
    */
-  public abstract signTxn(tx: Uint8Array): Promise<string>;
+  public abstract sendTransaction(tx: TransactionRequest): Promise<string>;
 
   /**
    * Sign an arbitrary message and return the signature.
@@ -36,4 +36,15 @@ export abstract class WalletBase {
    * @returns   A signature string, typically hex-encoded.
    */
   public abstract signMessage(msg: Uint8Array | string): Promise<string>;
+
+  /**
+   * Optional capability: sign a raw, unsigned transaction and return the signature.
+   *
+   * Default implementation indicates the capability is not supported. Wallets
+   * that can sign offline (e.g. `LocalWallet`) should override this.
+   */
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  public signTransaction(_tx: Uint8Array): Promise<string> {
+    return Promise.reject(new Error('signTransaction is not supported by this wallet'));
+  }
 }
