@@ -69,8 +69,6 @@ jobs:
       - name: Run Playwright tests (headless via xvfb) (sdk/e2e)
         working-directory: sdk/e2e
         run: |
-          ls -la
-          ls -la node_modules/.bin || true
           xvfb-run -a pnpm exec playwright test
 
       - name: Upload Playwright report
