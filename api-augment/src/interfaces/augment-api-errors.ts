@@ -219,6 +219,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CollectionNotFound: AugmentedError<ApiType>;
       /**
+       * Storage request metadata is corrupted or inconsistent.
+       **/
+      CorruptedStorageRequest: AugmentedError<ApiType>;
+      /**
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;
@@ -274,6 +278,10 @@ declare module "@polkadot/api-base/types/errors" {
        * File key already pending deletion.
        **/
       FileKeyAlreadyPendingDeletion: AugmentedError<ApiType>;
+      /**
+       * File key computed from metadata doesn't match the provided file key.
+       **/
+      FileKeyMismatch: AugmentedError<ApiType>;
       /**
        * File key not found in pending deletion requests.
        **/
@@ -471,6 +479,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Storage request not registered for the given file.
        **/
       StorageRequestNotFound: AugmentedError<ApiType>;
+      /**
+       * Storage request is not in rejected state.
+       **/
+      StorageRequestNotRejected: AugmentedError<ApiType>;
       /**
        * Operation not allowed while the storage request is not being revoked.
        **/
