@@ -136,7 +136,7 @@ pub trait StorageHubClientApi {
         &self,
         file_path: String,
         location: String,
-        account_id: &[u8],
+        owner_account_id_hex: String,
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult>;
 
@@ -321,14 +321,15 @@ where
         ext: &Extensions,
         file_path: String,
         location: String,
-        owner_account_id: &[u8],
+        owner_account_id_hex: String,
         bucket_id: H256,
     ) -> RpcResult<LoadFileInStorageResult> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
 
-        // Decode the AccountId sent as bytes.
-        let owner = Runtime::AccountId::try_from(owner_account_id).map_err(into_rpc_error)?;
+        let owner_account_id_bytes = hex::decode(owner_account_id_hex).map_err(into_rpc_error)?;
+        let owner = Runtime::AccountId::try_from(owner_account_id_bytes.as_slice())
+            .map_err(into_rpc_error)?;
 
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
