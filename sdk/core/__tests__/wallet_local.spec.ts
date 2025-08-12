@@ -79,7 +79,7 @@ describe('LocalWallet', () => {
             const { Transaction, getBytes, parseUnits } = await import('ethers');
 
             const unsignedTx = {
-                to: TEST_ADDRESS_12,
+                to: TEST_ADDRESS_24,
                 nonce: 0,
                 gasPrice: parseUnits('1', 'gwei'),
                 gasLimit: 21_000,
