@@ -1,6 +1,6 @@
 import { HttpError, NetworkError, TimeoutError } from './errors';
 
-export type HttpClientOptions = {
+export type HttpClientConfig = {
     baseUrl: string;
     timeoutMs?: number;
     defaultHeaders?: Record<string, string>;
@@ -19,7 +19,7 @@ export class HttpClient {
     private readonly defaultHeaders: Record<string, string>;
     private readonly fetchImpl: typeof fetch;
 
-    constructor(options: HttpClientOptions) {
+    constructor(options: HttpClientConfig) {
         if (!options.baseUrl) throw new Error('HttpClient: baseUrl is required');
         this.baseUrl = options.baseUrl.replace(/\/$/, '');
         this.timeoutMs = options.timeoutMs;

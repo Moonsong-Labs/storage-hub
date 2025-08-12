@@ -1,16 +1,30 @@
-export interface MspClientOptions {
-  endpoint?: string;
-}
+import { HttpClient } from '@storagehub-sdk/core';
+import type { HttpClientConfig } from '@storagehub-sdk/core';
+import type { HealthStatus } from './types';
 
 export class MspClient {
-  public readonly endpoint: string | undefined;
+  public readonly config: HttpClientConfig;
+  private readonly http: HttpClient;
 
-  private constructor(opts: MspClientOptions) {
-    this.endpoint = opts.endpoint;
+  private constructor(config: HttpClientConfig, http: HttpClient) {
+    this.config = config;
+    this.http = http;
   }
 
-  static async connect(opts: MspClientOptions = {}): Promise<MspClient> {
-    // For now no network connection; just return instance
-    return new MspClient(opts);
+  static async connect(config: HttpClientConfig): Promise<MspClient> {
+    if (!config?.baseUrl) throw new Error('MspClient.connect: baseUrl is required');
+
+    const http = new HttpClient({
+      baseUrl: config.baseUrl,
+      timeoutMs: config.timeoutMs,
+      defaultHeaders: config.defaultHeaders,
+      fetchImpl: config.fetchImpl,
+    });
+
+    return new MspClient(config, http);
+  }
+
+  getHealth(options?: { signal?: AbortSignal }): Promise<HealthStatus> {
+    return this.http.get<HealthStatus>('/health', { signal: options?.signal });
   }
 }

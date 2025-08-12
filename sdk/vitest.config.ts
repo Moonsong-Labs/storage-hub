@@ -14,6 +14,7 @@ export default defineConfig({
     test: {
         environment: 'node',
         globals: true,
+        watch: false,
         coverage: {
             provider: 'v8',
             exclude: ['scripts/**', '**/wasm/pkg/**'],
