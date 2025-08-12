@@ -75,7 +75,7 @@
             try {
                 document.getElementById('status').textContent = 'Connecting...';
                 const mod = await import('/core/dist/index.js');
-                const wallet = await mod.MetamaskWallet.connect();
+                const wallet = await mod.Eip1193Wallet.connect();
                 const address = await wallet.getAddress();
                 connectedAccount = address;
                 document.getElementById('status').textContent = 'Connected';
@@ -93,9 +93,9 @@
                 const message = "StorageHub rocks!";
                 document.getElementById('status').textContent = 'Signing...';
 
-                // Use SDK MetamaskWallet instead of direct window.ethereum
+                // Use SDK Eip1193Wallet instead of direct window.ethereum
                 const mod = await import('/core/dist/index.js');
-                const wallet = await mod.MetamaskWallet.connect();
+                const wallet = await mod.Eip1193Wallet.connect();
                 const signature = await wallet.signMessage(message);
 
                 document.getElementById('status').textContent = 'Signed';
@@ -116,7 +116,7 @@
                     import('/core/dist/index.js'),
                     import('ethers'),
                 ]);
-                const wallet = await mod.MetamaskWallet.connect();
+                const wallet = await mod.Eip1193Wallet.connect();
                 const from = await wallet.getAddress();
                 const txRequest = {
                     to: from,

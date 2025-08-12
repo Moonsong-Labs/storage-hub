@@ -1,10 +1,10 @@
 # StorageHub E2E Tests with dAppWright + SDK
 
-End-to-end tests for StorageHub using dAppWright to automate MetaMask and the SDK’s `MetamaskWallet` for signing.
+End-to-end tests for StorageHub using dAppWright to automate MetaMask and the SDK’s `Eip1193Wallet` for signing.
 
 ## 🚀 Features
 
-- **SDK-backed flows**: Use `MetamaskWallet.connect()`, `signMessage()`, and `signTxn()`
+- **SDK-backed flows**: Use `Eip1193Wallet.connect()`, `signMessage()`, and `sendTransaction()`
 - **Automated MetaMask**: Install, import seed, handle popups via dAppWright
 - **Headed and “headless” (Xvfb)**: Local headed and Docker/Xvfb for CI-like runs
 - **No chain dependency**: Tx step is initiated and then rejected (no funds required)
@@ -17,7 +17,7 @@ sdk/e2e/
 ├── playwright.config.ts
 ├── Dockerfile
 ├── page/
-│   └── index.html          # Minimal dApp using SDK MetamaskWallet
+│   └── index.html          # Minimal dApp using SDK Eip1193Wallet
 └── tests/
     └── metamask-sdk-sign.spec.ts
 ```

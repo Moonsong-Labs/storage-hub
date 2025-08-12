@@ -2,44 +2,50 @@ import { WalletBase } from './base.js';
 import { BrowserProvider, type TransactionRequest, type Eip1193Provider } from 'ethers';
 
 declare global {
-  // Expose the injected provider placed on the window object by MetaMask.
-  // We type it as unknown because the exact shape is library-specific and we
-  // interact with it exclusively through ethers' BrowserProvider wrapper.
+  /**
+   * EIP-1193 injected provider placed on the window object by browser wallets.
+   * The exact shape is library-specific; we wrap it via ethers' BrowserProvider.
+   */
   interface Window {
     ethereum?: unknown;
   }
 }
 
 /**
- * Wallet integration for the MetaMask browser extension.
+ * Generic wallet integration for any EIP-1193 compliant injected provider.
  *
- * It fulfils the minimal `WalletBase` contract (fetching the current address
- * and signing arbitrary messages). MetaMask **cannot** sign a raw transaction
- * without also broadcasting it, therefore {@link signTxn} intentionally throws
- * and consumers should use {@link sendTransaction} instead.
+ * Implements the minimal `WalletBase` contract (fetching the current address,
+ * sending transactions, and signing arbitrary messages) using ethers v6.
  */
-export class MetamaskWallet extends WalletBase {
+export class Eip1193Wallet extends WalletBase {
   private constructor(private readonly provider: BrowserProvider) {
     super();
   }
 
   /**
-   * Request connection to MetaMask and create a new `MetamaskWallet`.
+   * Create a wallet from an existing EIP-1193 provider instance.
+   */
+  public static fromProvider(provider: Eip1193Provider): Eip1193Wallet {
+    return new Eip1193Wallet(new BrowserProvider(provider));
+  }
+
+  /**
+   * Request connection to the injected provider at `window.ethereum` and
+   * create a new `Eip1193Wallet`.
    *
    * Internally this triggers the extension UI via `eth_requestAccounts` which
    * asks the user to authorise account access.
    *
-   * @throws If no injected provider is found (MetaMask not installed).
+   * @throws If no injected provider is found.
    */
-  public static async connect(): Promise<MetamaskWallet> {
+  public static async connect(): Promise<Eip1193Wallet> {
     if (typeof window.ethereum === 'undefined') {
-      throw new Error('Metamask provider not found. Please install Metamask.');
+      throw new Error('EIP-1193 provider not found. Please install a compatible wallet.');
     }
 
     const provider = new BrowserProvider(window.ethereum as Eip1193Provider);
-    // Prompt the user to connect (select account)
     await provider.send('eth_requestAccounts', []);
-    return new MetamaskWallet(provider);
+    return new Eip1193Wallet(provider);
   }
 
   /** @inheritdoc */
@@ -51,7 +57,6 @@ export class MetamaskWallet extends WalletBase {
   /** @inheritdoc */
   public async sendTransaction(tx: TransactionRequest): Promise<string> {
     const signer = await this.provider.getSigner();
-    // Keep only meaningful fields; let MetaMask fill in nonce/gas/chainId
     const txRequest: Partial<TransactionRequest> = {};
     if (tx.to) txRequest.to = tx.to;
     if (tx.data && tx.data !== '0x') txRequest.data = tx.data;
