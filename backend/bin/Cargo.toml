@@ -1,5 +1,5 @@
 [package]
-name = "sh-backend"
+name = "sh-msp-backend"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,7 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Local dependencies
-sh-backend-lib = { path = "../lib" }
+sh-msp-backend-lib = { path = "../lib" }
 
 # Workspace dependencies
 tokio = { workspace = true, features = ["full"] }
@@ -25,4 +25,4 @@ clap = { workspace = true }
 
 [features]
 default = ["mocks"]
-mocks = ["sh-backend-lib/mocks"]
+mocks = ["sh-msp-backend-lib/mocks"]

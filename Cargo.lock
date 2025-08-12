@@ -14040,14 +14040,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "sh-backend"
+name = "sh-msp-backend"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "axum",
  "clap",
  "serde",
- "sh-backend-lib",
+ "sh-msp-backend-lib",
  "tokio",
  "toml 0.8.20",
  "tracing",
@@ -14055,7 +14055,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "sh-backend-lib"
+name = "sh-msp-backend-lib"
 version = "0.1.0"
 dependencies = [
  "anyhow",
