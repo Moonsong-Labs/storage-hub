@@ -54,6 +54,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
+    // TODO
     async fn test_health_check() {
         let services = create_test_services();
         let response = health_check_detailed(State(services)).await;
@@ -63,6 +64,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
+    // TODO
     async fn test_counter_handlers() {
         let services = create_test_services();
 

@@ -44,6 +44,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires test app setup with mocked services"]
+    // TODO
     async fn test_health_endpoint() {
         // Create test server
         let app = create_test_app();
@@ -63,6 +64,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires test app setup with mocked services"]
+    // TODO
     async fn test_counter_endpoints() {
         // Create test server
         let app = create_test_app();

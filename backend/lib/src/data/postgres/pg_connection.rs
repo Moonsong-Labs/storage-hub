@@ -160,6 +160,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires a running PostgreSQL instance"]
+    // TODO
     async fn test_pg_connection_creation() {
         let config = DbConfig::new(get_test_db_url())
             .with_max_connections(DEFAULT_MAX_CONNECTIONS)
@@ -175,6 +176,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires a running PostgreSQL instance"]
+    // TODO
     async fn test_get_connection() {
         let config = DbConfig::new(get_test_db_url());
         let pg_conn = PgConnection::new(config)
@@ -187,6 +189,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires a running PostgreSQL instance"]
+    // TODO
     async fn test_connection_health_check() {
         let config = DbConfig::new(get_test_db_url());
         let pg_conn = PgConnection::new(config)
@@ -198,6 +201,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires a running PostgreSQL instance"]
+    // TODO
     async fn test_pool_state() {
         let config = DbConfig::new(get_test_db_url())
             .with_max_connections(crate::constants::test::DB_MAX_CONNECTIONS);
@@ -228,6 +232,7 @@ mod tests {
         }
     }
 
+    // TODO
     // WIP: Transaction test commented out until diesel-async transaction support is implemented
     // #[tokio::test]
     // #[ignore = "Requires a running PostgreSQL instance"]

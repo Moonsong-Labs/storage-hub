@@ -31,6 +31,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
+    // TODO
     async fn test_health_route() {
         let app = crate::api::test_app();
         let server = TestServer::new(app).unwrap();
@@ -44,6 +45,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires PostgreSQL mock implementation - currently WIP"]
+    // TODO
     async fn test_counter_routes() {
         let app = crate::api::test_app();
         let server = TestServer::new(app).unwrap();

@@ -358,6 +358,7 @@ mod tests {
 
     #[tokio::test]
     #[ignore = "Requires actual database"]
+    // TODO
     async fn test_client_creation() {
         let config = DbConfig::new("postgres://localhost/test");
         let pg_conn = PgConnection::new(config)
