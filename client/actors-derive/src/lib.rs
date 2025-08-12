@@ -94,13 +94,13 @@ use once_cell::sync::Lazy;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use quote::{quote, ToTokens};
-use std::{any::Any, sync::Mutex};
+use std::sync::Mutex;
 use syn::{
-    parse::{self, Parse, ParseStream},
+    parse::{Parse, ParseStream},
     parse_macro_input,
     spanned::Spanned,
     token::Comma,
-    Attribute, DeriveInput, Generics, Ident, LitStr, Token, Type, TypePath,
+    Attribute, DeriveInput, Generics, Ident, LitStr, Token, Type,
 };
 
 /// Parser for the `#[actor(actor = "...")]` attribute that accompanies the `ActorEvent` derive macro.
@@ -831,91 +831,6 @@ fn to_snake_case(s: &str) -> String {
     result
 }
 
-/// Generate generics for enum and trait declarations from additional generics
-fn generate_additional_generics_for_declaration(
-    additional_generics: &[syn::WherePredicate],
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    if additional_generics.is_empty() {
-        return (quote! {}, quote! {});
-    }
-
-    let param_names: Vec<syn::Ident> = additional_generics
-        .iter()
-        .filter_map(|pred| {
-            if let syn::WherePredicate::Type(type_pred) = pred {
-                if let syn::Type::Path(type_path) = &type_pred.bounded_ty {
-                    if let Some(first_segment) = type_path.path.segments.first() {
-                        return Some(first_segment.ident.clone());
-                    }
-                }
-            }
-            None
-        })
-        .collect();
-
-    let generics_params = quote! { <#(#param_names),*> };
-    let where_clause = quote! { where #(#additional_generics),* };
-
-    (generics_params, where_clause)
-}
-
-/// Merge and deduplicate generics from service type and additional generics
-fn merge_and_deduplicate_generics(
-    service_generics: &[syn::Ident],
-    service_bounds: &[proc_macro2::TokenStream],
-    additional_generics: &[syn::WherePredicate],
-) -> (proc_macro2::TokenStream, proc_macro2::TokenStream) {
-    let service_param_names: std::collections::HashSet<String> = service_generics
-        .iter()
-        .map(|ident| ident.to_string())
-        .collect();
-
-    // Filter additional generics to exclude duplicates
-    let mut filtered_additional_params = Vec::new();
-    let mut filtered_additional_bounds = Vec::new();
-
-    for predicate in additional_generics {
-        if let syn::WherePredicate::Type(type_pred) = predicate {
-            if let syn::Type::Path(type_path) = &type_pred.bounded_ty {
-                if let Some(first_segment) = type_path.path.segments.first() {
-                    let param_name = first_segment.ident.to_string();
-                    if !service_param_names.contains(&param_name) {
-                        filtered_additional_params.push(first_segment.ident.clone());
-                        filtered_additional_bounds.push(quote!(#predicate));
-                    }
-                }
-            }
-        }
-    }
-
-    // Combine all parameters and bounds
-    let all_params: Vec<syn::Ident> = service_generics
-        .iter()
-        .cloned()
-        .chain(filtered_additional_params.into_iter())
-        .collect();
-
-    let all_bounds: Vec<proc_macro2::TokenStream> = service_bounds
-        .iter()
-        .cloned()
-        .chain(filtered_additional_bounds.into_iter())
-        .collect();
-
-    let impl_generics = if !all_params.is_empty() {
-        quote! { <#(#all_params),*> }
-    } else {
-        quote! {}
-    };
-
-    let where_clause = if !all_bounds.is_empty() {
-        quote! { where #(#all_bounds),* }
-    } else {
-        quote! {}
-    };
-
-    (impl_generics, where_clause)
-}
-
 /// Parser for the `#[actor_command(...)]` attribute macro
 ///
 /// # Usage
@@ -937,7 +852,6 @@ struct ActorCommandArgs {
     default_mode: String,
     default_error_type: Option<Type>,
     default_inner_channel_type: Option<Type>,
-    additional_generics: Vec<syn::WherePredicate>,
 }
 
 impl Parse for ActorCommandArgs {
@@ -946,45 +860,28 @@ impl Parse for ActorCommandArgs {
         let mut default_mode = String::from("ImmediateResponse");
         let mut default_error_type = None;
         let mut default_inner_channel_type = None;
-        let mut additional_generics = Vec::new();
 
         while !input.is_empty() {
             let key: Ident = input.parse()?;
 
-            if key == "generics" {
-                // Parse generics(T: SomeTrait, U: AnotherTrait)
-                let content;
-                let _ = syn::parenthesized!(content in input);
+            let _: Token![=] = input.parse()?;
 
-                while !content.is_empty() {
-                    let predicate: syn::WherePredicate = content.parse()?;
-                    additional_generics.push(predicate);
-
-                    // Parse comma if there are more predicates
-                    if content.peek(Token![,]) {
-                        let _: Token![,] = content.parse()?;
-                    }
-                }
+            if key == "service" {
+                // Parse the service type with its bounds
+                let service_type: Type = input.parse()?;
+                service = Some(service_type);
+            } else if key == "default_mode" {
+                let mode: LitStr = input.parse()?;
+                default_mode = mode.value();
+            } else if key == "default_error_type" {
+                default_error_type = Some(input.parse()?);
+            } else if key == "default_inner_channel_type" {
+                default_inner_channel_type = Some(input.parse()?);
             } else {
-                let _: Token![=] = input.parse()?;
-
-                if key == "service" {
-                    // Parse the service type with its bounds
-                    let service_type: Type = input.parse()?;
-                    service = Some(service_type);
-                } else if key == "default_mode" {
-                    let mode: LitStr = input.parse()?;
-                    default_mode = mode.value();
-                } else if key == "default_error_type" {
-                    default_error_type = Some(input.parse()?);
-                } else if key == "default_inner_channel_type" {
-                    default_inner_channel_type = Some(input.parse()?);
-                } else {
-                    return Err(syn::Error::new(
-                        key.span(),
-                        format!("Unknown parameter: {}", key),
-                    ));
-                }
+                return Err(syn::Error::new(
+                    key.span(),
+                    format!("Unknown parameter: {}", key),
+                ));
             }
 
             // Parse comma if there are more fields
@@ -1002,7 +899,6 @@ impl Parse for ActorCommandArgs {
             default_mode,
             default_error_type,
             default_inner_channel_type,
-            additional_generics,
         })
     }
 }
@@ -1470,7 +1366,6 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let default_mode = args.default_mode;
     let default_error_type = args.default_error_type;
     let default_inner_channel_type = args.default_inner_channel_type;
-    let additional_generics = &args.additional_generics;
 
     let service_token_stream: proc_macro::TokenStream = service_type.into_token_stream().into();
     let service = parse_macro_input!(service_token_stream as syn::TypePath);
@@ -1493,12 +1388,6 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let generics_yay: Generics = input.generics.clone();
 
     if !generics_yay.params.is_empty() {
-        let generics: proc_macro::TokenStream =
-            input.generics.clone().params.into_token_stream().into();
-        // let (impl_generics, ty_generics, where_clause) = generics_yay.split_for_impl();
-
-        // let extension = parse_macro_input!(generics as syn::GenericArgument);
-
         for generic in input.generics.clone().params {
             let generic_token_stream: proc_macro::TokenStream = generic.into_token_stream().into();
             let generic_arg = parse_macro_input!(generic_token_stream as syn::GenericArgument);
@@ -1670,8 +1559,8 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
         _service_impl_generics,
         _type_generics,
         _service_where_clause,
-        service_generic_params,
-        service_where_bounds,
+        _service_generic_params,
+        _service_where_bounds,
     ) = process_service_type(service_type);
 
     let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
