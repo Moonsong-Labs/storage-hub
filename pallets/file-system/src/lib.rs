@@ -271,7 +271,7 @@ pub mod pallet {
         #[pallet::constant]
         type TreasuryAccount: Get<Self::AccountId>;
 
-        /// Penalty payed by a BSP when they forcefully stop storing a file.
+        /// Penalty paid by a BSP when they forcefully stop storing a file.
         #[pallet::constant]
         type BspStopStoringFilePenalty: Get<BalanceOf<Self>>;
 
