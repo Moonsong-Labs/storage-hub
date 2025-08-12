@@ -1,5 +1,7 @@
-import { describeBspNet, shUser, type EnrichedBspApi } from "../../../util";
 import assert from "node:assert";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, describeBspNet, shUser } from "../../../util";
 
 describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, createBspApi }) => {
   let userApi: EnrichedBspApi;
@@ -25,10 +27,11 @@ describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, createBsp
       containerName: "docker-sh-bsp-1"
     });
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const { file_metadata: FileMetadata } = await userApi.rpc.storagehubclient.loadFileInStorage(
       "res/whatsup.jpg",
       "test/whatsup.jpg",
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex,
       newBucketEventDataBlob.bucketId
     );
 

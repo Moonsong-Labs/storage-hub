@@ -1,7 +1,9 @@
 import assert, { notEqual, strictEqual } from "node:assert";
-import { describeBspNet, shUser, sleep, waitFor, type EnrichedBspApi } from "../../../util";
+import type { Bytes, U8aFixed, u64 } from "@polkadot/types";
 import type { H256 } from "@polkadot/types/interfaces";
-import type { Bytes, u64, U8aFixed } from "@polkadot/types";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, describeBspNet, shUser, sleep, waitFor } from "../../../util";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -45,12 +47,13 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     bucketId = newBucketEventDataBlob.bucketId;
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location: loc, fingerprint: fp, file_size: s }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex,
       newBucketEventDataBlob.bucketId
     );
 
@@ -228,13 +231,14 @@ describeBspNet("Single BSP multi-volunteers", ({ before, createBspApi, createUse
     assert(newBucketEventDataBlob, "Event doesn't match Type");
 
     const txs = [];
+    const ownerHex2 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     for (let i = 0; i < source.length; i++) {
       const {
         file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source[i],
         destination[i],
-        userApi.shConsts.NODE_INFOS.user.AddressId,
+        ownerHex2,
         newBucketEventDataBlob.bucketId
       );
 

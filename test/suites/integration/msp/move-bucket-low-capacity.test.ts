@@ -1,22 +1,24 @@
 import { strictEqual } from "node:assert";
 import assert from "node:assert";
+import type { EventRecord } from "@polkadot/types/interfaces";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
 import {
+  type EnrichedBspApi,
+  ShConsts,
+  addMspContainer,
   assertEventPresent,
-  bspTwoKey,
   bspThreeKey,
   bspThreeSeed,
+  bspTwoKey,
   bspTwoSeed,
-  ShConsts,
   describeMspNet,
-  shUser,
-  sleep,
   getContainerIp,
-  type EnrichedBspApi,
   mspThreeKey,
   mspThreeSeed,
-  addMspContainer
+  shUser,
+  sleep
 } from "../../../util";
-import type { EventRecord } from "@polkadot/types/interfaces";
 
 describeMspNet(
   "MSP rejects bucket move requests due to low capacity",
@@ -162,13 +164,14 @@ describeMspNet(
 
       // Seal block with 3 storage requests.
       const txs = [];
+      const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
       for (let i = 0; i < source.length; i++) {
         const {
           file_metadata: { location, fingerprint, file_size }
         } = await userApi.rpc.storagehubclient.loadFileInStorage(
           source[i],
           destination[i],
-          userApi.shConsts.NODE_INFOS.user.AddressId,
+          ownerHex,
           bucketId
         );
 

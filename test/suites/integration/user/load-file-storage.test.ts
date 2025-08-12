@@ -1,5 +1,7 @@
 import assert, { strictEqual } from "node:assert";
-import { describeBspNet, type EnrichedBspApi } from "../../../util";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, describeBspNet } from "../../../util";
 
 describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
@@ -21,12 +23,13 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
+    const ownerHex1 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex1,
       newBucketEventDataBlob.bucketId
     );
 
@@ -49,10 +52,13 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     }
 
     try {
+      const ownerHexEmpty = u8aToHex(
+        decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)
+      ).slice(2);
       await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
+        ownerHexEmpty,
         newBucketEventDataBlob.bucketId
       );
     } catch (e: any) {
@@ -73,12 +79,15 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
+    const ownerHexChunk = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(
+      2
+    );
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHexChunk,
       newBucketEventDataBlob.bucketId
     );
 
@@ -100,12 +109,15 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
+    const ownerHexFirst = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(
+      2
+    );
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHexFirst,
       newBucketEventDataBlob.bucketId
     );
 
@@ -114,10 +126,13 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     strictEqual(file_size.toBigInt(), userApi.shConsts.TEST_ARTEFACTS[source].size);
 
     try {
+      const ownerHex2 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(
+        2
+      );
       await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
+        ownerHex2,
         newBucketEventDataBlob.bucketId
       );
     } catch (e: any) {
@@ -143,7 +158,7 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
         userApi.rpc.storagehubclient.loadFileInStorage(
           source,
           destination,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
+          u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2),
           newBucketEventDataBlob.bucketId
         ),
       /-32603: Internal error: Os { code: 2, kind: NotFound, message: "No such file or directory" }/,
