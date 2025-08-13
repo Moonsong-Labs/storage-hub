@@ -15,17 +15,16 @@ use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
 use shc_actors_framework::actor::Actor;
-use shc_common::traits::{ExtensionOperations, KeyTypeOperations};
 use shc_common::{
     blockchain_utils::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
         get_provider_id_from_keystore, GetProviderIdError,
     },
-    traits::StorageEnableRuntime,
+    traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     types::{
         BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, ParachainClient,
-        ProofsDealerProviderId, StorageProviderId, TrieAddMutation, TrieMutation,
-        TrieRemoveMutation, BCSV_KEY_TYPE,
+        ProofsDealerProviderId, StorageEnableEvents, StorageProviderId, TrieAddMutation,
+        TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -39,7 +38,6 @@ use sp_runtime::{
     traits::{CheckedSub, One, Saturating, Zero},
     SaturatedConversion,
 };
-use storage_hub_runtime::RuntimeEvent;
 use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{
@@ -155,7 +153,9 @@ where
                         .events
                         .iter()
                         .find_map(|event| {
-                            if let RuntimeEvent::System(system_event) = &event.event {
+                            if let StorageEnableEvents::System(system_event) =
+                                &event.event.clone().into()
+                            {
                                 match system_event {
                                     frame_system::Event::ExtrinsicSuccess { dispatch_info: _ } => {
                                         Some(Ok(()))
@@ -590,7 +590,7 @@ where
         &self,
         block_hash: Runtime::Hash,
         extrinsic_hash: Runtime::Hash,
-    ) -> Result<Extrinsic> {
+    ) -> Result<Extrinsic<Runtime>> {
         // Get the block.
         let maybe_block = self.client.block(block_hash).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to get block. Error: {:?}", e);
@@ -838,7 +838,7 @@ where
                         match managed_provider {
                             ManagedProvider::Bsp(_) => {
                                 self.bsp_process_forest_root_changing_events(
-                                    ev.event.clone(),
+                                    ev.event.clone().into(),
                                     revert,
                                 )
                                 .await;
@@ -846,7 +846,7 @@ where
                             ManagedProvider::Msp(_) => {
                                 self.msp_process_forest_root_changing_events(
                                     &block.hash,
-                                    ev.event.clone(),
+                                    ev.event.clone().into(),
                                     revert,
                                 )
                                 .await;
@@ -1026,10 +1026,13 @@ where
         Ok(reverted_mutation)
     }
 
-    pub(crate) fn process_common_block_import_events(&mut self, event: RuntimeEvent) {
+    pub(crate) fn process_common_block_import_events(
+        &mut self,
+        event: StorageEnableEvents<Runtime>,
+    ) {
         match event {
             // New storage request event coming from pallet-file-system.
-            RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::NewStorageRequest {
                 who,
                 file_key,
                 bucket_id,
@@ -1046,10 +1049,10 @@ where
                 fingerprint: fingerprint.as_ref().into(),
                 size,
                 user_peer_ids: peer_ids,
-                expires_at: expires_at.into(),
+                expires_at: expires_at,
             }),
             // A provider has been marked as slashable.
-            RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
+            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
                 provider,
                 next_challenge_deadline,
             }) => self.emit(SlashableProvider {
@@ -1057,7 +1060,7 @@ where
                 next_challenge_deadline: next_challenge_deadline.saturated_into(),
             }),
             // The last chargeable info of a provider has been updated
-            RuntimeEvent::PaymentStreams(
+            StorageEnableEvents::PaymentStreams(
                 pallet_payment_streams::Event::LastChargeableInfoUpdated {
                     provider_id,
                     last_chargeable_tick,
@@ -1073,27 +1076,29 @@ where
                     };
                     if provider_id == *managed_provider_id {
                         self.emit(LastChargeableInfoUpdated {
-                            provider_id: provider_id,
-                            last_chargeable_tick: last_chargeable_tick.saturated_into(),
-                            last_chargeable_price_index: last_chargeable_price_index,
+                            provider_id,
+                            last_chargeable_tick,
+                            last_chargeable_price_index,
                         })
                     }
                 }
             }
             // A user has been flagged as without funds in the runtime
-            RuntimeEvent::PaymentStreams(pallet_payment_streams::Event::UserWithoutFunds {
-                who,
-            }) => {
+            StorageEnableEvents::PaymentStreams(
+                pallet_payment_streams::Event::UserWithoutFunds { who },
+            ) => {
                 self.emit(UserWithoutFunds { who });
             }
             // A file was correctly deleted from a user without funds
-            RuntimeEvent::FileSystem(pallet_file_system::Event::SpStopStoringInsolventUser {
-                sp_id,
-                file_key,
-                owner,
-                location,
-                new_root,
-            }) => {
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::SpStopStoringInsolventUser {
+                    sp_id,
+                    file_key,
+                    owner,
+                    location,
+                    new_root,
+                },
+            ) => {
                 if let Some(managed_provider_id) = &self.maybe_managed_provider {
                     // We only emit the event if the Provider ID is the one that this node is managing.
                     // It's irrelevant if the Provider ID is a MSP or a BSP.
@@ -1116,13 +1121,13 @@ where
         }
     }
 
-    pub(crate) fn process_common_finality_events(&self, _event: RuntimeEvent) {
+    pub(crate) fn process_common_finality_events(&self, _event: StorageEnableEvents<Runtime>) {
         {}
     }
 
-    pub(crate) fn process_test_user_events(&self, event: RuntimeEvent) {
+    pub(crate) fn process_test_user_events(&self, event: StorageEnableEvents<Runtime>) {
         match event {
-            RuntimeEvent::FileSystem(pallet_file_system::Event::AcceptedBspVolunteer {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::AcceptedBspVolunteer {
                 bsp_id,
                 bucket_id,
                 location,

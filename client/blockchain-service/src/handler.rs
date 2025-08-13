@@ -178,7 +178,7 @@ impl<FSH, Runtime> ActorEventLoop<BlockchainService<FSH, Runtime>>
     for BlockchainServiceEventLoop<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    Runtime: StorageEnableRuntime + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
 {
     fn new(
         actor: BlockchainService<FSH, Runtime>,
@@ -1412,19 +1412,25 @@ where
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
 
-                    self.process_common_block_import_events(ev.event.clone());
+                    self.process_common_block_import_events(ev.event.clone().into());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
                         Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_block_import_events(block_hash, ev.event.clone());
+                            self.bsp_process_block_import_events(
+                                block_hash,
+                                ev.event.clone().into(),
+                            );
                         }
                         Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_block_import_events(block_hash, ev.event.clone());
+                            self.msp_process_block_import_events(
+                                block_hash,
+                                ev.event.clone().into(),
+                            );
                         }
                         None => {
                             // * USER SPECIFIC EVENTS. USED ONLY FOR TESTING.
-                            self.process_test_user_events(ev.event.clone());
+                            self.process_test_user_events(ev.event.clone().into());
                         }
                     }
                 }
@@ -1470,15 +1476,15 @@ where
             Ok(block_events) => {
                 for ev in block_events {
                     // Process the events applicable regardless of whether this node is managing a BSP or an MSP.
-                    self.process_common_finality_events(ev.event.clone());
+                    self.process_common_finality_events(ev.event.clone().into());
 
                     // Process Provider-specific events.
                     match &self.maybe_managed_provider {
                         Some(ManagedProvider::Bsp(_)) => {
-                            self.bsp_process_finality_events(&block_hash, ev.event.clone());
+                            self.bsp_process_finality_events(&block_hash, ev.event.clone().into());
                         }
                         Some(ManagedProvider::Msp(_)) => {
-                            self.msp_process_finality_events(&block_hash, ev.event.clone());
+                            self.msp_process_finality_events(&block_hash, ev.event.clone().into());
                         }
                         _ => {}
                     }

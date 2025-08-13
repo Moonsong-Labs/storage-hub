@@ -200,13 +200,13 @@ impl<Runtime: StorageEnableRuntime> From<events::FileDeletionRequest<Runtime>>
 ///
 /// This struct represents an extrinsic in the blockchain.
 #[derive(Debug, Clone)]
-pub struct Extrinsic {
+pub struct Extrinsic<Runtime: StorageEnableRuntime> {
     /// Extrinsic hash.
     pub hash: H256,
     /// Block hash.
     pub block_hash: H256,
     /// Events vector.
-    pub events: StorageHubEventsVec,
+    pub events: StorageHubEventsVec<Runtime>,
 }
 
 /// ExtrinsicResult enum.

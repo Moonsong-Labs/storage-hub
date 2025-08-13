@@ -14,10 +14,12 @@ use shc_actors_framework::actor::Actor;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BlockHash, BlockNumber, Fingerprint, ProviderId, StorageRequestMetadata},
+    types::{
+        BlockHash, BlockNumber, Fingerprint, ProviderId, StorageEnableEvents,
+        StorageRequestMetadata,
+    },
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
     events::{
@@ -108,7 +110,7 @@ where
     pub(crate) fn msp_process_block_import_events(
         &self,
         _block_hash: &Runtime::Hash,
-        event: RuntimeEvent,
+        event: StorageEnableEvents<Runtime>,
     ) {
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
@@ -119,7 +121,7 @@ where
         };
 
         match event {
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
                 bucket_id,
                 old_msp_id: _,
                 new_msp_id,
@@ -136,7 +138,7 @@ where
                     });
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::FileDeletionRequest {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::FileDeletionRequest {
                 user,
                 file_key,
                 file_size,
@@ -165,7 +167,7 @@ where
     pub(crate) fn msp_process_finality_events(
         &self,
         _block_hash: &Runtime::Hash,
-        event: RuntimeEvent,
+        event: StorageEnableEvents<Runtime>,
     ) {
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
@@ -176,11 +178,13 @@ where
         };
 
         match event {
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MspStoppedStoringBucket {
-                msp_id,
-                owner,
-                bucket_id,
-            }) => {
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::MspStoppedStoringBucket {
+                    msp_id,
+                    owner,
+                    bucket_id,
+                },
+            ) => {
                 if msp_id == *managed_msp_id {
                     self.emit(FinalisedMspStoppedStoringBucket {
                         msp_id,
@@ -189,7 +193,7 @@ where
                     })
                 }
             }
-            RuntimeEvent::FileSystem(
+            StorageEnableEvents::FileSystem(
                 pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
                     msp_id,
                     user,
@@ -211,7 +215,7 @@ where
                     });
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequested {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketRequested {
                 who: _,
                 bucket_id,
                 new_msp_id,
@@ -225,7 +229,7 @@ where
                     });
                 }
             }
-            RuntimeEvent::FileSystem(
+            StorageEnableEvents::FileSystem(
                 pallet_file_system::Event::MspStopStoringBucketInsolventUser {
                     msp_id,
                     owner: _,
@@ -236,7 +240,7 @@ where
                     self.emit(FinalisedMspStopStoringBucketInsolventUser { msp_id, bucket_id })
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
                 bucket_id,
                 old_msp_id,
                 new_msp_id,
@@ -427,7 +431,7 @@ where
     pub(crate) async fn msp_process_forest_root_changing_events(
         &self,
         block_hash: &BlockHash,
-        event: RuntimeEvent,
+        event: StorageEnableEvents<Runtime>,
         revert: bool,
     ) {
         let managed_msp_id = match &self.maybe_managed_provider {
@@ -453,7 +457,7 @@ where
                     });
 
         match event {
-            RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
+            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
                 mutations,
                 old_root,
                 new_root,

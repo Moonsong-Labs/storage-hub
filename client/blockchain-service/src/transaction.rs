@@ -114,7 +114,7 @@ impl<Runtime: StorageEnableRuntime> SubmittedTransaction<Runtime> {
     pub async fn watch_for_success_with_events<FSH>(
         &mut self,
         blockchain: &ActorHandle<BlockchainService<FSH, Runtime>>,
-    ) -> Result<StorageHubEventsVec, WatchTransactionError>
+    ) -> Result<StorageHubEventsVec<Runtime>, WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
         Runtime: StorageEnableRuntime,
@@ -153,7 +153,7 @@ impl<Runtime: StorageEnableRuntime> SubmittedTransaction<Runtime> {
     async fn watch_transaction<FSH>(
         &mut self,
         blockchain: &ActorHandle<BlockchainService<FSH, Runtime>>,
-    ) -> Result<Extrinsic, WatchTransactionError>
+    ) -> Result<Extrinsic<Runtime>, WatchTransactionError>
     where
         FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
         Runtime: StorageEnableRuntime,

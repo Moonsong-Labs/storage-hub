@@ -3,7 +3,10 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
-use shc_common::traits::{KeyTypeOperations, StorageEnableRuntime};
+use shc_common::{
+    traits::{KeyTypeOperations, StorageEnableRuntime},
+    types::StorageEnableEvents,
+};
 use sp_api::ApiError;
 
 use pallet_file_system_runtime_api::{
@@ -54,7 +57,7 @@ pub enum BlockchainServiceCommand {
         call: Runtime::Call,
         options: SendExtrinsicOptions,
     },
-    #[command(success_type = Extrinsic)]
+    #[command(success_type = Extrinsic<Runtime>)]
     GetExtrinsicFromBlock {
         block_hash: Runtime::Hash,
         extrinsic_hash: Runtime::Hash,
@@ -201,7 +204,7 @@ pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntime>:
     BlockchainServiceCommandInterface<Runtime>
 {
     /// Helper function to check if an extrinsic failed or succeeded in a block.
-    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
+    fn extrinsic_result(extrinsic: Extrinsic<Runtime>) -> Result<ExtrinsicResult>;
 
     /// Helper function to submit an extrinsic with a retry strategy. Returns when the extrinsic is
     /// included in a block or when the retry strategy is exhausted.
@@ -211,7 +214,7 @@ pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntime>:
         options: SendExtrinsicOptions,
         retry_strategy: RetryStrategy,
         with_events: bool,
-    ) -> Result<Option<StorageHubEventsVec>>;
+    ) -> Result<Option<StorageHubEventsVec<Runtime>>>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
@@ -222,23 +225,21 @@ where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
-    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
+    fn extrinsic_result(extrinsic: Extrinsic<Runtime>) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {
-            match ev.event {
-                storage_hub_runtime::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicFailed {
-                        dispatch_error,
-                        dispatch_info,
-                    },
-                ) => {
+            match ev.event.into() {
+                StorageEnableEvents::System(frame_system::Event::ExtrinsicFailed {
+                    dispatch_error,
+                    dispatch_info,
+                }) => {
                     return Ok(ExtrinsicResult::Failure {
                         dispatch_info,
                         dispatch_error,
                     });
                 }
-                storage_hub_runtime::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicSuccess { dispatch_info },
-                ) => {
+                StorageEnableEvents::System(frame_system::Event::ExtrinsicSuccess {
+                    dispatch_info,
+                }) => {
                     return Ok(ExtrinsicResult::Success { dispatch_info });
                 }
                 _ => {}
@@ -256,7 +257,7 @@ where
         options: SendExtrinsicOptions,
         retry_strategy: RetryStrategy,
         with_events: bool,
-    ) -> Result<Option<StorageHubEventsVec>> {
+    ) -> Result<Option<StorageHubEventsVec<Runtime>>> {
         let call = call.into();
 
         // Execute the extrinsic without any tip or specific nonce the first time around.
@@ -272,7 +273,7 @@ where
 
             let mut transaction = self.send_extrinsic(call.clone(), extrinsic_options).await?;
 
-            let result: Result<Option<StorageHubEventsVec>, _> = if with_events {
+            let result: Result<Option<StorageHubEventsVec<Runtime>>, _> = if with_events {
                 transaction
                     .watch_for_success_with_events(&self)
                     .await
