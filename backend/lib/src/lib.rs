@@ -12,7 +12,7 @@ pub use config::Config;
 pub use error::{Error, Result};
 
 // WIP: Tests commented out until PostgreSQL mock implementation is complete
-#[cfg(test)]
+#[cfg(all(test, feature = "mocks"))]
 #[allow(dead_code)]
 mod tests {
     use std::sync::Arc;

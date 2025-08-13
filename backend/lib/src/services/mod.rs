@@ -48,7 +48,7 @@ impl Services {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mocks"))]
 impl Services {
     /// Create a test services container with in-memory storage
     pub fn test() -> Self {

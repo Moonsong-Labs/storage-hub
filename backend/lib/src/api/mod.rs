@@ -24,7 +24,7 @@ pub fn create_app(services: Services) -> Router {
     router.layer(cors)
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mocks"))]
 /// Create a test application
 ///
 /// This function creates a test application with mock services.

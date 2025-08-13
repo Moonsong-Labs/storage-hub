@@ -22,7 +22,7 @@ pub fn routes(services: Services) -> Router {
 }
 
 // WIP: Tests commented out until PostgreSQL mock implementation is complete
-#[cfg(test)]
+#[cfg(all(test, feature = "mocks"))]
 #[allow(dead_code)]
 mod tests {
     // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented

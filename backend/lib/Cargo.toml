@@ -30,5 +30,5 @@ shc-indexer-db = { path = "../../client/indexer-db" }
 axum-test = { workspace = true }
 
 [features]
-default = ["mocks"]
+default = []
 mocks = []
