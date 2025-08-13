@@ -6,10 +6,10 @@ use async_trait::async_trait;
 use jsonrpsee::core::client::Error;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::constants::rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_TIMEOUT_SECS};
 #[cfg(feature = "mocks")]
 use super::mock_connection::MockConnection;
 use super::{ws_connection::WsConnection, RpcConnection};
+use crate::constants::rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_TIMEOUT_SECS};
 
 /// Error type for RPC operations
 #[derive(Debug, thiserror::Error)]

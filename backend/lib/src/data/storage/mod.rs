@@ -26,7 +26,7 @@ pub trait Storage: Send + Sync {
 
     // TODO(SCAFFOLDING): Counter methods are example operations for demonstration.
     // Replace with actual MSP storage operations when implementing real features.
-    
+
     /// Increment a counter by the specified amount
     async fn increment_counter(&self, key: &str, amount: i64) -> Result<i64, Self::Error>;
 

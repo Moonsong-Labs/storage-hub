@@ -30,7 +30,7 @@ use crate::error::Result;
 ///
 /// This trait allows for mock implementations during testing
 /// while maintaining the same interface as the real PostgreSQL client.
-/// 
+///
 /// Pagination parameters (limit, offset) use the values from ApiConfig.
 #[async_trait]
 pub trait PostgresClientTrait: Send + Sync {

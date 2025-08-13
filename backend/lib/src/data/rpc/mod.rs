@@ -5,9 +5,9 @@ use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub mod client;
 pub mod connection;
-pub mod ws_connection;
 #[cfg(feature = "mocks")]
 pub mod mock_connection;
+pub mod ws_connection;
 
 pub use client::StorageHubRpcClient;
 pub use connection::{AnyRpcConnection, IntoRpcError, RpcConfig, RpcConnectionError, RpcResult};
