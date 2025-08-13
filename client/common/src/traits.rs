@@ -13,6 +13,7 @@ use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
+use sp_rpc::number::NumberOrHex;
 use sp_runtime::traits::{
     ConstU32, Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension, Verify,
 };
@@ -265,7 +266,7 @@ pub trait StorageEnableRuntime:
             Fingerprint = <Self as frame_system::Config>::Hash,
         >
         + pallet_transaction_payment::Config
-        + pallet_balances::Config<Balance: Into<BigDecimal> + MaybeDisplay>
+        + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
         + pallet_nfts::Config<CollectionId: Send + Sync + Display>
         + pallet_bucket_nfts::Config
         + pallet_randomness::Config

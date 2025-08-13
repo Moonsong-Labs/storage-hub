@@ -14283,6 +14283,7 @@ name = "shc-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bigdecimal",
  "bincode",
  "cumulus-client-service",
  "cumulus-primitives-core 0.17.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -14295,6 +14296,7 @@ dependencies = [
  "lazy_static",
  "log",
  "pallet-balances 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "pallet-bucket-nfts",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
  "pallet-nfts",
@@ -14302,6 +14304,7 @@ dependencies = [
  "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",
  "pallet-proofs-dealer-runtime-api",
+ "pallet-randomness",
  "pallet-storage-providers",
  "pallet-storage-providers-runtime-api",
  "pallet-transaction-payment 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -14327,6 +14330,7 @@ dependencies = [
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-io 39.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-keystore 0.41.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-rpc",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -14462,6 +14466,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "array-bytes",
+ "bigdecimal",
  "cumulus-primitives-core 0.17.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "cumulus-primitives-storage-weight-reclaim",
  "diesel",

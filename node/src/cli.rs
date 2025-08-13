@@ -229,7 +229,7 @@ pub struct ProviderConfigurations {
             ("provider_type", "msp"),
         ])
     )]
-    pub msp_move_bucket_max_tip: Option<f64>,
+    pub msp_move_bucket_max_tip: Option<u128>,
 
     // ============== BSP Upload File task options ==============
     /// Enable and configure BSP Upload File task.
@@ -258,7 +258,7 @@ pub struct ProviderConfigurations {
             ("provider_type", "bsp"),
         ])
     )]
-    pub bsp_upload_file_max_tip: Option<f64>,
+    pub bsp_upload_file_max_tip: Option<u128>,
 
     // ============== BSP Move Bucket task options ==============
     /// Enable and configure BSP Move Bucket task.
