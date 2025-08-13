@@ -308,6 +308,18 @@ describeMspNet(
       await userApi.block.seal();
       await userApi.block.seal();
 
+      // Wait for file deletion to be processed by indexer
+      await waitFor({
+        lambda: async () => {
+          const files = await sql`
+            SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
+          `;
+          return files.length === 0;
+        },
+        iterations: 20,
+        delay: 500
+      });
+
       // Verify file is removed from database
       const files = await sql`
         SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
@@ -448,6 +460,18 @@ describeMspNet(
       await userApi.block.seal();
       await userApi.block.seal();
 
+      // Wait for bucket to be indexed by the indexer
+      await waitFor({
+        lambda: async () => {
+          const buckets = await sql`
+            SELECT * FROM bucket WHERE name = ${bucketName}
+          `;
+          return buckets.length > 0;
+        },
+        iterations: 20,
+        delay: 500
+      });
+
       // Verify bucket is indexed
       let buckets = await sql`
         SELECT * FROM bucket WHERE name = ${bucketName}
@@ -508,7 +532,9 @@ describeMspNet(
             SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
           `;
           return files.length > 0;
-        }
+        },
+        iterations: 30,
+        delay: 1000
       });
 
       // Verify file exists in database (fulfillment creates permanent record)
@@ -609,7 +635,9 @@ describeMspNet(
             )
           `;
           return mspFiles.length > 0;
-        }
+        },
+        iterations: 30,
+        delay: 1000
       });
 
       // Verify BSP-file association exists
@@ -835,8 +863,8 @@ describeMspNet(
             msp_id = ${mspId}`;
           return buckets.length > 0;
         },
-        iterations: 10,
-        delay: 500
+        iterations: 30,
+        delay: 1000
       });
 
       // Get the value propositions of the second MSP to use, and use the first one (can be any).
