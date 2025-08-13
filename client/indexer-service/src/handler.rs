@@ -300,9 +300,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 }
 
                 let size: u64 = (*size).saturated_into();
+                // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
+                // TODO: (who.as_ref()).to_vec(),
+                let who = <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec();
                 File::create(
                     conn,
-                    <AccountId32 as AsRef<[u8]>>::as_ref(who).to_vec(),
+                    who,
+                    // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
+                    // TODO: (who.as_ref()).to_vec(),
                     file_key.as_ref().to_vec(),
                     bucket.id,
                     location.to_vec(),

@@ -24,7 +24,7 @@ use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::H256;
 use sp_runtime::{
     traits::{Header, Zero},
-    AccountId32, DispatchError, SaturatedConversion,
+    DispatchError, SaturatedConversion,
 };
 
 use crate::{events, handler::LOG_TARGET};
@@ -132,12 +132,12 @@ impl RespondStorageRequest {
 ///
 /// This struct is used as an item in the `pending_stop_storing_for_insolvent_user_requests` queue.
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct StopStoringForInsolventUserRequest {
-    pub user: AccountId32,
+pub struct StopStoringForInsolventUserRequest<Runtime: StorageEnableRuntime> {
+    pub user: Runtime::AccountId,
 }
 
-impl StopStoringForInsolventUserRequest {
-    pub fn new(user: AccountId32) -> Self {
+impl<Runtime: StorageEnableRuntime> StopStoringForInsolventUserRequest<Runtime> {
+    pub fn new(user: Runtime::AccountId) -> Self {
         Self { user }
     }
 }
@@ -147,7 +147,7 @@ impl StopStoringForInsolventUserRequest {
 /// This struct is used as an item in the `pending_file_deletion_requests` queue.
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct FileDeletionRequest<Runtime: StorageEnableRuntime> {
-    pub user: AccountId32,
+    pub user: Runtime::AccountId,
     pub file_key: H256,
     pub file_size: StorageDataUnit<Runtime>,
     pub bucket_id: BucketId<Runtime>,
@@ -158,7 +158,7 @@ pub struct FileDeletionRequest<Runtime: StorageEnableRuntime> {
 
 impl<Runtime: StorageEnableRuntime> FileDeletionRequest<Runtime> {
     pub fn new(
-        user: AccountId32,
+        user: Runtime::AccountId,
         file_key: H256,
         file_size: StorageDataUnit<Runtime>,
         bucket_id: BucketId<Runtime>,

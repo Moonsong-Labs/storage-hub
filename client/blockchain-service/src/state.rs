@@ -82,13 +82,26 @@ impl<Runtime: StorageEnableRuntime> Default for PendingConfirmStoringRequestCf<R
 }
 
 /// Pending stop storing requests.
-#[derive(Default)]
-pub struct PendingStopStoringForInsolventUserRequestCf;
-impl ScaleEncodedCf for PendingStopStoringForInsolventUserRequestCf {
+pub struct PendingStopStoringForInsolventUserRequestCf<Runtime: StorageEnableRuntime> {
+    pub(crate) phantom: std::marker::PhantomData<Runtime>,
+}
+impl<Runtime: StorageEnableRuntime> ScaleEncodedCf
+    for PendingStopStoringForInsolventUserRequestCf<Runtime>
+{
     type Key = u64;
-    type Value = StopStoringForInsolventUserRequest;
+    type Value = StopStoringForInsolventUserRequest<Runtime>;
 
     const SCALE_ENCODED_NAME: &'static str = "pending_stop_storing_for_insolvent_user_request";
+}
+
+impl<Runtime: StorageEnableRuntime> Default
+    for PendingStopStoringForInsolventUserRequestCf<Runtime>
+{
+    fn default() -> Self {
+        Self {
+            phantom: std::marker::PhantomData,
+        }
+    }
 }
 
 /// Pending submit proof requests left side (inclusive) index for the [`PendingConfirmStoringRequestCf`] CF.
@@ -234,7 +247,7 @@ const ALL_COLUMN_FAMILIES: [&str; 17] = [
     OngoingProcessStopStoringForInsolventUserRequestCf::<storage_hub_runtime::Runtime>::NAME,
     PendingStopStoringForInsolventUserRequestLeftIndexCf::NAME,
     PendingStopStoringForInsolventUserRequestRightIndexCf::NAME,
-    PendingStopStoringForInsolventUserRequestCf::NAME,
+    PendingStopStoringForInsolventUserRequestCf::<storage_hub_runtime::Runtime>::NAME,
     OngoingProcessFileDeletionRequestCf::<storage_hub_runtime::Runtime>::NAME,
     FileDeletionRequestLeftIndexCf::NAME,
     FileDeletionRequestRightIndexCf::NAME,
@@ -310,10 +323,11 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         }
     }
 
-    pub fn pending_stop_storing_for_insolvent_user_request_deque(
+    pub fn pending_stop_storing_for_insolvent_user_request_deque<Runtime: StorageEnableRuntime>(
         &'a self,
-    ) -> PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
+    ) -> PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime> {
         PendingStopStoringForInsolventUserRequestDequeAPI {
+            phantom: std::marker::PhantomData,
             db_context: &self.db_context,
         }
     }
@@ -390,23 +404,31 @@ impl<'a> CFDequeAPI for PendingMspRespondStorageRequestDequeAPI<'a> {
     type DataCF = PendingMspRespondStorageRequestCf;
 }
 
-pub struct PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
+pub struct PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime: StorageEnableRuntime> {
+    pub(crate) phantom: std::marker::PhantomData<Runtime>,
     db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
 }
 
-impl<'a> ProvidesDbContext for PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
+impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
+    for PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime>
+{
     fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
         &self.db_context
     }
 }
 
-impl<'a> ProvidesTypedDbSingleAccess for PendingStopStoringForInsolventUserRequestDequeAPI<'a> {}
+impl<'a, Runtime: StorageEnableRuntime> ProvidesTypedDbSingleAccess
+    for PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime>
+{
+}
 
-impl<'a> CFDequeAPI for PendingStopStoringForInsolventUserRequestDequeAPI<'a> {
-    type Value = StopStoringForInsolventUserRequest;
+impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
+    for PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime>
+{
+    type Value = StopStoringForInsolventUserRequest<Runtime>;
     type LeftIndexCF = PendingStopStoringForInsolventUserRequestLeftIndexCf;
     type RightIndexCF = PendingStopStoringForInsolventUserRequestRightIndexCf;
-    type DataCF = PendingStopStoringForInsolventUserRequestCf;
+    type DataCF = PendingStopStoringForInsolventUserRequestCf<Runtime>;
 }
 
 pub struct PendingFileDeletionRequestDequeAPI<'a, Runtime: StorageEnableRuntime> {

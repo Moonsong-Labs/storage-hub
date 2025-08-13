@@ -436,8 +436,11 @@ where
         }
 
         // Construct file metadata.
+        // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
+        // TODO: (event.who.as_ref()).to_vec(),
+        let who = <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec();
         let metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            who,
             event.bucket_id.as_ref().to_vec(),
             event.location.to_vec(),
             event.size.saturated_into(),

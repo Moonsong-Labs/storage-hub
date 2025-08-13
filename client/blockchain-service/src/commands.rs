@@ -118,7 +118,7 @@ pub enum BlockchainServiceCommand {
         request: RespondStorageRequest,
     },
     QueueStopStoringForInsolventUserRequest {
-        request: StopStoringForInsolventUserRequest,
+        request: StopStoringForInsolventUserRequest<Runtime>,
     },
     #[command(success_type = Vec<ForestLeaf<Runtime>>, error_type = ApiError)]
     QueryChallengesFromSeed {

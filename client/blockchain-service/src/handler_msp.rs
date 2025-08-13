@@ -409,7 +409,7 @@ where
         // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
         if next_event_data.is_none() {
             if let Some(request) = state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque()
+                .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
                 .pop_front()
             {
                 next_event_data = Some(

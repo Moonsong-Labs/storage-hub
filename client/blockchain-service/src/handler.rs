@@ -1333,7 +1333,7 @@ where
             maybe_ongoing_process_stop_storing_for_insolvent_user_request
         {
             state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque()
+                .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
                 .push_back(StopStoringForInsolventUserRequest::new(
                     process_stop_storing_for_insolvent_user_request.who,
                 ));

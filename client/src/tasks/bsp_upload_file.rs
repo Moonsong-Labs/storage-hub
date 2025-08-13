@@ -8,7 +8,6 @@ use anyhow::anyhow;
 use frame_support::BoundedVec;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use sp_core::H256;
 use sp_runtime::{
     traits::{SaturatedConversion, Zero},
     AccountId32,
@@ -82,7 +81,7 @@ where
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
-    file_key_cleanup: Option<H256>,
+    file_key_cleanup: Option<Runtime::Hash>,
     /// Configuration for this task
     config: BspUploadFileConfig,
 }
@@ -449,8 +448,11 @@ where
         }
 
         // Construct file metadata.
+        // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
+        // TODO: (event.who.as_ref()).to_vec(),
+        let who = <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec();
         let metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            who,
             event.bucket_id.as_ref().to_vec(),
             event.location.to_vec(),
             event.size.saturated_into(),
@@ -646,7 +648,7 @@ where
 
         // Build extrinsic.
         let call: Runtime::Call = pallet_file_system::Call::<Runtime>::bsp_volunteer {
-            file_key: H256(file_key.into()),
+            file_key: file_key.into(),
         }
         .into();
 
@@ -925,7 +927,7 @@ where
             return Ok(false);
         }
 
-        let owner = H256::from(event.who.as_ref());
+        let owner = Runtime::Hash::from(event.who.as_ref());
         is_allowed = read_file_storage
             .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
             .map_err(|e| {
@@ -968,7 +970,7 @@ where
         return Ok(true);
     }
 
-    async fn unvolunteer_file(&self, file_key: H256) {
+    async fn unvolunteer_file(&self, file_key: Runtime::Hash) {
         warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
 
         // Unregister the file from the file transfer service.

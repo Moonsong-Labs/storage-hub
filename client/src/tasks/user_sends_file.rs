@@ -76,7 +76,7 @@ where
             .await
             .map_err(|e| anyhow::anyhow!("Failed to get node public key: {:?}", e))?;
 
-        if AccountId32::from(event.who.clone()) != node_pub_key.into() {
+        if event.who != node_pub_key.into() {
             // Skip if the storage request was not created by this user node.
             return Ok(());
         }
@@ -130,8 +130,11 @@ where
             .extract_peer_ids_and_register_known_addresses(multiaddress_vec)
             .await;
 
+        // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
+        // TODO: (event.who.as_ref()).to_vec(),
+        let who = <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec();
         let file_metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            who,
             event.bucket_id.as_ref().to_vec(),
             event.location.into_inner(),
             event.size.saturated_into(),
@@ -170,8 +173,11 @@ where
             event.location,
         );
 
+        // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
+        // TODO: (event.owner.as_ref()).to_vec(),
+        let owner = <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec();
         let file_metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
+            owner,
             event.bucket_id.as_ref().to_vec(),
             event.location.into_inner(),
             event.size.saturated_into(),

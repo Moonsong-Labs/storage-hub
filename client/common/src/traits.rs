@@ -198,8 +198,7 @@ impl<T> StorageEnableRuntimeApi for T where
 /// - `Signature` - The signature type used for signing transactions
 /// - `Extension` - The transaction extension type for additional transaction logic
 pub trait StorageEnableRuntime:
-    // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
-    // TODO: If we don't do this now, in `utils.rs` we cannot compare the `owner` field of the `AcceptedBspVolunteer` event with the caller's public key.
+    // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we abstract the File and Forest Managers from the AccountId type.
     // TODO:
     // TODO: Remove the restriction that `MaxFilePathSize = ConstU32<512>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
     // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `location` field of type that includes `MaxFilePathSize = ConstU32<512>` 
@@ -229,6 +228,7 @@ pub trait StorageEnableRuntime:
     frame_system::Config<
         Hash = H256,
         AccountId = sp_runtime::AccountId32,
+        // AccountId: for<'a> TryFrom<&'a [u8]> + AsRef<[u8]>,
         RuntimeEvent: Into<StorageEnableEvents<Self>>,
     >
         + pallet_storage_providers::Config<

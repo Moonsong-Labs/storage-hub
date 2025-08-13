@@ -328,8 +328,10 @@ where
         check_if_safe(ext)?;
 
         let owner_account_id_bytes = hex::decode(owner_account_id_hex).map_err(into_rpc_error)?;
-        let owner = Runtime::AccountId::try_from(owner_account_id_bytes.as_slice())
-            .map_err(into_rpc_error)?;
+        let owner =
+            Runtime::AccountId::try_from(owner_account_id_bytes.as_slice()).map_err(|_| {
+                into_rpc_error("Failed to convert owner account id bytes to Runtime's AccountId")
+            })?;
 
         // Open file in the local file system.
         let mut file = File::open(PathBuf::from(file_path.clone())).map_err(into_rpc_error)?;
