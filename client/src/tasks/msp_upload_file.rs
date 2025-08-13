@@ -10,7 +10,10 @@ use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
-use sp_runtime::AccountId32;
+use sp_runtime::{
+    traits::{SaturatedConversion, Zero},
+    AccountId32,
+};
 
 use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
@@ -18,11 +21,13 @@ use shc_blockchain_service::events::ProcessMspRespondStoringRequest;
 use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface, events::NewStorageRequest,
 };
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{
-    FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
-    StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
-    StorageRequestMspBucketResponse, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        FileKey, FileKeyWithProof, FileMetadata, HashT, RejectedStorageRequestReason,
+        StorageProofsMerkleTrieLayout, StorageProviderId, StorageRequestMspAcceptedFileKeys,
+        StorageRequestMspBucketResponse, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+    },
 };
 use shc_file_manager::traits::{FileStorage, FileStorageWriteError, FileStorageWriteOutcome};
 use shc_file_transfer_service::{
@@ -378,7 +383,7 @@ where
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
-        if event.size == 0 {
+        if event.size == Zero::zero() {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
             return Err(anyhow!(err_msg));
@@ -435,7 +440,7 @@ where
             <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
             event.bucket_id.as_ref().to_vec(),
             event.location.to_vec(),
-            event.size as u64,
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;

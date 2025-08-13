@@ -9,7 +9,10 @@ use frame_support::BoundedVec;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
-use sp_runtime::AccountId32;
+use sp_runtime::{
+    traits::{SaturatedConversion, Zero},
+    AccountId32,
+};
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -18,9 +21,9 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
-use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
+    traits::StorageEnableRuntime,
     types::{
         FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
@@ -45,14 +48,14 @@ pub struct BspUploadFileConfig {
     /// Maximum number of times to retry an upload file request
     pub max_try_count: u32,
     /// Maximum tip amount to use when submitting an upload file request extrinsic
-    pub max_tip: f64,
+    pub max_tip: u128,
 }
 
 impl Default for BspUploadFileConfig {
     fn default() -> Self {
         Self {
             max_try_count: 3,
-            max_tip: 500.0,
+            max_tip: 500,
         }
     }
 }
@@ -382,7 +385,7 @@ where
                 )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
-                    .with_max_tip(self.config.max_tip)
+                    .with_max_tip(self.config.max_tip.saturated_into())
                     .retry_only_if_timeout(),
                 true,
             )
@@ -413,7 +416,7 @@ where
         &mut self,
         event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
-        if event.size == 0 {
+        if event.size == Zero::zero() {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
             return Err(anyhow!(err_msg));
@@ -450,7 +453,7 @@ where
             <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
             event.bucket_id.as_ref().to_vec(),
             event.location.to_vec(),
-            event.size as u64,
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;

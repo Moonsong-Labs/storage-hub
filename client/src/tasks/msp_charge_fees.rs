@@ -4,6 +4,7 @@ use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
 use shc_common::{traits::StorageEnableRuntime, types::StorageProviderId};
 use sp_core::Get;
+use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
     handler::StorageHubHandler,
@@ -108,7 +109,7 @@ where
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(own_msp_id, self.config.min_debt as u128)
+            .query_users_with_debt(own_msp_id, self.config.min_debt.saturated_into())
             .await
             .map_err(|e| {
                 anyhow!(

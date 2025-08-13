@@ -11,10 +11,12 @@ use shc_blockchain_service::{
     },
     types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
+use shc_common::{
+    consts::CURRENT_FOREST_KEY, traits::StorageEnableRuntime, types::MaxUsersToCharge,
+};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
+use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
     handler::StorageHubHandler,
@@ -109,7 +111,7 @@ where
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(event.provider_id, self.config.min_debt as u128)
+            .query_users_with_debt(event.provider_id, self.config.min_debt.saturated_into())
             .await
             .map_err(|e| {
                 anyhow!(
@@ -327,7 +329,7 @@ where
                     location,
                     owner,
                     fingerprint,
-                    size,
+                    size: size.saturated_into(),
                     inclusion_forest_proof,
                 }
                 .into();

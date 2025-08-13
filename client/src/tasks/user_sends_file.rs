@@ -1,7 +1,7 @@
 use log::{debug, info, warn};
 use sc_network::{PeerId, RequestFailure};
 use sp_core::H256;
-use sp_runtime::AccountId32;
+use sp_runtime::{traits::SaturatedConversion, AccountId32};
 use std::collections::HashSet;
 
 use shc_actors_framework::event_bus::EventHandler;
@@ -9,9 +9,11 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface,
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{
-    FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+    },
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{
@@ -132,7 +134,7 @@ where
             <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
             event.bucket_id.as_ref().to_vec(),
             event.location.into_inner(),
-            event.size.into(),
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
@@ -172,7 +174,7 @@ where
             <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
             event.bucket_id.as_ref().to_vec(),
             event.location.into_inner(),
-            event.size.into(),
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;

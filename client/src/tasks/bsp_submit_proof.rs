@@ -5,6 +5,7 @@ use sc_tracing::tracing::*;
 use shc_file_manager::traits::FileStorage;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
+use sp_runtime::traits::{SaturatedConversion, Saturating};
 
 use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
 use shc_blockchain_service::{
@@ -15,9 +16,9 @@ use shc_blockchain_service::{
     types::{RetryStrategy, SendExtrinsicOptions, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
 };
-use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
+    traits::StorageEnableRuntime,
     types::{
         BlockNumber, CustomChallenge, FileKey, ForestRoot, KeyProof, KeyProofs,
         ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
@@ -283,7 +284,7 @@ where
             .blockchain
             .query_slash_amount_per_max_file_size()
             .await?
-            .saturating_mul(event.data.forest_challenges.len() as u128)
+            .saturating_mul(event.data.forest_challenges.len().saturated_into())
             .saturating_mul(2u32.into());
 
         // Get necessary data for the retry check.
@@ -331,7 +332,7 @@ where
                 )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_submission_attempts)
-                    .with_max_tip(max_tip as f64)
+                    .with_max_tip(max_tip.saturated_into())
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )

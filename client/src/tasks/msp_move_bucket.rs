@@ -4,6 +4,7 @@ use std::{sync::Mutex, time::Duration};
 
 use sc_tracing::tracing::*;
 use sp_core::H256;
+use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
@@ -13,9 +14,12 @@ use shc_blockchain_service::{
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
     types::{RetryStrategy, SendExtrinsicOptions},
 };
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{
-    BucketId, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        BucketId, HashT, ProviderId, StorageDataUnit, StorageProofsMerkleTrieLayout,
+        StorageProviderId,
+    },
 };
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -38,14 +42,14 @@ pub struct MspMoveBucketConfig {
     /// Maximum number of times to retry a move bucket request
     pub max_try_count: u32,
     /// Maximum tip amount to use when submitting a move bucket request extrinsic
-    pub max_tip: f64,
+    pub max_tip: u128,
 }
 
 impl Default for MspMoveBucketConfig {
     fn default() -> Self {
         Self {
             max_try_count: 5,
-            max_tip: 500.0,
+            max_tip: 500,
         }
     }
 }
@@ -302,9 +306,12 @@ where
             .await;
 
         // Calculate total size to check capacity
-        let total_size: u64 = files
+        let total_size = files
             .iter()
-            .try_fold(0u64, |acc, file| acc.checked_add(file.size as u64))
+            .try_fold(Zero::zero(), |acc: StorageDataUnit<Runtime>, file| {
+                let file_size = (file.size as u64).saturated_into();
+                acc.checked_add(&file_size)
+            })
             .ok_or_else(|| {
                 anyhow!("Total size calculation overflowed u64 - bucket is too large")
             })?;
@@ -524,7 +531,7 @@ where
 
     async fn check_and_increase_capacity(
         &self,
-        required_size: u64,
+        required_size: StorageDataUnit<Runtime>,
         own_msp_id: ProviderId<Runtime>,
     ) -> anyhow::Result<()> {
         let available_capacity = self

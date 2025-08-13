@@ -580,7 +580,7 @@ pub struct MspMoveBucketOptions {
     /// Maximum number of times to retry a move bucket request.
     pub max_try_count: Option<u32>,
     /// Maximum tip amount to use when submitting a move bucket request extrinsic.
-    pub max_tip: Option<f64>,
+    pub max_tip: Option<u128>,
 }
 
 impl Into<MspMoveBucketConfig> for MspMoveBucketOptions {
@@ -598,7 +598,7 @@ pub struct BspUploadFileOptions {
     /// Maximum number of times to retry an upload file request.
     pub max_try_count: Option<u32>,
     /// Maximum tip amount to use when submitting an upload file request extrinsic.
-    pub max_tip: Option<f64>,
+    pub max_tip: Option<u128>,
 }
 
 impl Into<BspUploadFileConfig> for BspUploadFileOptions {
