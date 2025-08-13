@@ -15,7 +15,7 @@ use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
 use sp_rpc::number::NumberOrHex;
 use sp_runtime::traits::{
-    ConstU32, Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension, Verify,
+    Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension, Verify,
 };
 
 use crate::types::*;
@@ -200,31 +200,7 @@ impl<T> StorageEnableRuntimeApi for T where
 pub trait StorageEnableRuntime:
     // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we abstract the File and Forest Managers from the AccountId type.
     // TODO:
-    // TODO: Remove the restriction that `MaxFilePathSize = ConstU32<512>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
-    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `location` field of type that includes `MaxFilePathSize = ConstU32<512>` 
-    // TODO: (already concrete type) instead of `MaxFilePathSize<Runtime>`.
-    // TODO:
-    // TODO: Remove the restriction that `MaxNumberOfPeerIds = ConstU32<5>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
-    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `user_peer_ids` field of type that includes `MaxNumberOfPeerIds = ConstU32<5>` 
-    // TODO: (already concrete type) instead of `MaxNumberOfPeerIds<Runtime>`.
-    // TODO:
-    // TODO: Remove the restriction that `MaxPeerIdSize = ConstU32<100>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
-    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `user_peer_ids` field of type that includes `MaxPeerIdSize = ConstU32<100>` 
-    // TODO: (already concrete type) instead of `MaxPeerIdSize<Runtime>`.
-    // TODO:
-    // TODO: Remove the restriction that `Balance = u128` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
-    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `last_chargeable_price_index` field of type that includes `Balance = u128` 
-    // TODO: (already concrete type) instead of `Balance<Runtime>`.
-    // TODO:
-    // TODO: Remove the restriction that `MaxMultiAddressSize = ConstU32<100>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
-    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `multiaddresses` field of type that includes `MaxMultiAddressSize = ConstU32<100>` 
-    // TODO: (already concrete type) instead of `MaxMultiAddressSize<Runtime>`.
-    // TODO:
-    // TODO: Remove the restriction that `MaxMultiAddressAmount = ConstU32<5>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
-    // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `multiaddresses` field of type that includes `MaxMultiAddressAmount = ConstU32<5>` 
-    // TODO: (already concrete type) instead of `MaxMultiAddressAmount<Runtime>`.
-    // TODO:
-    // TODO: Consider removing the restriction that `MerkleTrieHash = H256`, `MerklePatriciaRoot = H256`.
+    // TODO: Consider removing the restriction that `Hash = H256`.
     frame_system::Config<
         Hash = H256,
         AccountId = sp_runtime::AccountId32,
@@ -237,9 +213,9 @@ pub trait StorageEnableRuntime:
             ProviderId = <Self as frame_system::Config>::Hash,
             BucketNameLimit: Send + Sync,
             MaxCommitmentSize: Send + Sync,
+            MaxMultiAddressSize: Send + Sync,
+            MaxMultiAddressAmount: Send + Sync,
             StorageDataUnit: Into<BigDecimal>,
-            MaxMultiAddressSize = ConstU32<100>,
-            MaxMultiAddressAmount = ConstU32<5>,
         >
         + pallet_proofs_dealer::Config<
             ProvidersPallet = pallet_storage_providers::Pallet<Self>,
@@ -258,12 +234,12 @@ pub trait StorageEnableRuntime:
             ProofDealer = pallet_proofs_dealer::Pallet<Self>,
             PaymentStreams = pallet_payment_streams::Pallet<Self>,
             Nfts = pallet_nfts::Pallet<Self>,
+            Fingerprint = <Self as frame_system::Config>::Hash,
             OffchainSignature: Send + Sync,
             MaxBatchConfirmStorageRequests: Send + Sync,
-            MaxFilePathSize = ConstU32<512>,
-            MaxNumberOfPeerIds = ConstU32<5>,
-            MaxPeerIdSize = ConstU32<100>,
-            Fingerprint = <Self as frame_system::Config>::Hash,
+            MaxFilePathSize: Send + Sync,
+            MaxNumberOfPeerIds: Send + Sync,
+            MaxPeerIdSize: Send + Sync,
         >
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
