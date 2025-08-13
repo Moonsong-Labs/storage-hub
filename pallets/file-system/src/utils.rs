@@ -29,10 +29,10 @@ use pallet_nfts::{CollectionConfig, CollectionSettings, ItemSettings, MintSettin
 use shp_constants::GIGAUNIT;
 use shp_file_metadata::ChunkId;
 use shp_traits::{
-    CommitRevealRandomnessInterface, MutateBucketsInterface, MutateStorageProvidersInterface,
-    PaymentStreamsInterface, PricePerGigaUnitPerTickInterface, ProofsDealerInterface,
-    ReadBucketsInterface, ReadProvidersInterface, ReadStorageProvidersInterface,
-    ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
+    CommitRevealRandomnessInterface, MutateBucketsInterface, MutateProvidersInterface,
+    MutateStorageProvidersInterface, PaymentStreamsInterface, PricePerGigaUnitPerTickInterface,
+    ProofsDealerInterface, ReadBucketsInterface, ReadProvidersInterface,
+    ReadStorageProvidersInterface, ReadUserSolvencyInterface, TrieAddMutation, TrieRemoveMutation,
 };
 use sp_std::collections::btree_map::BTreeMap;
 
@@ -1151,7 +1151,7 @@ where
         Ok((msp_id, bucket_owner))
     }
 
-    /// Processes a file deletion request with signature verification.
+    /// Processes a file deletion request.
     ///
     /// This function validates a signed file deletion request by:
     /// 1. Checking that the requester is not insolvent
@@ -1189,7 +1189,7 @@ where
         // Verify that the operation is Delete
         ensure!(
             signed_intention.operation == FileOperation::Delete,
-            Error::<T>::InvalidFileKeyMetadata
+            Error::<T>::InvalidSignedOperation
         );
 
         // Encode the intention for signature verification
@@ -1209,6 +1209,94 @@ where
             Error::<T>::InvalidFileKeyMetadata
         );
 
+        Ok(())
+    }
+
+    /// Executes actual file deletion. Any entity that has the owner's signed intention can delete the file on their behalf,
+    /// If they present a valid forest proof showing that the file exists in the provider's forest.
+    ///
+    /// This function validates a signed file deletion request and performs the actual deletion by:
+    /// 1. Checking that the file owner is not insolvent
+    /// 2. Verifying the intent signer is the owner of the bucket containing the file
+    /// 3. Ensuring the operation type is Delete
+    /// 4. Validating the signature against the encoded intention
+    /// 5. Computing the file key from provided metadata and verifying it matches the signed intention
+    /// 6. Verifying the forest proof and updating the provider's root
+    pub(crate) fn do_delete_file(
+        file_owner: T::AccountId,
+        signed_intention: FileOperationIntention<T>,
+        signature: T::OffchainSignature,
+        bucket_id: BucketIdFor<T>,
+        location: FileLocation<T>,
+        size: StorageDataUnit<T>,
+        fingerprint: Fingerprint<T>,
+        provider_id: ProviderIdFor<T>,
+        forest_proof: ForestProof<T>,
+    ) -> DispatchResult {
+        // Check that the file owner is not currently insolvent.
+        ensure!(
+            !<T::UserSolvency as ReadUserSolvencyInterface>::is_user_insolvent(&file_owner),
+            Error::<T>::OperationNotAllowedWithInsolventUser
+        );
+
+        // Check if file owner provided by the entity is the owner of the bucket.
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&file_owner, &bucket_id)?,
+            Error::<T>::NotBucketOwner
+        );
+
+        // Verify that the operation is Delete
+        ensure!(
+            signed_intention.operation == FileOperation::Delete,
+            Error::<T>::InvalidSignedOperation
+        );
+
+        // Encode the intention for signature verification
+        let signed_intention_encoded = signed_intention.encode();
+
+        let is_valid = signature.verify(&signed_intention_encoded[..], &file_owner);
+        ensure!(is_valid, Error::<T>::InvalidSignature);
+
+        // Compute file key from the provided metadata
+        let computed_file_key = Self::compute_file_key(
+            file_owner.clone(),
+            bucket_id,
+            location.clone(),
+            size,
+            fingerprint,
+        )
+        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
+
+        // Verify that the file_key in the signed intention matches the computed one
+        ensure!(
+            signed_intention.file_key == computed_file_key,
+            Error::<T>::InvalidFileKeyMetadata
+        );
+
+        // Forest proof verification and file deletion
+        if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
+            Self::delete_file_from_msp(
+                file_owner,
+                computed_file_key,
+                size,
+                bucket_id,
+                provider_id,
+                forest_proof,
+            )?;
+        } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
+            Self::delete_file_from_bsp(
+                file_owner,
+                computed_file_key,
+                size,
+                provider_id,
+                forest_proof,
+            )?;
+        } else {
+            // Entity provided an incorrect provider ID
+            return Err(Error::<T>::InvalidProviderID.into());
+        }
+
+        // TODO: Reward the caller
         Ok(())
     }
 
@@ -2296,40 +2384,13 @@ where
             &bsp_id, file_size,
         )?;
 
-        // Update the payment stream between the user and the BSP. If the new amount provided is zero, delete it instead.
-        let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &file_owner)
-			.ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
-			.saturating_sub(file_size);
-        if new_amount_provided == Zero::zero() {
-            <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
-                &bsp_id,
-                &file_owner,
-            )?;
-        } else {
-            <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
-                &bsp_id,
-                &file_owner,
-                &new_amount_provided,
-            )?;
-        }
-
-        // If the root of the BSP is now the default root, stop its cycles.
-        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
-            // Check the current used capacity of the BSP. Since its root is the default one, it should
-            // be zero.
-            let used_capacity =
-                <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
-            if used_capacity != Zero::zero() {
-                // Emit event if we have inconsistency. We can later monitor for those.
-                Self::deposit_event(Event::UsedCapacityShouldBeZero {
-                    actual_used_capacity: used_capacity,
-                });
-            }
-
-            // Stop the BSP's challenge and randomness cycles.
-            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
-            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
-        };
+        // Update payment stream and manage BSP cycles after file removal
+        Self::update_bsp_payment_and_cycles_after_file_removal(
+            bsp_id,
+            &file_owner,
+            file_size,
+            new_root,
+        )?;
 
         Ok((bsp_id, new_root))
     }
@@ -2590,6 +2651,175 @@ where
                 }
             })
             .collect()
+    }
+
+    /// Removes file key from the bucket's forest, updating the bucket's root.
+    pub(crate) fn delete_file_from_msp(
+        file_owner: T::AccountId,
+        file_key: MerkleHash<T>,
+        size: StorageDataUnit<T>,
+        bucket_id: BucketIdFor<T>,
+        provider_id: ProviderIdFor<T>,
+        forest_proof: ForestProof<T>,
+    ) -> DispatchResult {
+        // Get current bucket root
+        let old_bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
+            .ok_or(Error::<T>::BucketNotFound)?;
+
+        // Verify if the file key is part of the bucket's forest
+        let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_generic_forest_proof(
+            &old_bucket_root,
+            &[file_key],
+            &forest_proof,
+        )?;
+
+        // Ensure that the file key is part of the bucket's forest
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
+        );
+
+        // Compute new root after removing file key from forest
+        let new_root = <T::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+            &old_bucket_root,
+            &[(file_key, TrieRemoveMutation::default().into())],
+            &forest_proof,
+            Some(bucket_id.encode()),
+        )?;
+
+        // Update root of the bucket
+        <T::Providers as MutateBucketsInterface>::change_root_bucket(bucket_id, new_root)?;
+
+        // Decrease capacity used of the MSP
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(
+            &provider_id,
+            size,
+        )?;
+
+        // Decrease bucket size of the MSP
+        // This function also updates the fixed rate payment stream between the user and the MSP.
+        // via apply_delta_fixed_rate_payment_stream function in providers pallet.
+        <T::Providers as MutateBucketsInterface>::decrease_bucket_size(&bucket_id, size)?;
+
+        // Emit the MSP file deletion completed event
+        Self::deposit_event(Event::MspFileDeletionCompleted {
+            user: file_owner,
+            file_key,
+            file_size: size,
+            bucket_id,
+            msp_id: provider_id,
+            old_root: old_bucket_root,
+            new_root,
+        });
+
+        Ok(())
+    }
+
+    /// Removes file key from the BSP's forest, updating the BSP's root.
+    pub(crate) fn delete_file_from_bsp(
+        file_owner: T::AccountId,
+        file_key: MerkleHash<T>,
+        size: StorageDataUnit<T>,
+        bsp_id: ProviderIdFor<T>,
+        forest_proof: ForestProof<T>,
+    ) -> DispatchResult {
+        // Get current BSP root
+        let old_root = <T::Providers as ReadProvidersInterface>::get_root(bsp_id)
+            .ok_or(Error::<T>::NotABsp)?;
+
+        // Verify that the file key is part of the BSP's forest
+        let proven_keys = <T::ProofDealer as ProofsDealerInterface>::verify_forest_proof(
+            &bsp_id,
+            &[file_key],
+            &forest_proof,
+        )?;
+
+        // Ensure that the file key is part of the BSP's forest
+        ensure!(
+            proven_keys.contains(&file_key),
+            Error::<T>::ExpectedInclusionProof
+        );
+
+        // Compute new root after removing file key from forest
+        let new_root = <T::ProofDealer as ProofsDealerInterface>::apply_delta(
+            &bsp_id,
+            &[(file_key, TrieRemoveMutation::default().into())],
+            &forest_proof,
+        )?;
+
+        // Update root of BSP
+        <T::Providers as MutateProvidersInterface>::update_root(bsp_id, new_root)?;
+
+        // Decrease capacity used by the BSP
+        <T::Providers as MutateStorageProvidersInterface>::decrease_capacity_used(&bsp_id, size)?;
+
+        // Update payment stream and manage BSP cycles after file removal
+        Self::update_bsp_payment_and_cycles_after_file_removal(
+            bsp_id,
+            &file_owner,
+            size,
+            new_root,
+        )?;
+
+        // Emit the BSP file deletion completed event
+        Self::deposit_event(Event::BspFileDeletionCompleted {
+            user: file_owner,
+            file_key,
+            file_size: size,
+            bsp_id,
+            old_root,
+            new_root,
+        });
+
+        Ok(())
+    }
+
+    /// Updates the BSP payment stream and manages BSP cycles after file removal.
+    ///
+    /// 1. Updating or deleting the payment stream between a user and BSP based on file size
+    /// 2. Stopping BSP challenge and randomness cycles when the BSP root becomes default (no more files stored)
+    fn update_bsp_payment_and_cycles_after_file_removal(
+        bsp_id: ProviderIdFor<T>,
+        file_owner: &T::AccountId,
+        file_size: StorageDataUnit<T>,
+        new_root: MerkleHash<T>,
+    ) -> DispatchResult {
+        // Update the payment stream between the user and the BSP. If the new amount provided is zero, delete it instead.
+        let new_amount_provided = <T::PaymentStreams as PaymentStreamsInterface>::get_dynamic_rate_payment_stream_amount_provided(&bsp_id, &file_owner)
+            .ok_or(Error::<T>::DynamicRatePaymentStreamNotFound)?
+            .saturating_sub(file_size);
+        if new_amount_provided.is_zero() {
+            <T::PaymentStreams as PaymentStreamsInterface>::delete_dynamic_rate_payment_stream(
+                &bsp_id,
+                &file_owner,
+            )?;
+        } else {
+            <T::PaymentStreams as PaymentStreamsInterface>::update_dynamic_rate_payment_stream(
+                &bsp_id,
+                &file_owner,
+                &new_amount_provided,
+            )?;
+        }
+
+        // If the root of the BSP is now the default root, stop its cycles.
+        if new_root == <T::Providers as shp_traits::ReadProvidersInterface>::get_default_root() {
+            // Check the current used capacity of the BSP. Since its root is the default one, it should
+            // be zero.
+            let used_capacity =
+                <T::Providers as ReadStorageProvidersInterface>::get_used_capacity(&bsp_id);
+            if !used_capacity.is_zero() {
+                // Emit event if we have inconsistency. We can later monitor for those.
+                Self::deposit_event(Event::UsedCapacityShouldBeZero {
+                    actual_used_capacity: used_capacity,
+                });
+            }
+
+            // Stop the BSP's challenge and randomness cycles.
+            <T::ProofDealer as shp_traits::ProofsDealerInterface>::stop_challenge_cycle(&bsp_id)?;
+            <T::CrRandomness as CommitRevealRandomnessInterface>::stop_randomness_cycle(&bsp_id)?;
+        }
+
+        Ok(())
     }
 }
 

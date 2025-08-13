@@ -152,14 +152,14 @@ export class NetworkLauncher {
     if (this.config.indexer) {
       composeYaml.services["sh-user"].command.push("--indexer");
       composeYaml.services["sh-user"].command.push(
-        "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+        "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
       );
       if (this.type === "fullnet") {
         composeYaml.services["sh-msp-1"].command.push(
-          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+          "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
         composeYaml.services["sh-msp-2"].command.push(
-          "--database-url=postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+          "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
       }
     }
@@ -182,7 +182,7 @@ export class NetworkLauncher {
     );
 
     let composeContents = {
-      name: "docker",
+      name: "storage-hub",
       services: remappedYamlContents
     };
 
@@ -720,7 +720,7 @@ export class NetworkLauncher {
 
     // Wait for network to be in sync
     await bspApi.docker.waitForLog({
-      containerName: "docker-sh-bsp-1",
+      containerName: "storage-hub-sh-bsp-1",
       searchString: "💤 Idle",
       timeout: 15000
     });
@@ -740,7 +740,7 @@ export class NetworkLauncher {
     await using userApi = await launchedNetwork.getApi("sh-user");
 
     await userApi.docker.waitForLog({
-      containerName: "docker-sh-user-1",
+      containerName: "storage-hub-sh-user-1",
       searchString: "💤 Idle",
       timeout: 15000
     });
