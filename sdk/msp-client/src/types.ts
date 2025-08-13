@@ -5,12 +5,18 @@ export enum HealthState {
     Unknown = 'unknown',
 }
 
-export interface HealthComponents {
-    storage: HealthState;
-    postgres: HealthState;
-    rpc: HealthState;
+export interface ComponentHealth {
+    status: HealthState;
     // Allow future changes in response without breaking the type
-    [k: string]: HealthState;
+    [k: string]: unknown;
+}
+
+export interface HealthComponents {
+    storage: ComponentHealth;
+    postgres: ComponentHealth;
+    rpc: ComponentHealth;
+    // Allow future changes in response without breaking the type
+    [k: string]: ComponentHealth;
 }
 
 export interface HealthStatus {

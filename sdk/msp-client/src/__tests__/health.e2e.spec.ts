@@ -23,7 +23,7 @@ describe('MspClient.getHealth (e2e)', () => {
         expectState(health.status);
 
         for (const key of ['storage', 'postgres', 'rpc'] as const) {
-            expectState(health.components[key]);
+            expectState(health.components[key]?.status);
         }
 
         console.log('MSP Health:');
