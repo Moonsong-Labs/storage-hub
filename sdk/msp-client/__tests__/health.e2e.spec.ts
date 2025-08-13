@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { MspClient } from '../index.js';
-import { HealthState } from '../types.js';
+import { MspClient } from '../src/index.js';
+import { HealthState } from '../src/types.js';
 
 // Simple e2e-style test. Requires an MSP backend running and reachable.
 // Configure base URL via MSP_BASE_URL env var; defaults to http://localhost:8080
@@ -30,3 +30,5 @@ describe('MspClient.getHealth (e2e)', () => {
         console.dir(health, { depth: null, colors: true });
     }, 15000);
 });
+
+
