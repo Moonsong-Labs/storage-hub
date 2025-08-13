@@ -250,7 +250,7 @@ describeMspNet(
       );
 
       const acceptedFileKey = mspAcceptedEventDataBlob.fileKey.toString();
-      assert.equal(acceptedFileKey, fileKey);
+      assert.equal(acceptedFileKey, fileKey.toString());
 
       // Wait for indexing to catch up
       await userApi.block.seal();
@@ -263,7 +263,9 @@ describeMspNet(
             SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey.toString())}
           `;
           return files.length > 0;
-        }
+        },
+        iterations: 20,
+        delay: 500
       });
 
       // Verify MSP-file association is indexed
@@ -442,7 +444,7 @@ describeMspNet(
       assert.equal(bspFiles.length, 0);
     });
 
-    it("indexes bucket creation and deletion events", async () => {
+    it("indexes NewBucket and BucketDeleted events", async () => {
       const bucketName = "test-bucket-lifecycle";
 
       // Create bucket and get the bucket ID directly
