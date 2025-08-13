@@ -1,6 +1,6 @@
 import { HttpClient } from '@storagehub-sdk/core';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
-import type { HealthStatus } from './types';
+import type { HealthStatus, UploadOptions, UploadReceipt } from './types';
 
 export class MspClient {
   public readonly config: HttpClientConfig;
@@ -26,5 +26,43 @@ export class MspClient {
 
   getHealth(options?: { signal?: AbortSignal }): Promise<HealthStatus> {
     return this.http.get<HealthStatus>('/health', { signal: options?.signal });
+  }
+
+  /**
+   * Upload a file to a bucket for a specific fileKey using multipart/form-data.
+   *
+   * This matches the backend's current expectation of a FormData field named
+   * "file" sent via PUT to `/buckets/:bucketId/:fileKey/upload`.
+   *
+   * Accepted `file` types depend on the environment. In browsers, pass a
+   * Blob/File or ArrayBuffer/Uint8Array. In Node 18+/23 with fetch, Node
+   * Readable streams are also accepted by FormData.
+   */
+  async uploadFile(
+    bucketId: string,
+    fileKey: string,
+    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | any,
+    _options?: UploadOptions,
+  ): Promise<UploadReceipt | any> {
+    const form = new FormData();
+
+    const part = this.coerceToFormPart(file);
+    form.append('file', part as any);
+
+    const path = `/buckets/${encodeURIComponent(bucketId)}/${encodeURIComponent(fileKey)}/upload`;
+    const res = await this.http.put<any>(path, {
+      body: form as unknown as BodyInit,
+    });
+    return res;
+  }
+
+  private coerceToFormPart(
+    file: Blob | ArrayBuffer | Uint8Array | ReadableStream<Uint8Array> | any,
+  ): Blob | any {
+    if (typeof Blob !== 'undefined' && file instanceof Blob) return file;
+    if (file instanceof Uint8Array) return new Blob([file]);
+    if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer) return new Blob([file]);
+    // In Node environments, FormData accepts streams; pass-through as-is
+    return file;
   }
 }

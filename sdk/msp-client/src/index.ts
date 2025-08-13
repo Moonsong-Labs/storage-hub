@@ -1,2 +1,9 @@
 export { MspClient } from './MspClient';
-export type { HealthStatus, HealthState } from './types';
+export type {
+    HealthStatus,
+    HealthState,
+    ComponentHealth,
+    UploadOptions,
+    UploadReceipt,
+    UploadState,
+} from './types';

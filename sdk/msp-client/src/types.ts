@@ -26,3 +26,50 @@ export interface HealthStatus {
     // Allow future changes in response without breaking the type
     [k: string]: unknown;
 }
+
+// Upload (doc-aligned) primitives
+export type Hash = string; // 0x-prefixed hex string
+export type CustomMetadata = Record<string, string>;
+export enum Priority {
+    Low = 'low',
+    Normal = 'normal',
+    High = 'high',
+}
+
+export interface UploadProgress {
+    uploadedChunks: number;
+    totalChunks: number;
+    uploadedBytes: number;
+    totalBytes: number;
+    speed: number; // bytes per second
+    eta: number;   // seconds remaining
+}
+
+export type UploadState = 'staged' | 'committed';
+
+export interface UploadOptions {
+    // Documented fields
+    bucketId?: Hash;
+    replicationFactor?: number;
+    priority?: Priority;
+    onProgress?: (progress: UploadProgress) => void;
+    metadata?: CustomMetadata;
+    mspDistribution: boolean;
+
+    // Transport/HTTP-level fields (optional helpers)
+    path?: string;
+    checksumSha256?: string;
+    owner?: string;
+    idempotencyKey?: string;
+    contentLength?: number;
+    signal?: AbortSignal;
+}
+
+export interface UploadReceipt {
+    state: UploadState;
+    fileKey: string;
+    bucketId: string;
+    fingerprint: string;
+    location: string;
+    [k: string]: unknown;
+}
