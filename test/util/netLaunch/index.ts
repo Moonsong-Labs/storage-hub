@@ -314,14 +314,17 @@ export class NetworkLauncher {
       }
     });
 
-    await compose.upOne("sh-fisherman", {
-      cwd: cwd,
-      config: tmpFile,
-      log: verbose,
-      env: {
-        ...process.env
-      }
-    });
+    // Only start fisherman service if it's enabled and we're using fullnet
+    if (this.config.fisherman && this.type === "fullnet") {
+      await compose.upOne("sh-fisherman", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose,
+        env: {
+          ...process.env
+        }
+      });
+    }
 
     return this;
   }
