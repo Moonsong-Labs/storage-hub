@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::constants::api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE};
-use crate::constants::database::DEFAULT_DATABASE_URL;
-use crate::constants::rpc::{
-    DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS,
+use crate::constants::{
+    api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
+    database::DEFAULT_DATABASE_URL,
+    rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS},
+    server::DEFAULT_PORT,
 };
-use crate::constants::server::DEFAULT_PORT;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {

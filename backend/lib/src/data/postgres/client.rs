@@ -5,6 +5,8 @@
 
 use std::sync::Arc;
 
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use thiserror::Error;
 
 use super::connection::{AnyDbConnection, DbConnection, DbConnectionError};
@@ -61,8 +63,6 @@ impl super::PostgresClientTrait for PostgresClient {
         &self,
         file_key: &[u8],
     ) -> crate::error::Result<shc_indexer_db::models::File> {
-        use diesel::prelude::*;
-        use diesel_async::RunQueryDsl;
         use shc_indexer_db::schema::file;
 
         let mut conn = self
@@ -90,8 +90,6 @@ impl super::PostgresClientTrait for PostgresClient {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::File>> {
-        use diesel::prelude::*;
-        use diesel_async::RunQueryDsl;
         use shc_indexer_db::schema::file;
 
         let mut conn = self
@@ -123,8 +121,6 @@ impl super::PostgresClientTrait for PostgresClient {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::File>> {
-        use diesel::prelude::*;
-        use diesel_async::RunQueryDsl;
         use shc_indexer_db::schema::{bucket, file};
 
         let mut conn = self
@@ -160,8 +156,6 @@ impl super::PostgresClientTrait for PostgresClient {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::File>> {
-        use diesel::prelude::*;
-        use diesel_async::RunQueryDsl;
         use shc_indexer_db::schema::file;
 
         let mut conn = self
@@ -222,8 +216,6 @@ impl super::PostgresClientTrait for PostgresClient {
         &self,
         bucket_id: i64,
     ) -> crate::error::Result<shc_indexer_db::models::Bucket> {
-        use diesel::prelude::*;
-        use diesel_async::RunQueryDsl;
         use shc_indexer_db::schema::bucket;
 
         let mut conn = self
@@ -250,8 +242,6 @@ impl super::PostgresClientTrait for PostgresClient {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::Bucket>> {
-        use diesel::prelude::*;
-        use diesel_async::RunQueryDsl;
         use shc_indexer_db::schema::bucket;
 
         let mut conn = self
@@ -283,8 +273,6 @@ impl super::PostgresClientTrait for PostgresClient {
         &self,
         msp_id: i64,
     ) -> crate::error::Result<shc_indexer_db::models::Msp> {
-        use diesel::prelude::*;
-        use diesel_async::RunQueryDsl;
         use shc_indexer_db::schema::msp;
 
         let mut conn = self
@@ -310,8 +298,6 @@ impl super::PostgresClientTrait for PostgresClient {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::Msp>> {
-        use diesel::prelude::*;
-        use diesel_async::RunQueryDsl;
         use shc_indexer_db::schema::msp;
 
         let mut conn = self

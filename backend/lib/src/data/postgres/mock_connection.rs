@@ -8,6 +8,7 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     future::Future,
+    mem::MaybeUninit,
     pin::Pin,
     sync::{Arc, Mutex, MutexGuard},
     time::Duration,
@@ -22,15 +23,14 @@ use diesel::{
     RunQueryDsl,
 };
 use diesel_async::{AsyncConnection, SimpleAsyncConnection};
+use shc_indexer_db::models::{Bucket, File, Msp};
 use tokio::time::sleep;
 
-use shc_indexer_db::models::{Bucket, File, Msp};
-
 use super::connection::{DbConnection, DbConnectionError};
-
 #[cfg(test)]
 use crate::constants::test::{
-    accounts, buckets as test_buckets, file_keys, file_metadata, merkle, msp as test_msp, timestamps,
+    accounts, buckets as test_buckets, file_keys, file_metadata, merkle, msp as test_msp,
+    timestamps,
 };
 
 /// Test data storage for the mock connection
@@ -251,19 +251,21 @@ impl<Conn: diesel::Connection> TransactionManager<Conn> for MockTransactionManag
         Ok(())
     }
 
-    fn transaction_manager_status_mut(conn: &mut Conn) -> &mut diesel::connection::TransactionManagerStatus {
+    fn transaction_manager_status_mut(
+        conn: &mut Conn,
+    ) -> &mut diesel::connection::TransactionManagerStatus {
         // Return a static reference for the mock
         unsafe {
-            use std::mem::MaybeUninit;
-            static mut STATUS: MaybeUninit<diesel::connection::TransactionManagerStatus> = MaybeUninit::uninit();
+            static mut STATUS: MaybeUninit<diesel::connection::TransactionManagerStatus> =
+                MaybeUninit::uninit();
             static ONCE: std::sync::Once = std::sync::Once::new();
-            
+
             ONCE.call_once(|| {
                 STATUS.write(diesel::connection::TransactionManagerStatus::Valid(
-                    diesel::connection::AnsiTransactionManager::default()
+                    diesel::connection::AnsiTransactionManager::default(),
                 ));
             });
-            
+
             STATUS.assume_init_mut()
         }
     }
@@ -435,7 +437,7 @@ impl DbConnection for MockDbConnection {
     async fn get_connection(&self) -> Result<Self::Connection, DbConnectionError> {
         // Check if we should simulate a connection error
         let error_config = self.error_config.lock().unwrap().clone();
-        
+
         if let Some(error_msg) = error_config.connection_error {
             return Err(DbConnectionError::Pool(error_msg));
         }
@@ -465,14 +467,15 @@ impl DbConnection for MockDbConnection {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use shc_indexer_db::models::{File, FileStorageRequestStep};
+
+    use super::*;
 
     #[tokio::test]
     async fn test_successful_connection() {
         let mock_conn = MockDbConnection::new();
         let _client = mock_conn.get_connection().await.unwrap();
-        
+
         // Successfully getting a connection is enough for the mock
         // Real query execution would be tested through the PostgresClient
     }
@@ -480,7 +483,7 @@ mod tests {
     #[tokio::test]
     async fn test_connection_failure() {
         let mock_conn = MockDbConnection::new();
-        
+
         // Configure connection failure
         mock_conn.set_error_config(MockErrorConfig {
             connection_error: Some("Simulated connection failure".to_string()),
@@ -500,7 +503,7 @@ mod tests {
     #[tokio::test]
     async fn test_timeout_simulation() {
         let mock_conn = MockDbConnection::new();
-        
+
         // Configure timeout error
         mock_conn.set_error_config(MockErrorConfig {
             timeout_error: true,
@@ -520,10 +523,10 @@ mod tests {
     #[tokio::test]
     async fn test_health_check() {
         let mock_conn = MockDbConnection::new();
-        
+
         // Should be healthy by default
         assert!(mock_conn.is_healthy().await);
-        
+
         // Set unhealthy
         mock_conn.set_healthy(false);
         assert!(!mock_conn.is_healthy().await);
@@ -532,7 +535,7 @@ mod tests {
     #[tokio::test]
     async fn test_test_data_management() {
         let mock_conn = MockDbConnection::new();
-        
+
         // Add test file
         let test_file = File {
             id: 0, // Will be auto-assigned
@@ -546,16 +549,16 @@ mod tests {
             created_at: NaiveDateTime::from_timestamp_opt(timestamps::TEST_TIMESTAMP, 0).unwrap(),
             updated_at: NaiveDateTime::from_timestamp_opt(timestamps::TEST_TIMESTAMP, 0).unwrap(),
         };
-        
+
         mock_conn.add_test_file(test_file);
-        
+
         {
             let data = mock_conn.get_test_data();
             assert_eq!(data.files.len(), 1);
             let stored_file = data.files.get(file_keys::ALTERNATIVE_FILE_KEY).unwrap();
             assert_eq!(stored_file.id, 1); // Auto-assigned ID
         }
-        
+
         // Clear data
         mock_conn.clear_data();
         {
@@ -570,18 +573,17 @@ mod tests {
     async fn test_default_test_data() {
         let mock_conn = MockDbConnection::new();
         let data = mock_conn.get_test_data();
-        
+
         // Should have default MSP and bucket
         assert_eq!(data.msps.len(), 1);
         assert_eq!(data.buckets.len(), 1);
-        
+
         // Check default MSP
         let default_msp = data.msps.get(&test_msp::DEFAULT_MSP_ID).unwrap();
         assert_eq!(default_msp.onchain_msp_id, test_msp::TEST_MSP_ONCHAIN_ID);
-        
+
         // Check default bucket
         let default_bucket = data.buckets.get(&1).unwrap();
         assert_eq!(default_bucket.msp_id, Some(1));
     }
 }
-

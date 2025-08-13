@@ -137,10 +137,12 @@ impl StorageHubRpcClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::test::{
-        accounts, blockchain, buckets, file_keys, file_metadata, helpers, peers,
+    use crate::{
+        constants::test::{
+            accounts, blockchain, buckets, file_keys, file_metadata, helpers, peers,
+        },
+        data::rpc::{AnyRpcConnection, ErrorMode, MockConnection},
     };
-    use crate::data::rpc::{AnyRpcConnection, ErrorMode, MockConnection};
 
     #[tokio::test]
     async fn test_get_file_metadata() {

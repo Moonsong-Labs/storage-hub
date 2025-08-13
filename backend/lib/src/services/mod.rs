@@ -1,5 +1,8 @@
 //! Services module for StorageHub backend
+
 use std::sync::Arc;
+
+use crate::data::{postgres::PostgresClientTrait, rpc::StorageHubRpcClient, storage::BoxedStorage};
 
 // TODO(SCAFFOLDING): Counter module is for demonstration only
 // Remove when implementing real MSP services
@@ -8,10 +11,6 @@ pub mod health;
 
 use counter::CounterService;
 use health::HealthService;
-
-use crate::data::postgres::PostgresClientTrait;
-use crate::data::rpc::StorageHubRpcClient;
-use crate::data::storage::BoxedStorage;
 
 /// Container for all backend services
 #[derive(Clone)]

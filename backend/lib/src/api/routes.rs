@@ -1,7 +1,9 @@
 //! Route definitions for StorageHub API
 
-use axum::routing::{get, post};
-use axum::Router;
+use axum::{
+    routing::{get, post},
+    Router,
+};
 
 use super::handlers;
 use crate::services::Services;

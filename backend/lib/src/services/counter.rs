@@ -4,9 +4,11 @@
 
 use std::sync::Arc;
 
-use crate::constants::counter::{DEFAULT_COUNTER_KEY, DEFAULT_INCREMENT};
-use crate::data::storage::BoxedStorage;
-use crate::error::Result;
+use crate::{
+    constants::counter::{DEFAULT_COUNTER_KEY, DEFAULT_INCREMENT},
+    data::storage::BoxedStorage,
+    error::Result,
+};
 
 // TODO(SCAFFOLDING): Example service for demonstration - remove when implementing real MSP features
 pub struct CounterService {

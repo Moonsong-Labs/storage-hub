@@ -1,13 +1,11 @@
 //! StorageHub RPC client module
 
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 pub mod client;
 pub mod connection;
 pub mod ws_connection;
-
 #[cfg(feature = "mocks")]
 pub mod mock_connection;
 

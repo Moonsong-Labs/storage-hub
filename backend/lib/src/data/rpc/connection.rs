@@ -3,14 +3,13 @@
 use std::fmt::Debug;
 
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use jsonrpsee::core::client::Error;
+use serde::{de::DeserializeOwned, Serialize};
 
+use crate::constants::rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_TIMEOUT_SECS};
 #[cfg(feature = "mocks")]
 use super::mock_connection::MockConnection;
-use super::ws_connection::WsConnection;
-use super::RpcConnection;
-use crate::constants::rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_TIMEOUT_SECS};
+use super::{ws_connection::WsConnection, RpcConnection};
 
 /// Error type for RPC operations
 #[derive(Debug, thiserror::Error)]
@@ -78,8 +77,6 @@ pub trait IntoRpcError {
 
 impl IntoRpcError for jsonrpsee::core::client::Error {
     fn into_rpc_error(self) -> RpcConnectionError {
-        use jsonrpsee::core::client::Error;
-
         match self {
             Error::Call(e) => RpcConnectionError::Rpc(e.to_string()),
             Error::Transport(e) => RpcConnectionError::Transport(e.to_string()),

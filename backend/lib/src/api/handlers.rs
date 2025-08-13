@@ -1,11 +1,12 @@
 //! Request handlers for StorageHub API endpoints
 
-use axum::extract::State;
-use axum::Json;
+use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
-use crate::services::{health, Services};
+use crate::{
+    error::Result,
+    services::{health, Services},
+};
 
 // TODO(SCAFFOLDING): Counter handlers are example endpoints for demonstration.
 // Replace with actual MSP API endpoints when implementing real features.

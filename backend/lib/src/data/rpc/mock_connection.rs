@@ -3,18 +3,21 @@
 //! This module provides a mock RPC connection that can be configured
 //! with predefined responses and error scenarios for testing purposes.
 
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 use async_trait::async_trait;
-use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
 use tokio::time::sleep;
 
-use super::connection::{RpcConnectionError, RpcResult};
-use super::RpcConnection;
+use super::{
+    connection::{RpcConnectionError, RpcResult},
+    RpcConnection,
+};
 use crate::constants::rpc::TIMEOUT_MULTIPLIER;
 
 /// Error simulation modes for testing

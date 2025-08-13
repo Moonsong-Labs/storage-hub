@@ -6,8 +6,7 @@
 //! This module provides a thread-safe in-memory implementation of the Storage trait,
 //! suitable for development and testing environments.
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use parking_lot::RwLock;

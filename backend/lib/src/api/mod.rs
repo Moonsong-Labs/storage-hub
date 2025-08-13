@@ -3,9 +3,10 @@
 pub mod handlers;
 pub mod routes;
 
-use axum::http::header::CONTENT_TYPE;
-use axum::http::Method;
-use axum::Router;
+use axum::{
+    http::{header::CONTENT_TYPE, Method},
+    Router,
+};
 use tower_http::cors::CorsLayer;
 
 use crate::services::Services;

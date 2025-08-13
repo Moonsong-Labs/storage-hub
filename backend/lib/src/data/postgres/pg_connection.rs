@@ -3,13 +3,13 @@
 //! This module provides a production-ready PostgreSQL connection pool implementation
 //! that implements the `DbConnection` trait for use in the StorageHub backend.
 
-use std::fmt::Debug;
-use std::time::Duration;
+use std::{fmt::Debug, time::Duration};
 
 use async_trait::async_trait;
-use diesel_async::pooled_connection::bb8::Pool;
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
-use diesel_async::{AsyncConnection, AsyncPgConnection};
+use diesel_async::{
+    pooled_connection::{bb8::Pool, AsyncDieselConnectionManager},
+    AsyncConnection, AsyncPgConnection, RunQueryDsl,
+};
 
 use super::connection::{DbConfig, DbConnection, DbConnectionError};
 
@@ -124,8 +124,6 @@ impl DbConnection for PgConnection {
         let mut conn = self.get_connection().await?;
 
         // Execute a simple query to verify the connection works
-        use diesel_async::RunQueryDsl;
-
         diesel::sql_query("SELECT 1")
             .execute(&mut conn)
             .await
