@@ -30,7 +30,7 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 
 // The following are concrete types that are defined in the pallets/primitives.
 // These are type aliases for convenience to use in the SH Client.
-pub type Hash = shp_file_metadata::Hash<H_LENGTH>;
+pub type MetadataHash = shp_file_metadata::Hash<H_LENGTH>;
 pub type Fingerprint = shp_file_metadata::Fingerprint<H_LENGTH>;
 pub type FileMetadata =
     shp_file_metadata::FileMetadata<H_LENGTH, FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES>;
@@ -59,6 +59,7 @@ pub type ForestVerifierProof = <ForestVerifier as shp_traits::CommitmentVerifier
 // The following are abstracted types that depend on a runtime implementing the `Config`
 // traits of the various pallets.
 // These are type aliases for convenience to use in the SH Client.
+pub type Hash<Runtime> = <Runtime as frame_system::Config>::Hash;
 pub type AccountId<Runtime> = <Runtime as frame_system::Config>::AccountId;
 pub type BlockNumber<Runtime> = frame_system::pallet_prelude::BlockNumberFor<Runtime>;
 pub type TickNumber<Runtime> =

@@ -226,27 +226,30 @@ pub trait StorageEnableRuntime:
     // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `multiaddresses` field of type that includes `MaxMultiAddressAmount = ConstU32<5>` 
     // TODO: (already concrete type) instead of `MaxMultiAddressAmount<Runtime>`.
     // TODO:
-    // TODO: Consider removing the restriction that `Hash = H256`, `MerkleTrieHash = H256`, `ProviderId = H256`, `MerklePatriciaRoot = H256`.
+    // TODO: Consider removing the restriction that `MerkleTrieHash = H256`, `MerklePatriciaRoot = H256`.
     frame_system::Config<
         Hash = H256,
         AccountId = sp_runtime::AccountId32,
-        RuntimeEvent:
-            Into<StorageEnableEvents<Self>>,
+        RuntimeEvent: Into<StorageEnableEvents<Self>>,
     >
         + pallet_storage_providers::Config<
-            ProviderId = H256,
-            MerklePatriciaRoot = H256,
+            MerklePatriciaRoot = <Self as frame_system::Config>::Hash,
+            ValuePropId = <Self as frame_system::Config>::Hash,
+            ProviderId = <Self as frame_system::Config>::Hash,
             StorageDataUnit = u64,
             MaxMultiAddressSize = ConstU32<100>,
             MaxMultiAddressAmount = ConstU32<5>,
         >
         + pallet_proofs_dealer::Config<
             ProvidersPallet = pallet_storage_providers::Pallet<Self>,
-            MerkleTrieHash = H256,
+            MerkleTrieHash = <Self as frame_system::Config>::Hash,
             ForestVerifier = ForestVerifier,
             KeyVerifier = FileKeyVerifier,
         >
-        + pallet_payment_streams::Config
+        + pallet_payment_streams::Config<
+            ProvidersPallet = pallet_storage_providers::Pallet<Self>,
+            NativeBalance = pallet_balances::Pallet<Self>,
+        >
         + pallet_file_system::Config<
             Providers = pallet_storage_providers::Pallet<Self>,
             ProofDealer = pallet_proofs_dealer::Pallet<Self>,
@@ -254,10 +257,10 @@ pub trait StorageEnableRuntime:
             MaxFilePathSize = ConstU32<512>,
             MaxNumberOfPeerIds = ConstU32<5>,
             MaxPeerIdSize = ConstU32<100>,
-            Fingerprint = H256,
+            Fingerprint = <Self as frame_system::Config>::Hash,
         >
         + pallet_transaction_payment::Config
-        + pallet_balances::Config<Balance = u128>
+        + pallet_balances::Config<Balance: MaybeDisplay>
         + Copy
         + Debug
         + Send
