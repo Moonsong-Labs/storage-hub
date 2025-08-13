@@ -1,4 +1,5 @@
 import { HttpError, NetworkError, TimeoutError } from './errors';
+const DEFAULT_TIMEOUT_MS = 30_000;
 
 export type HttpClientConfig = {
     baseUrl: string;
@@ -11,18 +12,24 @@ export type RequestOptions = {
     headers?: Record<string, string>;
     signal?: AbortSignal;
     query?: Record<string, string | number | boolean>;
+    /**
+     * Optional request body. If a non-BodyInit object is provided and no
+     * explicit Content-Type header is set, it will be JSON-encoded with
+     * 'application/json'.
+     */
+    body?: BodyInit | unknown;
 };
 
 export class HttpClient {
     private readonly baseUrl: string;
-    private readonly timeoutMs?: number;
+    private readonly timeoutMs: number;
     private readonly defaultHeaders: Record<string, string>;
     private readonly fetchImpl: typeof fetch;
 
     constructor(options: HttpClientConfig) {
         if (!options.baseUrl) throw new Error('HttpClient: baseUrl is required');
         this.baseUrl = options.baseUrl.replace(/\/$/, '');
-        this.timeoutMs = options.timeoutMs;
+        this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
         this.defaultHeaders = { Accept: 'application/json', ...(options.defaultHeaders ?? {}) };
         this.fetchImpl = options.fetchImpl ?? fetch;
     }
@@ -32,16 +39,36 @@ export class HttpClient {
         const headers = { ...this.defaultHeaders, ...(options.headers ?? {}) };
 
         // Support timeout via AbortController if no external signal provided
-        const controller = !options.signal && this.timeoutMs ? new AbortController() : undefined;
+        const controller = !options.signal && this.timeoutMs > 0 ? new AbortController() : undefined;
         const signal = options.signal ?? controller?.signal;
 
-        const timer = controller && this.timeoutMs ? setTimeout(() => controller.abort(), this.timeoutMs) : undefined;
+        const timer: ReturnType<typeof setTimeout> | undefined =
+            controller ? setTimeout(() => controller.abort(), this.timeoutMs) : undefined;
 
         try {
+            // Auto-encode JSON bodies if caller passed a plain object and no Content-Type
+            let body = options.body as any;
+            const hasExplicitContentType = Object.keys(headers).some(
+                (h) => h.toLowerCase() === 'content-type'
+            );
+            const isBodyInitLike =
+                typeof body === 'string' ||
+                body instanceof Uint8Array ||
+                (typeof ArrayBuffer !== 'undefined' && body instanceof ArrayBuffer) ||
+                (typeof Blob !== 'undefined' && body instanceof Blob) ||
+                (typeof FormData !== 'undefined' && body instanceof FormData) ||
+                (typeof ReadableStream !== 'undefined' && body instanceof ReadableStream);
+
+            if (body !== undefined && body !== null && !isBodyInitLike && !hasExplicitContentType) {
+                headers['Content-Type'] = 'application/json';
+                body = JSON.stringify(body);
+            }
+
             const res = await this.fetchImpl(url, {
                 method,
                 headers,
-                signal,
+                signal: (signal ?? null) as AbortSignal | null,
+                body,
             });
 
             const text = await res.text();
@@ -65,6 +92,18 @@ export class HttpClient {
 
     get<T>(path: string, options?: RequestOptions): Promise<T> {
         return this.request<T>('GET', path, options);
+    }
+
+    post<T>(path: string, options?: RequestOptions): Promise<T> {
+        return this.request<T>('POST', path, options ?? {});
+    }
+
+    put<T>(path: string, options?: RequestOptions): Promise<T> {
+        return this.request<T>('PUT', path, options ?? {});
+    }
+
+    delete<T>(path: string, options?: RequestOptions): Promise<T> {
+        return this.request<T>('DELETE', path, options ?? {});
     }
 
     private buildUrl(path: string, query?: Record<string, string | number | boolean>): string {
