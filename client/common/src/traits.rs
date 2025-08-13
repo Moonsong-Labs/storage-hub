@@ -236,6 +236,8 @@ pub trait StorageEnableRuntime:
             MerklePatriciaRoot = <Self as frame_system::Config>::Hash,
             ValuePropId = <Self as frame_system::Config>::Hash,
             ProviderId = <Self as frame_system::Config>::Hash,
+            BucketNameLimit: Send,
+            MaxCommitmentSize: Send,
             StorageDataUnit = u64,
             MaxMultiAddressSize = ConstU32<100>,
             MaxMultiAddressAmount = ConstU32<5>,
@@ -245,15 +247,20 @@ pub trait StorageEnableRuntime:
             MerkleTrieHash = <Self as frame_system::Config>::Hash,
             ForestVerifier = ForestVerifier,
             KeyVerifier = FileKeyVerifier,
+            MaxCustomChallengesPerBlock: Send,
         >
         + pallet_payment_streams::Config<
             ProvidersPallet = pallet_storage_providers::Pallet<Self>,
             NativeBalance = pallet_balances::Pallet<Self>,
+            MaxUsersToCharge: Send,
         >
         + pallet_file_system::Config<
             Providers = pallet_storage_providers::Pallet<Self>,
             ProofDealer = pallet_proofs_dealer::Pallet<Self>,
             PaymentStreams = pallet_payment_streams::Pallet<Self>,
+            Nfts = pallet_nfts::Pallet<Self>,
+            OffchainSignature: Send,
+            MaxBatchConfirmStorageRequests: Send,
             MaxFilePathSize = ConstU32<512>,
             MaxNumberOfPeerIds = ConstU32<5>,
             MaxPeerIdSize = ConstU32<100>,
@@ -261,6 +268,7 @@ pub trait StorageEnableRuntime:
         >
         + pallet_transaction_payment::Config
         + pallet_balances::Config<Balance: MaybeDisplay>
+        + pallet_nfts::Config<CollectionId: Send>
         + Copy
         + Debug
         + Send

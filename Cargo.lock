@@ -14297,6 +14297,7 @@ dependencies = [
  "pallet-balances 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
+ "pallet-nfts",
  "pallet-payment-streams",
  "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",

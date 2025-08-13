@@ -32,6 +32,7 @@ frame-metadata-hash-extension = { workspace = true }
 frame-support = { workspace = true }
 frame-system = { workspace = true }
 pallet-balances = { workspace = true }
+pallet-nfts = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-client-api = { workspace = true }
@@ -106,6 +107,7 @@ std = [
 	"shp-traits/std",
 	"pallet-balances/std",
 	"pallet-file-system/std",
+	"pallet-nfts/std",
 	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
 	"pallet-storage-providers/std",
@@ -116,6 +118,7 @@ runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
+	"pallet-nfts/runtime-benchmarks",
 	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
