@@ -22,12 +22,6 @@ interface FileSystem {
         Custom
     }
 
-    // Bucket move request response enum
-    enum BucketMoveRequestResponse {
-        Accepted,
-        Rejected
-    }
-
     // File operation enum
     enum FileOperation {
         Delete
@@ -44,30 +38,30 @@ interface FileSystem {
     /// @param name The bucket name
     /// @param _private Whether the bucket is private
     /// @param valuePropId The value proposition ID
+    /// @custom:selector d2b3a6d8
     function createBucket(bytes32 mspId, bytes memory name, bool _private, bytes32 valuePropId) external;
 
     /// @dev Request to move a bucket to a new MSP
     /// @param bucketId The bucket ID to move
     /// @param newMspId The new MSP ID
     /// @param newValuePropId The new value proposition ID
+    /// @custom:selector edc9d055
     function requestMoveBucket(bytes32 bucketId, bytes32 newMspId, bytes32 newValuePropId) external;
-
-    /// @dev MSP responds to a move bucket request
-    /// @param bucketId The bucket ID
-    /// @param response The response (Accepted or Rejected)
-    function mspRespondMoveBucketRequest(bytes32 bucketId, BucketMoveRequestResponse response) external;
 
     /// @dev Update bucket privacy setting
     /// @param bucketId The bucket ID
     /// @param _private The new privacy setting
+    /// @custom:selector 9996b391
     function updateBucketPrivacy(bytes32 bucketId, bool _private) external;
 
     /// @dev Create and associate a collection with a bucket
     /// @param bucketId The bucket ID
+    /// @custom:selector 4829b447
     function createAndAssociateCollectionWithBucket(bytes32 bucketId) external;
 
     /// @dev Delete an empty bucket
     /// @param bucketId The bucket ID to delete
+    /// @custom:selector 71f330a9
     function deleteBucket(bytes32 bucketId) external;
 
     /// @dev Issue a new storage request for a file
@@ -79,6 +73,7 @@ interface FileSystem {
     /// @param peerIds Array of peer IDs
     /// @param replicationTarget The replication target level
     /// @param customReplicationTarget Custom replication target (used if replicationTarget is Custom)
+    /// @custom:selector e71dbd43
     function issueStorageRequest(
         bytes32 bucketId,
         bytes memory location,
@@ -92,67 +87,8 @@ interface FileSystem {
 
     /// @dev Revoke a storage request
     /// @param fileKey The file key to revoke
+    /// @custom:selector 202e7d2d
     function revokeStorageRequest(bytes32 fileKey) external;
-
-    /// @dev MSP responds to storage requests (simplified interface)
-    /// @param fileKeys Array of file keys to process
-    /// @param responses Array of booleans indicating accept (true) or reject (false)
-    function mspRespondStorageRequests(bytes32[] memory fileKeys, bool[] memory responses) external;
-
-    /// @dev MSP stops storing a bucket
-    /// @param bucketId The bucket ID to stop storing
-    function mspStopStoringBucket(bytes32 bucketId) external;
-
-    /// @dev BSP volunteers to store a file
-    /// @param fileKey The file key to volunteer for
-    function bspVolunteer(bytes32 fileKey) external;
-
-    /// @dev BSP confirms storing files (simplified interface)
-    /// @param fileKeys Array of file keys being confirmed
-    /// @param newRoot The new Merkle root after storing files
-    function bspConfirmStoring(bytes32[] memory fileKeys, bytes32 newRoot) external;
-
-    /// @dev BSP requests to stop storing a file
-    /// @param fileKey The file key
-    /// @param bucketId The bucket ID
-    /// @param location The file location
-    /// @param owner The file owner
-    /// @param fingerprint The file fingerprint
-    /// @param size The file size
-    /// @param canServe Whether the BSP can still serve the file
-    function bspRequestStopStoring(
-        bytes32 fileKey,
-        bytes32 bucketId,
-        bytes memory location,
-        address owner,
-        bytes32 fingerprint,
-        uint64 size,
-        bool canServe
-    ) external;
-
-    /// @dev BSP confirms to stop storing a file
-    /// @param fileKey The file key to stop storing
-    function bspConfirmStopStoring(bytes32 fileKey) external;
-
-    /// @dev Storage provider stops storing a file from an insolvent user
-    /// @param fileKey The file key
-    /// @param bucketId The bucket ID
-    /// @param location The file location
-    /// @param owner The file owner
-    /// @param fingerprint The file fingerprint
-    /// @param size The file size
-    function stopStoringForInsolventUser(
-        bytes32 fileKey,
-        bytes32 bucketId,
-        bytes memory location,
-        address owner,
-        bytes32 fingerprint,
-        uint64 size
-    ) external;
-
-    /// @dev MSP stops storing a bucket for an insolvent user
-    /// @param bucketId The bucket ID to stop storing
-    function mspStopStoringBucketForInsolventUser(bytes32 bucketId) external;
 
     /// @dev Request deletion of a file using a signed delete intention
     /// @param signedIntention The signed file operation intention
@@ -161,6 +97,7 @@ interface FileSystem {
     /// @param location The file location
     /// @param size The file size
     /// @param fingerprint The file fingerprint
+    /// @custom:selector 787d538d
     function requestDeleteFile(
         FileOperationIntention memory signedIntention,
         bytes memory signature,
@@ -170,6 +107,17 @@ interface FileSystem {
         bytes32 fingerprint
     ) external;
 
+    /// @dev Get pending file deletion requests count for a user
+    /// @param user The user address
+    /// @return count The number of pending deletion requests
+    function getPendingFileDeletionRequestsCount(address user) external view returns (uint32 count);
+
+    /// @dev Derive a bucket ID from owner and bucket name
+    /// @param owner The owner address
+    /// @param name The bucket name
+    /// @return bucketId The derived bucket ID
+    function deriveBucketId(address owner, bytes memory name) external view returns (bytes32 bucketId);
+
     // Events
     event BucketCreated(address indexed who, bytes32 indexed bucketId, bytes32 indexed mspId);
     event BucketMoveRequested(address indexed who, bytes32 indexed bucketId, bytes32 indexed newMspId);
@@ -178,9 +126,5 @@ interface FileSystem {
     event BucketDeleted(address indexed who, bytes32 indexed bucketId);
     event StorageRequestIssued(address indexed who, bytes32 indexed fileKey, bytes32 indexed bucketId);
     event StorageRequestRevoked(bytes32 indexed fileKey);
-    event BspVolunteered(bytes32 indexed bspId, bytes32 indexed fileKey);
-    event BspConfirmedStoring(bytes32 indexed bspId, bytes32[] fileKeys, bytes32 newRoot);
-    event BspStopStoringRequested(bytes32 indexed bspId, bytes32 indexed fileKey);
-    event BspStopStoringConfirmed(bytes32 indexed bspId, bytes32 indexed fileKey);
     event FileDeletionRequested(bytes32 indexed fileKey, address indexed owner);
 }
