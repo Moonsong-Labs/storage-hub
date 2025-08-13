@@ -303,7 +303,7 @@ pub struct RetryStrategy {
     pub max_retries: u32,
     /// Maximum tip to be paid for the extrinsic submission. The progression follows an exponential
     /// backoff strategy.
-    pub max_tip: f64,
+    pub max_tip: u128,
     /// Base multiplier for the tip calculation. This is the base of the geometric progression.
     /// A higher value will make tips grow faster.
     pub base_multiplier: f64,
@@ -322,7 +322,7 @@ pub struct RetryStrategy {
 
 impl RetryStrategy {
     /// Creates a new `RetryStrategy` instance.
-    pub fn new(max_retries: u32, max_tip: f64, base_multiplier: f64) -> Self {
+    pub fn new(max_retries: u32, max_tip: u128, base_multiplier: f64) -> Self {
         Self {
             max_retries,
             max_tip,
@@ -341,7 +341,7 @@ impl RetryStrategy {
     ///
     /// As the number of times the extrinsic is retried increases, the tip will increase
     /// exponentially, up to this maximum tip.
-    pub fn with_max_tip(mut self, max_tip: f64) -> Self {
+    pub fn with_max_tip(mut self, max_tip: u128) -> Self {
         self.max_tip = max_tip;
         self
     }
@@ -396,7 +396,7 @@ impl RetryStrategy {
     /// The formula for the tip is:
     /// [`Self::max_tip`] * (([`Self::base_multiplier`] ^ (retry_count / [`Self::max_retries`]) - 1) /
     /// ([`Self::base_multiplier`] - 1)).
-    pub fn compute_tip(&self, retry_count: u32) -> f64 {
+    pub fn compute_tip(&self, retry_count: u32) -> u128 {
         // Ensure the retry_count is within the bounds of max_retries
         let retry_count = min(retry_count, self.max_retries);
 
@@ -408,7 +408,8 @@ impl RetryStrategy {
             / (self.base_multiplier - 1.0);
 
         // Final tip formula for each retry, scaled to max_tip
-        self.max_tip * factor
+        let tip = self.max_tip as f64 * factor;
+        tip as u128
     }
 }
 
@@ -416,7 +417,7 @@ impl Default for RetryStrategy {
     fn default() -> Self {
         Self {
             max_retries: 5,
-            max_tip: 0.0,
+            max_tip: 0,
             base_multiplier: 2.0,
             should_retry: None,
         }
