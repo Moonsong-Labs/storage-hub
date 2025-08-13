@@ -44,22 +44,15 @@ impl PostgresClient {
     }
 
     /// Test the database connection
-    pub async fn test_connection(&self) -> Result<(), PostgresError> {
-        self.conn.test_connection().await?;
-        Ok(())
-    }
-}
-
-// Implement PostgresClientTrait for PostgresClient
-#[async_trait::async_trait]
-impl super::PostgresClientTrait for PostgresClient {
-    async fn test_connection(&self) -> crate::error::Result<()> {
-        self.test_connection()
+    pub async fn test_connection(&self) -> crate::error::Result<()> {
+        self.conn
+            .test_connection()
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
-    async fn get_file_by_key(
+    /// Get a file by its key
+    pub async fn get_file_by_key(
         &self,
         file_key: &[u8],
     ) -> crate::error::Result<shc_indexer_db::models::File> {
@@ -84,7 +77,8 @@ impl super::PostgresClientTrait for PostgresClient {
             })
     }
 
-    async fn get_files_by_user(
+    /// Get all files for a user
+    pub async fn get_files_by_user(
         &self,
         user_account: &[u8],
         limit: Option<i64>,
@@ -114,7 +108,8 @@ impl super::PostgresClientTrait for PostgresClient {
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
-    async fn get_files_by_user_and_msp(
+    /// Get files for a user stored by a specific MSP
+    pub async fn get_files_by_user_and_msp(
         &self,
         user_account: &[u8],
         msp_id: i64,
@@ -150,7 +145,8 @@ impl super::PostgresClientTrait for PostgresClient {
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
-    async fn get_files_by_bucket_id(
+    /// Get all files in a bucket
+    pub async fn get_files_by_bucket_id(
         &self,
         bucket_id: i64,
         limit: Option<i64>,
@@ -181,7 +177,8 @@ impl super::PostgresClientTrait for PostgresClient {
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
-    async fn create_file(
+    /// Create a new file record
+    pub async fn create_file(
         &self,
         _file: shc_indexer_db::models::File,
     ) -> crate::error::Result<shc_indexer_db::models::File> {
@@ -192,7 +189,8 @@ impl super::PostgresClientTrait for PostgresClient {
         ))
     }
 
-    async fn update_file_step(
+    /// Update file storage step
+    pub async fn update_file_step(
         &self,
         _file_key: &[u8],
         _step: shc_indexer_db::models::FileStorageRequestStep,
@@ -204,7 +202,8 @@ impl super::PostgresClientTrait for PostgresClient {
         ))
     }
 
-    async fn delete_file(&self, _file_key: &[u8]) -> crate::error::Result<()> {
+    /// Delete a file record
+    pub async fn delete_file(&self, _file_key: &[u8]) -> crate::error::Result<()> {
         // Note: The indexer database should be read-only from the backend perspective
         // This method is primarily for testing with mocks
         Err(crate::error::Error::Database(
@@ -212,7 +211,8 @@ impl super::PostgresClientTrait for PostgresClient {
         ))
     }
 
-    async fn get_bucket_by_id(
+    /// Get a bucket by its ID
+    pub async fn get_bucket_by_id(
         &self,
         bucket_id: i64,
     ) -> crate::error::Result<shc_indexer_db::models::Bucket> {
@@ -236,7 +236,8 @@ impl super::PostgresClientTrait for PostgresClient {
             })
     }
 
-    async fn get_buckets_by_user(
+    /// Get all buckets for a user
+    pub async fn get_buckets_by_user(
         &self,
         user_account: &[u8],
         limit: Option<i64>,
@@ -269,7 +270,8 @@ impl super::PostgresClientTrait for PostgresClient {
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
-    async fn get_msp_by_id(
+    /// Get an MSP by its ID
+    pub async fn get_msp_by_id(
         &self,
         msp_id: i64,
     ) -> crate::error::Result<shc_indexer_db::models::Msp> {
@@ -293,7 +295,8 @@ impl super::PostgresClientTrait for PostgresClient {
             })
     }
 
-    async fn get_all_msps(
+    /// Get all MSPs
+    pub async fn get_all_msps(
         &self,
         limit: Option<i64>,
         offset: Option<i64>,
@@ -321,7 +324,8 @@ impl super::PostgresClientTrait for PostgresClient {
             .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
-    async fn execute_raw_query(
+    /// Execute a raw SQL query (for advanced use cases)
+    pub async fn execute_raw_query(
         &self,
         _query: &str,
     ) -> crate::error::Result<Vec<serde_json::Value>> {
@@ -345,7 +349,7 @@ mod tests {
         let pg_conn = PgConnection::new(config)
             .await
             .expect("Failed to create connection");
-        let client = PostgresClient::new(Arc::new(AnyDbConnection::Real(pg_conn))).await;
+        let client = PostgresClient::new(Arc::new(AnyDbConnection::Postgres(pg_conn))).await;
         let result = client.test_connection().await;
         assert!(result.is_ok());
     }

@@ -1,25 +1,45 @@
-# PostgreSQL Mock Analysis Summary
+# Database Connection Architecture
 
 ## Current Structure
 
-The PostgreSQL mocks are located in `/backend/lib/src/data/postgres/mock_connection.rs` and are designed to simulate database behavior for testing purposes.
+The database connection system supports multiple backends (PostgreSQL and SQLite) through a unified interface. Mock connections are located in `/backend/lib/src/data/postgres/mock_connection.rs` and are designed to simulate database behavior for testing purposes.
 
 ### Key Components
 
+#### Connection Abstraction
+- **DbConnection** trait - Backend-agnostic database connection interface
+- **AnyDbConnection** enum - Dispatches between PostgreSQL, SQLite, and Mock connections
+- **AnyAsyncConnection** enum - Dispatches between async connection types
+
+#### Backend Implementations
+- **PgConnection** - PostgreSQL connection pool using diesel-async
+- **SqliteConnection** - SQLite connection pool using SyncConnectionWrapper
+- **MockDbConnection** - In-memory mock implementation for testing
+
+#### Mock Components
 - **MockTestData** - In-memory storage for test data (files, buckets, MSPs)
 - **MockErrorConfig** - Configuration for simulating various error conditions  
 - **MockAsyncConnection** - Mock implementation of diesel's `AsyncConnection` trait
-- **MockDbConnection** - Pool wrapper implementing the `DbConnection` trait
 - **MockTransactionManager** - Simulates transaction management
 
-## Expected Usage
+## Database Backend Support
 
+### PostgreSQL
+- Full async support via diesel-async's `AsyncPgConnection`
+- Connection pooling with bb8
+- Native support for all diesel PostgreSQL features
+
+### SQLite
+- Async support via diesel-async's `SyncConnectionWrapper`
+- Connection pooling with bb8
+- Wraps synchronous SQLite connections for async compatibility
+
+### Mock Connections
 The mocks are intended to:
-
-- Replace real PostgreSQL connections in tests
+- Replace real database connections in tests
 - Store test data in memory rather than a database
 - Simulate various error conditions (connection failures, timeouts, query errors)
-- Support the same interface as the real `PostgresClient` through the `PostgresClientTrait`
+- Support the same interface as the real database clients
 
 ## Current Issues
 
@@ -49,8 +69,33 @@ The mocks are intended to:
 ### 5. Test Data Management
 
 - While `MockTestData` structure exists, it lacks query implementation
-- Methods like `get_file_by_key`, `get_files_by_user` in `PostgresClientTrait` have no mock logic
+- Methods like `get_file_by_key`, `get_files_by_user` in `PostgresClient` have no mock logic
 - The mock connection doesn't translate diesel queries to operations on test data
+
+## SQLite Integration
+
+### Implementation Details
+
+SQLite support has been added alongside PostgreSQL using diesel-async's `SyncConnectionWrapper`:
+
+1. **Type Alias**: `AsyncSqliteConnection` wraps `diesel::SqliteConnection` for async compatibility
+2. **Connection Pool**: Uses the same bb8 pooling as PostgreSQL
+3. **Unified Interface**: Both backends implement the same `DbConnection` trait
+4. **Enum Dispatch**: `AnyAsyncConnection` handles routing between PostgreSQL and SQLite
+
+### Configuration
+
+Cargo.toml dependencies have been updated:
+```toml
+diesel = { version = "2.2.4", features = ["postgres", "sqlite", "chrono", "numeric"] }
+diesel-async = { version = "0.5.0", features = ["bb8", "postgres", "sqlite"] }
+```
+
+### Limitations
+
+- The `AsyncConnection` implementation for `AnyAsyncConnection` currently only supports PostgreSQL backend due to diesel's type constraints
+- SQLite connections will panic if PostgreSQL-specific queries are attempted
+- This is a diesel limitation where different backends have incompatible type systems
 
 ## Root Cause
 

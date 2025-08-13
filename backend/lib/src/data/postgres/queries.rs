@@ -122,7 +122,7 @@ mod tests {
         let pg_conn = PgConnection::new(config)
             .await
             .expect("Failed to create connection");
-        let client = PostgresClient::new(Arc::new(AnyDbConnection::Real(pg_conn))).await;
+        let client = PostgresClient::new(Arc::new(AnyDbConnection::Postgres(pg_conn))).await;
 
         let result = client.get_active_bsps().await;
         assert!(result.is_ok());
@@ -136,7 +136,7 @@ mod tests {
         let pg_conn = PgConnection::new(config)
             .await
             .expect("Failed to create connection");
-        let client = PostgresClient::new(Arc::new(AnyDbConnection::Real(pg_conn))).await;
+        let client = PostgresClient::new(Arc::new(AnyDbConnection::Postgres(pg_conn))).await;
 
         let result = client.get_file_by_id("test-file-id").await;
         assert!(result.is_ok());

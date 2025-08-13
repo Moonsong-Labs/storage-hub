@@ -36,7 +36,7 @@ mod tests {
         // WIP: Mock PostgreSQL connection commented out until diesel traits are fully implemented
         // let mock_conn = MockDbConnection::new();
         // let db_conn = Arc::new(AnyDbConnection::Mock(mock_conn));
-        // let postgres: Arc<dyn data::postgres::PostgresClientTrait> = Arc::new(PostgresClient::new(db_conn));
+        // let postgres: Arc<PostgresClient> = Arc::new(PostgresClient::new(db_conn));
 
         // For now, we'll panic in tests that need postgres
         panic!("Test requires PostgreSQL mock implementation - currently WIP")

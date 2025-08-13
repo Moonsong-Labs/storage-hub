@@ -1,4 +1,4 @@
-//! Database connection abstraction for PostgreSQL
+//! Database connection abstraction for database backends
 
 use std::fmt::Debug;
 
@@ -10,7 +10,7 @@ use diesel_async::AsyncConnection;
 #[async_trait]
 pub trait DbConnection: Send + Sync + Debug {
     /// Type representing the actual connection implementation
-    type Connection: AsyncConnection<Backend = diesel::pg::Pg> + Send + 'static;
+    type Connection: AsyncConnection + Send + 'static;
 
     /// Get a connection from the pool
     ///
@@ -149,6 +149,7 @@ pub trait ConnectionProvider: Send + Sync {
 
 // Import concrete types for the enum
 use super::pg_connection::PgConnection;
+use crate::data::sqlite::sqlite_connection::SqliteConnection;
 // WIP: Mock connection import - commented out until diesel traits are fully implemented
 // #[cfg(feature = "mocks")]
 // use super::mock_connection::MockDbConnection;
@@ -157,14 +158,26 @@ use super::pg_connection::PgConnection;
 ///
 /// This enum allows using concrete types instead of trait objects,
 /// solving trait object safety issues while maintaining flexibility
-/// between real and mock connections.
+/// between different database backends and mock connections.
 #[derive(Debug)]
 pub enum AnyDbConnection {
-    /// Real PostgreSQL connection
-    Real(PgConnection),
+    /// PostgreSQL connection
+    Postgres(PgConnection),
+    /// SQLite connection
+    Sqlite(SqliteConnection),
     // WIP: Mock connection variant - commented out until diesel traits are fully implemented
     // #[cfg(feature = "mocks")]
     // Mock(MockDbConnection),
+}
+
+impl AnyDbConnection {
+    /// Get the backend type for this connection
+    pub fn backend_type(&self) -> crate::data::any_connection::BackendType {
+        match self {
+            AnyDbConnection::Postgres(_) => crate::data::any_connection::BackendType::Postgres,
+            AnyDbConnection::Sqlite(_) => crate::data::any_connection::BackendType::Sqlite,
+        }
+    }
 }
 
 #[async_trait]
@@ -174,10 +187,15 @@ impl DbConnection for AnyDbConnection {
 
     async fn get_connection(&self) -> Result<Self::Connection, DbConnectionError> {
         match self {
-            AnyDbConnection::Real(conn) => {
-                // Get the real connection and wrap it in our enum
-                let real_conn = conn.get_connection().await?;
-                Ok(AnyAsyncConnection::Real(real_conn))
+            AnyDbConnection::Postgres(conn) => {
+                // Get the PostgreSQL connection and wrap it in our enum
+                let pg_conn = conn.get_connection().await?;
+                Ok(AnyAsyncConnection::Postgres(pg_conn))
+            }
+            AnyDbConnection::Sqlite(conn) => {
+                // Get the SQLite connection and wrap it in our enum
+                let sqlite_conn = conn.get_connection().await?;
+                Ok(AnyAsyncConnection::Sqlite(sqlite_conn))
             } // WIP: Mock connection handling - commented out until diesel traits are fully implemented
               // #[cfg(feature = "mocks")]
               // AnyDbConnection::Mock(conn) => {
@@ -189,7 +207,8 @@ impl DbConnection for AnyDbConnection {
 
     async fn test_connection(&self) -> Result<(), DbConnectionError> {
         match self {
-            AnyDbConnection::Real(conn) => conn.test_connection().await,
+            AnyDbConnection::Postgres(conn) => conn.test_connection().await,
+            AnyDbConnection::Sqlite(conn) => conn.test_connection().await,
             // WIP: Mock connection handling
             // #[cfg(feature = "mocks")]
             // AnyDbConnection::Mock(conn) => conn.test_connection().await,
@@ -198,7 +217,8 @@ impl DbConnection for AnyDbConnection {
 
     async fn is_healthy(&self) -> bool {
         match self {
-            AnyDbConnection::Real(conn) => conn.is_healthy().await,
+            AnyDbConnection::Postgres(conn) => conn.is_healthy().await,
+            AnyDbConnection::Sqlite(conn) => conn.is_healthy().await,
             // WIP: Mock connection handling
             // #[cfg(feature = "mocks")]
             // AnyDbConnection::Mock(conn) => conn.is_healthy().await,
@@ -206,13 +226,18 @@ impl DbConnection for AnyDbConnection {
     }
 }
 
+// Type alias for async SQLite connection
+type AsyncSqliteConnection = diesel_async::sync_connection_wrapper::SyncConnectionWrapper<diesel::SqliteConnection>;
+
 /// Enum wrapper for different async connection types
 ///
-/// This enum allows us to switch between real and mock connections
+/// This enum allows us to switch between different database backends
 /// while maintaining the same interface.
 pub enum AnyAsyncConnection {
-    /// Real async PostgreSQL connection
-    Real(diesel_async::AsyncPgConnection),
+    /// Async PostgreSQL connection
+    Postgres(diesel_async::AsyncPgConnection),
+    /// Async SQLite connection (using SyncConnectionWrapper)
+    Sqlite(AsyncSqliteConnection),
     // WIP: Mock async connection variant - commented out until diesel traits are fully implemented
     // #[cfg(feature = "mocks")]
     // Mock(super::mock_connection::MockAsyncConnection),
@@ -222,9 +247,54 @@ pub enum AnyAsyncConnection {
 impl std::fmt::Debug for AnyAsyncConnection {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            AnyAsyncConnection::Real(_) => f.debug_struct("AnyAsyncConnection::Real").finish(),
+            AnyAsyncConnection::Postgres(_) => f.debug_struct("AnyAsyncConnection::Postgres").finish(),
+            AnyAsyncConnection::Sqlite(_) => f.debug_struct("AnyAsyncConnection::Sqlite").finish(),
             // #[cfg(feature = "mocks")]
             // AnyAsyncConnection::Mock(_) => f.debug_struct("AnyAsyncConnection::Mock").finish(),
+        }
+    }
+}
+
+impl AnyAsyncConnection {
+    /// Execute a raw SQL query that works on both backends
+    pub async fn execute_raw_sql(&mut self, sql: &str) -> diesel::QueryResult<usize> {
+        use diesel_async::SimpleAsyncConnection;
+        
+        match self {
+            AnyAsyncConnection::Postgres(conn) => {
+                conn.batch_execute(sql).await?;
+                Ok(0) // batch_execute doesn't return affected rows
+            }
+            AnyAsyncConnection::Sqlite(conn) => {
+                conn.batch_execute(sql).await?;
+                Ok(0) // batch_execute doesn't return affected rows
+            }
+        }
+    }
+    
+    /// Get the backend type as a string
+    pub fn backend_name(&self) -> &'static str {
+        match self {
+            AnyAsyncConnection::Postgres(_) => "PostgreSQL",
+            AnyAsyncConnection::Sqlite(_) => "SQLite",
+        }
+    }
+    
+    /// Check if this connection uses PostgreSQL backend
+    pub fn is_postgres(&self) -> bool {
+        matches!(self, AnyAsyncConnection::Postgres(_))
+    }
+    
+    /// Check if this connection uses SQLite backend
+    pub fn is_sqlite(&self) -> bool {
+        matches!(self, AnyAsyncConnection::Sqlite(_))
+    }
+    
+    /// Get the backend type for this connection
+    pub fn backend_type(&self) -> crate::data::any_connection::BackendType {
+        match self {
+            AnyAsyncConnection::Postgres(_) => crate::data::any_connection::BackendType::Postgres,
+            AnyAsyncConnection::Sqlite(_) => crate::data::any_connection::BackendType::Sqlite,
         }
     }
 }
@@ -234,16 +304,23 @@ impl std::fmt::Debug for AnyAsyncConnection {
 impl diesel_async::SimpleAsyncConnection for AnyAsyncConnection {
     async fn batch_execute(&mut self, query: &str) -> diesel::QueryResult<()> {
         match self {
-            AnyAsyncConnection::Real(conn) => conn.batch_execute(query).await,
+            AnyAsyncConnection::Postgres(conn) => conn.batch_execute(query).await,
+            AnyAsyncConnection::Sqlite(conn) => conn.batch_execute(query).await,
             // #[cfg(feature = "mocks")]
             // AnyAsyncConnection::Mock(conn) => conn.batch_execute(query).await,
         }
     }
 }
 
-// Implement AsyncConnection by delegating to the inner connection
+// Note: We cannot implement AsyncConnection for AnyAsyncConnection directly
+// because PostgreSQL and SQLite have different Backend types.
+// However, we can provide backend-specific operations through delegation.
+// For now, this implementation assumes PostgreSQL backend for compatibility,
+// but future work should introduce AnyBackend to properly abstract over both.
 #[async_trait]
 impl diesel_async::AsyncConnection for AnyAsyncConnection {
+    // FIXME: This currently hardcodes PostgreSQL backend
+    // TODO: Implement AnyBackend to properly support both PostgreSQL and SQLite
     type Backend = diesel::pg::Pg;
 
     // Use AnsiTransactionManager which is what AsyncPgConnection uses
@@ -291,7 +368,8 @@ impl diesel_async::AsyncConnection for AnyAsyncConnection {
             + 'query,
     {
         match self {
-            AnyAsyncConnection::Real(conn) => conn.load(source),
+            AnyAsyncConnection::Postgres(conn) => conn.load(source),
+            AnyAsyncConnection::Sqlite(_) => panic!("Cannot use SQLite connection with PostgreSQL queries"),
             // #[cfg(feature = "mocks")]
             // AnyAsyncConnection::Mock(conn) => conn.load(source),
         }
@@ -307,7 +385,8 @@ impl diesel_async::AsyncConnection for AnyAsyncConnection {
             + 'query,
     {
         match self {
-            AnyAsyncConnection::Real(conn) => conn.execute_returning_count(source),
+            AnyAsyncConnection::Postgres(conn) => conn.execute_returning_count(source),
+            AnyAsyncConnection::Sqlite(_) => panic!("Cannot use SQLite connection with PostgreSQL queries"),
             // #[cfg(feature = "mocks")]
             // AnyAsyncConnection::Mock(conn) => conn.execute_returning_count(source),
         }
@@ -315,7 +394,8 @@ impl diesel_async::AsyncConnection for AnyAsyncConnection {
 
     fn transaction_state(&mut self) -> &mut <Self::TransactionManager as diesel_async::TransactionManager<Self>>::TransactionStateData{
         match self {
-            AnyAsyncConnection::Real(conn) => conn.transaction_state(),
+            AnyAsyncConnection::Postgres(conn) => conn.transaction_state(),
+            AnyAsyncConnection::Sqlite(_) => panic!("Cannot use SQLite connection with PostgreSQL queries"),
             // #[cfg(feature = "mocks")]
             // AnyAsyncConnection::Mock(conn) => conn.transaction_state(),
         }
@@ -323,7 +403,8 @@ impl diesel_async::AsyncConnection for AnyAsyncConnection {
 
     fn instrumentation(&mut self) -> &mut dyn diesel::connection::Instrumentation {
         match self {
-            AnyAsyncConnection::Real(conn) => conn.instrumentation(),
+            AnyAsyncConnection::Postgres(conn) => conn.instrumentation(),
+            AnyAsyncConnection::Sqlite(_) => panic!("Cannot use SQLite connection with PostgreSQL queries"),
             // #[cfg(feature = "mocks")]
             // AnyAsyncConnection::Mock(conn) => conn.instrumentation(),
         }
@@ -331,7 +412,8 @@ impl diesel_async::AsyncConnection for AnyAsyncConnection {
 
     fn set_instrumentation(&mut self, instrumentation: impl diesel::connection::Instrumentation) {
         match self {
-            AnyAsyncConnection::Real(conn) => conn.set_instrumentation(instrumentation),
+            AnyAsyncConnection::Postgres(conn) => conn.set_instrumentation(instrumentation),
+            AnyAsyncConnection::Sqlite(_) => panic!("Cannot use SQLite connection with PostgreSQL queries"),
             // #[cfg(feature = "mocks")]
             // AnyAsyncConnection::Mock(conn) => conn.set_instrumentation(instrumentation),
         }

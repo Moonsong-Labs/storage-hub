@@ -16,7 +16,7 @@ use sh_msp_backend_lib::{
     api::create_app,
     config::Config,
     data::{
-        postgres::{AnyDbConnection, DbConfig, PgConnection, PostgresClient, PostgresClientTrait},
+        postgres::{AnyDbConnection, DbConfig, PgConnection, PostgresClient},
         rpc::{AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection},
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
@@ -113,7 +113,7 @@ fn load_config() -> Result<Config> {
     Ok(config)
 }
 
-async fn create_postgres_client(config: &Config) -> Result<Arc<dyn PostgresClientTrait>> {
+async fn create_postgres_client(config: &Config) -> Result<Arc<PostgresClient>> {
     // WIP: Mock mode handling - commented out until diesel traits are fully implemented
     // #[cfg(feature = "mocks")]
     // {

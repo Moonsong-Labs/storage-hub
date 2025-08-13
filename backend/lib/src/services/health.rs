@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::data::{postgres::PostgresClientTrait, rpc::StorageHubRpcClient, storage::BoxedStorage};
+use crate::data::{postgres::PostgresClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 
 #[derive(Serialize)]
 pub struct DetailedHealthStatus {
@@ -28,14 +28,14 @@ pub struct ComponentHealth {
 
 pub struct HealthService {
     storage: Arc<dyn BoxedStorage>,
-    postgres: Arc<dyn PostgresClientTrait>,
+    postgres: Arc<PostgresClient>,
     rpc: Arc<StorageHubRpcClient>,
 }
 
 impl HealthService {
     pub fn new(
         storage: Arc<dyn BoxedStorage>,
-        postgres: Arc<dyn PostgresClientTrait>,
+        postgres: Arc<PostgresClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
         Self {
