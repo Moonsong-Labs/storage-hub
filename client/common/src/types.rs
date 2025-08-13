@@ -270,7 +270,9 @@ where
         + pallet_payment_streams::Config
         + pallet_file_system::Config
         + pallet_transaction_payment::Config
-        + pallet_balances::Config,
+        + pallet_balances::Config
+        + pallet_bucket_nfts::Config
+        + pallet_randomness::Config,
 {
     System(frame_system::Event<Runtime>),
     StorageProviders(pallet_storage_providers::Event<Runtime>),
@@ -279,6 +281,8 @@ where
     FileSystem(pallet_file_system::Event<Runtime>),
     TransactionPayment(pallet_transaction_payment::Event<Runtime>),
     Balances(pallet_balances::Event<Runtime>),
+    BucketNfts(pallet_bucket_nfts::Event<Runtime>),
+    Randomness(pallet_randomness::Event<Runtime>),
     /// Catch-all for events that we do not care in the SH Client.
     Other(<Runtime as frame_system::Config>::RuntimeEvent),
 }

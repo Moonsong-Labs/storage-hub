@@ -16,6 +16,7 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+bigdecimal = { workspace = true }
 bincode = { workspace = true }
 codec = { workspace = true }
 rocksdb = { workspace = true }
@@ -71,12 +72,14 @@ shp-traits = { workspace = true }
 shp-opaque = { workspace = true }
 
 # Local pallets
+pallet-bucket-nfts = { workspace = true }
 pallet-file-system = { workspace = true }
 pallet-file-system-runtime-api = { workspace = true }
 pallet-payment-streams = { workspace = true }
 pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
+pallet-randomness = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
 
@@ -106,10 +109,12 @@ std = [
 	"shp-forest-verifier/std",
 	"shp-traits/std",
 	"pallet-balances/std",
+	"pallet-bucket-nfts/std",
 	"pallet-file-system/std",
 	"pallet-nfts/std",
 	"pallet-payment-streams/std",
 	"pallet-proofs-dealer/std",
+	"pallet-randomness/std",
 	"pallet-storage-providers/std",
 	"pallet-transaction-payment/std",
 ]
@@ -117,10 +122,12 @@ runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
+	"pallet-bucket-nfts/runtime-benchmarks",
 	"pallet-file-system/runtime-benchmarks",
 	"pallet-nfts/runtime-benchmarks",
 	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
+	"pallet-randomness/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
 	"pallet-transaction-payment/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",

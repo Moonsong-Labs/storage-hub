@@ -1,5 +1,6 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
+use bigdecimal::BigDecimal;
 use codec::{Decode, Encode};
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
@@ -199,9 +200,6 @@ pub trait StorageEnableRuntime:
     // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
     // TODO: If we don't do this now, in `utils.rs` we cannot compare the `owner` field of the `AcceptedBspVolunteer` event with the caller's public key.
     // TODO:
-    // TODO: Remove the restriction that `StorageDataUnit = u64` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
-    // TODO: If we don't do this now, in `handler_msp.rs` we receive a `RuntimeEvent` with a `file_size` field of type `u64` (already concrete type) instead of `StorageDataUnit`.
-    // TODO:
     // TODO: Remove the restriction that `MaxFilePathSize = ConstU32<512>` once we create an abstraction trait to convert `StorageEnableEvents` to `RuntimeEvent`.
     // TODO: If we don't do this now, in `utils.rs` we receive a `RuntimeEvent` with a `location` field of type that includes `MaxFilePathSize = ConstU32<512>` 
     // TODO: (already concrete type) instead of `MaxFilePathSize<Runtime>`.
@@ -236,9 +234,9 @@ pub trait StorageEnableRuntime:
             MerklePatriciaRoot = <Self as frame_system::Config>::Hash,
             ValuePropId = <Self as frame_system::Config>::Hash,
             ProviderId = <Self as frame_system::Config>::Hash,
-            BucketNameLimit: Send,
-            MaxCommitmentSize: Send,
-            StorageDataUnit = u64,
+            BucketNameLimit: Send + Sync,
+            MaxCommitmentSize: Send + Sync,
+            StorageDataUnit: Into<BigDecimal>,
             MaxMultiAddressSize = ConstU32<100>,
             MaxMultiAddressAmount = ConstU32<5>,
         >
@@ -247,28 +245,30 @@ pub trait StorageEnableRuntime:
             MerkleTrieHash = <Self as frame_system::Config>::Hash,
             ForestVerifier = ForestVerifier,
             KeyVerifier = FileKeyVerifier,
-            MaxCustomChallengesPerBlock: Send,
+            MaxCustomChallengesPerBlock: Send + Sync,
         >
         + pallet_payment_streams::Config<
             ProvidersPallet = pallet_storage_providers::Pallet<Self>,
             NativeBalance = pallet_balances::Pallet<Self>,
-            MaxUsersToCharge: Send,
+            MaxUsersToCharge: Send + Sync,
         >
         + pallet_file_system::Config<
             Providers = pallet_storage_providers::Pallet<Self>,
             ProofDealer = pallet_proofs_dealer::Pallet<Self>,
             PaymentStreams = pallet_payment_streams::Pallet<Self>,
             Nfts = pallet_nfts::Pallet<Self>,
-            OffchainSignature: Send,
-            MaxBatchConfirmStorageRequests: Send,
+            OffchainSignature: Send + Sync,
+            MaxBatchConfirmStorageRequests: Send + Sync,
             MaxFilePathSize = ConstU32<512>,
             MaxNumberOfPeerIds = ConstU32<5>,
             MaxPeerIdSize = ConstU32<100>,
             Fingerprint = <Self as frame_system::Config>::Hash,
         >
         + pallet_transaction_payment::Config
-        + pallet_balances::Config<Balance: MaybeDisplay>
-        + pallet_nfts::Config<CollectionId: Send>
+        + pallet_balances::Config<Balance: Into<BigDecimal> + MaybeDisplay>
+        + pallet_nfts::Config<CollectionId: Send + Sync + Display>
+        + pallet_bucket_nfts::Config
+        + pallet_randomness::Config
         + Copy
         + Debug
         + Send
