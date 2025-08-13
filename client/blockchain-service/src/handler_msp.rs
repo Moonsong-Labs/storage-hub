@@ -1,6 +1,5 @@
 use log::{debug, error, info, trace, warn};
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
@@ -151,7 +150,7 @@ where
                     self.emit(FileDeletionRequest {
                         user,
                         file_key: file_key.into(),
-                        file_size: file_size.into(),
+                        file_size,
                         bucket_id,
                         msp_id,
                         proof_of_inclusion,

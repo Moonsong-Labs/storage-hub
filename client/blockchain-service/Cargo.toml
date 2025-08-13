@@ -15,18 +15,18 @@ publish = false
 workspace = true
 
 [dependencies]
-tokio = { workspace = true }
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 array-bytes = { workspace = true }
+async-trait = { workspace = true }
+codec = { workspace = true }
+futures = { workspace = true }
 lazy-static = { workspace = true }
 log = { workspace = true }
-futures = { workspace = true }
-serde_json = { workspace = true }
-codec = { workspace = true }
-serde = { workspace = true, default-features = true }
 rocksdb = { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }

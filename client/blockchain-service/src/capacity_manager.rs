@@ -6,7 +6,7 @@ use log::{debug, error};
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
-use sp_runtime::traits::{One, Saturating, Zero};
+use sp_runtime::traits::{CheckedAdd, One, Saturating, Zero};
 
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
@@ -73,7 +73,7 @@ impl<Runtime: StorageEnableRuntime> CapacityRequestQueue<Runtime> {
         request: CapacityRequest<Runtime>,
         current_capacity: StorageDataUnit<Runtime>,
     ) {
-        let Some(new_total_required) = self.total_required.checked_add(request.data.required)
+        let Some(new_total_required) = self.total_required.checked_add(&request.data.required)
         else {
             request.send_result(Err(anyhow!("Capacity overflow")));
             return;
