@@ -130,14 +130,14 @@ export const addCopypartyContainer = async (options?: {
             });
           }
         );
-        
+
         client.on("error", () => {
           if (!resolved) {
             resolved = true;
             resolve(false);
           }
         });
-        
+
         client.setTimeout(250, () => {
           if (!resolved) {
             resolved = true;
