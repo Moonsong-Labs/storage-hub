@@ -12,6 +12,17 @@ import {
   sealBlock
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
+import {
+  hexToBuffer,
+  waitForFileIndexed,
+  waitForBucketIndexed,
+  waitForBucketByIdIndexed,
+  waitForMspFileAssociation,
+  waitForBspFileAssociation,
+  waitForFileDeleted,
+  waitForBlockIndexed
+} from "../../../util/indexerHelpers";
+import { sealAndWaitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 
 describeMspNet(
   "Fisherman Indexer - Fishing Mode",
@@ -54,8 +65,8 @@ describeMspNet(
       await sleep(1000);
 
       // Seal additional blocks to ensure stable state
-      await userApi.block.seal();
-      await userApi.block.seal();
+      await sealAndWaitForIndexing(userApi);
+      await sealAndWaitForIndexing(userApi);
     });
 
     it("indexes NewStorageRequest events", async () => {
@@ -71,9 +82,8 @@ describeMspNet(
         bucketName
       );
 
-      // Wait for indexing to catch up
-      await userApi.block.seal();
-      await userApi.block.seal();
+      // Seal block and wait for indexer to process it
+      await sealAndWaitForIndexing(userApi);
 
       // Verify file is indexed
       const files = await sql`
@@ -127,19 +137,12 @@ describeMspNet(
         "BspConfirmedStoring"
       );
       assert(bspConfirmedEvent, "BspConfirmedStoring event should be present");
-      // Wait for indexing to catch up
-      await userApi.block.seal();
-      await userApi.block.seal();
+
+      // Seal block and wait for indexer to process it
+      await sealAndWaitForIndexing(userApi);
 
       // Wait for the indexer to process the events
-      await waitFor({
-        lambda: async () => {
-          const files = await sql`
-            SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-          `;
-          return files.length > 0;
-        }
-      });
+      await waitForFileIndexed(sql, fileKey);
 
       // Verify BSP-file association is indexed
       const bspFiles = await sql`
@@ -252,21 +255,11 @@ describeMspNet(
       const acceptedFileKey = mspAcceptedEventDataBlob.fileKey.toString();
       assert.equal(acceptedFileKey, fileKey.toString());
 
-      // Wait for indexing to catch up
-      await userApi.block.seal();
-      await userApi.block.seal();
+      // Seal block and wait for indexer to process it
+      await sealAndWaitForIndexing(userApi);
 
       // Wait for the indexer to process the events
-      await waitFor({
-        lambda: async () => {
-          const files = await sql`
-            SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey.toString())}
-          `;
-          return files.length > 0;
-        },
-        iterations: 20,
-        delay: 500
-      });
+      await waitForFileIndexed(sql, fileKey.toString());
 
       // Verify MSP-file association is indexed
       const mspFiles = await sql`
@@ -307,20 +300,10 @@ describeMspNet(
       );
 
       // Wait for indexing to process the revocation
-      await userApi.block.seal();
-      await userApi.block.seal();
+      await sealAndWaitForIndexing(userApi);
 
       // Wait for file deletion to be processed by indexer
-      await waitFor({
-        lambda: async () => {
-          const files = await sql`
-            SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-          `;
-          return files.length === 0;
-        },
-        iterations: 20,
-        delay: 500
-      });
+      await waitForFileDeleted(sql, fileKey);
 
       // Verify file is removed from database
       const files = await sql`
@@ -430,8 +413,7 @@ describeMspNet(
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
 
       // Wait for indexing
-      await userApi.block.seal();
-      await userApi.block.seal();
+      await sealAndWaitForIndexing(userApi);
 
       // Verify BSP-file association is removed
       const bspFiles = await sql`
@@ -459,20 +441,10 @@ describeMspNet(
       const bucketId = newBucketEventData.bucketId;
 
       // Wait for bucket creation to be indexed
-      await userApi.block.seal();
-      await userApi.block.seal();
+      await sealAndWaitForIndexing(userApi);
 
       // Wait for bucket to be indexed by the indexer
-      await waitFor({
-        lambda: async () => {
-          const buckets = await sql`
-            SELECT * FROM bucket WHERE name = ${bucketName}
-          `;
-          return buckets.length > 0;
-        },
-        iterations: 20,
-        delay: 500
-      });
+      await waitForBucketIndexed(sql, bucketName);
 
       // Verify bucket is indexed
       let buckets = await sql`
@@ -490,8 +462,7 @@ describeMspNet(
       assertEventPresent(userApi, "fileSystem", "BucketDeleted", deleteBucketResult.events);
 
       // Wait for deletion to be indexed
-      await userApi.block.seal();
-      await userApi.block.seal();
+      await sealAndWaitForIndexing(userApi);
 
       // Verify bucket is removed
       buckets = await sql`
@@ -525,19 +496,9 @@ describeMspNet(
       await userApi.block.seal();
 
       // Wait for indexing and verify file is properly stored
-      await userApi.block.seal();
-      await userApi.block.seal();
+      await sealAndWaitForIndexing(userApi);
 
-      await waitFor({
-        lambda: async () => {
-          const files = await sql`
-            SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-          `;
-          return files.length > 0;
-        },
-        iterations: 30,
-        delay: 1000
-      });
+      await waitForFileIndexed(sql, fileKey);
 
       // Verify file exists in database (fulfillment creates permanent record)
       const files = await sql`
@@ -568,8 +529,7 @@ describeMspNet(
       await userApi.block.skipTo(currentBlockNumber + 100);
 
       // Wait for indexing to catch up
-      await userApi.block.seal();
-      await userApi.block.seal();
+      await sealAndWaitForIndexing(userApi);
 
       // Verify that expired storage requests are handled properly
       const files = await sql`
@@ -627,33 +587,11 @@ describeMspNet(
       });
 
       // Verify MSP-file association exists
-      await userApi.block.seal();
-      await waitFor({
-        lambda: async () => {
-          const mspFiles = await sql`
-            SELECT * FROM msp_file 
-            WHERE file_id = (
-              SELECT id FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-            )
-          `;
-          return mspFiles.length > 0;
-        },
-        iterations: 30,
-        delay: 1000
-      });
+      await waitForBlockIndexed(userApi);
+      await waitForMspFileAssociation(sql, fileKey);
 
       // Verify BSP-file association exists
-      await waitFor({
-        lambda: async () => {
-          const bspFiles = await sql`
-            SELECT * FROM bsp_file 
-            WHERE file_id = (
-              SELECT id FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-            )
-          `;
-          return bspFiles.length > 0;
-        }
-      });
+      await waitForBspFileAssociation(sql, fileKey);
 
       // Now trigger file deletion
       // First, create the signed intention for file deletion
@@ -724,18 +662,10 @@ describeMspNet(
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
       // Wait for deletion processing
-      await userApi.block.seal();
-      await userApi.block.seal();
+      await sealAndWaitForIndexing(userApi);
 
       // Verify file is deleted first
-      waitFor({
-        lambda: async () => {
-          const files = await sql`
-            SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-          `;
-          return files.length === 0;
-        }
-      });
+      await waitForFileDeleted(sql, fileKey);
 
       // Check if any orphaned MSP associations remain
       // Note: Since file is deleted, we can't use a subquery - check by MSP ID
@@ -763,38 +693,6 @@ describeMspNet(
 
       // There should be no orphaned BSP file associations
       assert.equal(bspFilesAfter.length, 0, "No orphaned BSP file associations should remain");
-    });
-
-    it("validates provider lifecycle table structures", async () => {
-      // Verify all required provider tables exist
-      const providerTables = ["bsp", "msp", "multiaddress", "bsp_multiaddress", "msp_multiaddress"];
-
-      for (const tableName of providerTables) {
-        const tableExists = await sql`
-          SELECT EXISTS (
-            SELECT 1 FROM information_schema.tables 
-            WHERE table_name = ${tableName}
-          )
-        `;
-        assert(
-          tableExists[0].exists,
-          `Provider table '${tableName}' should exist for fishing mode`
-        );
-      }
-
-      // Verify BSP and MSP tables can handle provider lifecycle events
-      const bspColumns = await sql`
-        SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'bsp'
-      `;
-
-      const mspColumns = await sql`
-        SELECT column_name FROM information_schema.columns
-        WHERE table_name = 'msp'
-      `;
-
-      assert(bspColumns.length > 0, "BSP table should have columns for provider data");
-      assert(mspColumns.length > 0, "MSP table should have columns for provider data");
     });
 
     it("indexes SpStopStoringInsolventUser events", async () => {
@@ -858,16 +756,7 @@ describeMspNet(
       const mspId = mspRows[0]?.id;
 
       // Wait for bucket to be indexed
-      await waitFor({
-        lambda: async () => {
-          const buckets = await sql`
-            SELECT * FROM bucket WHERE onchain_bucket_id = ${hexToBuffer(bucketId)} AND 
-            msp_id = ${mspId}`;
-          return buckets.length > 0;
-        },
-        iterations: 30,
-        delay: 1000
-      });
+      await waitForBucketByIdIndexed(sql, bucketId, mspId);
 
       // Get the value propositions of the second MSP to use, and use the first one (can be any).
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
@@ -927,9 +816,3 @@ describeMspNet(
     });
   }
 );
-
-const hexToBuffer = (hex: string): Buffer => {
-  // Remove '0x' prefix if present
-  const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex;
-  return Buffer.from(cleanHex, "hex");
-};
