@@ -109,39 +109,48 @@ export const addCopypartyContainer = async (options?: {
     const checkFtp = async (): Promise<boolean> => {
       return new Promise<boolean>((resolve) => {
         let resolved = false;
-        const client = net.createConnection(
-          { port: Number(ftpHostPort), host: "localhost" },
-          () => {
-            // Wait for FTP 220 greeting
-            client.once("data", (data) => {
-              if (!resolved) {
-                resolved = true;
-                const response = data.toString();
-                if (response.includes("220")) {
-                  console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
-                  client.end();
-                  resolve(true);
-                } else {
-                  // Got data but not a 220 greeting, server not ready
-                  client.destroy();
-                  resolve(false);
-                }
-              }
-            });
+        let client: net.Socket | undefined;
+
+        const timeoutId = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            client?.destroy();
+            resolve(false);
           }
-        );
+        }, 250);
+
+        client = net.createConnection({ port: Number(ftpHostPort), host: "localhost" }, () => {
+          // Wait for FTP 220 greeting
+          client!.once("data", (data) => {
+            if (!resolved) {
+              resolved = true;
+              clearTimeout(timeoutId);
+              const response = data.toString();
+              if (response.includes("220")) {
+                console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
+                client!.end();
+                resolve(true);
+              } else {
+                // Got data but not a 220 greeting, server not ready
+                client!.destroy();
+                resolve(false);
+              }
+            }
+          });
+        });
 
         client.on("error", () => {
           if (!resolved) {
             resolved = true;
+            clearTimeout(timeoutId);
             resolve(false);
           }
         });
 
-        client.setTimeout(250, () => {
+        client.on("close", () => {
           if (!resolved) {
             resolved = true;
-            client.destroy();
+            clearTimeout(timeoutId);
             resolve(false);
           }
         });
