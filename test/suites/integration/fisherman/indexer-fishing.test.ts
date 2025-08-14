@@ -166,76 +166,23 @@ describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const bucketTx = userApi.tx.fileSystem.createBucket(mspId, bucketName, true, valuePropId);
-
-      const { events } = await userApi.block.seal({
-        calls: [bucketTx],
-        signer: shUser
-      });
-
-      // Assert NewBucket event was emitted
-      assertEventPresent(userApi, "fileSystem", "NewBucket", events);
-
-      // Get bucket ID from the NewBucket event
-      const newBucketEvent = events?.find((record) =>
-        userApi.events.fileSystem.NewBucket.is(record.event)
-      );
-
-      if (!newBucketEvent) {
-        throw new Error("NewBucket event not found");
-      }
-
-      const bucketId = (newBucketEvent.event.data as any).bucketId;
-
-      // Load file first
-      const {
-        file_metadata: { location, fingerprint, file_size }
-      } = await userApi.rpc.storagehubclient.loadFileInStorage(
+      // Use helper function to create bucket and send storage request
+      const { fileKey } = await createBucketAndSendNewStorageRequest(
+        userApi,
         source,
         destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
-        bucketId
+        bucketName,
+        valuePropId,
+        mspId,
+        null,
+        1
       );
-
-      // Issue storage request with loaded metadata
-      const issueStorageRequestResult = await userApi.block.seal({
-        calls: [
-          userApi.tx.fileSystem.issueStorageRequest(
-            bucketId,
-            location,
-            fingerprint,
-            file_size,
-            mspId,
-            [userApi.shConsts.NODE_INFOS.user.expectedPeerId],
-            { Basic: null }
-          )
-        ],
-        signer: shUser
-      });
-
-      // Assert NewStorageRequest event was emitted
-      assertEventPresent(
-        userApi,
-        "fileSystem",
-        "NewStorageRequest",
-        issueStorageRequestResult.events
-      );
-
-      // Get the file key from the event
-      const { event } = await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
-      const eventData = userApi.events.fileSystem.NewStorageRequest.is(event) && event.data;
-      assert(eventData, "NewStorageRequest event data not found");
-      const fileKey = eventData.fileKey;
-
-      // Wait for MSP to receive the file
-      await waitFor({
-        lambda: async () =>
-          (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
-      });
 
       // Wait for MSP to accept the storage request
       await userApi.wait.mspResponseInTxPool();
-      await userApi.block.seal();
+
+      // Wait for BSP to volunteer
+      await userApi.wait.bspVolunteer();
 
       // Get the MspAcceptedStorageRequest event
       const { event: mspAcceptedEvent } = await userApi.assert.eventPresent(
@@ -270,6 +217,15 @@ describeMspNet(
       `;
 
       assert(mspFiles.length > 0, "MSP file association should be indexed");
+
+      // Wait for BSP to confirm storage
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      // Wait for BSP to confirm storage
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        sealBlock: true,
+        bspAccount: bspAddress
+      });
     });
 
     it("indexes StorageRequestRevoked events", async () => {

@@ -353,7 +353,27 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .await?;
             }
             pallet_file_system::Event::StorageRequestRevoked { file_key } => {
-                File::delete(conn, file_key.as_ref().to_vec()).await?;
+                // Check if file has any provider associations
+                let has_msp = File::has_msp_associations(conn, file_key.as_ref()).await?;
+                let has_bsp = File::has_bsp_associations(conn, file_key.as_ref()).await?;
+
+                if has_msp || has_bsp {
+                    // Mark file for deletion - will be deleted when all associations are removed
+                    File::update_deletion_status(
+                        conn,
+                        file_key.as_ref(),
+                        FileDeletionStatus::InProgress,
+                    )
+                    .await?;
+                    log::debug!(
+                        "Storage request revoked for file {:?} with existing associations (MSP: {}, BSP: {}), marked for deletion",
+                        file_key, has_msp, has_bsp
+                    );
+                } else {
+                    // No associations, safe to delete immediately
+                    File::delete(conn, file_key.as_ref().to_vec()).await?;
+                    log::debug!("Storage request revoked for file {:?} with no associations, deleted immediately", file_key);
+                }
             }
             pallet_file_system::Event::MspAcceptedStorageRequest { file_key } => {
                 let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
