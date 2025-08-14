@@ -123,17 +123,85 @@ export const addCopypartyContainer = async (options?: {
           // Wait for FTP 220 greeting
           client!.once("data", (data) => {
             if (!resolved) {
-              resolved = true;
-              clearTimeout(timeoutId);
               const response = data.toString();
               if (response.includes("220")) {
-                console.log(`Copyparty FTP server ready on ftp://localhost:${ftpHostPort}`);
-                client!.end();
-                resolve(true);
+                // Got 220 greeting, now verify files are accessible by sending LIST command
+                client!.write("USER anonymous\r\n");
+                
+                client!.once("data", (loginResponse) => {
+                  if (loginResponse.toString().includes("331")) {
+                    // Need password
+                    client!.write("PASS \r\n");
+                    
+                    client!.once("data", (passResponse) => {
+                      if (passResponse.toString().includes("230")) {
+                        // Logged in, try to list /res directory to verify mount is ready
+                        client!.write("CWD /res\r\n");
+                        
+                        client!.once("data", (cwdResponse) => {
+                          if (!resolved) {
+                            resolved = true;
+                            clearTimeout(timeoutId);
+                            if (cwdResponse.toString().includes("250")) {
+                              // Successfully changed to /res directory, files are accessible
+                              console.log(`Copyparty FTP server ready with files accessible on ftp://localhost:${ftpHostPort}`);
+                              client!.write("QUIT\r\n");
+                              client!.end();
+                              resolve(true);
+                            } else {
+                              // Could not access /res, files not ready yet
+                              client!.destroy();
+                              resolve(false);
+                            }
+                          }
+                        });
+                      } else {
+                        // Login failed
+                        if (!resolved) {
+                          resolved = true;
+                          clearTimeout(timeoutId);
+                          client!.destroy();
+                          resolve(false);
+                        }
+                      }
+                    });
+                  } else if (loginResponse.toString().includes("230")) {
+                    // Already logged in (no password needed)
+                    client!.write("CWD /res\r\n");
+                    
+                    client!.once("data", (cwdResponse) => {
+                      if (!resolved) {
+                        resolved = true;
+                        clearTimeout(timeoutId);
+                        if (cwdResponse.toString().includes("250")) {
+                          console.log(`Copyparty FTP server ready with files accessible on ftp://localhost:${ftpHostPort}`);
+                          client!.write("QUIT\r\n");
+                          client!.end();
+                          resolve(true);
+                        } else {
+                          client!.destroy();
+                          resolve(false);
+                        }
+                      }
+                    });
+                  } else {
+                    // Unexpected response
+                    if (!resolved) {
+                      resolved = true;
+                      clearTimeout(timeoutId);
+                      client!.destroy();
+                      resolve(false);
+                    }
+                  }
+                });
               } else {
                 // Got data but not a 220 greeting, server not ready
-                client!.destroy();
-                resolve(false);
+                if (!resolved) {
+                  resolved = true;
+                  clearTimeout(timeoutId);
+                  client!.destroy();
+                  resolve(false);
+                }
               }
             }
           });
