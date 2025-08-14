@@ -109,48 +109,38 @@ export const addCopypartyContainer = async (options?: {
     const checkFtp = async (): Promise<boolean> => {
       return new Promise<boolean>((resolve) => {
         let resolved = false;
-        let client: net.Socket | undefined;
-
-        const timeoutId = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            client?.destroy();
-            resolve(false);
-          }
-        }, 250);
-
-        client = net.createConnection({ port: Number(ftpHostPort), host: "localhost" }, () => {
+        const client: net.Socket = net.createConnection({ port: Number(ftpHostPort), host: "localhost" }, () => {
           // Wait for FTP 220 greeting
-          client!.once("data", (data) => {
+          client.once("data", (data) => {
             if (!resolved) {
               const response = data.toString();
               if (response.includes("220")) {
                 // Got 220 greeting, now verify files are accessible by sending LIST command
-                client!.write("USER anonymous\r\n");
+                client.write("USER anonymous\r\n");
                 
-                client!.once("data", (loginResponse) => {
+                client.once("data", (loginResponse) => {
                   if (loginResponse.toString().includes("331")) {
                     // Need password
-                    client!.write("PASS \r\n");
+                    client.write("PASS \r\n");
                     
-                    client!.once("data", (passResponse) => {
+                    client.once("data", (passResponse) => {
                       if (passResponse.toString().includes("230")) {
                         // Logged in, try to list /res directory to verify mount is ready
-                        client!.write("CWD /res\r\n");
+                        client.write("CWD /res\r\n");
                         
-                        client!.once("data", (cwdResponse) => {
+                        client.once("data", (cwdResponse) => {
                           if (!resolved) {
                             resolved = true;
                             clearTimeout(timeoutId);
                             if (cwdResponse.toString().includes("250")) {
                               // Successfully changed to /res directory, files are accessible
                               console.log(`Copyparty FTP server ready with files accessible on ftp://localhost:${ftpHostPort}`);
-                              client!.write("QUIT\r\n");
-                              client!.end();
+                              client.write("QUIT\r\n");
+                              client.end();
                               resolve(true);
                             } else {
                               // Could not access /res, files not ready yet
-                              client!.destroy();
+                              client.destroy();
                               resolve(false);
                             }
                           }
@@ -160,26 +150,26 @@ export const addCopypartyContainer = async (options?: {
                         if (!resolved) {
                           resolved = true;
                           clearTimeout(timeoutId);
-                          client!.destroy();
+                          client.destroy();
                           resolve(false);
                         }
                       }
                     });
                   } else if (loginResponse.toString().includes("230")) {
                     // Already logged in (no password needed)
-                    client!.write("CWD /res\r\n");
+                    client.write("CWD /res\r\n");
                     
-                    client!.once("data", (cwdResponse) => {
+                    client.once("data", (cwdResponse) => {
                       if (!resolved) {
                         resolved = true;
                         clearTimeout(timeoutId);
                         if (cwdResponse.toString().includes("250")) {
                           console.log(`Copyparty FTP server ready with files accessible on ftp://localhost:${ftpHostPort}`);
-                          client!.write("QUIT\r\n");
-                          client!.end();
+                          client.write("QUIT\r\n");
+                          client.end();
                           resolve(true);
                         } else {
-                          client!.destroy();
+                          client.destroy();
                           resolve(false);
                         }
                       }
@@ -189,7 +179,7 @@ export const addCopypartyContainer = async (options?: {
                     if (!resolved) {
                       resolved = true;
                       clearTimeout(timeoutId);
-                      client!.destroy();
+                      client.destroy();
                       resolve(false);
                     }
                   }
@@ -199,13 +189,21 @@ export const addCopypartyContainer = async (options?: {
                 if (!resolved) {
                   resolved = true;
                   clearTimeout(timeoutId);
-                  client!.destroy();
+                  client.destroy();
                   resolve(false);
                 }
               }
             }
           });
         });
+
+        const timeoutId = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            client.destroy();
+            resolve(false);
+          }
+        }, 250);
 
         client.on("error", () => {
           if (!resolved) {
