@@ -186,10 +186,17 @@ impl<T> StorageEnableRuntimeApi for T where
 {
 }
 
-/// Trait defining the runtime types required for StorageHub Client operations.
+/// The trait that a runtime must implement to be compatible with the StorageHub Client.
 ///
-/// This trait establishes the core types needed for interacting with a StorageHub-enabled
-/// runtime, including address formats, call types, signatures, and transaction extensions.
+/// This trait describes the concrete associated types and pallet constraints that a
+/// runtime must satisfy for the StorageHub Client to work. It allows the client to
+/// remain generic over runtimes while still relying on a consistent set of capabilities.
+///
+/// - Fixes the fundamental runtime types used by the client: `Address`, `Call`,
+///   `Signature`, `Extension`, and `RuntimeApi`.
+/// - Requires the presence of specific pallets via trait bounds.
+/// - Requires `RuntimeEvent: Into<StorageEnableEvents<Self>>` so the client can map the
+///   concrete runtime event type into a known set of events.
 ///
 /// # Associated Types
 ///
@@ -197,6 +204,7 @@ impl<T> StorageEnableRuntimeApi for T where
 /// - `Call` - The dispatchable call type for submitting extrinsics
 /// - `Signature` - The signature type used for signing transactions
 /// - `Extension` - The transaction extension type for additional transaction logic
+/// - `RuntimeApi` - The set of runtime APIs that must be available to the client
 pub trait StorageEnableRuntime:
     // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we abstract the File and Forest Managers from the AccountId type.
     // TODO:

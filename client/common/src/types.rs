@@ -260,7 +260,19 @@ impl MinimalExtension {
     }
 }
 
-// TODO: DOCUMENT THIS
+/// Set of pallets and their events that are relevant to the StorageHub Client.
+///
+/// This enum serves to convert the runtime's `RuntimeEvent` into a known set of
+/// storage-related events that the client cares about. It allows the
+/// client to match on these events without having to know about every pallet
+/// that may exist in the runtime.
+///
+/// The enum intentionally includes a catch-all `Other` variant so that
+/// unrecognized or out-of-scope events can be ignored without breaking
+/// client logic.
+///
+/// Conversion from the concrete runtime event is up to each StorageHub-compatible
+/// runtime to implement.
 #[derive(Debug, Clone)]
 pub enum StorageEnableEvents<Runtime>
 where
@@ -274,14 +286,23 @@ where
         + pallet_bucket_nfts::Config
         + pallet_randomness::Config,
 {
+    /// Events emitted by the [frame_system](https://docs.rs/frame-system/latest/frame_system/) pallet.
     System(frame_system::Event<Runtime>),
+    /// Events from [`pallet_storage_providers`].
     StorageProviders(pallet_storage_providers::Event<Runtime>),
+    /// Events from [`pallet_proofs_dealer`].
     ProofsDealer(pallet_proofs_dealer::Event<Runtime>),
+    /// Events from [`pallet_payment_streams`].
     PaymentStreams(pallet_payment_streams::Event<Runtime>),
+    /// Events from [`pallet_file_system`].
     FileSystem(pallet_file_system::Event<Runtime>),
+    /// Events from [`pallet_transaction_payment`](https://docs.rs/pallet-transaction-payment/latest/pallet_transaction_payment/).
     TransactionPayment(pallet_transaction_payment::Event<Runtime>),
+    /// Events from [`pallet_balances`](https://docs.rs/pallet-balances/latest/pallet_balances/index.html).
     Balances(pallet_balances::Event<Runtime>),
+    /// Events from [`pallet_bucket_nfts`].
     BucketNfts(pallet_bucket_nfts::Event<Runtime>),
+    /// Events from [`pallet_randomness`].
     Randomness(pallet_randomness::Event<Runtime>),
     /// Catch-all for events that we do not care in the SH Client.
     Other(<Runtime as frame_system::Config>::RuntimeEvent),
