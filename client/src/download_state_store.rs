@@ -42,6 +42,12 @@ impl ScaleEncodedCf for MissingChunksCf {
     const SCALE_ENCODED_NAME: &'static str = "missing_chunks";
 }
 
+/// Non-generic name holder for the `MissingChunks` column family
+pub struct MissingChunksName;
+impl MissingChunksName {
+    pub const NAME: &'static str = "missing_chunks";
+}
+
 /// A separate column family for the composite key implementation
 pub struct MissingChunksCompositeCf;
 
@@ -58,6 +64,12 @@ impl TypedCf for MissingChunksCompositeCf {
     type ValueCodec = ScaleDbCodec;
 
     const NAME: &'static str = "missing_chunks";
+}
+
+/// Non-generic name holder for the `MissingChunksComposite` column family
+pub struct MissingChunksCompositeName;
+impl MissingChunksCompositeName {
+    pub const NAME: &'static str = "missing_chunks";
 }
 
 /// Column family that stores file metadata for files being downloaded.
@@ -98,6 +110,12 @@ impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingBucketDownloadsCf<
     const SCALE_ENCODED_NAME: &'static str = "pending_bucket_downloads";
 }
 
+/// Non-generic name holder for the `PendingBucketDownloads` column family
+pub struct PendingBucketDownloadsName;
+impl PendingBucketDownloadsName {
+    pub const NAME: &'static str = "pending_bucket_downloads";
+}
+
 impl Default for FileMetadataCf {
     fn default() -> Self {
         Self
@@ -111,12 +129,17 @@ impl ScaleEncodedCf for FileMetadataCf {
     const SCALE_ENCODED_NAME: &'static str = "file_metadata";
 }
 
+/// Non-generic name holder for the `FileMetadata` column family
+pub struct FileMetadataName;
+impl FileMetadataName {
+    pub const NAME: &'static str = "file_metadata";
+}
+
 // List of all column families used by the download state store
 const ALL_COLUMN_FAMILIES: &[&str] = &[
-    MissingChunksCompositeCf::NAME,
-    FileMetadataCf::SCALE_ENCODED_NAME,
-    // TODO: Remove the dependency on `storage_hub_runtime` here.
-    PendingBucketDownloadsCf::<storage_hub_runtime::Runtime>::SCALE_ENCODED_NAME,
+    MissingChunksCompositeName::NAME,
+    FileMetadataName::NAME,
+    PendingBucketDownloadsName::NAME,
 ];
 
 /// Persistent store for file download state using RocksDB.

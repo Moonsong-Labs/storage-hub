@@ -8,8 +8,8 @@ use shc_common::{
     traits::StorageEnableRuntime,
     typed_store::{
         BufferedWriteSupport, CFDequeAPI, ProvidesDbContext, ProvidesTypedDbAccess,
-        ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedCf,
-        TypedDbContext, TypedRocksDB,
+        ProvidesTypedDbSingleAccess, ScaleEncodedCf, SingleScaleEncodedValueCf, TypedDbContext,
+        TypedRocksDB,
     },
     types::BlockNumber,
 };
@@ -37,6 +37,12 @@ impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "last_processed_block_number";
 }
 
+/// Non-generic name holder for the `LastProcessedBlockNumber` column family
+pub struct LastProcessedBlockNumberName;
+impl LastProcessedBlockNumberName {
+    pub const NAME: &'static str = "last_processed_block_number";
+}
+
 /// Current ongoing task which requires a forest write lock.
 pub struct OngoingProcessConfirmStoringRequestCf<Runtime: StorageEnableRuntime> {
     pub(crate) phantom: std::marker::PhantomData<Runtime>,
@@ -47,6 +53,12 @@ impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf
     type Value = ProcessConfirmStoringRequestData;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_process_confirm_storing_request";
+}
+
+/// Non-generic name holder for the `OngoingProcessConfirmStoringRequest` column family
+pub struct OngoingProcessConfirmStoringRequestName;
+impl OngoingProcessConfirmStoringRequestName {
+    pub const NAME: &'static str = "ongoing_process_confirm_storing_request";
 }
 
 /// Current ongoing task which requires a forest write lock.
@@ -62,6 +74,12 @@ impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf
         "ongoing_process_stop_storing_for_insolvent_user_request";
 }
 
+/// Non-generic name holder for the `OngoingProcessStopStoringForInsolventUserRequest` column family
+pub struct OngoingProcessStopStoringForInsolventUserRequestName;
+impl OngoingProcessStopStoringForInsolventUserRequestName {
+    pub const NAME: &'static str = "ongoing_process_stop_storing_for_insolvent_user_request";
+}
+
 /// Pending confirm storing requests.
 pub struct PendingConfirmStoringRequestCf<Runtime: StorageEnableRuntime> {
     pub(crate) phantom: std::marker::PhantomData<Runtime>,
@@ -71,6 +89,12 @@ impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingConfirmStoringRequ
     type Value = ConfirmStoringRequest;
 
     const SCALE_ENCODED_NAME: &'static str = "pending_confirm_storing_request";
+}
+
+/// Non-generic name holder for the `PendingConfirmStoringRequest` column family
+pub struct PendingConfirmStoringRequestName;
+impl PendingConfirmStoringRequestName {
+    pub const NAME: &'static str = "pending_confirm_storing_request";
 }
 
 impl<Runtime: StorageEnableRuntime> Default for PendingConfirmStoringRequestCf<Runtime> {
@@ -104,6 +128,12 @@ impl<Runtime: StorageEnableRuntime> Default
     }
 }
 
+/// Non-generic name holder for the `PendingStopStoringForInsolventUserRequest` column family
+pub struct PendingStopStoringForInsolventUserRequestName;
+impl PendingStopStoringForInsolventUserRequestName {
+    pub const NAME: &'static str = "pending_stop_storing_for_insolvent_user_request";
+}
+
 /// Pending submit proof requests left side (inclusive) index for the [`PendingConfirmStoringRequestCf`] CF.
 #[derive(Default)]
 pub struct PendingConfirmStoringRequestLeftIndexCf;
@@ -112,6 +142,12 @@ impl SingleScaleEncodedValueCf for PendingConfirmStoringRequestLeftIndexCf {
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
         "pending_confirm_storing_request_left_index";
+}
+
+/// Non-generic name holder for the `PendingConfirmStoringRequestLeftIndex` column family
+pub struct PendingConfirmStoringRequestLeftIndexName;
+impl PendingConfirmStoringRequestLeftIndexName {
+    pub const NAME: &'static str = "pending_confirm_storing_request_left_index";
 }
 
 /// Pending submit proof requests right side (exclusive) index for the [`PendingConfirmStoringRequestCf`] CF.
@@ -124,12 +160,24 @@ impl SingleScaleEncodedValueCf for PendingConfirmStoringRequestRightIndexCf {
         "pending_confirm_storing_request_right_index";
 }
 
+/// Non-generic name holder for the `PendingConfirmStoringRequestRightIndex` column family
+pub struct PendingConfirmStoringRequestRightIndexName;
+impl PendingConfirmStoringRequestRightIndexName {
+    pub const NAME: &'static str = "pending_confirm_storing_request_right_index";
+}
+
 pub struct OngoingProcessMspRespondStorageRequestCf;
 impl SingleScaleEncodedValueCf for OngoingProcessMspRespondStorageRequestCf {
     type Value = ProcessMspRespondStoringRequestData;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
         "ongoing_process_msp_respond_storage_request";
+}
+
+/// Non-generic name holder for the `OngoingProcessMspRespondStorageRequest` column family
+pub struct OngoingProcessMspRespondStorageRequestName;
+impl OngoingProcessMspRespondStorageRequestName {
+    pub const NAME: &'static str = "ongoing_process_msp_respond_storage_request";
 }
 
 /// Pending respond storage requests.
@@ -142,6 +190,12 @@ impl ScaleEncodedCf for PendingMspRespondStorageRequestCf {
     const SCALE_ENCODED_NAME: &'static str = "pending_msp_respond_storage_request";
 }
 
+/// Non-generic name holder for the `PendingMspRespondStorageRequest` column family
+pub struct PendingMspRespondStorageRequestName;
+impl PendingMspRespondStorageRequestName {
+    pub const NAME: &'static str = "pending_msp_respond_storage_request";
+}
+
 /// Pending respond storage requests left side (inclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
 #[derive(Default)]
 pub struct PendingMspRespondStorageRequestLeftIndexCf;
@@ -150,6 +204,12 @@ impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestLeftIndexCf {
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
         "pending_msp_respond_storage_request_left_index";
+}
+
+/// Non-generic name holder for the `PendingMspRespondStorageRequestLeftIndex` column family
+pub struct PendingMspRespondStorageRequestLeftIndexName;
+impl PendingMspRespondStorageRequestLeftIndexName {
+    pub const NAME: &'static str = "pending_msp_respond_storage_request_left_index";
 }
 
 /// Pending respond storage requests right side (exclusive) index for the [`PendingMspRespondStorageRequestCf`] CF.
@@ -162,6 +222,12 @@ impl SingleScaleEncodedValueCf for PendingMspRespondStorageRequestRightIndexCf {
         "pending_msp_respond_storage_request_right_index";
 }
 
+/// Non-generic name holder for the `PendingMspRespondStorageRequestRightIndex` column family
+pub struct PendingMspRespondStorageRequestRightIndexName;
+impl PendingMspRespondStorageRequestRightIndexName {
+    pub const NAME: &'static str = "pending_msp_respond_storage_request_right_index";
+}
+
 /// Pending submit proof requests left side (inclusive) index for the [`PendingStopStoringForInsolventUserRequestCf`] CF.
 #[derive(Default)]
 pub struct PendingStopStoringForInsolventUserRequestLeftIndexCf;
@@ -172,6 +238,12 @@ impl SingleScaleEncodedValueCf for PendingStopStoringForInsolventUserRequestLeft
         "pending_stop_storing_for_insolvent_user_request_left_index";
 }
 
+/// Non-generic name holder for the `PendingStopStoringForInsolventUserRequestLeftIndex` column family
+pub struct PendingStopStoringForInsolventUserRequestLeftIndexName;
+impl PendingStopStoringForInsolventUserRequestLeftIndexName {
+    pub const NAME: &'static str = "pending_stop_storing_for_insolvent_user_request_left_index";
+}
+
 /// Pending submit proof requests right side (exclusive) index for the [`PendingStopStoringForInsolventUserRequestCf`] CF.
 #[derive(Default)]
 pub struct PendingStopStoringForInsolventUserRequestRightIndexCf;
@@ -180,6 +252,12 @@ impl SingleScaleEncodedValueCf for PendingStopStoringForInsolventUserRequestRigh
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
         "pending_stop_storing_for_insolvent_user_request_right_index";
+}
+
+/// Non-generic name holder for the `PendingStopStoringForInsolventUserRequestRightIndex` column family
+pub struct PendingStopStoringForInsolventUserRequestRightIndexName;
+impl PendingStopStoringForInsolventUserRequestRightIndexName {
+    pub const NAME: &'static str = "pending_stop_storing_for_insolvent_user_request_right_index";
 }
 
 /// Current ongoing task which requires a forest write lock.
@@ -194,6 +272,12 @@ impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_process_file_deletion_request";
 }
 
+/// Non-generic name holder for the `OngoingProcessFileDeletionRequest` column family
+pub struct OngoingProcessFileDeletionRequestName;
+impl OngoingProcessFileDeletionRequestName {
+    pub const NAME: &'static str = "ongoing_process_file_deletion_request";
+}
+
 /// Pending file deletion requests.
 pub struct FileDeletionRequestCf<Runtime: StorageEnableRuntime> {
     pub(crate) phantom: std::marker::PhantomData<Runtime>,
@@ -203,6 +287,12 @@ impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for FileDeletionRequestCf<Run
     type Value = FileDeletionRequest<Runtime>;
 
     const SCALE_ENCODED_NAME: &'static str = "pending_file_deletion_request";
+}
+
+/// Non-generic name holder for the `FileDeletionRequest` column family
+pub struct FileDeletionRequestName;
+impl FileDeletionRequestName {
+    pub const NAME: &'static str = "pending_file_deletion_request";
 }
 
 impl<Runtime: StorageEnableRuntime> Default for FileDeletionRequestCf<Runtime> {
@@ -223,6 +313,12 @@ impl SingleScaleEncodedValueCf for FileDeletionRequestLeftIndexCf {
         "pending_file_deletion_request_left_index";
 }
 
+/// Non-generic name holder for the `FileDeletionRequestLeftIndex` column family
+pub struct FileDeletionRequestLeftIndexName;
+impl FileDeletionRequestLeftIndexName {
+    pub const NAME: &'static str = "pending_file_deletion_request_left_index";
+}
+
 /// Pending file deletion requests right side (exclusive) index for the [`PendingFileDeletionRequestCf`] CF.
 #[derive(Default)]
 pub struct FileDeletionRequestRightIndexCf;
@@ -233,25 +329,30 @@ impl SingleScaleEncodedValueCf for FileDeletionRequestRightIndexCf {
         "pending_file_deletion_request_right_index";
 }
 
+/// Non-generic name holder for the `FileDeletionRequestRightIndex` column family
+pub struct FileDeletionRequestRightIndexName;
+impl FileDeletionRequestRightIndexName {
+    pub const NAME: &'static str = "pending_file_deletion_request_right_index";
+}
+
 const ALL_COLUMN_FAMILIES: [&str; 17] = [
-    // TODO: Remove this when removing the typed store.
-    LastProcessedBlockNumberCf::<storage_hub_runtime::Runtime>::NAME,
-    OngoingProcessConfirmStoringRequestCf::<storage_hub_runtime::Runtime>::NAME,
-    PendingConfirmStoringRequestLeftIndexCf::NAME,
-    PendingConfirmStoringRequestRightIndexCf::NAME,
-    PendingConfirmStoringRequestCf::<storage_hub_runtime::Runtime>::NAME,
-    OngoingProcessMspRespondStorageRequestCf::NAME,
-    PendingMspRespondStorageRequestLeftIndexCf::NAME,
-    PendingMspRespondStorageRequestRightIndexCf::NAME,
-    PendingMspRespondStorageRequestCf::NAME,
-    OngoingProcessStopStoringForInsolventUserRequestCf::<storage_hub_runtime::Runtime>::NAME,
-    PendingStopStoringForInsolventUserRequestLeftIndexCf::NAME,
-    PendingStopStoringForInsolventUserRequestRightIndexCf::NAME,
-    PendingStopStoringForInsolventUserRequestCf::<storage_hub_runtime::Runtime>::NAME,
-    OngoingProcessFileDeletionRequestCf::<storage_hub_runtime::Runtime>::NAME,
-    FileDeletionRequestLeftIndexCf::NAME,
-    FileDeletionRequestRightIndexCf::NAME,
-    FileDeletionRequestCf::<storage_hub_runtime::Runtime>::NAME,
+    LastProcessedBlockNumberName::NAME,
+    OngoingProcessConfirmStoringRequestName::NAME,
+    PendingConfirmStoringRequestLeftIndexName::NAME,
+    PendingConfirmStoringRequestRightIndexName::NAME,
+    PendingConfirmStoringRequestName::NAME,
+    OngoingProcessMspRespondStorageRequestName::NAME,
+    PendingMspRespondStorageRequestLeftIndexName::NAME,
+    PendingMspRespondStorageRequestRightIndexName::NAME,
+    PendingMspRespondStorageRequestName::NAME,
+    OngoingProcessStopStoringForInsolventUserRequestName::NAME,
+    PendingStopStoringForInsolventUserRequestLeftIndexName::NAME,
+    PendingStopStoringForInsolventUserRequestRightIndexName::NAME,
+    PendingStopStoringForInsolventUserRequestName::NAME,
+    OngoingProcessFileDeletionRequestName::NAME,
+    FileDeletionRequestLeftIndexName::NAME,
+    FileDeletionRequestRightIndexName::NAME,
+    FileDeletionRequestName::NAME,
 ];
 
 /// A persistent blockchain service state store.
