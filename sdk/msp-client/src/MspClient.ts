@@ -1,6 +1,6 @@
 import { HttpClient } from '@storagehub-sdk/core';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
-import type { HealthStatus, UploadOptions, UploadReceipt } from './types';
+import type { HealthStatus, UploadOptions, UploadReceipt, NonceResponse } from './types';
 
 export class MspClient {
   public readonly config: HttpClientConfig;
@@ -26,6 +26,15 @@ export class MspClient {
 
   getHealth(options?: { signal?: AbortSignal }): Promise<HealthStatus> {
     return this.http.get<HealthStatus>('/health', { signal: options?.signal });
+  }
+
+  /** Request a SIWE-style nonce message for the given address and chainId */
+  getNonce(address: string, chainId: number, options?: { signal?: AbortSignal }): Promise<NonceResponse> {
+    return this.http.post<NonceResponse>('/auth/nonce', {
+      body: { address, chainId },
+      signal: options?.signal,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   /**

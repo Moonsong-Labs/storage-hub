@@ -73,3 +73,9 @@ export interface UploadReceipt {
     location: string;
     [k: string]: unknown;
 }
+
+// Auth
+export interface NonceResponse {
+    message: string;
+    nonce: string;
+}
