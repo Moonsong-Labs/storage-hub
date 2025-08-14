@@ -57,6 +57,9 @@ impl AsyncRead for FtpStreamReader {
                         this.current_chunk = None;
                         this.position = 0;
                     }
+
+                    // We've read some bytes, return Ready immediately
+                    return Poll::Ready(Ok(()));
                 }
             }
 
@@ -64,7 +67,7 @@ impl AsyncRead for FtpStreamReader {
                 return Poll::Ready(Ok(()));
             }
 
-            // Try to get next chunk
+            // Try to get next chunk only if we haven't written any bytes yet
             break match this.receiver.poll_recv(cx) {
                 Poll::Ready(Some(Ok(chunk))) => {
                     this.current_chunk = Some(chunk);
