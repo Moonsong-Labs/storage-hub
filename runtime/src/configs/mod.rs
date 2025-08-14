@@ -36,6 +36,7 @@ use shp_forest_verifier::ForestVerifier;
 use shp_treasury_funding::{
     LinearThenPowerOfTwoTreasuryCutCalculator, LinearThenPowerOfTwoTreasuryCutCalculatorConfig,
 };
+use shp_types::{Hash, Hashing, StorageDataUnit, StorageProofsMerkleTrieLayout};
 use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_core::{ConstU128, Get, Hasher, H256};
 use sp_runtime::{
@@ -43,15 +44,15 @@ use sp_runtime::{
     AccountId32, Perbill, SaturatedConversion,
 };
 use sp_std::vec;
-use sp_trie::{LayoutV1, TrieConfiguration, TrieLayout};
+use sp_trie::{TrieConfiguration, TrieLayout};
 use sp_version::RuntimeVersion;
 use xcm::latest::prelude::BodyId;
 
 // Local module imports
 use crate::{
     weights::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight},
-    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection, Hash,
-    Hashing, MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams,
+    AccountId, Aura, Balance, Balances, Block, BlockNumber, BucketNfts, CollatorSelection,
+    MessageQueue, Nfts, Nonce, PalletInfo, ParachainInfo, ParachainSystem, PaymentStreams,
     PolkadotXcm, ProofsDealer, Providers, Runtime, RuntimeCall, RuntimeEvent, RuntimeFreezeReason,
     RuntimeHoldReason, RuntimeOrigin, RuntimeTask, Session, SessionKeys, Signature, System,
     WeightToFee, XcmpQueue, AVERAGE_ON_INITIALIZE_RATIO, BLOCK_PROCESSING_VELOCITY, CENTS, DAYS,
@@ -60,11 +61,6 @@ use crate::{
 };
 use runtime_params::RuntimeParameters;
 use xcm_config::{RelayLocation, XcmOriginToTransactDispatchOrigin};
-
-pub type StorageProofsMerkleTrieLayout = LayoutV1<BlakeTwo256>;
-
-/// Type representing the storage data units in StorageHub.
-pub type StorageDataUnit = u64;
 
 // TODO: remove this and replace with pallet treasury
 pub struct TreasuryAccount;

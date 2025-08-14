@@ -48,8 +48,10 @@ shp-data-price-updater = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
+shp-opaque = { workspace = true }
 shp-traits = { workspace = true }
 shp-treasury-funding = { workspace = true }
+shp-types = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }

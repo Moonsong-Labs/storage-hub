@@ -69,8 +69,9 @@ shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
 shp-forest-verifier = { workspace = true }
-shp-traits = { workspace = true }
 shp-opaque = { workspace = true }
+shp-traits = { workspace = true }
+shp-types = { workspace = true }
 
 # Local pallets
 pallet-bucket-nfts = { workspace = true }

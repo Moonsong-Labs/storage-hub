@@ -9,10 +9,9 @@ use sc_executor::WasmExecutor;
 use sc_service::TFullClient;
 pub use shp_constants::{FILE_CHUNK_SIZE, FILE_SIZE_TO_CHALLENGES, H_LENGTH};
 pub use shp_file_metadata::{Chunk, ChunkId, ChunkWithId, Leaf};
-use shp_opaque::Block;
 use shp_traits::ProofsDealerInterface;
 use sp_core::Hasher;
-use sp_runtime::{generic, traits::Block as BlockT, KeyTypeId};
+use sp_runtime::{generic, KeyTypeId};
 use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use trie_db::TrieLayout;
@@ -40,10 +39,9 @@ pub type FileOperation = pallet_file_system::types::FileOperation;
 pub type TrieMutation = shp_traits::TrieMutation;
 pub type TrieRemoveMutation = shp_traits::TrieRemoveMutation;
 pub type TrieAddMutation = shp_traits::TrieAddMutation;
-// TODO: Remove dependency from `storage_hub_runtime` here. Maybe move it to primitives.
-pub type OpaqueBlock = storage_hub_runtime::opaque::Block;
-pub type BlockHash = <OpaqueBlock as BlockT>::Hash;
-pub type StorageProofsMerkleTrieLayout = storage_hub_runtime::StorageProofsMerkleTrieLayout;
+pub type OpaqueBlock = shp_opaque::Block;
+pub type BlockHash = shp_opaque::Hash;
+pub type StorageProofsMerkleTrieLayout = shp_types::StorageProofsMerkleTrieLayout;
 pub type FileKeyVerifier = shp_file_key_verifier::FileKeyVerifier<
     StorageProofsMerkleTrieLayout,
     H_LENGTH,
@@ -130,8 +128,10 @@ type HostFunctions = (
     frame_benchmarking::benchmarking::HostFunctions,
 );
 
+// TODO: Consider not using `ParachainExecutor` as the runtime might not be a parachain.
 pub type ParachainExecutor = WasmExecutor<HostFunctions>;
-pub type ParachainClient<RuntimeApi> = TFullClient<Block, RuntimeApi, ParachainExecutor>;
+pub type ParachainClient<RuntimeApi> =
+    TFullClient<shp_opaque::Block, RuntimeApi, ParachainExecutor>;
 
 /// The type of key used for [`BlockchainService`]` operations.
 pub const BCSV_KEY_TYPE: KeyTypeId = KeyTypeId(*b"bcsv");
@@ -323,7 +323,7 @@ impl StorageEnableRuntime for storage_hub_runtime::Runtime {
 impl ExtensionOperations<storage_hub_runtime::RuntimeCall, storage_hub_runtime::Runtime>
     for storage_hub_runtime::SignedExtra
 {
-    type Hash = storage_hub_runtime::Hash;
+    type Hash = shp_types::Hash;
 
     fn from_minimal_extension(minimal: MinimalExtension) -> Self {
         (
