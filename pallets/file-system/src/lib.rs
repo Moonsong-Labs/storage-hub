@@ -959,8 +959,8 @@ pub mod pallet {
         FileKeyMismatch,
         /// Storage request metadata is corrupted or inconsistent.
         CorruptedStorageRequest,
-        /// Storage request is already revoked.
-        StorageRequestAlreadyRevoked,
+        /// Storage request is already rejected.
+        StorageRequestAlreadyRejected,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
