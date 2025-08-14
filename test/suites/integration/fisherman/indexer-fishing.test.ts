@@ -107,6 +107,8 @@ describeMspNet(
         bucketName
       );
 
+      await userApi.wait.mspResponseInTxPool();
+
       await userApi.wait.bspVolunteer();
 
       await waitFor({
