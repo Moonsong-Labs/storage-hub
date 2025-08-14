@@ -1565,27 +1565,24 @@ fn generate_method_impl(
 ///
 /// ```ignore
 /// #[actor_command(
-///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
+///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, Runtime: StorageEnableRuntime>,
 ///     default_mode = "ImmediateResponse",
 ///     default_inner_channel_type = tokio::sync::oneshot::Receiver,
-///     generics(Runtime: StorageEnableRuntime, OtherType: SomeTrait)
-/// )]
-/// pub enum BlockchainServiceCommand {
-///     #[command(success_type = SubmittedTransaction)]
+///     generics(Runtime: StorageEnableRuntime)
+///  )]
+///  pub enum BlockchainServiceCommand {
+///     #[command(success_type = SubmittedTransaction<Runtime>)]
 ///     SendExtrinsic {
-///         call: storage_hub_runtime::RuntimeCall,
+///         call: Runtime::Call,
 ///         options: SendExtrinsicOptions,
 ///     },
-///     
-///     #[command(success_type = Extrinsic)]
+///     #[command(success_type = Extrinsic<Runtime>)]
 ///     GetExtrinsicFromBlock {
-///         block_hash: H256,
-///         extrinsic_hash: H256,
+///         block_hash: Runtime::Hash,
+///         extrinsic_hash: Runtime::Hash,
 ///     },
-///     
-///     #[command(mode = "AsyncResponse", inner_channel_type = tokio::sync::oneshot::Receiver)]
-///     WaitForBlock {
-///         block_number: BlockNumber,
+///     UnwatchExtrinsic {
+///         subscription_id: Number,
 ///     },
 /// }
 /// ```

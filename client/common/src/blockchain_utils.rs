@@ -19,9 +19,6 @@ use crate::{
 };
 
 lazy_static! {
-    // Would be cool to be able to do this...
-    // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
-
     // Static and lazily initialised `events_storage_key`
     static ref EVENTS_STORAGE_KEY: Vec<u8> = {
         let key = [
