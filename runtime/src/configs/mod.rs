@@ -1,4 +1,5 @@
 mod runtime_params;
+pub mod storage_hub;
 pub mod xcm_config;
 
 // Substrate and Polkadot dependencies

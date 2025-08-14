@@ -64,7 +64,6 @@ cumulus-primitives-storage-weight-reclaim = { workspace = true }
 fp-account = { workspace = true }
 
 # Local
-storage-hub-runtime = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
