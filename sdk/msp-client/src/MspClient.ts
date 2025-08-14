@@ -52,6 +52,12 @@ export class MspClient {
     this.token = token;
   }
 
+  /** Merge Authorization header when token is present */
+  private withAuth(headers?: Record<string, string>): Record<string, string> | undefined {
+    if (!this.token) return headers;
+    return { ...(headers ?? {}), Authorization: `Bearer ${this.token}` };
+  }
+
   /**
    * Upload a file to a bucket for a specific fileKey using multipart/form-data.
    *
@@ -74,10 +80,9 @@ export class MspClient {
     form.append('file', part as any);
 
     const path = `/buckets/${encodeURIComponent(bucketId)}/${encodeURIComponent(fileKey)}/upload`;
-    const headers = this.token ? { Authorization: `Bearer ${this.token}` } : undefined;
     const res = await this.http.put<any>(path, {
       body: form as unknown as BodyInit,
-      headers,
+      headers: this.withAuth(),
     });
     return res;
   }
