@@ -1,4 +1,5 @@
 import assert from "node:assert";
+import { BN } from "@polkadot/util";
 import {
   describeMspNet,
   type EnrichedBspApi,
@@ -20,7 +21,10 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation,
   waitForFileDeleted,
-  waitForBlockIndexed
+  waitForBlockIndexed,
+  verifyNoBspFileAssociation,
+  verifyNoOrphanedBspAssociations,
+  verifyNoOrphanedMspAssociations
 } from "../../../util/indexerHelpers";
 import { sealAndWaitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 
@@ -51,20 +55,16 @@ describeMspNet(
       msp2Api = maybeMsp2Api;
       sql = createSqlClient();
 
-      // Wait for nodes to be ready
       await userApi.docker.waitForLog({
         searchString: "💤 Idle",
         containerName: "storage-hub-sh-user-1",
         timeout: 10000
       });
 
-      // Initialize blockchain state using direct RPC call for first block
       await userApi.rpc.engine.createBlock(true, true);
 
-      // Small delay to ensure nodes are synced
       await sleep(1000);
 
-      // Seal additional blocks to ensure stable state
       await sealAndWaitForIndexing(userApi);
       await sealAndWaitForIndexing(userApi);
     });
@@ -74,7 +74,6 @@ describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/file.txt";
 
-      // Use helper function to create bucket and send storage request
       const { fileKey } = await createBucketAndSendNewStorageRequest(
         userApi,
         source,
@@ -82,10 +81,8 @@ describeMspNet(
         bucketName
       );
 
-      // Seal block and wait for indexer to process it
       await sealAndWaitForIndexing(userApi);
 
-      // Verify file is indexed
       const files = await sql`
         SELECT * FROM file 
         WHERE bucket_id = (
@@ -94,18 +91,15 @@ describeMspNet(
       `;
 
       assert.equal(files.length, 1);
-      // Convert Buffer to hex string with 0x prefix for comparison
       const dbFileKey = `0x${files[0].file_key.toString("hex")}`;
       assert.equal(dbFileKey, fileKey);
     });
 
     it("indexes BspConfirmedStoring events", async () => {
-      // Use whatsup.jpg which matches DUMMY_BSP_ID for automatic volunteering
       const bucketName = "test-bsp-confirm";
       const source = "res/whatsup.jpg";
       const destination = "test/bsp-file.txt";
 
-      // Use helper function to create bucket and send storage request
       const { fileKey } = await createBucketAndSendNewStorageRequest(
         userApi,
         source,
@@ -113,60 +107,42 @@ describeMspNet(
         bucketName
       );
 
-      // Wait for BSP to volunteer
       await userApi.wait.bspVolunteer();
 
-      // Wait for BSP to receive and store the file
       await waitFor({
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
-      // Wait for BSP to confirm storage
       const bspAddress = userApi.createType("Address", bspKey.address);
-      // Wait for BSP to confirm storage (without auto-sealing)
       await userApi.wait.bspStored({
         expectedExts: 1,
         sealBlock: true,
         bspAccount: bspAddress
       });
 
-      // Assert BspConfirmedStoring event was emitted
       const { event: bspConfirmedEvent } = await userApi.assert.eventPresent(
         "fileSystem",
         "BspConfirmedStoring"
       );
       assert(bspConfirmedEvent, "BspConfirmedStoring event should be present");
 
-      // Seal block and wait for indexer to process it
       await sealAndWaitForIndexing(userApi);
 
-      // Wait for the indexer to process the events
       await waitForFileIndexed(sql, fileKey);
 
-      // Verify BSP-file association is indexed
-      const bspFiles = await sql`
-        SELECT * FROM bsp_file 
-        WHERE file_id = (
-          SELECT id FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-        )
-      `;
-
-      assert(bspFiles.length > 0, "BSP file association should be indexed");
+      await waitForBspFileAssociation(sql, fileKey);
     });
 
     it("indexes MspAcceptedStorageRequest events", async () => {
-      // Create bucket assigned to MSP
       const bucketName = "test-msp-accept";
       const source = "res/smile.jpg";
       const destination = "test/msp-file.txt";
       const mspId = userApi.shConsts.DUMMY_MSP_ID;
 
-      // Get value proposition for MSP
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      // Use helper function to create bucket and send storage request
       const { fileKey } = await createBucketAndSendNewStorageRequest(
         userApi,
         source,
@@ -178,13 +154,10 @@ describeMspNet(
         1
       );
 
-      // Wait for MSP to accept the storage request
       await userApi.wait.mspResponseInTxPool();
 
-      // Wait for BSP to volunteer
       await userApi.wait.bspVolunteer();
 
-      // Get the MspAcceptedStorageRequest event
       const { event: mspAcceptedEvent } = await userApi.assert.eventPresent(
         "fileSystem",
         "MspAcceptedStorageRequest"
@@ -202,25 +175,13 @@ describeMspNet(
       const acceptedFileKey = mspAcceptedEventDataBlob.fileKey.toString();
       assert.equal(acceptedFileKey, fileKey.toString());
 
-      // Seal block and wait for indexer to process it
       await sealAndWaitForIndexing(userApi);
 
-      // Wait for the indexer to process the events
       await waitForFileIndexed(sql, fileKey.toString());
 
-      // Verify MSP-file association is indexed
-      const mspFiles = await sql`
-        SELECT * FROM msp_file 
-        WHERE file_id = (
-          SELECT id FROM file WHERE file_key = ${hexToBuffer(fileKey.toString())}
-        )
-      `;
+      await waitForMspFileAssociation(sql, fileKey.toString());
 
-      assert(mspFiles.length > 0, "MSP file association should be indexed");
-
-      // Wait for BSP to confirm storage
       const bspAddress = userApi.createType("Address", bspKey.address);
-      // Wait for BSP to confirm storage
       await userApi.wait.bspStored({
         expectedExts: 1,
         sealBlock: true,
@@ -233,21 +194,27 @@ describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/revoke.txt";
 
-      // Use helper function to create bucket and send storage request
       const { fileKey } = await createBucketAndSendNewStorageRequest(
         userApi,
         source,
         destination,
-        bucketName
+        bucketName,
+        null,
+        null,
+        null,
+        1
       );
 
-      // Revoke storage request
+      // Stop the other BSP so it doesn't volunteer for the files.
+      await userApi.docker.pauseContainer("storage-hub-sh-bsp-1");
+      // Stop the other MSP so it doesnt't accept the file before we revoke the storage request
+      await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
+
       const revokeStorageRequestResult = await userApi.block.seal({
         calls: [userApi.tx.fileSystem.revokeStorageRequest(fileKey)],
         signer: shUser
       });
 
-      // Assert StorageRequestRevoked event was emitted
       assertEventPresent(
         userApi,
         "fileSystem",
@@ -255,50 +222,35 @@ describeMspNet(
         revokeStorageRequestResult.events
       );
 
-      // Wait for indexing to process the revocation
       await sealAndWaitForIndexing(userApi);
-
-      // Wait for file deletion to be processed by indexer
       await waitForFileDeleted(sql, fileKey);
 
-      // Verify file is removed from database
-      const files = await sql`
-        SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-      `;
-
-      // In fishing mode, file should be deleted from database when revoked
-      assert.equal(files.length, 0);
+      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
+      await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
     });
 
     it("indexes BspConfirmStoppedStoring events", async () => {
-      // Setup: Create file and have BSP store it
       const bucketName = "test-bsp-stop";
       const source = "res/smile.jpg";
       const destination = "test/bsp-stop.txt";
 
-      // Use helper function to create bucket and send storage request
       const { fileKey, bucketId, location, fingerprint, fileSize } =
         await createBucketAndSendNewStorageRequest(userApi, source, destination, bucketName);
 
-      // Wait for BSP to volunteer
       await userApi.wait.bspVolunteer();
 
-      // Wait for BSP to receive and store the file
       await waitFor({
         lambda: async () =>
           (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
       });
 
-      // Wait for BSP to confirm storage
       const bspAddress = userApi.createType("Address", bspKey.address);
-      // Wait for BSP to confirm storage
       await userApi.wait.bspStored({
         expectedExts: 1,
         sealBlock: true,
         bspAccount: bspAddress
       });
 
-      // BSP requests to stop storing
       const inclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKey
       ]);
@@ -319,7 +271,6 @@ describeMspNet(
         signer: bspKey
       });
 
-      // Assert BspRequestedToStopStoring event was emitted
       assertEventPresent(
         userApi,
         "fileSystem",
@@ -327,10 +278,8 @@ describeMspNet(
         bspRequestStopStoringResult.events
       );
 
-      // Check for BspRequestedToStopStoring event
       await userApi.assert.eventPresent("fileSystem", "BspRequestedToStopStoring");
 
-      // Wait for cooldown period
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
       const minWaitForStopStoring = (
@@ -345,7 +294,6 @@ describeMspNet(
       const cooldown = currentBlockNumber + minWaitForStopStoring;
       await userApi.block.skipTo(cooldown);
 
-      // Confirm stop storing
       const newInclusionForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [
         fileKey
       ]);
@@ -357,7 +305,6 @@ describeMspNet(
         signer: bspKey
       });
 
-      // Assert BspConfirmStoppedStoring event was emitted
       assertEventPresent(
         userApi,
         "fileSystem",
@@ -365,27 +312,16 @@ describeMspNet(
         bspConfirmStopStoringResult.events
       );
 
-      // Check for BspConfirmStoppedStoring event
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
 
-      // Wait for indexing
       await sealAndWaitForIndexing(userApi);
 
-      // Verify BSP-file association is removed
-      const bspFiles = await sql`
-        SELECT * FROM bsp_file 
-        WHERE file_id = (
-          SELECT id FROM file WHERE file_key = ${hexToBuffer(fileKey)}
-        )
-      `;
-
-      assert.equal(bspFiles.length, 0);
+      await verifyNoBspFileAssociation(sql, fileKey);
     });
 
     it("indexes NewBucket and BucketDeleted events", async () => {
       const bucketName = "test-bucket-lifecycle";
 
-      // Create bucket and get the bucket ID directly
       const newBucketEvent = await userApi.createBucket(bucketName);
       const newBucketEventData =
         userApi.events.fileSystem.NewBucket.is(newBucketEvent) && newBucketEvent.data;
@@ -396,31 +332,24 @@ describeMspNet(
 
       const bucketId = newBucketEventData.bucketId;
 
-      // Wait for bucket creation to be indexed
       await sealAndWaitForIndexing(userApi);
 
-      // Wait for bucket to be indexed by the indexer
       await waitForBucketIndexed(sql, bucketName);
 
-      // Verify bucket is indexed
       let buckets = await sql`
         SELECT * FROM bucket WHERE name = ${bucketName}
       `;
       assert.equal(buckets.length, 1);
 
-      // Delete bucket using the bucket ID from creation
       const deleteBucketResult = await userApi.block.seal({
         calls: [userApi.tx.fileSystem.deleteBucket(bucketId)],
         signer: shUser
       });
 
-      // Assert BucketDeleted event was emitted
       assertEventPresent(userApi, "fileSystem", "BucketDeleted", deleteBucketResult.events);
 
-      // Wait for deletion to be indexed
       await sealAndWaitForIndexing(userApi);
 
-      // Verify bucket is removed
       buckets = await sql`
         SELECT * FROM bucket WHERE name = ${bucketName}
       `;
@@ -434,7 +363,6 @@ describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/fulfilled.txt";
 
-      // Use helper function to create bucket and send storage request
       const { fileKey } = await createBucketAndSendNewStorageRequest(
         userApi,
         source,
@@ -442,7 +370,6 @@ describeMspNet(
         bucketName
       );
 
-      // Wait for MSP to accept the storage request
       await waitFor({
         lambda: async () =>
           (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
@@ -451,12 +378,10 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      // Wait for indexing and verify file is properly stored
       await sealAndWaitForIndexing(userApi);
 
       await waitForFileIndexed(sql, fileKey);
 
-      // Verify file exists in database (fulfillment creates permanent record)
       const files = await sql`
         SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
       `;
@@ -469,7 +394,6 @@ describeMspNet(
       const source = "res/smile.jpg";
       const destination = "test/expired.txt";
 
-      // Use helper function to create bucket and send storage request
       const { fileKey } = await createBucketAndSendNewStorageRequest(
         userApi,
         source,
@@ -477,37 +401,29 @@ describeMspNet(
         bucketName
       );
 
-      // Force expiration by advancing blocks beyond storage request timeout
       const currentBlock = await userApi.rpc.chain.getBlock();
       const currentBlockNumber = currentBlock.block.header.number.toNumber();
 
-      // Skip to expiration block (approximate timeout period)
       await userApi.block.skipTo(currentBlockNumber + 100);
 
-      // Wait for indexing to catch up
       await sealAndWaitForIndexing(userApi);
 
-      // Verify that expired storage requests are handled properly
       const files = await sql`
         SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
       `;
 
-      // File should exist but potentially marked as expired
       assert(files.length >= 0, "Storage request expiration should be handled in database");
     });
 
     it("indexes [BSP|MSP]FileDeletionCompleted events", async () => {
-      // Setup: Create file with MSP association first
       const bucketName = "test-msp-deletion";
       const source = "res/smile.jpg";
       const destination = "test/msp-delete.txt";
       const mspId = userApi.shConsts.DUMMY_MSP_ID;
 
-      // Get value proposition for MSP
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      // Use helper function to create bucket and send storage request with specific MSP
       const { fileKey, bucketId, location, fingerprint, fileSize } =
         await createBucketAndSendNewStorageRequest(
           userApi,
@@ -520,7 +436,6 @@ describeMspNet(
           1
         );
 
-      // Wait for MSP to accept
       await waitFor({
         lambda: async () =>
           (await msp1Api.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
@@ -528,7 +443,6 @@ describeMspNet(
 
       await userApi.wait.mspResponseInTxPool();
 
-      // Wait for BSP to volunteer and confirm storage
       await userApi.wait.bspVolunteer();
       await waitFor({
         lambda: async () =>
@@ -542,21 +456,16 @@ describeMspNet(
         bspAccount: bspAddress
       });
 
-      // Verify MSP-file association exists
       await waitForBlockIndexed(userApi);
       await waitForMspFileAssociation(sql, fileKey);
 
-      // Verify BSP-file association exists
       await waitForBspFileAssociation(sql, fileKey);
 
-      // Now trigger file deletion
-      // First, create the signed intention for file deletion
       const fileOperationIntention = {
         fileKey: fileKey,
         operation: { Delete: null }
       };
 
-      // Sign the intention with the file owner's key
       const intentionCodec = userApi.createType(
         "PalletFileSystemFileOperationIntention",
         fileOperationIntention
@@ -565,7 +474,6 @@ describeMspNet(
       const rawSignature = shUser.sign(intentionPayload);
       const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
 
-      // Generate the forest proof for the file in the MSP's forest (bucket)
       const bucketIdOption = userApi.createType("Option<H256>", bucketId);
       const mspForestProof = await msp1Api.rpc.storagehubclient.generateForestProof(
         bucketIdOption,
@@ -573,14 +481,11 @@ describeMspNet(
       );
       const bspForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [fileKey]);
 
-      // Check if submit proof extrinsic is in tx pool
       const txs = await userApi.rpc.author.pendingExtrinsics();
       const match = txs.filter(
         (tx) => tx.method.method === "submitProof" && tx.signer.eq(bspAddress)
       );
 
-      // If there's a submit proof extrinsic pending, advance one block to allow the BSP to submit
-      // the proof and be able to confirm storing the file and continue waiting.
       if (match.length === 1) {
         await sealBlock(userApi);
       }
@@ -613,59 +518,16 @@ describeMspNet(
         signer: shUser
       });
 
-      // Assert deletion events were emitted
       assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
-      // Wait for deletion processing
       await sealAndWaitForIndexing(userApi);
 
-      // Verify file is deleted first
       await waitForFileDeleted(sql, fileKey);
 
-      // Check if any orphaned MSP associations remain
-      // Note: Since file is deleted, we can't use a subquery - check by MSP ID
-      const mspFilesAfter = await sql`
-        SELECT mf.* FROM msp_file mf
-        JOIN msp m ON mf.msp_id = m.id
-        WHERE m.onchain_msp_id = ${mspId}
-        AND NOT EXISTS (
-          SELECT 1 FROM file f WHERE f.id = mf.file_id
-        )
-      `;
+      await verifyNoOrphanedMspAssociations(sql, mspId);
 
-      // There should be no orphaned MSP file associations
-      assert.equal(mspFilesAfter.length, 0, "No orphaned MSP file associations should remain");
-
-      // Check if any orphaned BSP associations remain
-      const bspFilesAfter = await sql`
-        SELECT bf.* FROM bsp_file bf
-        JOIN bsp b ON bf.bsp_id = b.id
-        WHERE b.onchain_bsp_id = ${userApi.shConsts.DUMMY_BSP_ID}
-        AND NOT EXISTS (
-          SELECT 1 FROM file f WHERE f.id = bf.file_id
-        )
-      `;
-
-      // There should be no orphaned BSP file associations
-      assert.equal(bspFilesAfter.length, 0, "No orphaned BSP file associations should remain");
-    });
-
-    it("indexes SpStopStoringInsolventUser events", async () => {
-      // Verify the database structure supports insolvent user cleanup
-      const bspFileTableExists = await sql`
-        SELECT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'bsp_file'
-        )
-      `;
-      assert(bspFileTableExists[0].exists, "BSP file table should support insolvent user cleanup");
-
-      // In a full implementation, this would:
-      // 1. Create user with insufficient funds
-      // 2. Have BSP store files for that user
-      // 3. Trigger insolvent user cleanup
-      // 4. Verify BSP-file associations are removed for that user's files
+      await verifyNoOrphanedBspAssociations(sql, userApi.shConsts.DUMMY_BSP_ID);
     });
 
     it("indexes MoveBucketAccepted events", async () => {
@@ -673,7 +535,6 @@ describeMspNet(
       const source = "res/whatsup.jpg";
       const destination = "test/bsp-delete.txt";
 
-      // Use helper function to create bucket and send storage request
       const { fileKey, bucketId } = await createBucketAndSendNewStorageRequest(
         userApi,
         source,
@@ -687,7 +548,6 @@ describeMspNet(
 
       await userApi.wait.mspResponseInTxPool();
 
-      // Wait for BSP to volunteer and confirm storage
       await userApi.wait.bspVolunteer();
       await waitFor({
         lambda: async () =>
@@ -701,8 +561,6 @@ describeMspNet(
         bspAccount: bspAddress
       });
 
-      // Get the MSP id from the msp table using the onchain_msp_id
-      // Note: The database stores truncated IDs with ellipsis (e.g., "0x0000…0300")
       const truncatedMspId = `${ShConsts.DUMMY_MSP_ID.slice(0, 6)}…${ShConsts.DUMMY_MSP_ID.slice(
         -4
       )}`;
@@ -714,7 +572,6 @@ describeMspNet(
       // Wait for bucket to be indexed
       await waitForBucketByIdIndexed(sql, bucketId, mspId);
 
-      // Get the value propositions of the second MSP to use, and use the first one (can be any).
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID_2
       );
@@ -738,10 +595,8 @@ describeMspNet(
         requestMoveBucketResult.events
       );
 
-      // Finalising the block in the BSP node as well, to trigger the reorg in the BSP node too.
       const finalisedBlockHash = await userApi.rpc.chain.getFinalizedHead();
 
-      // Wait for BSP node to have imported the finalised block built by the user node.
       await msp2Api.wait.blockImported(finalisedBlockHash.toString());
       await msp2Api.block.finaliseBlock(finalisedBlockHash.toString());
 
@@ -754,7 +609,6 @@ describeMspNet(
 
       assertEventPresent(userApi, "fileSystem", "MoveBucketAccepted", events);
 
-      // Wait for all files to be in the Forest of the second MSP.
       await waitFor({
         lambda: async () => {
           const isFileInForest = await msp2Api.rpc.storagehubclient.isFileInForest(
@@ -769,6 +623,175 @@ describeMspNet(
         iterations: 100,
         delay: 1000
       });
+    });
+
+    it("indexes SpStopStoringInsolventUser events", async () => {
+      const bucketName = "test-insolvent-user";
+      const source = "res/whatsup.jpg";
+      const destination = "test/insolvent-file.txt";
+
+      const { fileKey } = await createBucketAndSendNewStorageRequest(
+        userApi,
+        source,
+        destination,
+        bucketName
+      );
+
+      await userApi.wait.bspVolunteer();
+      await waitFor({
+        lambda: async () =>
+          (await bspApi.rpc.storagehubclient.isFileInFileStorage(fileKey)).isFileFound
+      });
+
+      const bspAddress = userApi.createType("Address", bspKey.address);
+      await userApi.wait.bspStored({
+        expectedExts: 1,
+        sealBlock: true,
+        bspAccount: bspAddress
+      });
+
+      await sealAndWaitForIndexing(userApi);
+      await waitForFileIndexed(sql, fileKey);
+      await waitForBspFileAssociation(sql, fileKey);
+
+      const preStreamLastTickResult =
+        await userApi.call.proofsDealerApi.getLastTickProviderSubmittedProof(
+          userApi.shConsts.DUMMY_BSP_ID
+        );
+      assert(preStreamLastTickResult.isOk);
+      const preStreamLastTick = preStreamLastTickResult.asOk.toNumber();
+
+      const preStreamChallengeResult = await userApi.call.proofsDealerApi.getChallengePeriod(
+        userApi.shConsts.DUMMY_BSP_ID
+      );
+      assert(preStreamChallengeResult.isOk);
+      const preStreamChallengePeriod = preStreamChallengeResult.asOk.toNumber();
+
+      const preStreamNextChallenge = preStreamLastTick + preStreamChallengePeriod;
+      const preStreamCurrentBlock = await userApi.rpc.chain.getBlock();
+      const preStreamCurrentNumber = preStreamCurrentBlock.block.header.number.toNumber();
+      const preStreamBlocksToAdvance = preStreamNextChallenge - preStreamCurrentNumber;
+
+      for (let i = 0; i < preStreamBlocksToAdvance; i++) {
+        await userApi.block.seal();
+      }
+
+      await userApi.assert.extrinsicPresent({
+        method: "submitProof",
+        module: "proofsDealer",
+        checkTxPool: true
+      });
+
+      await userApi.block.seal();
+      await userApi.block.seal();
+
+      const originalBalance = (await userApi.query.system.account(shUser.address)).data.free;
+      const reducedBalance = originalBalance.divn(10);
+
+      const reduceFreeBalanceResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(shUser.address, reducedBalance))
+        ]
+      });
+      assert(reduceFreeBalanceResult.extSuccess, "Balance reduction should succeed");
+
+      const freeBalance = (await userApi.query.system.account(shUser.address)).data.free;
+      const currentPricePerGigaUnitPerTick =
+        await userApi.query.paymentStreams.currentPricePerGigaUnitPerTick();
+      const currentPriceOfStorage = currentPricePerGigaUnitPerTick.toBn();
+      const newStreamDeposit = userApi.consts.paymentStreams.newStreamDeposit.toBn();
+      const existentialDeposit = userApi.consts.balances.existentialDeposit.toBn();
+      const gigaUnit = new BN("1073741824", 10);
+
+      const newAmountProvided = freeBalance
+        .sub(existentialDeposit.muln(10))
+        .mul(gigaUnit)
+        .div(currentPriceOfStorage.mul(newStreamDeposit));
+
+      const createPaymentStreamResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.paymentStreams.createDynamicRatePaymentStream(
+              userApi.shConsts.DUMMY_BSP_ID,
+              shUser.address,
+              1024 * 1024
+            )
+          )
+        ]
+      });
+      assert(createPaymentStreamResult.extSuccess, "Payment stream creation should succeed");
+
+      const updatePaymentStreamResult = await userApi.block.seal({
+        calls: [
+          userApi.tx.sudo.sudo(
+            userApi.tx.paymentStreams.updateDynamicRatePaymentStream(
+              userApi.shConsts.DUMMY_BSP_ID,
+              shUser.address,
+              newAmountProvided
+            )
+          )
+        ]
+      });
+      assert(updatePaymentStreamResult.extSuccess, "Payment stream update should succeed");
+
+      const { chargeUserUntilInsolvent } = await import("../../../util/indexerHelpers");
+      const chargingResult = await chargeUserUntilInsolvent(
+        userApi,
+        userApi.shConsts.DUMMY_BSP_ID,
+        10,
+        shUser.address
+      );
+
+      if (!chargingResult.userBecameInsolvent) {
+        throw new Error("User did not become insolvent after multiple charging cycles");
+      }
+
+      await userApi.assert.eventPresent("paymentStreams", "UserWithoutFunds");
+
+      await userApi.assert.extrinsicPresent({
+        method: "stopStoringForInsolventUser",
+        module: "fileSystem",
+        checkTxPool: true,
+        timeout: 15000
+      });
+
+      await userApi.block.seal();
+
+      const spStopStoringEvents = await userApi.assert.eventMany(
+        "fileSystem",
+        "SpStopStoringInsolventUser"
+      );
+      assert(spStopStoringEvents.length > 0, "SpStopStoringInsolventUser events should be emitted");
+
+      const stopStoringEvent = spStopStoringEvents[0];
+      const stopStoringEventData =
+        userApi.events.fileSystem.SpStopStoringInsolventUser.is(stopStoringEvent.event) &&
+        stopStoringEvent.event.data;
+
+      assert(stopStoringEventData, "SpStopStoringInsolventUser event data should be present");
+      assert.equal(
+        stopStoringEventData.fileKey.toString(),
+        fileKey.toString(),
+        "Event should contain correct file key"
+      );
+      assert.equal(
+        stopStoringEventData.owner.toString(),
+        shUser.address,
+        "Event should contain correct user address"
+      );
+      assert.equal(
+        stopStoringEventData.spId.toString(),
+        userApi.shConsts.DUMMY_BSP_ID.toString(),
+        "Event should contain correct BSP ID"
+      );
+
+      const eventBlock = await userApi.rpc.chain.getBlock();
+      const eventBlockNumber = eventBlock.block.header.number.toNumber();
+      await waitForBlockIndexed(userApi, eventBlockNumber);
+
+      await verifyNoBspFileAssociation(sql, fileKey);
+
+      await bspApi.wait.bspFileDeletionCompleted(fileKey);
     });
   }
 );
