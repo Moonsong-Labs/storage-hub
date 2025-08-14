@@ -79,3 +79,12 @@ export interface NonceResponse {
     message: string;
     nonce: string;
 }
+
+export interface VerifyResponse {
+    token: string;
+    user: {
+        address: string;
+        [k: string]: unknown;
+    };
+    [k: string]: unknown;
+}

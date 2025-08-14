@@ -1,10 +1,11 @@
 import { HttpClient } from '@storagehub-sdk/core';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
-import type { HealthStatus, UploadOptions, UploadReceipt, NonceResponse } from './types';
+import type { HealthStatus, UploadOptions, UploadReceipt, NonceResponse, VerifyResponse } from './types';
 
 export class MspClient {
   public readonly config: HttpClientConfig;
   private readonly http: HttpClient;
+  private token?: string;
 
   private constructor(config: HttpClientConfig, http: HttpClient) {
     this.config = config;
@@ -31,10 +32,24 @@ export class MspClient {
   /** Request a SIWE-style nonce message for the given address and chainId */
   getNonce(address: string, chainId: number, options?: { signal?: AbortSignal }): Promise<NonceResponse> {
     return this.http.post<NonceResponse>('/auth/nonce', {
-      body: { address, chainId },
+      body: JSON.stringify({ address, chainId }),
       signal: options?.signal,
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  /** Verify signed message and receive JWT token */
+  verify(message: string, signature: string, options?: { signal?: AbortSignal }): Promise<VerifyResponse> {
+    return this.http.post<VerifyResponse>('/auth/verify', {
+      body: JSON.stringify({ message, signature }),
+      signal: options?.signal,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  /** Store token to be sent on subsequent protected requests */
+  setToken(token: string): void {
+    this.token = token;
   }
 
   /**
@@ -59,8 +74,10 @@ export class MspClient {
     form.append('file', part as any);
 
     const path = `/buckets/${encodeURIComponent(bucketId)}/${encodeURIComponent(fileKey)}/upload`;
+    const headers = this.token ? { Authorization: `Bearer ${this.token}` } : undefined;
     const res = await this.http.put<any>(path, {
       body: form as unknown as BodyInit,
+      headers,
     });
     return res;
   }
