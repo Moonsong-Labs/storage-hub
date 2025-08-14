@@ -16,8 +16,6 @@ use sp_std::collections::btree_map::BTreeMap;
 use sp_trie::CompactProof;
 use trie_db::TrieLayout;
 
-use crate::traits::{ExtensionOperations, StorageEnableRuntime};
-
 /// Size of each batch in bytes (2 MiB)
 /// This is the maximum size of a batch of chunks that can be uploaded in a single call
 /// (request-response round-trip).
@@ -306,85 +304,4 @@ where
     Randomness(pallet_randomness::Event<Runtime>),
     /// Catch-all for events that we do not care in the SH Client.
     Other(<Runtime as frame_system::Config>::RuntimeEvent),
-}
-
-//TODO: This should be moved to the runtime crate once the SH Client is abstracted
-//TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
-impl StorageEnableRuntime for storage_hub_runtime::Runtime {
-    type Address = storage_hub_runtime::Address;
-    type Call = storage_hub_runtime::RuntimeCall;
-    type Signature = storage_hub_runtime::Signature;
-    type Extension = storage_hub_runtime::SignedExtra;
-    type RuntimeApi = storage_hub_runtime::apis::RuntimeApi;
-}
-
-//TODO: This should be moved to the runtime crate once the SH Client is abstracted
-//TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
-impl ExtensionOperations<storage_hub_runtime::RuntimeCall, storage_hub_runtime::Runtime>
-    for storage_hub_runtime::SignedExtra
-{
-    type Hash = shp_types::Hash;
-
-    fn from_minimal_extension(minimal: MinimalExtension) -> Self {
-        (
-            frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(minimal.era),
-            frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(minimal.nonce),
-            frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
-            pallet_transaction_payment::ChargeTransactionPayment::<storage_hub_runtime::Runtime>::from(
-                minimal.tip,
-            ),
-            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
-                storage_hub_runtime::Runtime,
-            >::new(),
-            frame_metadata_hash_extension::CheckMetadataHash::new(false),
-        )
-    }
-
-    fn implicit(genesis_block_hash: Self::Hash, current_block_hash: Self::Hash) -> Self::Implicit {
-        (
-            (),
-            storage_hub_runtime::VERSION.spec_version,
-            storage_hub_runtime::VERSION.transaction_version,
-            genesis_block_hash,
-            current_block_hash,
-            (),
-            (),
-            (),
-            (),
-            None,
-        )
-    }
-}
-
-//TODO: This should be moved to the runtime crate once the SH Client is abstracted
-//TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
-impl Into<StorageEnableEvents<storage_hub_runtime::Runtime>> for storage_hub_runtime::RuntimeEvent {
-    fn into(self) -> StorageEnableEvents<storage_hub_runtime::Runtime> {
-        match self {
-            storage_hub_runtime::RuntimeEvent::System(event) => StorageEnableEvents::System(event),
-            storage_hub_runtime::RuntimeEvent::Providers(event) => {
-                StorageEnableEvents::StorageProviders(event)
-            }
-            storage_hub_runtime::RuntimeEvent::ProofsDealer(event) => {
-                StorageEnableEvents::ProofsDealer(event)
-            }
-            storage_hub_runtime::RuntimeEvent::PaymentStreams(event) => {
-                StorageEnableEvents::PaymentStreams(event)
-            }
-            storage_hub_runtime::RuntimeEvent::FileSystem(event) => {
-                StorageEnableEvents::FileSystem(event)
-            }
-            storage_hub_runtime::RuntimeEvent::TransactionPayment(event) => {
-                StorageEnableEvents::TransactionPayment(event)
-            }
-            storage_hub_runtime::RuntimeEvent::Balances(event) => {
-                StorageEnableEvents::Balances(event)
-            }
-            _ => StorageEnableEvents::Other(self),
-        }
-    }
 }

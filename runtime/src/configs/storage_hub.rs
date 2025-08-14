@@ -1,8 +1,9 @@
 // This module implements the StorageHub client traits for the runtime types.
 // It is only compiled for native (std) builds to avoid pulling `shc-common` into the
 // no_std Wasm runtime.
-use shp_storage_enable_traits::{
-    ExtensionOperations, MinimalExtension, StorageEnableEvents, StorageEnableRuntime,
+use shc_common::{
+    traits::{ExtensionOperations, StorageEnableRuntime},
+    types::{MinimalExtension, StorageEnableEvents},
 };
 
 // Implement the client-facing runtime trait for the concrete runtime.

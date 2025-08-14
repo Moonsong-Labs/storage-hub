@@ -1,6 +1,8 @@
 mod runtime_params;
-pub mod storage_hub;
 pub mod xcm_config;
+
+#[cfg(feature = "std")]
+pub mod storage_hub;
 
 // Substrate and Polkadot dependencies
 use core::marker::PhantomData;

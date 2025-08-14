@@ -42,7 +42,7 @@ pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-randomness = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
-
+shc-common = { workspace = true, optional = true }
 shp-constants = { workspace = true }
 shp-data-price-updater = { workspace = true }
 shp-file-key-verifier = { workspace = true }
@@ -162,6 +162,8 @@ std = [
 	"polkadot-runtime-common/std",
 	"scale-info/std",
 	"serde_json/std",
+	"dep:shc-common",
+	"shc-common/std",
 	"shp-constants/std",
 	"shp-file-key-verifier/std",
 	"shp-file-metadata/std",
