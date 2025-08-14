@@ -2222,7 +2222,6 @@ mod request_storage {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -2379,7 +2378,6 @@ mod request_storage {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -2421,7 +2419,6 @@ mod request_storage {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -2557,7 +2554,6 @@ mod request_storage {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -3936,7 +3932,6 @@ mod msp_respond_storage_request {
                         expires_at: 100,
 						deposit_paid: 0,
 						rejected: false,
-						revoked: false,
                     },
                 );
 
@@ -4013,7 +4008,6 @@ mod msp_respond_storage_request {
                         expires_at: 100,
 						deposit_paid: 0,
 						rejected: false,
-						revoked: false,
                     },
                 );
 
@@ -4262,7 +4256,6 @@ mod msp_respond_storage_request {
                         expires_at: 100,
 						deposit_paid: 0,
 						rejected: false,
-						revoked: false,
                     },
                 );
 
@@ -4343,7 +4336,6 @@ mod msp_respond_storage_request {
                         expires_at: 100,
 						deposit_paid: 0,
 						rejected: false,
-						revoked: false,
                     },
                 );
 
@@ -5879,7 +5871,6 @@ mod bsp_confirm {
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 								),
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -6223,7 +6214,6 @@ mod bsp_confirm {
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -6373,7 +6363,6 @@ mod bsp_confirm {
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -6797,7 +6786,6 @@ mod bsp_stop_storing {
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -6951,7 +6939,6 @@ mod bsp_stop_storing {
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -7108,7 +7095,6 @@ mod bsp_stop_storing {
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
 						),
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -7282,7 +7268,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -7330,7 +7315,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -7498,7 +7482,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -7552,7 +7535,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -7701,7 +7683,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -7766,7 +7747,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -7983,7 +7963,6 @@ mod bsp_stop_storing {
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -8031,7 +8010,6 @@ mod bsp_stop_storing {
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -8284,7 +8262,6 @@ mod bsp_stop_storing {
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 				assert_eq!(
@@ -8304,7 +8281,6 @@ mod bsp_stop_storing {
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -8344,7 +8320,6 @@ mod bsp_stop_storing {
 						expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -8552,7 +8527,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -8669,7 +8643,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -8778,7 +8751,6 @@ mod bsp_stop_storing {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -9374,7 +9346,6 @@ mod stop_storing_for_insolvent_user {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -9633,7 +9604,6 @@ mod stop_storing_for_insolvent_user {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -9823,7 +9793,6 @@ mod stop_storing_for_insolvent_user {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -10114,7 +10083,6 @@ mod stop_storing_for_insolvent_user {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -10385,7 +10353,6 @@ mod stop_storing_for_insolvent_user {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: new_deposit_paid,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -10637,7 +10604,6 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -10842,7 +10808,6 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         expires_at: next_expiration_tick_storage_request,
 						deposit_paid: storage_request_deposit,
 						rejected: false,
-						revoked: false
                     })
                 );
 
@@ -13528,7 +13493,6 @@ mod delete_file_for_incomplete_storage_request_tests {
                         bsps_volunteered: 0,
                         deposit_paid: 0,
                         rejected: true,
-                        revoked: false,
                     },
                 );
 

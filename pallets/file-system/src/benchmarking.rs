@@ -669,7 +669,6 @@ mod benchmarks {
                     bsps_volunteered: ReplicationTargetType::<T>::zero(),
 					deposit_paid: Default::default(),
 					rejected: false,
-					revoked: false,
                 };
                 let file_key = Pallet::<T>::compute_file_key(
                     user_account.clone(),
@@ -747,7 +746,6 @@ mod benchmarks {
                     bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
 					deposit_paid: Default::default(),
 					rejected: false,
-					revoked: false,
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
                 <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_keys_to_accept[j], ());
@@ -1077,7 +1075,6 @@ mod benchmarks {
 				bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
 				deposit_paid: Default::default(),
 				rejected: false,
-				revoked: false,
 			};
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
             <BucketsWithStorageRequests<T>>::insert(&bucket_id, &file_key, ());
