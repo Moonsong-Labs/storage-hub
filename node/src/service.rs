@@ -24,8 +24,8 @@ use sp_consensus_aura::Slot;
 use sp_core::H256;
 
 // Local Runtime Types
-use storage_hub_runtime::opaque::Block;
-use storage_hub_runtime::{apis::RuntimeApi, opaque::Hash, Runtime};
+use shp_opaque::{Block, Hash};
+use storage_hub_runtime::{apis::RuntimeApi, Runtime};
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;

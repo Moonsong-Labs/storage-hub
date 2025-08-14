@@ -210,7 +210,7 @@ pub trait StorageEnableRuntime:
     // TODO:
     // TODO: Consider removing the restriction that `Hash = H256`.
     frame_system::Config<
-        Hash = H256,
+        Hash = shp_types::Hash,
         AccountId = sp_runtime::AccountId32,
         // AccountId: for<'a> TryFrom<&'a [u8]> + AsRef<[u8]>,
         RuntimeEvent: Into<StorageEnableEvents<Self>>,
