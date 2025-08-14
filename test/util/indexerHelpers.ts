@@ -286,7 +286,6 @@ export const calculateNextChallengeTick = async (
 export const triggerProviderChargingCycle = async (
   api: EnrichedBspApi,
   providerId: string,
-  shouldSealBlocks = true,
   userAddress?: string
 ): Promise<{
   proofAcceptedEvents: any[];
@@ -312,9 +311,7 @@ export const triggerProviderChargingCycle = async (
   if (nextChallengeTick > currentBlockNumber) {
     const blocksToAdvance = nextChallengeTick - currentBlockNumber;
     for (let i = 0; i < blocksToAdvance; i++) {
-      if (shouldSealBlocks) {
-        await api.block.seal();
-      }
+      await api.block.seal();
     }
   }
 
@@ -326,17 +323,13 @@ export const triggerProviderChargingCycle = async (
   });
 
   // Seal block to process proof submission
-  if (shouldSealBlocks) {
-    await api.block.seal();
-  }
+  await api.block.seal();
 
   // Assert for the event of the proof successfully submitted and verified
   const proofAcceptedEvents = await api.assert.eventMany("proofsDealer", "ProofAccepted");
 
   // Seal another block to update last chargeable info
-  if (shouldSealBlocks) {
-    await api.block.seal();
-  }
+  await api.block.seal();
 
   // Assert for the event of the last chargeable info being updated
   const lastChargeableInfoUpdatedEvents = await api.assert.eventMany(
@@ -354,44 +347,17 @@ export const triggerProviderChargingCycle = async (
   });
 
   // Seal block to process charging
-  if (shouldSealBlocks) {
-    const blockResult = await api.block.seal();
+  const blockResult = await api.block.seal();
 
-    // Check if charging completed successfully and if user became insolvent
-    const chargingCompleted =
-      blockResult.events?.find((event) => event.event.method === "PaymentStreamCharged") !==
-      undefined;
+  // Check if charging completed successfully and if user became insolvent
+  const chargingCompleted =
+    blockResult.events?.find((event) => event.event.method === "PaymentStreamCharged") !==
+    undefined;
 
-    const userBecameInsolvent =
-      blockResult.events?.find((event) => event.event.method === "UserWithoutFunds") !== undefined;
+  const userBecameInsolvent =
+    blockResult.events?.find((event) => event.event.method === "UserWithoutFunds") !== undefined;
 
-    // Log balance after charging if user address provided
-    let balanceAfterCharge: string | undefined;
-    if (userAddress) {
-      const afterBalance = (await api.query.system.account(userAddress)).data.free;
-      balanceAfterCharge = afterBalance.toString();
-    }
-
-    return {
-      proofAcceptedEvents,
-      lastChargeableInfoUpdatedEvents,
-      chargingCompleted,
-      userBecameInsolvent,
-      balanceBeforeCharge,
-      balanceAfterCharge
-    };
-  }
-
-  // When not sealing blocks, we cannot verify transaction outcomes
-  // WARNING: This should only be used in specific test scenarios
-  if (!shouldSealBlocks) {
-    console.warn(
-      "triggerProviderChargingCycle called with shouldSealBlocks=false. " +
-        "Cannot verify if charging completed or if user became insolvent."
-    );
-  }
-
-  // Check balance if user address provided
+  // Log balance after charging if user address provided
   let balanceAfterCharge: string | undefined;
   if (userAddress) {
     const afterBalance = (await api.query.system.account(userAddress)).data.free;
@@ -401,8 +367,8 @@ export const triggerProviderChargingCycle = async (
   return {
     proofAcceptedEvents,
     lastChargeableInfoUpdatedEvents,
-    chargingCompleted: false, // Cannot verify without sealing blocks
-    userBecameInsolvent: false, // WARNING: Cannot verify without sealing blocks - assuming false
+    chargingCompleted,
+    userBecameInsolvent,
     balanceBeforeCharge,
     balanceAfterCharge
   };
@@ -434,7 +400,7 @@ export const chargeUserUntilInsolvent = async (
   do {
     attempts++;
 
-    finalResult = await triggerProviderChargingCycle(api, providerId, true, userAddress);
+    finalResult = await triggerProviderChargingCycle(api, providerId, userAddress);
 
     if (finalResult.userBecameInsolvent) {
       break;
