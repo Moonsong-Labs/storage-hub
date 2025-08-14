@@ -88,3 +88,19 @@ export interface VerifyResponse {
     };
     [k: string]: unknown;
 }
+
+// Download
+export interface DownloadOptions {
+    range?: { start: number; end?: number };
+    signal?: AbortSignal;
+}
+
+export interface DownloadResult {
+    stream: ReadableStream<Uint8Array>;
+    status: number;
+    contentType?: string | null;
+    contentLength?: number | null;
+    contentRange?: string | null;
+}
+
+

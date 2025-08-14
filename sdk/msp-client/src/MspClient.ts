@@ -1,6 +1,14 @@
 import { HttpClient } from '@storagehub-sdk/core';
 import type { HttpClientConfig } from '@storagehub-sdk/core';
-import type { HealthStatus, UploadOptions, UploadReceipt, NonceResponse, VerifyResponse } from './types';
+import type {
+  HealthStatus,
+  UploadOptions,
+  UploadReceipt,
+  NonceResponse,
+  VerifyResponse,
+  DownloadOptions,
+  DownloadResult,
+} from './types';
 
 export class MspClient {
   public readonly config: HttpClientConfig;
@@ -95,5 +103,73 @@ export class MspClient {
     if (typeof ArrayBuffer !== 'undefined' && file instanceof ArrayBuffer) return new Blob([file]);
     // In Node environments, FormData accepts streams; pass-through as-is
     return file;
+  }
+
+  /** Download a file by bucket and key. */
+  async downloadByKey(
+    bucketId: string,
+    fileKey: string,
+    _options?: DownloadOptions,
+  ): Promise<DownloadResult> {
+    const path = `/buckets/${encodeURIComponent(bucketId)}/${encodeURIComponent(fileKey)}`;
+    const headers: Record<string, string> = { Accept: '*/*' };
+    const res = await this.http.getRaw(path, {
+      headers: this.withAuth(headers),
+    });
+
+    if (!res.body) {
+      throw new Error('Response body is null - unable to create stream');
+    }
+
+    const contentType = res.headers.get('content-type');
+    const contentRange = res.headers.get('content-range');
+    const contentLengthHeader = res.headers.get('content-length');
+    const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
+    const contentLength = typeof parsedLength === 'number' && Number.isFinite(parsedLength)
+      ? parsedLength
+      : null;
+
+    return {
+      stream: res.body,
+      status: res.status,
+      contentType,
+      contentRange,
+      contentLength,
+    };
+  }
+
+  /** Download a file by its location path under a bucket. */
+  async downloadByLocation(
+    bucketId: string,
+    filePath: string,
+    _options?: DownloadOptions,
+  ): Promise<DownloadResult> {
+    const normalized = filePath.replace(/^\/+/, '');
+    const encodedPath = normalized.split('/').map(encodeURIComponent).join('/');
+    const path = `/buckets/${encodeURIComponent(bucketId)}/files/${encodedPath}`;
+    const headers: Record<string, string> = { Accept: '*/*' };
+    const res = await this.http.getRaw(path, {
+      headers: this.withAuth(headers),
+    });
+
+    if (!res.body) {
+      throw new Error('Response body is null - unable to create stream');
+    }
+
+    const contentType = res.headers.get('content-type');
+    const contentRange = res.headers.get('content-range');
+    const contentLengthHeader = res.headers.get('content-length');
+    const parsedLength = contentLengthHeader !== null ? Number(contentLengthHeader) : undefined;
+    const contentLength = typeof parsedLength === 'number' && Number.isFinite(parsedLength)
+      ? parsedLength
+      : null;
+
+    return {
+      stream: res.body,
+      status: res.status,
+      contentType,
+      contentRange,
+      contentLength,
+    };
   }
 }
