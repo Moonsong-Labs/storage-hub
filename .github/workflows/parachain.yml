@@ -14,6 +14,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  REGISTRY: moonsonglabs
+  IMAGE_NAME: storage-hub
+
 permissions:
   contents: read
 
