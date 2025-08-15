@@ -1714,6 +1714,10 @@ export default {
         bspId: "H256",
         oldRoot: "H256",
         newRoot: "H256"
+      },
+      FileDeletedFromIncompleteStorageRequest: {
+        fileKey: "H256",
+        providerId: "H256"
       }
     }
   },
@@ -3850,6 +3854,11 @@ export default {
         fingerprint: "H256",
         providerId: "H256",
         forestProof: "SpTrieStorageProofCompactProof"
+      },
+      delete_file_for_incomplete_storage_request: {
+        fileKey: "H256",
+        providerId: "H256",
+        forestProof: "SpTrieStorageProofCompactProof"
       }
     }
   },
@@ -4753,7 +4762,9 @@ export default {
     bspsRequired: "u32",
     bspsConfirmed: "u32",
     bspsVolunteered: "u32",
-    depositPaid: "u128"
+    depositPaid: "u128",
+    rejected: "bool",
+    revoked: "bool"
   },
   /**
    * Lookup480: pallet_file_system::types::StorageRequestBspsMetadata<T>
@@ -4878,7 +4889,10 @@ export default {
       "ForestProofVerificationFailed",
       "ProviderNotStoringFile",
       "InvalidProviderID",
-      "InvalidSignedOperation"
+      "InvalidSignedOperation",
+      "StorageRequestNotRejected",
+      "FileKeyMismatch",
+      "CorruptedStorageRequest"
     ]
   },
   /**

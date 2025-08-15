@@ -2150,6 +2150,11 @@ declare module "@polkadot/types/lookup" {
       readonly oldRoot: H256;
       readonly newRoot: H256;
     } & Struct;
+    readonly isFileDeletedFromIncompleteStorageRequest: boolean;
+    readonly asFileDeletedFromIncompleteStorageRequest: {
+      readonly fileKey: H256;
+      readonly providerId: H256;
+    } & Struct;
     readonly type:
       | "NewBucket"
       | "BucketDeleted"
@@ -2184,7 +2189,8 @@ declare module "@polkadot/types/lookup" {
       | "FailedToTransferDepositFundsToBsp"
       | "FileDeletionRequested"
       | "MspFileDeletionCompleted"
-      | "BspFileDeletionCompleted";
+      | "BspFileDeletionCompleted"
+      | "FileDeletedFromIncompleteStorageRequest";
   }
   /** @name PalletFileSystemRejectedStorageRequestReason (154) */
   interface PalletFileSystemRejectedStorageRequestReason extends Enum {
@@ -4629,6 +4635,12 @@ declare module "@polkadot/types/lookup" {
       readonly providerId: H256;
       readonly forestProof: SpTrieStorageProofCompactProof;
     } & Struct;
+    readonly isDeleteFileForIncompleteStorageRequest: boolean;
+    readonly asDeleteFileForIncompleteStorageRequest: {
+      readonly fileKey: H256;
+      readonly providerId: H256;
+      readonly forestProof: SpTrieStorageProofCompactProof;
+    } & Struct;
     readonly type:
       | "CreateBucket"
       | "RequestMoveBucket"
@@ -4647,7 +4659,8 @@ declare module "@polkadot/types/lookup" {
       | "StopStoringForInsolventUser"
       | "MspStopStoringBucketForInsolventUser"
       | "RequestDeleteFile"
-      | "DeleteFile";
+      | "DeleteFile"
+      | "DeleteFileForIncompleteStorageRequest";
   }
   /** @name PalletFileSystemBucketMoveRequestResponse (374) */
   interface PalletFileSystemBucketMoveRequestResponse extends Enum {
@@ -5830,6 +5843,8 @@ declare module "@polkadot/types/lookup" {
     readonly bspsConfirmed: u32;
     readonly bspsVolunteered: u32;
     readonly depositPaid: u128;
+    readonly rejected: bool;
+    readonly revoked: bool;
   }
   /** @name PalletFileSystemStorageRequestBspsMetadata (480) */
   interface PalletFileSystemStorageRequestBspsMetadata extends Struct {
@@ -5944,6 +5959,9 @@ declare module "@polkadot/types/lookup" {
     readonly isProviderNotStoringFile: boolean;
     readonly isInvalidProviderID: boolean;
     readonly isInvalidSignedOperation: boolean;
+    readonly isStorageRequestNotRejected: boolean;
+    readonly isFileKeyMismatch: boolean;
+    readonly isCorruptedStorageRequest: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -6030,7 +6048,10 @@ declare module "@polkadot/types/lookup" {
       | "ForestProofVerificationFailed"
       | "ProviderNotStoringFile"
       | "InvalidProviderID"
-      | "InvalidSignedOperation";
+      | "InvalidSignedOperation"
+      | "StorageRequestNotRejected"
+      | "FileKeyMismatch"
+      | "CorruptedStorageRequest";
   }
   /** @name PalletProofsDealerProofSubmissionRecord (489) */
   interface PalletProofsDealerProofSubmissionRecord extends Struct {

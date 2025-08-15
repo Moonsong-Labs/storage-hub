@@ -770,6 +770,11 @@ pub mod pallet {
             old_root: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
+        /// Notifies that a file has been deleted from a rejected storage request.
+        FileDeletedFromIncompleteStorageRequest {
+            file_key: MerkleHash<T>,
+            provider_id: ProviderIdFor<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -948,6 +953,12 @@ pub mod pallet {
         InvalidProviderID,
         /// Invalid signed operation provided.
         InvalidSignedOperation,
+        /// Storage request is not in rejected state.
+        StorageRequestNotRejected,
+        /// File key computed from metadata doesn't match the provided file key.
+        FileKeyMismatch,
+        /// Storage request metadata is corrupted or inconsistent.
+        CorruptedStorageRequest,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1499,6 +1510,31 @@ pub mod pallet {
                 location,
                 size,
                 fingerprint,
+                provider_id,
+                forest_proof,
+            )?;
+
+            Ok(())
+        }
+
+        /// Delete a file from an incomplete (rejected, expired or revoked) storage request.
+        ///
+        /// This extrinsic allows fisherman nodes to delete files from providers when the storage request
+        /// has been marked as rejected or revoked. It validates that the storage request exists, is rejected or revoked,
+        /// the provider actually stores the file, and verifies the file key matches the metadata.
+        #[pallet::call_index(18)]
+        #[pallet::weight(Weight::zero())]
+        pub fn delete_file_for_incomplete_storage_request(
+            origin: OriginFor<T>,
+            file_key: MerkleHash<T>,
+            provider_id: ProviderIdFor<T>,
+            forest_proof: ForestProof<T>,
+        ) -> DispatchResult {
+            // TODO: We need to reward the caller of delete_file_for_incomplete_storage_request
+            let _caller = ensure_signed(origin)?;
+
+            Self::do_delete_file_for_incomplete_storage_request(
+                file_key,
                 provider_id,
                 forest_proof,
             )?;

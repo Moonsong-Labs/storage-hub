@@ -954,6 +954,8 @@ where
             bsps_volunteered: zero,
             expires_at: expiration_tick,
             deposit_paid: deposit,
+            rejected: false,
+            revoked: false,
         };
 
         // Hold the required deposit from the user.
@@ -1297,6 +1299,110 @@ where
         }
 
         // TODO: Reward the caller
+        Ok(())
+    }
+
+    pub(crate) fn do_delete_file_for_incomplete_storage_request(
+        file_key: MerkleHash<T>,
+        provider_id: ProviderIdFor<T>,
+        forest_proof: ForestProof<T>,
+    ) -> DispatchResult {
+        // Fetch storage request metadata
+        let mut storage_request_metadata =
+            StorageRequests::<T>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
+
+        // Ensure the storage request is rejected
+        ensure!(
+            storage_request_metadata.rejected,
+            Error::<T>::StorageRequestNotRejected
+        );
+
+        // Verify file key integrity by recomputing it from metadata
+        let computed_file_key = Self::compute_file_key(
+            storage_request_metadata.owner.clone(),
+            storage_request_metadata.bucket_id,
+            storage_request_metadata.location.clone(),
+            storage_request_metadata.size,
+            storage_request_metadata.fingerprint,
+        )
+        .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
+
+        ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
+
+        // Determine if provider is MSP or BSP and perform specific validations
+        if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
+            // Verify this MSP is actually storing the file for this request
+            match &storage_request_metadata.msp {
+                Some((msp_id, accepted)) if *msp_id == provider_id && *accepted => {
+                    // MSP has accepted and should be storing the file
+                    // This can only happen if the user revoked the storage as
+                    // Expired or rejected flows deleting files means that the MSP is not storing the file.
+                }
+                _ => return Err(Error::<T>::ProviderNotStoringFile.into()),
+            }
+
+            Self::delete_file_from_msp(
+                storage_request_metadata.owner.clone(),
+                file_key,
+                storage_request_metadata.size,
+                storage_request_metadata.bucket_id,
+                provider_id,
+                forest_proof,
+            )?;
+
+            // Remove the MSP from the storage request after successful deletion
+            storage_request_metadata.msp = Some((provider_id, false));
+            StorageRequests::<T>::insert(&file_key, &storage_request_metadata);
+        } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
+            // Verify this BSP has confirmed storing the file
+            let bsp_metadata = StorageRequestBsps::<T>::get(&file_key, &provider_id)
+                .ok_or(Error::<T>::ProviderNotStoringFile)?;
+
+            // Ensure the BSP has confirmed storing the file
+            ensure!(bsp_metadata.confirmed, Error::<T>::BspNotConfirmed);
+
+            // Sanity check: Get number of BSPs that have confirmed storing the file
+            let bsps_confirmed = StorageRequestBsps::<T>::iter_prefix(&file_key)
+                .fold(T::ReplicationTargetType::zero(), |acc, _| {
+                    acc.saturating_add(One::one())
+                });
+
+            ensure!(
+                bsps_confirmed == storage_request_metadata.bsps_confirmed,
+                Error::<T>::CorruptedStorageRequest
+            );
+
+            Self::delete_file_from_bsp(
+                storage_request_metadata.owner.clone(),
+                file_key,
+                storage_request_metadata.size,
+                provider_id,
+                forest_proof,
+            )?;
+
+            // Remove the BSP from the storage request after successful deletion
+            StorageRequestBsps::<T>::remove(&file_key, &provider_id);
+            storage_request_metadata.bsps_confirmed = storage_request_metadata
+                .bsps_confirmed
+                .saturating_sub(One::one());
+            StorageRequests::<T>::insert(&file_key, &storage_request_metadata);
+        } else {
+            return Err(Error::<T>::InvalidProviderID.into());
+        }
+
+        // Emit the event
+        Self::deposit_event(Event::FileDeletedFromIncompleteStorageRequest {
+            file_key,
+            provider_id,
+        });
+
+        // If the file has been deleted from all providers, cleanup the storage request.
+        if storage_request_metadata.bsps_confirmed.is_zero()
+            && matches!(storage_request_metadata.msp, Some((_, false)))
+        {
+            Self::cleanup_expired_storage_request(&file_key, &storage_request_metadata);
+        }
+
         Ok(())
     }
 
@@ -2826,8 +2932,8 @@ where
 mod hooks {
     use crate::{
         pallet,
-        types::{MerkleHash, RejectedStorageRequestReason, ReplicationTargetType, TickNumber},
-        utils::{BucketIdFor, EitherAccountIdOrMspId},
+        types::{MerkleHash, RejectedStorageRequestReason, StorageRequestMetadata, TickNumber},
+        utils::BucketIdFor,
         weights::WeightInfo,
         BucketsWithStorageRequests, Event, HoldReason, MoveBucketRequestExpirations,
         NextStartingTickToCleanUp, Pallet, PendingMoveBucketRequests, StorageRequestBsps,
@@ -2835,7 +2941,7 @@ mod hooks {
     };
     use frame_support::traits::{fungible::MutateHold, tokens::Precision};
     use sp_runtime::{
-        traits::{Get, One},
+        traits::{Get, One, Zero},
         Saturating,
     };
     use sp_weights::{RuntimeDbWeight, WeightMeter};
@@ -3000,42 +3106,22 @@ mod hooks {
             file_key: MerkleHash<T>,
             meter: &mut WeightMeter,
         ) {
-            // Remove storage request and all BSPs that volunteered for it.
-            let storage_request_metadata = StorageRequests::<T>::take(&file_key);
-            let amount_of_deleted_bsps = StorageRequestBsps::<T>::drain_prefix(&file_key)
+            // Get storage request as mutable and count BSPs that volunteered for it.
+            // We do not remove the storage request nor BSPs as the runtime needs this information
+            // to be able to know if a fisherman node can delete the respective file.
+            let storage_request_metadata = StorageRequests::<T>::get(&file_key);
+            let amount_of_volunteered_bsps = StorageRequestBsps::<T>::iter_prefix(&file_key)
                 .fold(0u32, |acc, _| acc.saturating_add(One::one()));
 
             match storage_request_metadata {
-                Some(storage_request_metadata) => match storage_request_metadata.msp {
+                Some(mut storage_request_metadata) => match storage_request_metadata.msp {
                     None | Some((_, true)) => {
                         // If the request was originated by a request to stop storing from a BSP for a file that had no
                         // storage request open, or if the MSP has already accepted storing the file (and the bucket and
                         // payment stream with the user still exists), treat the storage request as fulfilled with whatever
                         // amount of BSPs got to volunteer and confirm the file. For that:
-                        // Return the storage request creation deposit to the user, emitting an error event if it fails
-                        // but continuing execution.
-                        let _ = T::Currency::release(
-                            &HoldReason::StorageRequestCreationHold.into(),
-                            &storage_request_metadata.owner,
-                            storage_request_metadata.deposit_paid,
-                            Precision::BestEffort,
-                        )
-                        .map_err(|e| {
-                            Self::deposit_event(
-                                Event::FailedToReleaseStorageRequestCreationDeposit {
-                                    file_key,
-                                    owner: storage_request_metadata.owner.clone(),
-                                    amount_to_return: storage_request_metadata.deposit_paid,
-                                    error: e,
-                                },
-                            );
-                        });
-
-                        // Remove the storage request from the active storage requests for the bucket
-                        <BucketsWithStorageRequests<T>>::remove(
-                            &storage_request_metadata.bucket_id,
-                            &file_key,
-                        );
+                        // Clean up storage request data
+                        Self::cleanup_expired_storage_request(&file_key, &storage_request_metadata);
 
                         // Emit the StorageRequestExpired event
                         Self::deposit_event(Event::StorageRequestExpired { file_key });
@@ -3043,71 +3129,47 @@ mod hooks {
                         // Consume the weight used.
                         meter.consume(
                             T::WeightInfo::process_expired_storage_request_msp_accepted_or_no_msp(
-                                amount_of_deleted_bsps,
+                                amount_of_volunteered_bsps,
                             ),
                         );
                     }
-                    Some((msp_id, false)) => {
-                        // If the MSP did not accept the file in time, treat the storage request as rejected. For that:
-                        // Check if there are already BSPs who have confirmed to store the file.
-                        if storage_request_metadata.bsps_confirmed
-                            >= ReplicationTargetType::<T>::one()
-                        {
-                            // If there are, queue up a priority challenge for the file key with a remove mutation, forcing all BSPs to delete the file.
-                            // This can error if the priority challenge queue is full. In that case, we emit an error event and continue. The
-                            // priority challenge then should be enqueued manually at a later time.
-                            let _ = <T::ProofDealer as shp_traits::ProofsDealerInterface>::challenge_with_priority(
-									&file_key,
-									true,
-								).map_err(|e| {
-									Self::deposit_event(Event::FailedToQueuePriorityChallenge {
-										file_key,
-										error: e,
-									});
-								});
-
-                            // Emit the event of the priority challenge being queued.
-                            Self::deposit_event(Event::PriorityChallengeForFileDeletionQueued {
-                                issuer: EitherAccountIdOrMspId::MspId(msp_id),
-                                file_key,
-                            });
-                        }
-
-                        // Return the storage request creation deposit to the user, emitting an error event if it fails
-                        // but continuing execution.
-                        let _ = T::Currency::release(
-                            &HoldReason::StorageRequestCreationHold.into(),
-                            &storage_request_metadata.owner,
-                            storage_request_metadata.deposit_paid,
-                            Precision::BestEffort,
-                        )
-                        .map_err(|e| {
-                            Self::deposit_event(
-                                Event::FailedToReleaseStorageRequestCreationDeposit {
-                                    file_key,
-                                    owner: storage_request_metadata.owner.clone(),
-                                    amount_to_return: storage_request_metadata.deposit_paid,
-                                    error: e,
-                                },
+                    Some((_msp_id, false)) => {
+                        // If the MSP did not accept the file in time, treat the storage request as rejected.
+                        // If no BSP has already confirmed storing the file, we just clean up the storage request
+                        if storage_request_metadata.bsps_confirmed.is_zero() {
+                            // Clean up storage request data
+                            Self::cleanup_expired_storage_request(
+                                &file_key,
+                                &storage_request_metadata,
                             );
-                        });
 
-                        // Remove the storage request from the active storage requests for the bucket
-                        <BucketsWithStorageRequests<T>>::remove(
-                            &storage_request_metadata.bucket_id,
-                            &file_key,
-                        );
+                            // Consume the weight used.
+                            meter.consume(
+                                T::WeightInfo::process_expired_storage_request_msp_rejected(
+                                    amount_of_volunteered_bsps,
+                                ),
+                            );
+                        } else {
+                            // If there are BSPs that have confirmed storing the file, we update the storage request
+                            // to indicate that it was rejected. This will allow the fisherman node to delete the file from the confirmed BSPs.
+                            storage_request_metadata.rejected = true;
+                            StorageRequests::<T>::insert(&file_key, storage_request_metadata);
 
+                            // Consume the weight used.
+                            meter.consume(
+                                T::WeightInfo::process_expired_storage_request_msp_rejected(
+                                    amount_of_volunteered_bsps,
+                                ),
+                            );
+                        }
                         // Emit the StorageRequestRejected event
+                        // If there are BSPs that have confirmed storing the file,
+                        // this event will be used by the fisherman node to delete the file from the confirmed BSPs.
+                        // If there are no BSPs the event is just informative.
                         Self::deposit_event(Event::StorageRequestRejected {
                             file_key,
                             reason: RejectedStorageRequestReason::RequestExpired,
                         });
-
-                        // Consume the weight used.
-                        meter.consume(T::WeightInfo::process_expired_storage_request_msp_rejected(
-                            amount_of_deleted_bsps,
-                        ));
                     }
                 },
                 None => {
@@ -3116,6 +3178,43 @@ mod hooks {
                     // the storage request is already gone.
                 }
             }
+        }
+
+        /// Utility function to clean up expired storage request data including:
+        /// - Releasing the storage request creation deposit to the owner
+        /// - Removing the storage request from bucket associations
+        /// - Removing BSPs that volunteered for the storage request
+        /// - Removing the storage request itself
+        pub(crate) fn cleanup_expired_storage_request(
+            file_key: &MerkleHash<T>,
+            storage_request_metadata: &StorageRequestMetadata<T>,
+        ) {
+            // Return the storage request creation deposit to the user, emitting an error event if it fails
+            // but continuing execution.
+            let _ = T::Currency::release(
+                &HoldReason::StorageRequestCreationHold.into(),
+                &storage_request_metadata.owner,
+                storage_request_metadata.deposit_paid,
+                Precision::BestEffort,
+            )
+            .map_err(|e| {
+                Self::deposit_event(Event::FailedToReleaseStorageRequestCreationDeposit {
+                    file_key: *file_key,
+                    owner: storage_request_metadata.owner.clone(),
+                    amount_to_return: storage_request_metadata.deposit_paid,
+                    error: e,
+                });
+            });
+
+            // Remove the storage request from the active storage requests for the bucket
+            <BucketsWithStorageRequests<T>>::remove(&storage_request_metadata.bucket_id, file_key);
+
+            // Remove BSPs that volunteered for the storage request.
+            // We consume the iterator so the drain actually happens.
+            let _ = <StorageRequestBsps<T>>::drain_prefix(file_key).count();
+
+            // Remove storage request.
+            <StorageRequests<T>>::remove(file_key);
         }
 
         pub(crate) fn process_expired_move_bucket_request(

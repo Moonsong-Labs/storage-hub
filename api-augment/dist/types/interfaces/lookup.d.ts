@@ -1684,6 +1684,10 @@ declare const _default: {
         oldRoot: string;
         newRoot: string;
       };
+      FileDeletedFromIncompleteStorageRequest: {
+        fileKey: string;
+        providerId: string;
+      };
     };
   };
   /**
@@ -3743,6 +3747,11 @@ declare const _default: {
         providerId: string;
         forestProof: string;
       };
+      delete_file_for_incomplete_storage_request: {
+        fileKey: string;
+        providerId: string;
+        forestProof: string;
+      };
     };
   };
   /**
@@ -4485,6 +4494,8 @@ declare const _default: {
     bspsConfirmed: string;
     bspsVolunteered: string;
     depositPaid: string;
+    rejected: string;
+    revoked: string;
   };
   /**
    * Lookup480: pallet_file_system::types::StorageRequestBspsMetadata<T>
