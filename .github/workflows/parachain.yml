@@ -197,7 +197,7 @@ jobs:
             test/node_modules
             api-augment
             types-bundle
-          key: test-deps-${{ runner.os }}-${{ hashFiles('test/pnpm-lock.yaml', 'api-augment/**', 'types-bundle/**') }}
+          key: test-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'api-augment/**', 'types-bundle/**') }}
 
   tests:
     needs: [setup, prepare]
@@ -252,7 +252,7 @@ jobs:
             test/node_modules
             api-augment
             types-bundle
-          key: test-deps-${{ runner.os }}-${{ hashFiles('test/pnpm-lock.yaml', 'api-augment/**', 'types-bundle/**') }}
+          key: test-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'api-augment/**', 'types-bundle/**') }}
 
       - name: Download node binary artifact
         if: needs.setup.outputs.node_changed == 'true'
@@ -414,7 +414,7 @@ jobs:
             test/node_modules
             api-augment
             types-bundle
-          key: test-deps-${{ runner.os }}-${{ hashFiles('test/pnpm-lock.yaml', 'api-augment/**', 'types-bundle/**') }}
+          key: test-deps-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'api-augment/**', 'types-bundle/**') }}
 
       - name: Check for changes
         run: |

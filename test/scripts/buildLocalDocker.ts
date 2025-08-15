@@ -28,7 +28,7 @@ async function main() {
 
   console.log(`Binary found at ${BINARY_PATH}`);
   const stats = fs.statSync(BINARY_PATH);
-  console.log(`Binary size: ${stats.size} bytes, executable: ${!!(stats.mode & parseInt('111', 8))}`);
+  console.log(`Binary size: ${stats.size} bytes, executable: ${!!(stats.mode & 0o111)}`);
   console.log(`Binary permissions: ${stats.mode.toString(8)}`);
 
   const fileOutput = execSync(`file ${BINARY_PATH}`).toString();
@@ -47,10 +47,12 @@ async function main() {
   const targetBinary = path.join(buildDir, path.basename(BINARY_PATH));
   fs.copyFileSync(BINARY_PATH, targetBinary);
   console.log(`Copied binary to: ${targetBinary}`);
-  
+
   // Verify the copied binary
   const copiedStats = fs.statSync(targetBinary);
-  console.log(`Copied binary size: ${copiedStats.size} bytes, executable: ${!!(copiedStats.mode & parseInt('111', 8))}`);
+  console.log(
+    `Copied binary size: ${copiedStats.size} bytes, executable: ${!!(copiedStats.mode & 0o111)}`
+  );
 
   try {
     console.log("Starting Docker build...");
@@ -59,9 +61,13 @@ async function main() {
       stdio: "inherit"
     });
     console.log("Docker image built successfully.");
-    
+
     // Verify the image exists
-    const imageCheck = execSync("docker images storage-hub:local --format '{{.Repository}}:{{.Tag}} {{.Size}}'").toString().trim();
+    const imageCheck = execSync(
+      "docker images storage-hub:local --format '{{.Repository}}:{{.Tag}} {{.Size}}'"
+    )
+      .toString()
+      .trim();
     console.log(`Built image: ${imageCheck}`);
   } catch (error) {
     console.error("Docker build failed:", error);
