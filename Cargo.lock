@@ -5837,7 +5837,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "regex",
- "syn 2.0.104",
+ "syn 2.0.105",
 ]
 
 [[package]]
@@ -11592,7 +11592,7 @@ dependencies = [
  "rustc-hash 2.1.1",
  "rustls 0.23.31",
  "socket2 0.5.10",
- "thiserror 2.0.12",
+ "thiserror 2.0.14",
  "tokio",
  "tracing",
  "web-time",
@@ -11630,7 +11630,7 @@ dependencies = [
  "rustls 0.23.31",
  "rustls-pki-types",
  "slab",
- "thiserror 2.0.12",
+ "thiserror 2.0.14",
  "tinyvec",
  "tracing",
  "web-time",
@@ -14281,7 +14281,7 @@ checksum = "91d129178576168c589c9ec973feedf7d3126c01ac2bf08795109aa35b69fb8f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.104",
+ "syn 2.0.105",
 ]
 
 [[package]]
@@ -14817,6 +14817,10 @@ name = "shc-rpc"
 version = "0.1.0"
 dependencies = [
  "array-bytes",
+ "async-trait",
+ "bytes",
+ "futures",
+ "futures-util",
  "hex",
  "jsonrpsee 0.24.9",
  "log",
@@ -17597,7 +17601,7 @@ dependencies = [
  "log",
  "pin-project",
  "rustls 0.23.31",
- "thiserror 2.0.12",
+ "thiserror 2.0.14",
 ]
 
 [[package]]

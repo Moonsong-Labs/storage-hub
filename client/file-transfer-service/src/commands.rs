@@ -60,9 +60,8 @@ pub enum RequestError {
     service = FileTransferService<Runtime: StorageEnableRuntime>,
     default_mode = "ImmediateResponse",
     default_error_type = RequestError,
-    generics(Runtime: StorageEnableRuntime)
 )]
-pub enum FileTransferServiceCommand {
+pub enum FileTransferServiceCommand<Runtime: StorageEnableRuntime> {
     #[command(
         mode = "AsyncResponse", 
         success_type = (Vec<u8>, ProtocolName),
