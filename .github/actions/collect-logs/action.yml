@@ -1,0 +1,47 @@
+name: 'Collect Test Logs'
+description: 'Collect Docker container logs and storage provider logs for debugging failed tests'
+inputs:
+  artifact-name:
+    description: 'Name for the log artifact'
+    required: true
+  logs-dir-pattern:
+    description: 'Pattern to search for logs directory (e.g., "bsp-logs-*", "sp-logs-*")'
+    required: false
+    default: 'bsp-logs-*'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Collect Docker Logs
+      shell: bash
+      run: |
+        echo "::group::Docker Container Status"
+        docker ps -a
+        echo "::endgroup::"
+
+        mkdir -p test-logs
+
+        for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+          echo "Collecting logs from $container"
+          docker logs $container > "test-logs/${container}.log" 2>&1
+        done
+
+        LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "${{ inputs.logs-dir-pattern }}" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+
+        if [ ! -z "$LOGS_DIR" ]; then
+          echo "Found logs directory: $LOGS_DIR"
+          cp -r $LOGS_DIR/* test-logs/ || true
+        else
+          echo "No logs directory found matching pattern: ${{ inputs.logs-dir-pattern }}"
+        fi
+
+        echo "Collected log files:"
+        ls -la test-logs/
+
+    - name: Upload logs as artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: test-logs/
+        retention-days: 5
+        if-no-files-found: warn
