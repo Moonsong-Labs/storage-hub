@@ -840,10 +840,13 @@ fn to_snake_case(s: &str) -> String {
 ///     service = ServiceType,
 ///     default_mode = "ImmediateResponse",
 ///     default_error_type = CustomError,
-///     default_inner_channel_type = "futures::channel::oneshot::Receiver",
-///     generics(T: SomeTrait, U: AnotherTrait)
+///     default_inner_channel_type = futures::channel::oneshot::Receiver,
 /// )]
-/// pub enum CommandEnum {
+/// pub enum CommandEnum<T, U>
+/// where
+///     T: SomeTrait,
+///     U: AnotherTrait,
+/// {
 ///     // command variants
 /// }
 /// ```
@@ -1303,7 +1306,9 @@ fn generate_method_impl(
 /// - `default_mode`: (Optional) Default command mode, one of: "FireAndForget", "ImmediateResponse", "AsyncResponse"
 /// - `default_error_type`: (Optional) Default error type for command responses
 /// - `default_inner_channel_type`: (Optional) Default channel type for AsyncResponse mode
-/// - `generics`: (Optional) Additional generic parameters and their bounds to add to the enum and trait
+///
+/// Note: Generic parameters and bounds should be declared on the enum itself. They are automatically merged
+/// with any generics from the `service` type.
 ///
 /// # Command Mode Options
 ///
@@ -1318,9 +1323,12 @@ fn generate_method_impl(
 ///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
 ///     default_mode = "ImmediateResponse",
 ///     default_inner_channel_type = tokio::sync::oneshot::Receiver,
-///     generics(Runtime: StorageEnableRuntime, OtherType: SomeTrait)
 /// )]
-/// pub enum BlockchainServiceCommand {
+/// pub enum BlockchainServiceCommand<Runtime, OtherType>
+/// where
+///     Runtime: StorageEnableRuntime,
+///     OtherType: SomeTrait,
+/// {
 ///     #[command(success_type = SubmittedTransaction)]
 ///     SendExtrinsic {
 ///         call: storage_hub_runtime::RuntimeCall,
