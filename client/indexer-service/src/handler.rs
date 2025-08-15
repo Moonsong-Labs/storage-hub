@@ -1,7 +1,7 @@
 use diesel_async::AsyncConnection;
 use futures::prelude::*;
 use log::{error, info};
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::StorageProviderId;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
@@ -31,20 +31,16 @@ pub(crate) const LOG_TARGET: &str = "indexer-service";
 pub enum IndexerServiceCommand {}
 
 // The IndexerService actor
-pub struct IndexerService<RuntimeApi> {
-    client: Arc<ParachainClient<RuntimeApi>>,
+pub struct IndexerService<Runtime: StorageEnableRuntime> {
+    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
 }
 
 // Implement the Actor trait for IndexerService
-impl<RuntimeApi> Actor for IndexerService<RuntimeApi>
-where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-{
+impl<Runtime: StorageEnableRuntime> Actor for IndexerService<Runtime> {
     type Message = IndexerServiceCommand;
-    type EventLoop = IndexerServiceEventLoop<RuntimeApi>;
+    type EventLoop = IndexerServiceEventLoop<Runtime>;
     type EventBusProvider = (); // We're not using an event bus for now
 
     fn handle_message(
@@ -64,13 +60,9 @@ where
 }
 
 // Implement methods for IndexerService
-impl<RuntimeApi> IndexerService<RuntimeApi>
-where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-{
+impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     pub fn new(
-        client: Arc<ParachainClient<RuntimeApi>>,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         db_pool: DbPool,
         indexer_mode: crate::IndexerMode,
     ) -> Self {
@@ -120,7 +112,7 @@ where
     ) -> Result<(), IndexBlockError> {
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
 
-        let block_events = get_events_at_block(&self.client, &block_hash)?;
+        let block_events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
@@ -675,9 +667,9 @@ where
 }
 
 // Define the EventLoop for IndexerService
-pub struct IndexerServiceEventLoop<RuntimeApi> {
+pub struct IndexerServiceEventLoop<Runtime: StorageEnableRuntime> {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
-    actor: IndexerService<RuntimeApi>,
+    actor: IndexerService<Runtime>,
 }
 
 enum MergedEventLoopMessage<Block>
@@ -689,13 +681,11 @@ where
 }
 
 // Implement ActorEventLoop for IndexerServiceEventLoop
-impl<RuntimeApi> ActorEventLoop<IndexerService<RuntimeApi>> for IndexerServiceEventLoop<RuntimeApi>
-where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+impl<Runtime: StorageEnableRuntime> ActorEventLoop<IndexerService<Runtime>>
+    for IndexerServiceEventLoop<Runtime>
 {
     fn new(
-        actor: IndexerService<RuntimeApi>,
+        actor: IndexerService<Runtime>,
         receiver: sc_utils::mpsc::TracingUnboundedReceiver<IndexerServiceCommand>,
     ) -> Self {
         Self { actor, receiver }

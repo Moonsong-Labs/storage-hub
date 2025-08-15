@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::{KeyTypeOperations, StorageEnableRuntime};
 use sp_api::ApiError;
 use sp_core::H256;
 
@@ -45,14 +45,14 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 
 /// Commands that can be sent to the BlockchainService actor.
 #[actor_command(
-    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>>,
+    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, Runtime: StorageEnableRuntime>,
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 )]
-pub enum BlockchainServiceCommand {
+pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     #[command(success_type = SubmittedTransaction)]
     SendExtrinsic {
-        call: storage_hub_runtime::RuntimeCall,
+        call: Runtime::Call,
         options: SendExtrinsicOptions,
     },
     #[command(success_type = Extrinsic)]
@@ -90,7 +90,7 @@ pub enum BlockchainServiceCommand {
     QueryEarliestChangeCapacityBlock {
         bsp_id: ProviderId,
     },
-    #[command(success_type = sp_core::sr25519::Public)]
+    #[command(success_type = <<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public)]
     GetNodePublicKey,
     #[command(success_type = Vec<ChunkId>, error_type = QueryBspConfirmChunksToProveForFileError)]
     QueryBspConfirmChunksToProveForFile {
@@ -161,7 +161,8 @@ pub enum BlockchainServiceCommand {
     },
     #[command(success_type = Option<StorageProviderId>)]
     QueryStorageProviderId {
-        maybe_node_pub_key: Option<sp_core::sr25519::Public>,
+        maybe_node_pub_key:
+            Option<<<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public>,
     },
     #[command(success_type = Vec<AccountId>, error_type = GetUsersWithDebtOverThresholdError)]
     QueryUsersWithDebt {
@@ -197,7 +198,9 @@ pub enum BlockchainServiceCommand {
 
 /// Interface for interacting with the BlockchainService actor.
 #[async_trait]
-pub trait BlockchainServiceCommandInterfaceExt: BlockchainServiceCommandInterface {
+pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntime>:
+    BlockchainServiceCommandInterface<Runtime>
+{
     /// Helper function to check if an extrinsic failed or succeeded in a block.
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
 
@@ -205,7 +208,7 @@ pub trait BlockchainServiceCommandInterfaceExt: BlockchainServiceCommandInterfac
     /// included in a block or when the retry strategy is exhausted.
     async fn submit_extrinsic_with_retry(
         &self,
-        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        call: impl Into<Runtime::Call> + Send,
         options: SendExtrinsicOptions,
         retry_strategy: RetryStrategy,
         with_events: bool,
@@ -214,12 +217,11 @@ pub trait BlockchainServiceCommandInterfaceExt: BlockchainServiceCommandInterfac
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
 #[async_trait]
-impl<FSH, RuntimeApi> BlockchainServiceCommandInterfaceExt
-    for ActorHandle<BlockchainService<FSH, RuntimeApi>>
+impl<FSH, Runtime> BlockchainServiceCommandInterfaceExt<Runtime>
+    for ActorHandle<BlockchainService<FSH, Runtime>>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {
@@ -251,7 +253,7 @@ where
 
     async fn submit_extrinsic_with_retry(
         &self,
-        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        call: impl Into<Runtime::Call> + Send,
         options: SendExtrinsicOptions,
         retry_strategy: RetryStrategy,
         with_events: bool,

@@ -14616,6 +14616,7 @@ dependencies = [
  "sc-executor",
  "sc-network",
  "sc-service",
+ "scale-info",
  "serde",
  "shp-constants",
  "shp-file-key-verifier",
