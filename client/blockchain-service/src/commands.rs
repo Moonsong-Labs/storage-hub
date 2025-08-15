@@ -49,9 +49,8 @@ const LOG_TARGET: &str = "blockchain-service-interface";
     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, Runtime: StorageEnableRuntime>,
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
-    generics(Runtime: StorageEnableRuntime)
 )]
-pub enum BlockchainServiceCommand {
+pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
     #[command(success_type = SubmittedTransaction<Runtime>)]
     SendExtrinsic {
         call: Runtime::Call,

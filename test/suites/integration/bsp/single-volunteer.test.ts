@@ -188,7 +188,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
     await userApi.assert.eventPresent("fileSystem", "NewStorageRequest");
 
     await bspApi.docker.waitForLog({
-      containerName: "docker-sh-bsp-1",
+      containerName: "storage-hub-sh-bsp-1",
       searchString: "Skipping file key",
       timeout: 15000
     });

@@ -36,8 +36,29 @@ max_tip = 100.0
 [provider.blockchain_service]
 extrinsic_retry_timeout = 60
 
+# RPC configuration
+[provider.rpc_config]
+# Remote file configuration
+[provider.rpc_config.remote_file]
+# Maximum file size in bytes (default: 10GB)
+max_file_size = 10737418240
+# Connection timeout in seconds (default: 30)
+connection_timeout = 30
+# Read timeout in seconds (default: 300)
+read_timeout = 300
+# Whether to follow redirects (default: true)
+follow_redirects = true
+# Maximum number of redirects (default: 10)
+max_redirects = 10
+# User agent string (default: "StorageHub-Client/1.0")
+user_agent = "StorageHub-Client/1.0"
+# Chunk size in bytes. This is different from the FILE_CHUNK_SIZE constant in the runtime, as it only affects file upload/download. (default: 8KB)
+chunk_size = 8192
+# Number of `chunk_size` chunks to buffer during upload/download. (default: 512)
+chunks_buffer = 512
+
 # Optional indexer configuration
 [indexer]
 # Set to true to enable the indexer
 indexer = true
-database_url = "postgresql://postgres:postgres@docker-sh-postgres-1:5432/storage_hub"
+database_url = "postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"

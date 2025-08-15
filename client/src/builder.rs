@@ -19,7 +19,7 @@ use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_forest_manager::traits::ForestStorageHandler;
-use shc_rpc::StorageHubClientRpcConfig;
+use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
 
 use crate::tasks::{
     bsp_charge_fees::BspChargeFeesConfig, bsp_move_bucket::BspMoveBucketConfig,
@@ -226,6 +226,7 @@ where
     pub fn create_rpc_config(
         &self,
         keystore: KeystorePtr,
+        config: RpcConfig,
     ) -> StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH> {
         StorageHubClientRpcConfig::new(
             self.file_storage
@@ -235,6 +236,7 @@ where
                 .clone()
                 .expect("Forest Storage Handler not initialized. Use `setup_storage_layer` before calling `create_rpc_config`."),
             keystore,
+            config,
         )
     }
 

@@ -15,7 +15,6 @@ import {
   describeMspNet,
   getContainerIp,
   mspThreeKey,
-  mspThreeSeed,
   shUser,
   sleep
 } from "../../../util";
@@ -49,7 +48,7 @@ describeMspNet(
 
     it("postgres DB is ready", async () => {
       await userApi.docker.waitForLog({
-        containerName: "docker-sh-postgres-1",
+        containerName: "storage-hub-sh-postgres-1",
         searchString: "database system is ready to accept connections",
         timeout: 5000
       });
@@ -96,10 +95,9 @@ describeMspNet(
 
     it("Add new MSP with low capacity", async () => {
       const { containerName, p2pPort, peerId, rpcPort } = await addMspContainer({
-        name: "sleepy",
+        name: "storage-hub-sh-msp-sleepy",
         additionalArgs: [
-          "--keystore-path=/tmp/msp-three",
-          "--node-key=0xe6a9007b119845010c43f68685f7c2065d8cbf596efc3ebc854dc44f05f6530a",
+          "--keystore-path=/keystore/msp-three",
           `--max-storage-capacity=${1024 * 1024}`,
           `--jump-capacity=${1024 * 1024}`,
           "--msp-charging-period=12"
@@ -107,23 +105,20 @@ describeMspNet(
       });
 
       await userApi.docker.waitForLog({
-        containerName: "sleepy",
+        containerName: "storage-hub-sh-msp-sleepy",
         searchString: "💤 Idle",
         timeout: 15000
       });
 
       msp3Api = await createApi(`ws://127.0.0.1:${rpcPort}`);
-      await msp3Api.rpc.storagehubclient.insertBcsvKeys(mspThreeSeed);
 
-      //Give it some balance.
+      // Give it some balance.
       const amount = 10000n * 10n ** 12n;
       await userApi.block.seal({
         calls: [
           userApi.tx.sudo.sudo(userApi.tx.balances.forceSetBalance(mspThreeKey.address, amount))
         ]
       });
-
-      await userApi.block.seal();
 
       const mspIp = await getContainerIp(containerName);
       const multiAddressMsp = `/ip4/${mspIp}/tcp/${p2pPort}/p2p/${peerId}`;
@@ -146,7 +141,7 @@ describeMspNet(
     });
 
     it("User submits 3 storage requests in the same bucket for first MSP", async () => {
-      // Get value propositions form the MSP to use, and use the first one (can be any).
+      // Get value propositions from the MSP to use, and use the first one (can be any).
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(
         userApi.shConsts.DUMMY_MSP_ID
       );
@@ -319,11 +314,31 @@ describeMspNet(
         allBucketFiles.push(fileKey);
       }
 
-      // Seal 5 more blocks to pass maxthreshold and ensure completed upload requests
-      for (let i = 0; i < 5; i++) {
-        await sleep(500);
-        const block = await userApi.block.seal();
-        await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
+      // Seal more blocks until the storage request is fulfilled.
+      let hasStorageRequests = true;
+      let iterations = 0;
+      const maxIterations = 60; // Max 60 iterations (30 seconds at 500ms per iteration)
+
+      while (hasStorageRequests && iterations < maxIterations) {
+        hasStorageRequests = false;
+        for (const fileKey of acceptedFileKeys) {
+          const storageRequest = await userApi.query.fileSystem.storageRequests(fileKey);
+          if (storageRequest && !storageRequest.isEmpty) {
+            hasStorageRequests = true;
+            break;
+          }
+        }
+
+        if (hasStorageRequests) {
+          await sleep(500);
+          const block = await userApi.block.seal();
+          await userApi.rpc.engine.finalizeBlock(block.blockReceipt.blockHash);
+          iterations++;
+        }
+      }
+
+      if (iterations >= maxIterations) {
+        throw new Error(`Storage requests not fulfilled after ${maxIterations} iterations`);
       }
     });
 

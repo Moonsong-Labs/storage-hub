@@ -36,8 +36,8 @@ describeMspNet(
 
         // Stop the msp container so it will be behind when we restart the node.
         // TODO: clearLogs is not working, fix it.
-        // await clearLogs({ containerName: "docker-sh-msp-1" });
-        await userApi.docker.pauseContainer("docker-sh-msp-1");
+        // await clearLogs({ containerName: "storage-hub-sh-msp-1" });
+        await userApi.docker.pauseContainer("storage-hub-sh-msp-1");
 
         const newBucketEventEvent = await userApi.createBucket(bucketName);
         const newBucketEventDataBlob =
@@ -89,12 +89,12 @@ describeMspNet(
         await mspApi.disconnect();
 
         // Restarting the MSP container. This will start the Substrate node from scratch.
-        await userApi.docker.restartContainer({ containerName: "docker-sh-msp-1" });
+        await userApi.docker.restartContainer({ containerName: "storage-hub-sh-msp-1" });
 
         // TODO: Wait for the container logs of starting up
         await userApi.docker.waitForLog({
           searchString: "💤 Idle (3 peers)",
-          containerName: "docker-sh-msp-1",
+          containerName: "storage-hub-sh-msp-1",
           tail: 10
         });
 
@@ -113,7 +113,7 @@ describeMspNet(
 
         await userApi.docker.waitForLog({
           searchString: "🥱 Handling coming out of sync mode",
-          containerName: "docker-sh-msp-1"
+          containerName: "storage-hub-sh-msp-1"
         });
 
         await userApi.block.skip(4); // user retry every 5 blocks. The one we created before and this one
@@ -121,7 +121,7 @@ describeMspNet(
         await userApi.docker.waitForLog({
           searchString:
             'File upload complete. Peer PeerId("12D3KooWSUvz8QM5X4tfAaSLErAZjR2puojo16pULBHyqTMGKtNV") has the entire file',
-          containerName: "docker-sh-user-1"
+          containerName: "storage-hub-sh-user-1"
         });
 
         await waitFor({

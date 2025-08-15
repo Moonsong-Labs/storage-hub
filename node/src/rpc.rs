@@ -32,7 +32,7 @@ where
     pub client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
-    /// File Storage instance.
+    /// RPC configuration.
     pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,

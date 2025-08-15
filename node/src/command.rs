@@ -23,6 +23,7 @@ use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
     BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
 };
+use shc_rpc::RpcConfig;
 
 /// Configuration for the provider.
 #[derive(Debug, Clone, Deserialize)]
@@ -37,6 +38,9 @@ pub struct ProviderOptions {
     pub max_storage_capacity: Option<StorageDataUnit>,
     /// Jump capacity (bytes).
     pub jump_capacity: Option<StorageDataUnit>,
+    /// RPC configuration options.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rpc_config: Option<RpcConfig>,
     /// MSP charging fees frequency.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub msp_charging_period: Option<u32>,

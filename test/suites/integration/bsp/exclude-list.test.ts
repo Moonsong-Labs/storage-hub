@@ -24,7 +24,7 @@ describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, createBsp
 
     await bspApi.assert.log({
       searchString: "Key added to the exclude list",
-      containerName: "docker-sh-bsp-1"
+      containerName: "storage-hub-sh-bsp-1"
     });
 
     const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
@@ -56,7 +56,7 @@ describeBspNet("BSP Exclude list tests", ({ before, createUserApi, it, createBsp
 
     await bspApi.assert.log({
       searchString: "Bucket is in the exclude list",
-      containerName: "docker-sh-bsp-1"
+      containerName: "storage-hub-sh-bsp-1"
     });
   });
 });
