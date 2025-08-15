@@ -21,8 +21,15 @@ runs:
 
         mkdir -p test-logs
 
+        # Collect logs from storage-hub containers
         for container in $(docker ps -a --filter "ancestor=storage-hub:local" --format "{{.Names}}"); do
-          echo "Collecting logs from $container"
+          echo "Collecting logs from $container (storage-hub:local)"
+          docker logs $container > "test-logs/${container}.log" 2>&1
+        done
+        
+        # Also collect logs from moonsonglabs/storage-hub containers as fallback
+        for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+          echo "Collecting logs from $container (moonsonglabs/storage-hub)"
           docker logs $container > "test-logs/${container}.log" 2>&1
         done
 

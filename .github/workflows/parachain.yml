@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       node_changed: ${{ steps.node_check.outputs.changed }}
-      image_tag: ${{ steps.set_tag.outputs.tag }}
+      image_tag: ${{ steps.set-tag.outputs.tag }}
     env:
       SKIP_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-node-build') }}
     steps:
@@ -48,7 +48,7 @@ jobs:
           fi
 
       - name: Set image tag
-        id: set_tag
+        id: set-tag
         run: |
           if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' ]]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
@@ -99,6 +99,13 @@ jobs:
           mkdir -p build
           cp target/release/storage-hub-node build/
 
+      - name: Upload node binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-binary
+          path: build/storage-hub-node
+          if-no-files-found: error
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -116,7 +123,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   prepare:
-    needs: [setup, build]
+    needs: [setup]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -133,20 +140,37 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Download node binary artifact
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node-binary
+          path: build/
+        continue-on-error: true
+
       - name: Get node binary
         run: |
           mkdir -p target/release/
-          if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
-            # Pull the newly built image
-            docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
-            docker create --name temp_storage_hub moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+          
+          # Try to use artifact first if node was rebuilt
+          if [[ "${{ needs.setup.outputs.node_changed }}" == "true" && -f "build/storage-hub-node" ]]; then
+            echo "Using node binary from artifact"
+            cp build/storage-hub-node target/release/storage-hub-node
           else
-            # Use latest image
-            docker pull moonsonglabs/storage-hub:latest
-            docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+            # Fall back to extracting from Docker image
+            echo "Extracting node binary from Docker image"
+            if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
+              # Pull the newly built image
+              docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+              docker create --name temp_storage_hub moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+            else
+              # Use latest image
+              docker pull moonsonglabs/storage-hub:latest
+              docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+            fi
+            docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+            docker rm temp_storage_hub
           fi
-          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-          docker rm temp_storage_hub
 
       - name: Prepare test environment
         run: |
@@ -191,14 +215,20 @@ jobs:
           - { name: "fisherman", pattern: "./suites/integration/fisherman/**.test.ts", shards: 1, diesel: true }
         shard: [1, 2, 3, 4, 5]
         exclude:
-          - { test_type: { shards: 1 }, shard: 2 }
-          - { test_type: { shards: 1 }, shard: 3 }
-          - { test_type: { shards: 1 }, shard: 4 }
-          - { test_type: { shards: 1 }, shard: 5 }
-          - { test_type: { shards: 2 }, shard: 3 }
-          - { test_type: { shards: 2 }, shard: 4 }
-          - { test_type: { shards: 2 }, shard: 5 }
-          - { test_type: { shards: 4 }, shard: 5 }
+          # Fisherman (1 shard)
+          - { test_type: { name: "fisherman" }, shard: 2 }
+          - { test_type: { name: "fisherman" }, shard: 3 }
+          - { test_type: { name: "fisherman" }, shard: 4 }
+          - { test_type: { name: "fisherman" }, shard: 5 }
+          # Dev-node and User-net (2 shards)
+          - { test_type: { name: "dev-node" }, shard: 3 }
+          - { test_type: { name: "dev-node" }, shard: 4 }
+          - { test_type: { name: "dev-node" }, shard: 5 }
+          - { test_type: { name: "user-net" }, shard: 3 }
+          - { test_type: { name: "user-net" }, shard: 4 }
+          - { test_type: { name: "user-net" }, shard: 5 }
+          # Full-net (4 shards)
+          - { test_type: { name: "full-net" }, shard: 5 }
 
     name: "Test ${{ matrix.test_type.name }} (shard ${{ matrix.shard }}/${{ matrix.test_type.shards }})"
 
@@ -224,20 +254,32 @@ jobs:
             types-bundle
           key: test-deps-${{ runner.os }}-${{ hashFiles('test/pnpm-lock.yaml', 'api-augment/**', 'types-bundle/**') }}
 
+      - name: Download node binary artifact
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node-binary
+          path: build/
+        continue-on-error: true
+
       - name: Prepare Docker image for tests
         run: |
           mkdir -p target/release/
-          if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
-            # Pull the newly built image
-            docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
-            docker create --name temp_storage_hub moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+          if [[ "${{ needs.setup.outputs.node_changed }}" == "true" && -f "build/storage-hub-node" ]]; then
+            echo "Using node binary from artifact"
+            cp build/storage-hub-node target/release/storage-hub-node
           else
-            # Use latest image
-            docker pull moonsonglabs/storage-hub:latest
-            docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+            echo "Extracting node binary from Docker image"
+            if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
+              docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+              docker create --name temp_storage_hub moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+            else
+              docker pull moonsonglabs/storage-hub:latest
+              docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+            fi
+            docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+            docker rm temp_storage_hub
           fi
-          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-          docker rm temp_storage_hub
           chmod +x target/release/storage-hub-node
           
           # Build local image for tests
@@ -274,7 +316,7 @@ jobs:
           logs-dir-pattern: 'bsp-logs-*'
 
   network-tests:
-    needs: [setup, build]
+    needs: [setup]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -298,20 +340,38 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
+      - name: Download node binary artifact
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node-binary
+          path: build/
+        continue-on-error: true
+
       - name: Get node binary and build local image
         run: |
           mkdir -p target/release/
-          if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
-            echo "Using newly built image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
-            docker create --name temp_storage_hub ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
+          
+          # Try to use artifact first if node was rebuilt
+          if [[ "${{ needs.setup.outputs.node_changed }}" == "true" && -f "build/storage-hub-node" ]]; then
+            echo "Using node binary from artifact"
+            cp build/storage-hub-node target/release/storage-hub-node
           else
-            echo "Using latest image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            docker create --name temp_storage_hub ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            # Fall back to extracting from Docker image
+            echo "Extracting node binary from Docker image"
+            if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
+              echo "Using newly built image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
+              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
+              docker create --name temp_storage_hub ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
+            else
+              echo "Using latest image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+              docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+              docker create --name temp_storage_hub ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            fi
+            docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+            docker rm temp_storage_hub
           fi
-          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
-          docker rm temp_storage_hub
+          
           echo "Binary extracted, checking properties..."
           file target/release/storage-hub-node
           ls -la target/release/storage-hub-node
