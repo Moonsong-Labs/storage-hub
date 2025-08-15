@@ -27,7 +27,6 @@ jobs:
     outputs:
       node_changed: ${{ steps.node_check.outputs.changed }}
       image_tag: ${{ steps.set_tag.outputs.tag }}
-      test_image: ${{ steps.set_tag.outputs.test_image }}
     env:
       SKIP_BUILD_LABEL_PRESENT: ${{ contains(github.event.pull_request.labels.*.name, 'skip-node-build') }}
     steps:
@@ -48,7 +47,7 @@ jobs:
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Set image tags
+      - name: Set image tag
         id: set_tag
         run: |
           if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' ]]; then
@@ -56,7 +55,6 @@ jobs:
           else
             echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
           fi
-          echo "test_image=moonsonglabs/storage-hub:test-${{ github.sha }}" >> $GITHUB_OUTPUT
 
   build:
     needs: [setup]
@@ -157,12 +155,11 @@ jobs:
           cd test
           pnpm install
 
-      - name: Build and push test Docker image
+      - name: Build local Docker image for tests
         run: |
           cd test
           pnpm docker:build
-          docker tag moonsonglabs/storage-hub:latest ${{ needs.setup.outputs.test_image }}
-          docker push ${{ needs.setup.outputs.test_image }}
+          # This creates storage-hub:local which is what the tests expect
 
       - name: Generate TypeScript types
         run: |
@@ -227,10 +224,26 @@ jobs:
             types-bundle
           key: test-deps-${{ runner.os }}-${{ hashFiles('test/pnpm-lock.yaml', 'api-augment/**', 'types-bundle/**') }}
 
-      - name: Pull test Docker image
+      - name: Prepare Docker image for tests
         run: |
-          docker pull ${{ needs.setup.outputs.test_image }}
-          docker tag ${{ needs.setup.outputs.test_image }} moonsonglabs/storage-hub:latest
+          mkdir -p target/release/
+          if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
+            # Pull the newly built image
+            docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+            docker create --name temp_storage_hub moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+          else
+            # Use latest image
+            docker pull moonsonglabs/storage-hub:latest
+            docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          fi
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+          chmod +x target/release/storage-hub-node
+          
+          # Build local image for tests
+          cd test
+          pnpm install --frozen-lockfile
+          pnpm docker:build
 
       - name: Install diesel CLI
         if: matrix.test_type.diesel
@@ -285,7 +298,7 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
-      - name: Get node binary
+      - name: Get node binary and build local image
         run: |
           mkdir -p target/release/
           if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
@@ -304,6 +317,8 @@ jobs:
           chmod -R 777 docker/dev-keystores
           cd test
           pnpm install
+          # Build local image for network tests
+          pnpm docker:build
 
       - name: Download Polkadot for Zombienet
         if: matrix.test_type.name == 'zombienet-simple'
