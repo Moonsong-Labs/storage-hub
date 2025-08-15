@@ -7,7 +7,8 @@ use crate::command::ProviderOptions;
 
 use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
-    BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
+    BspUploadFileOptions, FishermanOptions, IndexerOptions, MspChargeFeesOptions,
+    MspMoveBucketOptions,
 };
 use shc_indexer_service::IndexerMode;
 use shc_rpc::RpcConfig;
@@ -496,26 +497,77 @@ impl ProviderConfigurations {
 
 #[derive(Debug, Parser, Clone)]
 pub struct IndexerConfigurations {
-    /// Whether to enable the indexer.
-    ///
-    /// By default, the indexer is disabled.
-    /// If enabled, a Postgres database must be set up (see the indexer README for details).
-    #[arg(long, default_value = "false")]
+    /// Enable the indexer service.
+    #[clap(long)]
     pub indexer: bool,
 
     /// The mode in which the indexer runs.
     ///
     /// - `full`: Indexes all blockchain data
     /// - `lite`: Indexes only essential data for storage operations
+    /// - `fishing`: Indexes only essential data for operating as a fisherman
     #[arg(long, value_parser = clap::value_parser!(IndexerMode), default_value = "full")]
     pub indexer_mode: IndexerMode,
 
     /// Postgres database URL.
     ///
-    /// If not provided, the indexer will use the `DATABASE_URL` environment variable. If the
+    /// If not provided, the indexer will use the `INDEXER_DATABASE_URL` environment variable. If the
     /// environment variable is not set, the node will abort.
-    #[arg(long)]
-    pub database_url: Option<String>,
+    #[clap(
+        long("indexer-database-url"),
+        env = "INDEXER_DATABASE_URL",
+        required_if_eq("indexer", "true")
+    )]
+    pub indexer_database_url: Option<String>,
+}
+
+impl IndexerConfigurations {
+    pub fn indexer_options(&self) -> Option<IndexerOptions> {
+        if self.indexer {
+            Some(IndexerOptions {
+                indexer_mode: self.indexer_mode,
+                database_url: self
+                    .indexer_database_url
+                    .clone()
+                    .expect("Indexer database URL is required"),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Parser, Clone)]
+pub struct FishermanConfigurations {
+    /// Enable the fisherman service.
+    #[clap(long)]
+    pub fisherman: bool,
+
+    /// Postgres database URL for the fisherman service.
+    ///
+    /// If not provided, the fisherman will use the `FISHERMAN_DATABASE_URL` environment variable.
+    /// If the environment variable is not set, the node will abort.
+    #[clap(
+        long("fisherman-database-url"),
+        env = "FISHERMAN_DATABASE_URL",
+        required_if_eq("fisherman", "true")
+    )]
+    pub fisherman_database_url: Option<String>,
+}
+
+impl FishermanConfigurations {
+    pub fn fisherman_options(&self) -> Option<FishermanOptions> {
+        if self.fisherman {
+            Some(FishermanOptions {
+                database_url: self
+                    .fisherman_database_url
+                    .clone()
+                    .expect("Fisherman database URL is required"),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 /// Block authoring scheme to be used by the dev service.
@@ -591,11 +643,11 @@ pub struct Cli {
 
     /// Provider configurations file path (allow to specify the provider configuration in a file instead of the cli)
     #[clap(long, conflicts_with_all = [
-        "provider", "provider_type", "max_storage_capacity", "jump_capacity", 
+        "provider", "provider_type", "max_storage_capacity", "jump_capacity",
         "storage_layer", "storage_path", "extrinsic_retry_timeout", "sync_mode_min_blocks_behind",
         "check_for_pending_proofs_period", "max_blocks_behind_to_catch_up_root_changes",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
-        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", 
+        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
@@ -606,6 +658,10 @@ pub struct Cli {
     /// Indexer configurations
     #[command(flatten)]
     pub indexer_config: IndexerConfigurations,
+
+    /// Fisherman configurations
+    #[command(flatten)]
+    pub fisherman_config: FishermanConfigurations,
 }
 
 #[derive(Debug, Parser)]

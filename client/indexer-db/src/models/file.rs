@@ -15,6 +15,13 @@ use crate::{
 pub enum FileStorageRequestStep {
     Requested = 0,
     Stored = 1,
+    Expired = 2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FileDeletionStatus {
+    None = 0,
+    InProgress = 1,
 }
 
 /// Table that holds the Files (both ongoing requests and completed).
@@ -31,6 +38,8 @@ pub struct File {
     pub size: i64,
     /// The step this file is at. 0 = requested, 1 = fulfilled.
     pub step: i32,
+    /// Deletion status of the file. NULL = normal, 1 = deletion in progress.
+    pub deletion_status: Option<i32>,
     pub created_at: NaiveDateTime,
     pub updated_at: NaiveDateTime,
 }
@@ -66,6 +75,7 @@ impl File {
                 file::fingerprint.eq(fingerprint.into()),
                 file::size.eq(size),
                 file::step.eq(step as i32),
+                file::deletion_status.eq(None::<i32>),
             ))
             .returning(File::as_select())
             .get_result(conn)
@@ -125,6 +135,109 @@ impl File {
             .execute(conn)
             .await?;
         Ok(())
+    }
+
+    pub async fn update_deletion_status<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+        status: FileDeletionStatus,
+    ) -> Result<(), diesel::result::Error> {
+        let file_key = file_key.as_ref().to_vec();
+        let status_value = match status {
+            FileDeletionStatus::None => None,
+            FileDeletionStatus::InProgress => Some(1),
+        };
+        diesel::update(file::table)
+            .filter(file::file_key.eq(file_key))
+            .set(file::deletion_status.eq(status_value))
+            .execute(conn)
+            .await?;
+        Ok(())
+    }
+
+    /// Check if file has any MSP associations
+    pub async fn has_msp_associations<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<bool, diesel::result::Error> {
+        use crate::schema::msp_file;
+
+        let file_key = file_key.as_ref().to_vec();
+
+        // Get file ID
+        let file_id: Option<i64> = file::table
+            .filter(file::file_key.eq(&file_key))
+            .select(file::id)
+            .first(conn)
+            .await
+            .optional()?;
+
+        if let Some(file_id) = file_id {
+            let count: i64 = msp_file::table
+                .filter(msp_file::file_id.eq(file_id))
+                .count()
+                .get_result(conn)
+                .await?;
+            Ok(count > 0)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Check if file has any BSP associations
+    pub async fn has_bsp_associations<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<bool, diesel::result::Error> {
+        use crate::schema::bsp_file;
+
+        let file_key = file_key.as_ref().to_vec();
+
+        // Get file ID
+        let file_id: Option<i64> = file::table
+            .filter(file::file_key.eq(&file_key))
+            .select(file::id)
+            .first(conn)
+            .await
+            .optional()?;
+
+        if let Some(file_id) = file_id {
+            let count: i64 = bsp_file::table
+                .filter(bsp_file::file_id.eq(file_id))
+                .count()
+                .get_result(conn)
+                .await?;
+            Ok(count > 0)
+        } else {
+            Ok(false)
+        }
+    }
+
+    /// Delete file only if it has no provider associations (orphaned)
+    pub async fn delete_if_orphaned<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<bool, diesel::result::Error> {
+        let file_key = file_key.as_ref();
+
+        // Check if file has any associations
+        let has_msp = Self::has_msp_associations(conn, file_key).await?;
+        let has_bsp = Self::has_bsp_associations(conn, file_key).await?;
+
+        if !has_msp && !has_bsp {
+            // No associations, delete the file
+            Self::delete(conn, file_key).await?;
+            log::info!("Deleted orphaned file with key: {:?}", file_key);
+            Ok(true)
+        } else {
+            log::debug!(
+                "File with key {:?} still has associations (MSP: {}, BSP: {}), keeping it",
+                file_key,
+                has_msp,
+                has_bsp
+            );
+            Ok(false)
+        }
     }
 
     pub async fn get_by_bucket_id<'a>(
