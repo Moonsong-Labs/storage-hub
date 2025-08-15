@@ -1,6 +1,7 @@
 use shc_actors_derive::{ActorEvent, ActorEventBus};
 use shc_common::types::{BackupStorageProviderId, BucketId, FileOperationIntention};
 use sp_runtime::MultiSignature;
+
 /// Represent where a file should be deleted from for the deletion process
 #[derive(Clone, Debug)]
 pub enum FileDeletionTarget {

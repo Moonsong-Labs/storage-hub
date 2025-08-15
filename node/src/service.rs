@@ -624,7 +624,9 @@ where
             }
             cli::Sealing::Interval(millis) => {
                 if millis < 3000 {
-                    log::info!("⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended.");
+                    log::info!(
+                        "⚠️ Sealing interval is very short. Normally setting this to 6000 ms is recommended."
+                    );
                 }
 
                 Box::new(StreamExt::map(
@@ -713,9 +715,9 @@ where
         match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if collator => {
                 log::warn!(
-				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
-				err
-			);
+                    "⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
+                    err
+                );
             }
             _ => {}
         }
@@ -1253,9 +1255,9 @@ where
         match SUBSTRATE_REFERENCE_HARDWARE.check_hardware(&hwbench, false) {
             Err(err) if validator => {
                 log::warn!(
-				"⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
-				err
-			);
+                    "⚠️  The hardware does not meet the minimal requirements {} for role 'Authority'.",
+                    err
+                );
             }
             _ => {}
         }

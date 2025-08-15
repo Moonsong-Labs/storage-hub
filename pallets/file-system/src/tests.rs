@@ -3,7 +3,7 @@ use crate::{
     mock::*,
     types::{
         BalanceOf, BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionIdFor,
-        FileKeyWithProof, FileLocation, FileOperation, FileOperationIntention,
+        FileKeyWithProof, FileLocation, FileMetadata, FileOperation, FileOperationIntention,
         MoveBucketRequestMetadata, PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit,
         StorageRequestBspsMetadata, StorageRequestMetadata, StorageRequestMspAcceptedFileKeys,
         StorageRequestMspBucketResponse, StorageRequestTtl, ThresholdType, TickNumber, ValuePropId,
@@ -39,6 +39,24 @@ use sp_runtime::{
 };
 use sp_std::cmp::max;
 use sp_trie::CompactProof;
+
+/// Helper function to create FileMetadata for tests
+fn create_test_file_metadata(
+    owner_account_id: &<Test as frame_system::Config>::AccountId,
+    bucket_id: &BucketIdFor<Test>,
+    location: &FileLocation<Test>,
+    size: u64,
+    fingerprint: H256,
+) -> FileMetadata {
+    FileMetadata::new(
+        owner_account_id.encode(),
+        bucket_id.as_ref().to_vec(),
+        location.to_vec(),
+        size,
+        fingerprint.as_bytes().into(),
+    )
+    .unwrap()
+}
 
 mod create_bucket_tests {
     use super::*;
@@ -5890,7 +5908,7 @@ mod bsp_confirm {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![(file_key, create_test_file_metadata(&owner_account_id, &bucket_id, &location, size, fingerprint))]).unwrap(),
                         skipped_file_keys: Default::default(),
                         new_root,
                     }
@@ -6068,11 +6086,36 @@ mod bsp_confirm {
 
                 let new_root = Providers::get_root(bsp_id).unwrap();
 
+                // Create the correct file metadata for each successful file key
+                let confirmed_file_keys_with_metadata: Vec<_> = successful_file_keys
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, fk)| {
+                        // Skip index 0 since that's the pre-confirmed file
+                        let location_index = if i == 0 { 1 } else { i + 1 };
+                        let location = FileLocation::<Test>::try_from(
+                            format!("test{}", location_index).into_bytes(),
+                        )
+                        .unwrap();
+                        let metadata = create_test_file_metadata(
+                            &owner_account_id,
+                            &bucket_id,
+                            &location,
+                            size,
+                            fingerprint,
+                        );
+                        (fk, metadata)
+                    })
+                    .collect();
+
                 System::assert_last_event(
                     Event::BspConfirmedStoring {
                         who: bsp_account_id,
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(successful_file_keys).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(
+                            confirmed_file_keys_with_metadata,
+                        )
+                        .unwrap(),
                         skipped_file_keys: BoundedVec::try_from(vec![pre_confirmed_file_key])
                             .unwrap(),
                         new_root,
@@ -6224,7 +6267,7 @@ mod bsp_confirm {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![(file_key, create_test_file_metadata(&owner_account_id, &bucket_id, &location, size, fingerprint))]).unwrap(),
                         skipped_file_keys: BoundedVec::default(),
                         new_root,
                     }
@@ -6372,7 +6415,7 @@ mod bsp_confirm {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![(file_key, create_test_file_metadata(&owner_account_id, &bucket_id, &location, new_size, fingerprint))]).unwrap(),
                         skipped_file_keys: Default::default(),
                         new_root,
                     }
@@ -6530,7 +6573,7 @@ mod bsp_confirm {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![(file_key, create_test_file_metadata(&owner_account_id, &bucket_id, &location, size, fingerprint))]).unwrap(),
                         skipped_file_keys: Default::default(),
                         new_root,
                     }
@@ -9345,7 +9388,7 @@ mod stop_storing_for_insolvent_user {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![(file_key, create_test_file_metadata(&owner_account_id, &bucket_id, &location, size, fingerprint))]).unwrap(),
                         skipped_file_keys: Default::default(),
                         new_root,
                     }
@@ -9782,7 +9825,7 @@ mod stop_storing_for_insolvent_user {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![(file_key, create_test_file_metadata(&owner_account_id, &bucket_id, &location, size, fingerprint))]).unwrap(),
                         skipped_file_keys: Default::default(),
                         new_root,
                     }
@@ -10079,7 +10122,7 @@ mod stop_storing_for_insolvent_user {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![(file_key, create_test_file_metadata(&owner_account_id, &bucket_id, &location, size, fingerprint))]).unwrap(),
                         skipped_file_keys: Default::default(),
                         new_root,
                     }
@@ -10348,7 +10391,7 @@ mod stop_storing_for_insolvent_user {
                     Event::BspConfirmedStoring {
                         who: bsp_account_id.clone(),
                         bsp_id,
-                        confirmed_file_keys: BoundedVec::try_from(vec![file_key]).unwrap(),
+                        confirmed_file_keys: BoundedVec::try_from(vec![(file_key, create_test_file_metadata(&owner_account_id, &bucket_id, &location, size, fingerprint))]).unwrap(),
                         skipped_file_keys: Default::default(),
                         new_root,
                     }

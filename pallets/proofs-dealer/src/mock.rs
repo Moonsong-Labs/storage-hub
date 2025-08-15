@@ -462,7 +462,7 @@ where
                         ) {
                             Ok(file_metadata) => file_metadata,
                             Err(_) => {
-                                return Err(DispatchError::Other("Failed to create file metadata"))
+                                return Err(DispatchError::Other("Failed to create file metadata"));
                             }
                         };
 
