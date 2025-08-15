@@ -14,13 +14,8 @@ on:
     branches: [main]
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: moonsong-labs/storage-hub
-
 permissions:
   contents: read
-  packages: write
 
 jobs:
   setup:
@@ -52,12 +47,12 @@ jobs:
       - name: Set image tags
         id: set_tag
         run: |
-          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' || "${{ github.ref }}" == 'refs/heads/main' ]]; then
+          if [[ "${{ env.SKIP_BUILD_LABEL_PRESENT }}" == "true" || "${{ steps.node_check.outputs.changed }}" == 'false' ]]; then
             echo "tag=latest" >> $GITHUB_OUTPUT
           else
             echo "tag=sha-$(git log -1 --format='%H' | cut -c1-8)" >> $GITHUB_OUTPUT
           fi
-          echo "test_image=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:test-${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "test_image=moonsonglabs/storage-hub:test-${{ github.sha }}" >> $GITHUB_OUTPUT
 
   build:
     needs: [setup]
@@ -70,12 +65,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to Container Registry
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -114,8 +108,8 @@ jobs:
           push: true
           platforms: linux/amd64
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+            moonsonglabs/storage-hub:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -131,24 +125,23 @@ jobs:
         with:
           node_version: 23
 
-      - name: Log in to Container Registry
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Get node binary
         run: |
           mkdir -p target/release/
           if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
             # Pull the newly built image
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
-            docker create --name temp_storage_hub ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
+            docker pull moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
+            docker create --name temp_storage_hub moonsonglabs/storage-hub:${{ needs.setup.outputs.image_tag }}
           else
             # Use latest image
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-            docker create --name temp_storage_hub ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            docker pull moonsonglabs/storage-hub:latest
+            docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
           fi
           docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
           docker rm temp_storage_hub
@@ -215,12 +208,11 @@ jobs:
         with:
           node_version: 23
 
-      - name: Log in to Container Registry
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Restore test dependencies
         uses: actions/cache@v4
@@ -283,12 +275,11 @@ jobs:
 
       - uses: ./.github/workflow-templates/setup-pnpm
 
-      - name: Log in to Container Registry
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Get node binary
         run: |
