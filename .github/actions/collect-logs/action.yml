@@ -21,7 +21,7 @@ runs:
 
         mkdir -p test-logs
 
-        for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+        for container in $(docker ps -a --filter "ancestor=storage-hub:local" --format "{{.Names}}"); do
           echo "Collecting logs from $container"
           docker logs $container > "test-logs/${container}.log" 2>&1
         done

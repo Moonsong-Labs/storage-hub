@@ -302,21 +302,26 @@ jobs:
         run: |
           mkdir -p target/release/
           if [[ "${{ needs.setup.outputs.node_changed }}" == "true" ]]; then
+            echo "Using newly built image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}"
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
             docker create --name temp_storage_hub ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.setup.outputs.image_tag }}
           else
+            echo "Using latest image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             docker create --name temp_storage_hub ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           fi
           docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
           docker rm temp_storage_hub
+          echo "Binary extracted, checking properties..."
+          file target/release/storage-hub-node
+          ls -la target/release/storage-hub-node
 
       - name: Prepare environment
         run: |
           chmod +x target/release/storage-hub-node
           chmod -R 777 docker/dev-keystores
           cd test
-          pnpm install
+          pnpm install --frozen-lockfile
           # Build local image for network tests
           pnpm docker:build
 
