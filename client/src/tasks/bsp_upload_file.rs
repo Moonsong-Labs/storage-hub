@@ -689,7 +689,7 @@ where
                 .storage_hub_handler
                 .blockchain
                 .send_extrinsic(
-                    call.into(),
+                    call,
                     SendExtrinsicOptions::new(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
