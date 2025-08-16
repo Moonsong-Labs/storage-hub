@@ -448,5 +448,5 @@ pub struct FinalisedBucketMovedAway<Runtime: StorageEnableRuntime> {
 ///
 /// It holds the event buses for the different events that the BlockchainService actor
 /// can emit.
-#[ActorEventBus("blockchain_service", generics(Runtime: StorageEnableRuntime))]
-pub struct BlockchainServiceEventBusProvider;
+#[ActorEventBus("blockchain_service")]
+pub struct BlockchainServiceEventBusProvider<Runtime: StorageEnableRuntime>;

@@ -50,5 +50,5 @@ pub struct RemoteDownloadRequest<Runtime: StorageEnableRuntime> {
 #[actor(actor = "file_transfer_service")]
 pub struct RetryBucketMoveDownload;
 
-#[ActorEventBus("file_transfer_service", generics(Runtime: StorageEnableRuntime))]
+#[ActorEventBus("file_transfer_service")]
 pub struct FileTransferServiceEventBusProvider<Runtime: StorageEnableRuntime>;

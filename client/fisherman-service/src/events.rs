@@ -21,5 +21,5 @@ pub struct ProcessFileDeletionRequest<Runtime: StorageEnableRuntime> {
     /// The signed intention
     pub signature: MultiSignature,
 }
-#[ActorEventBus("fisherman_service", generics(Runtime: StorageEnableRuntime))]
+#[ActorEventBus("fisherman_service")]
 pub struct FishermanServiceEventBusProvider<Runtime: StorageEnableRuntime>;
