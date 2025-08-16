@@ -23,7 +23,7 @@ where
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
-    download_state_store: Arc<DownloadStateStore>,
+    download_state_store: Arc<DownloadStateStore<Runtime>>,
 }
 
 impl<NT, Runtime> MspRetryBucketMoveTask<NT, Runtime>

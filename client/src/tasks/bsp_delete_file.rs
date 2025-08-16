@@ -67,7 +67,8 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FinalisedBspConfirmStoppedStoring> for BspDeleteFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<FinalisedBspConfirmStoppedStoring<Runtime>>
+    for BspDeleteFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
@@ -75,7 +76,7 @@ where
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedBspConfirmStoppedStoring,
+        event: FinalisedBspConfirmStoppedStoring<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,

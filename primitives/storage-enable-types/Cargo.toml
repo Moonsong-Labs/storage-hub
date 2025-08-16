@@ -1,0 +1,82 @@
+[package]
+name = "shp-storage-enable-types"
+description = "Primitives for generally used types of StorageHub"
+version = "0.1.0"
+homepage = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+edition = { workspace = true }
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[dependencies]
+# Substrate
+frame-system = { workspace = true }
+pallet-balances = { workspace = true }
+sp-core = { workspace = true }
+sp-runtime = { workspace = true }
+sp-trie = { workspace = true }
+
+# Local dependencies
+pallet-file-system = { workspace = true }
+pallet-payment-streams = { workspace = true }
+pallet-proofs-dealer = { workspace = true }
+pallet-storage-providers = { workspace = true }
+shp-constants = { workspace = true }
+shp-file-key-verifier = { workspace = true }
+shp-file-metadata = { workspace = true }
+shp-forest-verifier = { workspace = true }
+shp-opaque = { workspace = true }
+shp-traits = { workspace = true }
+
+[features]
+default = ["std"]
+runtime-benchmarks = [
+    "frame-system/runtime-benchmarks",
+    "pallet-balances/runtime-benchmarks",
+    "pallet-file-system/runtime-benchmarks",
+    "pallet-payment-streams/runtime-benchmarks",
+    "pallet-proofs-dealer/runtime-benchmarks",
+    "pallet-storage-providers/runtime-benchmarks",
+    "shp-constants/runtime-benchmarks",
+    "shp-file-key-verifier/runtime-benchmarks",
+    "shp-file-metadata/runtime-benchmarks",
+    "shp-forest-verifier/runtime-benchmarks",
+    "shp-opaque/runtime-benchmarks",
+    "sp-runtime/runtime-benchmarks",
+]
+std = [
+    "frame-system/std",
+    "pallet-balances/std",
+    "pallet-file-system/std",
+    "pallet-payment-streams/std",
+    "pallet-proofs-dealer/std",
+    "pallet-storage-providers/std",
+    "shp-constants/std",
+    "shp-file-key-verifier/std",
+    "shp-file-metadata/std",
+    "shp-forest-verifier/std",
+    "shp-opaque/std",
+    "sp-core/std",
+    "sp-runtime/std",
+    "sp-trie/std",
+]
+try-runtime = [
+    "frame-system/try-runtime",
+    "pallet-balances/try-runtime",
+    "pallet-file-system/try-runtime",
+    "pallet-payment-streams/try-runtime",
+    "pallet-proofs-dealer/try-runtime",
+    "pallet-storage-providers/try-runtime",
+    "shp-constants/try-runtime",
+    "shp-file-key-verifier/try-runtime",
+    "shp-file-metadata/try-runtime",
+    "shp-forest-verifier/try-runtime",
+    "shp-opaque/try-runtime",
+    "sp-runtime/try-runtime",
+]

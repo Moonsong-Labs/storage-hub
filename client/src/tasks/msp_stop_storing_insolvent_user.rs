@@ -84,13 +84,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<UserWithoutFunds> for MspStopStoringInsolventUserTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<UserWithoutFunds<Runtime>>
+    for MspStopStoringInsolventUserTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: UserWithoutFunds) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing UserWithoutFunds for user {:?}. Stopping storing all buckets for the insolvent user.",
@@ -216,7 +217,7 @@ where
 /// This task will:
 /// - Delete the bucket from the MSP's storage.
 /// - Delete all the files in the bucket.
-impl<NT, Runtime> EventHandler<FinalisedMspStopStoringBucketInsolventUser>
+impl<NT, Runtime> EventHandler<FinalisedMspStopStoringBucketInsolventUser<Runtime>>
     for MspStopStoringInsolventUserTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
@@ -225,7 +226,7 @@ where
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedMspStopStoringBucketInsolventUser,
+        event: FinalisedMspStopStoringBucketInsolventUser<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -273,19 +274,18 @@ where
     /// Common function to handle submitting an extrinsic to stop storing a bucket that belongs to an insolvent user.
     async fn stop_storing_bucket_for_insolvent_user(&self, bucket_id: &H256) -> anyhow::Result<()> {
         // Build the extrinsic to stop storing the bucket of the insolvent user
-        let stop_storing_bucket_for_insolvent_user_call =
-            storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
-                    bucket_id: *bucket_id,
-                },
-            );
+        let stop_storing_bucket_for_insolvent_user_call: Runtime::Call =
+            pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
+                bucket_id: *bucket_id,
+            }
+            .into();
 
         // Send the transaction and wait for it to be included in the block.
         if let Err(e) = self
             .storage_hub_handler
             .blockchain
             .send_extrinsic(
-                stop_storing_bucket_for_insolvent_user_call.into(),
+                stop_storing_bucket_for_insolvent_user_call,
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config

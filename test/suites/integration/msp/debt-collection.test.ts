@@ -1,8 +1,10 @@
 import assert, { strictEqual } from "node:assert";
-import { describeMspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
-import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
-import type { H256 } from "@polkadot/types/interfaces";
 import type { Option } from "@polkadot/types";
+import type { H256 } from "@polkadot/types/interfaces";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, describeMspNet, shUser, waitFor } from "../../../util";
+import { DUMMY_MSP_ID, MSP_CHARGING_PERIOD } from "../../../util/bspNet/consts";
 
 describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -53,13 +55,14 @@ describeMspNet("Single MSP collecting debt", ({ before, createMsp1Api, it, creat
 
     // Load each file in storage and issue the storage requests
     const txs = [];
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     for (let i = 0; i < source.length; i++) {
       const {
         file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source[i],
         destination[i],
-        userApi.shConsts.NODE_INFOS.user.AddressId,
+        ownerHex,
         bucketId
       );
 

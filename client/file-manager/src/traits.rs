@@ -2,7 +2,7 @@ use std::{collections::HashSet, str::FromStr};
 
 use trie_db::TrieLayout;
 
-use shc_common::types::{Chunk, ChunkId, FileKeyProof, FileMetadata, FileProof, HasherOutT};
+use shc_common::types::{Chunk, ChunkId, FileKeyProof, FileMetadata, HasherOutT};
 
 #[derive(Debug)]
 pub enum FileStorageWriteError {
@@ -129,8 +129,11 @@ pub trait FileDataTrie<T: TrieLayout> {
     /// Get the root of the trie.
     fn get_root(&self) -> &HasherOutT<T>;
 
-    /// Generate proof for a set of chunks of a file. Returns error if the chunk does not exist.
-    fn generate_proof(&self, chunk_ids: &HashSet<ChunkId>) -> Result<FileProof, FileStorageError>;
+    /// Generate a compact proof for a set of chunks of a file. Returns error if any requested chunk does not exist.
+    fn generate_proof(
+        &self,
+        chunk_ids: &HashSet<ChunkId>,
+    ) -> Result<FileKeyProof, FileStorageError>;
 
     // TODO: make it accept a list of chunks to be retrieved
     /// Get a file chunk from storage. Returns error if the chunk does not exist.

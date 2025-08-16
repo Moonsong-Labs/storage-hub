@@ -24,8 +24,8 @@ use sp_consensus_aura::Slot;
 use sp_core::H256;
 
 // Local Runtime Types
-use storage_hub_runtime::opaque::Block;
-use storage_hub_runtime::{apis::RuntimeApi, opaque::Hash, Runtime};
+use shp_opaque::{Block, Hash};
+use storage_hub_runtime::{apis::RuntimeApi, Runtime};
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
@@ -558,7 +558,7 @@ where
                 command_sink: command_sink.clone(),
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -909,7 +909,7 @@ where
                 command_sink: Some(command_sink.clone()),
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1141,7 +1141,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1383,7 +1383,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 

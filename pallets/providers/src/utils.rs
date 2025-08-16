@@ -28,7 +28,7 @@ use shp_traits::{
     StorageHubTickGetter, SystemMetricsInterface,
 };
 use sp_arithmetic::{rational::MultiplyRational, Rounding::NearestPrefUp};
-use sp_runtime::traits::ConvertBack;
+use sp_runtime::traits::{Convert, ConvertBack};
 use sp_std::vec::Vec;
 
 macro_rules! expect_or_err {
@@ -1436,9 +1436,11 @@ where
                     let bucket_rate = if bucket.size.is_zero() {
                         zero_sized_bucket_rate
                     } else {
+                        let bucket_size =
+                            StorageDataUnitAndBalanceConverter::<T>::convert(bucket.size);
                         value_prop
                             .price_per_giga_unit_of_data_per_block
-                            .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                            .multiply_rational(bucket_size, GIGAUNIT.into(), NearestPrefUp)
                             .ok_or(ArithmeticError::Overflow)?
                             .checked_add(&zero_sized_bucket_rate)
                             .ok_or(ArithmeticError::Overflow)?
@@ -1473,9 +1475,11 @@ where
                     let bucket_rate = if bucket.size.is_zero() {
                         zero_sized_bucket_rate
                     } else {
+                        let bucket_size =
+                            StorageDataUnitAndBalanceConverter::<T>::convert(bucket.size);
                         value_prop
                             .price_per_giga_unit_of_data_per_block
-                            .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                            .multiply_rational(bucket_size, GIGAUNIT.into(), NearestPrefUp)
                             .ok_or(ArithmeticError::Overflow)?
                             .checked_add(&zero_sized_bucket_rate)
                             .ok_or(ArithmeticError::Overflow)?
@@ -1498,9 +1502,10 @@ where
                 }
                 RateDeltaParam::Increase(delta) => {
                     // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
+                    let bucket_size = StorageDataUnitAndBalanceConverter::<T>::convert(bucket.size);
                     let bucket_rate = value_prop
                         .price_per_giga_unit_of_data_per_block
-                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .multiply_rational(bucket_size, GIGAUNIT.into(), NearestPrefUp)
                         .ok_or(ArithmeticError::Overflow)?
                         .checked_add(&zero_sized_bucket_rate)
                         .ok_or(ArithmeticError::Overflow)?;
@@ -1518,9 +1523,15 @@ where
                     );
 
                     // Calculate what would be the new bucket rate with the new size.
+                    let new_bucket_size_in_storage_data_units =
+                        StorageDataUnitAndBalanceConverter::<T>::convert(new_bucket_size);
                     let new_bucket_rate = value_prop
                         .price_per_giga_unit_of_data_per_block
-                        .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .multiply_rational(
+                            new_bucket_size_in_storage_data_units,
+                            GIGAUNIT.into(),
+                            NearestPrefUp,
+                        )
                         .ok_or(ArithmeticError::Overflow)?
                         .checked_add(&zero_sized_bucket_rate)
                         .ok_or(ArithmeticError::Overflow)?;
@@ -1544,9 +1555,10 @@ where
                 }
                 RateDeltaParam::Decrease(delta) => {
                     // Get the current bucket rate, which is the rate of a zero sized bucket plus the rate according to the bucket size.
+                    let bucket_size = StorageDataUnitAndBalanceConverter::<T>::convert(bucket.size);
                     let bucket_rate = value_prop
                         .price_per_giga_unit_of_data_per_block
-                        .multiply_rational(bucket.size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .multiply_rational(bucket_size, GIGAUNIT.into(), NearestPrefUp)
                         .ok_or(ArithmeticError::Overflow)?
                         .checked_add(&zero_sized_bucket_rate)
                         .ok_or(ArithmeticError::Overflow)?;
@@ -1558,9 +1570,15 @@ where
                         .ok_or(ArithmeticError::Underflow)?;
 
                     // Calculate what would be the new bucket rate with the new size.
+                    let new_bucket_size_in_storage_data_units =
+                        StorageDataUnitAndBalanceConverter::<T>::convert(new_bucket_size);
                     let new_bucket_rate = value_prop
                         .price_per_giga_unit_of_data_per_block
-                        .multiply_rational(new_bucket_size.into(), GIGAUNIT.into(), NearestPrefUp)
+                        .multiply_rational(
+                            new_bucket_size_in_storage_data_units,
+                            GIGAUNIT.into(),
+                            NearestPrefUp,
+                        )
                         .ok_or(ArithmeticError::Overflow)?
                         .checked_add(&zero_sized_bucket_rate)
                         .ok_or(ArithmeticError::Overflow)?;
@@ -1593,8 +1611,10 @@ where
         let capacity_over_minimum = capacity
             .checked_sub(&T::SpMinCapacity::get())
             .ok_or(Error::<T>::StorageTooLow)?;
+        let capacity_over_minimum =
+            StorageDataUnitAndBalanceConverter::<T>::convert(capacity_over_minimum);
         let deposit_for_capacity_over_minimum = T::DepositPerData::get()
-            .checked_mul(&capacity_over_minimum.into())
+            .checked_mul(&capacity_over_minimum)
             .ok_or(ArithmeticError::Overflow)?;
         T::SpMinDeposit::get()
             .checked_add(&deposit_for_capacity_over_minimum)

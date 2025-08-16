@@ -52,12 +52,12 @@ where
 /// Handles the [`SlashableProvider`] event.
 ///
 /// This event is triggered by the runtime when a provider is marked as slashable.
-impl<NT, Runtime> EventHandler<SlashableProvider> for SlashProviderTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<SlashableProvider<Runtime>> for SlashProviderTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: SlashableProvider) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: SlashableProvider<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Slashing provider {:?}",
@@ -75,19 +75,19 @@ where
 {
     async fn handle_slashable_provider_event(
         &mut self,
-        event: SlashableProvider,
+        event: SlashableProvider<Runtime>,
     ) -> anyhow::Result<()> {
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::Providers(pallet_storage_providers::Call::slash {
-                provider_id: event.provider,
-            });
+        let call: Runtime::Call = pallet_storage_providers::Call::<Runtime>::slash {
+            provider_id: event.provider,
+        }
+        .into();
 
         // Send extrinsic and wait for it to be included in the block.
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(
-                call.into(),
+                call,
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config

@@ -62,13 +62,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FinalisedBucketMovedAway> for MspDeleteBucketTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<FinalisedBucketMovedAway<Runtime>>
+    for MspDeleteBucketTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: FinalisedBucketMovedAway) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: FinalisedBucketMovedAway<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: bucket {:?} moved to MSP {:?}, starting cleanup",
@@ -96,7 +100,7 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FinalisedMspStoppedStoringBucket>
+impl<NT, Runtime> EventHandler<FinalisedMspStoppedStoringBucket<Runtime>>
     for MspDeleteBucketTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
@@ -105,7 +109,7 @@ where
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedMspStoppedStoringBucket,
+        event: FinalisedMspStoppedStoringBucket<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -141,7 +145,7 @@ where
     Runtime: StorageEnableRuntime,
 {
     /// Deletes all files in a bucket and removes the bucket's forest storage
-    async fn delete_bucket(&mut self, bucket_id: &BucketId) -> anyhow::Result<()> {
+    async fn delete_bucket(&mut self, bucket_id: &BucketId<Runtime>) -> anyhow::Result<()> {
         self.storage_hub_handler
             .file_storage
             .write()

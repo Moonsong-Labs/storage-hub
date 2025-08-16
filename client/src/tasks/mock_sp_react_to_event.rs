@@ -14,7 +14,7 @@ use crate::{handler::StorageHubHandler, types::ShNodeType};
 
 const LOG_TARGET: &str = "sp-react-to-event-mock-task";
 
-pub type EventToReactTo = MultipleNewChallengeSeeds;
+pub type EventToReactTo<Runtime> = MultipleNewChallengeSeeds<Runtime>;
 
 /// [`SpReactToEventMockTask`] is a mocked task used specifically for testing events emitted by the
 /// BlockchainService, which this tasks reacts to by sending a remark with event transaction.
@@ -53,12 +53,12 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<EventToReactTo> for SpReactToEventMockTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<EventToReactTo<Runtime>> for SpReactToEventMockTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: EventToReactTo) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: EventToReactTo<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating task for event: {:?}",
@@ -66,17 +66,17 @@ where
         );
 
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::System(frame_system::Call::remark_with_event {
-                remark: "Remark as a mock for testing events emitted by the BlockchainService."
-                    .as_bytes()
-                    .to_vec(),
-            });
+        let call: Runtime::Call = frame_system::Call::<Runtime>::remark_with_event {
+            remark: "Remark as a mock for testing events emitted by the BlockchainService."
+                .as_bytes()
+                .to_vec(),
+        }
+        .into();
 
         self.storage_hub_handler
             .blockchain
             .send_extrinsic(
-                call.into(),
+                call,
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config

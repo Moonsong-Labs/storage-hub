@@ -59,7 +59,9 @@ shc-client = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-key-verifier = { workspace = true }
 shp-file-metadata = { workspace = true }
+shp-opaque = { workspace = true }
 shp-traits = { workspace = true }
+shp-types = { workspace = true }
 
 clap = { workspace = true }
 log = { workspace = true }
