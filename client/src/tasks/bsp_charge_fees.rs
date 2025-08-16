@@ -134,7 +134,7 @@ where
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Default::default())
+                .send_extrinsic(call.into(), Default::default())
                 .await;
 
             match charging_result {
@@ -339,7 +339,7 @@ where
             self.storage_hub_handler
                 .blockchain
                 .send_extrinsic(
-                    stop_storing_for_insolvent_user_call,
+                    stop_storing_for_insolvent_user_call.into(),
                     SendExtrinsicOptions::new(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
@@ -362,7 +362,7 @@ where
                 let charging_result = self
                     .storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call, Default::default())
+                    .send_extrinsic(call.into(), Default::default())
                     .await;
 
                 match charging_result {
