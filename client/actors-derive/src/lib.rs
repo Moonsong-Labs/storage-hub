@@ -325,7 +325,7 @@ impl Parse for SubscribeActorEventArgs {
 #[derive(Clone)]
 struct EventTypeInfo {
     name: String,
-    generics: String, // The type generics as string (e.g., "<Runtime>")
+    generics: String,     // The type generics as string (e.g., "<Runtime>")
     where_clause: String, // The where clause as string if any
 }
 
@@ -337,8 +337,8 @@ struct ActorRegistry {
 
 impl ActorRegistry {
     fn register_event_with_generics(
-        &mut self, 
-        actor_id: &str, 
+        &mut self,
+        actor_id: &str,
         event_type: &str,
         generics: String,
         where_clause: String,
@@ -458,7 +458,7 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
 
     // Register this event with the actor, including generic information
     get_registry().register_event_with_generics(
-        &actor_id, 
+        &actor_id,
         &name.to_string(),
         ty_generics.to_token_stream().to_string(),
         where_clause.to_token_stream().to_string(),
@@ -526,7 +526,7 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
         let field_name = format!("{}_event_bus", to_snake_case(&event_info.name));
         let field_name_ident = Ident::new(&field_name, Span::call_site());
         let event_type = Ident::new(&event_info.name, Span::call_site());
-        
+
         // Parse the generics string back to tokens if not empty
         let event_generics = if event_info.generics.is_empty() {
             quote! {}
@@ -557,7 +557,7 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
         let event_type = Ident::new(&event_info.name, Span::call_site());
         let field_name = format!("{}_event_bus", to_snake_case(&event_info.name));
         let field_name_ident = Ident::new(&field_name, Span::call_site());
-        
+
         // Parse the generics string back to tokens if not empty
         let event_generics = if event_info.generics.is_empty() {
             quote! {}
@@ -589,7 +589,9 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Generate the final expanded code
     // Only derive Default if there are no generics (backwards compatibility)
-    let derives = if provider_generics_all.params.is_empty() && provider_generics_all.where_clause.is_none() {
+    let derives = if provider_generics_all.params.is_empty()
+        && provider_generics_all.where_clause.is_none()
+    {
         quote! { #[derive(Clone, Default)] }
     } else {
         quote! { #[derive(Clone)] }
