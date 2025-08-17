@@ -1,16 +1,19 @@
 use codec::{Decode, Encode};
-use log::info;
+use log::{error, info};
 use sp_trie::{recorder::Recorder, MemoryDB, Trie, TrieDBBuilder, TrieLayout, TrieMut};
 use std::collections::{HashMap, HashSet};
 use trie_db::TrieDBMutBuilder;
 
 use shc_common::types::{
-    Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, HashT, HasherOutT, H_LENGTH,
+    Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
 
-use crate::traits::{
-    ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
-    FileStorageWriteOutcome,
+use crate::{
+    traits::{
+        ExcludeType, FileDataTrie, FileStorage, FileStorageError, FileStorageWriteError,
+        FileStorageWriteOutcome,
+    },
+    LOG_TARGET,
 };
 
 pub struct InMemoryFileDataTrie<T: TrieLayout + 'static> {
@@ -31,10 +34,7 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
         &self.root
     }
 
-    fn generate_proof(
-        &self,
-        chunk_ids: &HashSet<ChunkId>,
-    ) -> Result<FileKeyProof, FileStorageError> {
+    fn generate_proof(&self, chunk_ids: &HashSet<ChunkId>) -> Result<FileProof, FileStorageError> {
         let recorder: Recorder<T::Hash> = Recorder::default();
 
         // A `TrieRecorder` is needed to create a proof of the "visited" leafs, by the end of this process.
@@ -69,7 +69,10 @@ impl<T: TrieLayout> FileDataTrie<T> for InMemoryFileDataTrie<T> {
             .to_compact_proof::<T::Hash>(self.root)
             .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
 
-        Ok(FileKeyProof::from(proof))
+        Ok(FileProof {
+            proof: proof.into(),
+            fingerprint: self.get_root().as_ref().into(),
+        })
     }
 
     fn get_chunk(&self, chunk_id: &ChunkId) -> Result<Chunk, FileStorageError> {
@@ -205,18 +208,13 @@ where
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        {
-            let proof = file_data.generate_proof(chunk_ids)?;
-            FileKeyProof::new(
-                metadata.owner().clone(),
-                metadata.bucket_id().clone(),
-                metadata.location().clone(),
-                metadata.file_size(),
-                *metadata.fingerprint(),
-                proof.into(),
-            )
-            .map_err(|_| FileStorageError::FailedToConstructFileKeyProof)
-        }
+        file_data
+            .generate_proof(chunk_ids)?
+            .to_file_key_proof(metadata.clone())
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToConstructFileKeyProof
+            })
     }
 
     fn stored_chunks_count(&self, key: &HasherOutT<T>) -> Result<u64, FileStorageError> {
@@ -554,7 +552,7 @@ mod tests {
         let file_proof = file_trie.generate_proof(&chunk_ids_set).unwrap();
 
         assert_eq!(
-            file_proof.file_metadata.fingerprint().as_ref(),
+            file_proof.fingerprint.as_ref(),
             file_trie.get_root().as_ref()
         );
     }

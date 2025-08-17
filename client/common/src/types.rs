@@ -1,6 +1,5 @@
 use std::{
     fmt::Debug,
-    marker::PhantomData,
     sync::atomic::{AtomicU64, Ordering},
 };
 
@@ -181,22 +180,18 @@ impl<T: TrieLayout> ForestProof<T> {
 }
 
 #[derive(Clone, Encode, Decode)]
-pub struct FileProof<Runtime>
-where
-    Runtime: Clone,
-{
+pub struct FileProof {
     /// The compact proof.
     pub proof: CompactProof,
     /// The root hash of the trie, also known as the fingerprint of the file.
     pub fingerprint: Fingerprint,
-
-    _runtime: PhantomData<Runtime>,
 }
 
-impl<Runtime> FileProof<Runtime>
-where
-    Runtime: pallet_proofs_dealer::Config,
-{
+impl FileProof {
+    pub fn new(proof: CompactProof, fingerprint: Fingerprint) -> Self {
+        Self { proof, fingerprint }
+    }
+
     pub fn to_file_key_proof(
         &self,
         file_metadata: FileMetadata,

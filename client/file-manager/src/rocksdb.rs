@@ -5,7 +5,7 @@ use hash_db::{AsHashDB, HashDB, Prefix};
 use kvdb::{DBTransaction, KeyValueDB};
 use log::{debug, error};
 use shc_common::types::{
-    Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, HashT, HasherOutT, H_LENGTH,
+    Chunk, ChunkId, ChunkWithId, FileKeyProof, FileMetadata, FileProof, HashT, HasherOutT, H_LENGTH,
 };
 use sp_state_machine::{warn, Storage};
 use sp_trie::{prefixed_key, recorder::Recorder, PrefixedMemoryDB, TrieLayout, TrieMut};
@@ -269,10 +269,7 @@ where
     }
 
     // Generates a [`FileProof`] for requested chunks.
-    fn generate_proof(
-        &self,
-        chunk_ids: &HashSet<ChunkId>,
-    ) -> Result<FileKeyProof, FileStorageError> {
+    fn generate_proof(&self, chunk_ids: &HashSet<ChunkId>) -> Result<FileProof, FileStorageError> {
         let db = self.as_hash_db();
         let recorder: Recorder<T::Hash> = Recorder::default();
 
@@ -311,7 +308,10 @@ where
             .to_compact_proof::<T::Hash>(self.root)
             .map_err(|_| FileStorageError::FailedToGenerateCompactProof)?;
 
-        Ok(FileKeyProof::from(proof))
+        Ok(FileProof {
+            proof: proof.into(),
+            fingerprint: self.get_root().as_ref().into(),
+        })
     }
 
     // TODO: make it accept a list of chunks to be retrieved
@@ -849,18 +849,13 @@ where
             return Err(FileStorageError::FingerprintAndStoredFileMismatch);
         }
 
-        {
-            let proof = file_trie.generate_proof(chunk_ids)?;
-            FileKeyProof::new(
-                metadata.owner().clone(),
-                metadata.bucket_id().clone(),
-                metadata.location().clone(),
-                metadata.file_size(),
-                *metadata.fingerprint(),
-                proof.into(),
-            )
-            .map_err(|_| FileStorageError::FailedToConstructFileKeyProof)
-        }
+        file_trie
+            .generate_proof(chunk_ids)?
+            .to_file_key_proof(metadata.clone())
+            .map_err(|e| {
+                error!(target: LOG_TARGET, "{:?}", e);
+                FileStorageError::FailedToConstructFileKeyProof
+            })
     }
 
     /// Deletes a file and all its associated data.
@@ -1146,7 +1141,7 @@ mod tests {
         let file_proof = file_trie.generate_proof(&chunk_ids_set).unwrap();
 
         assert_eq!(
-            file_proof.file_metadata.fingerprint().as_ref(),
+            file_proof.fingerprint.as_ref(),
             file_trie.get_root().as_ref()
         );
     }
