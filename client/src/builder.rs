@@ -45,15 +45,16 @@ pub struct StorageHubBuilder<R, S, Runtime>
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService<Runtime>>>,
-    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH, Runtime>>>,
+    blockchain:
+        Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType<Runtime>>::FSH, Runtime>>>,
     storage_path: Option<String>,
-    file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
-    forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
+    file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType<Runtime>>::FL>>>,
+    forest_storage_handler: Option<<(R, S) as ShNodeType<Runtime>>::FSH>,
     capacity_config: Option<CapacityConfig<Runtime>>,
     indexer_db_pool: Option<DbPool>,
     notify_period: Option<u32>,
@@ -71,7 +72,7 @@ where
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
 impl<R: ShRole, S: ShStorageLayer, Runtime> StorageHubBuilder<R, S, Runtime>
 where
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(task_spawner: TaskSpawner) -> Self {
@@ -168,7 +169,7 @@ where
         let blockchain_service_config = self.blockchain_service_config.clone().unwrap_or_default();
 
         let blockchain_service_handle =
-            spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH, Runtime>(
+            spawn_blockchain_service::<<(R, S) as ShNodeType<Runtime>>::FSH, Runtime>(
                 self.task_spawner
                     .as_ref()
                     .expect("Task spawner is not set."),
@@ -227,7 +228,11 @@ where
         &self,
         keystore: KeystorePtr,
         config: RpcConfig,
-    ) -> StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH> {
+    ) -> StorageHubClientRpcConfig<
+        <(R, S) as ShNodeType<Runtime>>::FL,
+        <(R, S) as ShNodeType<Runtime>>::FSH,
+        Runtime,
+    > {
         StorageHubClientRpcConfig::new(
             self.file_storage
                 .clone()
@@ -343,8 +348,9 @@ where
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler =
-            Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType>::FSH::new());
+        self.forest_storage_handler = Some(<(BspProvider, InMemoryStorageLayer) as ShNodeType<
+            Runtime,
+        >>::FSH::new());
 
         self
     }
@@ -364,8 +370,9 @@ where
                 .expect("Failed to create RocksDB");
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
-        self.forest_storage_handler =
-            Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType>::FSH::new(storage_path));
+        self.forest_storage_handler = Some(<(BspProvider, RocksDbStorageLayer) as ShNodeType<
+            Runtime,
+        >>::FSH::new(storage_path));
 
         self
     }
@@ -377,8 +384,9 @@ where
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler =
-            Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType>::FSH::new());
+        self.forest_storage_handler = Some(<(MspProvider, InMemoryStorageLayer) as ShNodeType<
+            Runtime,
+        >>::FSH::new());
 
         self
     }
@@ -397,8 +405,9 @@ where
                 .expect("Failed to create RocksDB");
         self.file_storage = Some(Arc::new(RwLock::new(RocksDbFileStorage::new(file_storage))));
 
-        self.forest_storage_handler =
-            Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType>::FSH::new(storage_path));
+        self.forest_storage_handler = Some(<(MspProvider, RocksDbStorageLayer) as ShNodeType<
+            Runtime,
+        >>::FSH::new(storage_path));
 
         self
     }
@@ -410,7 +419,8 @@ where
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler = Some(<(UserRole, NoStorageLayer) as ShNodeType>::FSH::new());
+        self.forest_storage_handler =
+            Some(<(UserRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH::new());
 
         self
     }
@@ -421,15 +431,15 @@ where
 /// This trait is implemented by the different [`StorageHubBuilder`] variants,
 /// and build a [`StorageHubHandler`] with the required configuration for the
 /// corresponding [`ShRole`].
-pub trait Buildable<NT: ShNodeType, Runtime: StorageEnableRuntime> {
+pub trait Buildable<NT: ShNodeType<Runtime>, Runtime: StorageEnableRuntime> {
     fn build(self) -> StorageHubHandler<NT, Runtime>;
 }
 
 impl<S: ShStorageLayer, Runtime> Buildable<(BspProvider, S), Runtime>
     for StorageHubBuilder<BspProvider, S, Runtime>
 where
-    (BspProvider, S): ShNodeType,
-    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
+    (BspProvider, S): ShNodeType<Runtime>,
+    <(BspProvider, S) as ShNodeType<Runtime>>::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn build(self) -> StorageHubHandler<(BspProvider, S), Runtime> {
@@ -473,8 +483,8 @@ where
 impl<S: ShStorageLayer, Runtime> Buildable<(MspProvider, S), Runtime>
     for StorageHubBuilder<MspProvider, S, Runtime>
 where
-    (MspProvider, S): ShNodeType,
-    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
+    (MspProvider, S): ShNodeType<Runtime>,
+    <(MspProvider, S) as ShNodeType<Runtime>>::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn build(self) -> StorageHubHandler<(MspProvider, S), Runtime> {
@@ -518,9 +528,9 @@ where
 impl<Runtime> Buildable<(UserRole, NoStorageLayer), Runtime>
     for StorageHubBuilder<UserRole, NoStorageLayer, Runtime>
 where
-    (UserRole, NoStorageLayer): ShNodeType,
-    <(UserRole, NoStorageLayer) as ShNodeType>::FSH:
-        ForestStorageHandler + Clone + Send + Sync + 'static,
+    (UserRole, NoStorageLayer): ShNodeType<Runtime>,
+    <(UserRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH:
+        ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer), Runtime> {

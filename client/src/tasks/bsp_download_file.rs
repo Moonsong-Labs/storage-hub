@@ -15,8 +15,8 @@ const LOG_TARGET: &str = "bsp-download-file-task";
 
 pub struct BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -24,8 +24,8 @@ where
 
 impl<NT, Runtime> Clone for BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspDownloadFileTask<NT, Runtime> {
@@ -37,8 +37,8 @@ where
 
 impl<NT, Runtime> BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -54,8 +54,8 @@ where
 /// If there is a bucket ID provided, this will also check that it matches the local file's bucket.
 impl<NT, Runtime> EventHandler<RemoteDownloadRequest<Runtime>> for BspDownloadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: RemoteDownloadRequest<Runtime>) -> anyhow::Result<()> {

@@ -29,8 +29,8 @@ const LOG_TARGET: &str = "msp-stopped-storing-task";
 /// [`ForestStorageHandler`]: shc_forest_manager::traits::ForestStorageHandler
 pub struct MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -38,8 +38,8 @@ where
 
 impl<NT, Runtime> Clone for MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> MspDeleteBucketTask<NT, Runtime> {
@@ -51,8 +51,8 @@ where
 
 impl<NT, Runtime> MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -65,8 +65,8 @@ where
 impl<NT, Runtime> EventHandler<FinalisedBucketMovedAway<Runtime>>
     for MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
@@ -103,8 +103,8 @@ where
 impl<NT, Runtime> EventHandler<FinalisedMspStoppedStoringBucket<Runtime>>
     for MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
@@ -140,8 +140,8 @@ where
 
 impl<NT, Runtime> MspDeleteBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     /// Deletes all files in a bucket and removes the bucket's forest storage

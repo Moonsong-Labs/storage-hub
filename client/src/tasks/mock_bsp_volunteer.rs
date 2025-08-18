@@ -20,8 +20,8 @@ const LOG_TARGET: &str = "bsp-volunteer-mock-task";
 
 pub struct BspVolunteerMockTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -29,8 +29,8 @@ where
 
 impl<NT, Runtime> Clone for BspVolunteerMockTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspVolunteerMockTask<NT, Runtime> {
@@ -42,8 +42,8 @@ where
 
 impl<NT, Runtime> BspVolunteerMockTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -55,8 +55,8 @@ where
 
 impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for BspVolunteerMockTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {

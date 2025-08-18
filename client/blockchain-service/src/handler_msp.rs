@@ -44,7 +44,7 @@ const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
 impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Handles the initial sync of a MSP, after coming out of syncing mode.

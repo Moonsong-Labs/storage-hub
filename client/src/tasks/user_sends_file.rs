@@ -1,7 +1,7 @@
 use log::{debug, info, warn};
 use sc_network::{PeerId, RequestFailure};
 use sp_core::H256;
-use sp_runtime::{traits::SaturatedConversion, AccountId32};
+use sp_runtime::traits::SaturatedConversion;
 use std::collections::HashSet;
 
 use shc_actors_framework::event_bus::EventHandler;
@@ -31,7 +31,7 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// it reacts to every [`AcceptedBspVolunteer`] from the runtime.
 pub struct UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -39,7 +39,7 @@ where
 
 impl<NT, Runtime> Clone for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> Self {
@@ -51,7 +51,7 @@ where
 
 impl<NT, Runtime> UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -63,7 +63,7 @@ where
 
 impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
+    NT: ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
@@ -130,9 +130,7 @@ where
             .extract_peer_ids_and_register_known_addresses(multiaddress_vec)
             .await;
 
-        // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
-        // TODO: (event.who.as_ref()).to_vec(),
-        let who = <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec();
+        let who = event.who.as_ref().to_vec();
         let file_metadata = FileMetadata::new(
             who,
             event.bucket_id.as_ref().to_vec(),
@@ -158,7 +156,7 @@ where
 
 impl<NT, Runtime> EventHandler<AcceptedBspVolunteer<Runtime>> for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
+    NT: ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
@@ -173,9 +171,7 @@ where
             event.location,
         );
 
-        // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
-        // TODO: (event.owner.as_ref()).to_vec(),
-        let owner = <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec();
+        let owner = event.owner.as_ref().to_vec();
         let file_metadata = FileMetadata::new(
             owner,
             event.bucket_id.as_ref().to_vec(),
@@ -209,7 +205,7 @@ where
 
 impl<NT, Runtime> UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn send_chunks_to_provider(

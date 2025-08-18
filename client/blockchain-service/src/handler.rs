@@ -61,7 +61,7 @@ pub(crate) const LOG_TARGET: &str = "blockchain-service";
 /// extrinsics, and the [`Keystore`] to sign the extrinsics.
 pub struct BlockchainService<FSH, Runtime>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// The configuration for the BlockchainService.
@@ -155,7 +155,7 @@ where
 /// Event loop for the BlockchainService actor.
 pub struct BlockchainServiceEventLoop<FSH, Runtime>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     receiver: sc_utils::mpsc::TracingUnboundedReceiver<BlockchainServiceCommand<Runtime>>,
@@ -177,7 +177,7 @@ where
 impl<FSH, Runtime> ActorEventLoop<BlockchainService<FSH, Runtime>>
     for BlockchainServiceEventLoop<FSH, Runtime>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     fn new(
@@ -235,7 +235,7 @@ where
 /// Implement the Actor trait for the BlockchainService actor.
 impl<FSH, Runtime> Actor for BlockchainService<FSH, Runtime>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     type Message = BlockchainServiceCommand<Runtime>;
@@ -1159,7 +1159,7 @@ where
 
 impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Create a new [`BlockchainService`].

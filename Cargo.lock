@@ -14739,6 +14739,7 @@ dependencies = [
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-state-machine 0.44.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "storage-hub-runtime",
  "thiserror 1.0.69",
  "tokio",
  "trie-db 0.29.1",

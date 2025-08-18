@@ -19,7 +19,7 @@ const LOG_TARGET: &str = "slash-provider-task";
 /// to StorageHub runtime to slash the provider.
 pub struct SlashProviderTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -27,7 +27,7 @@ where
 
 impl<NT, Runtime> Clone for SlashProviderTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> SlashProviderTask<NT, Runtime> {
@@ -39,7 +39,7 @@ where
 
 impl<NT, Runtime> SlashProviderTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -54,7 +54,7 @@ where
 /// This event is triggered by the runtime when a provider is marked as slashable.
 impl<NT, Runtime> EventHandler<SlashableProvider<Runtime>> for SlashProviderTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
+    NT: ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: SlashableProvider<Runtime>) -> anyhow::Result<()> {
@@ -70,7 +70,7 @@ where
 
 impl<NT, Runtime> SlashProviderTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_slashable_provider_event(

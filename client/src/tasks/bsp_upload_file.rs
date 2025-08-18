@@ -8,10 +8,7 @@ use anyhow::anyhow;
 use frame_support::BoundedVec;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use sp_runtime::{
-    traits::{SaturatedConversion, Zero},
-    AccountId32,
-};
+use sp_runtime::traits::{Hash, SaturatedConversion, Zero};
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -76,8 +73,8 @@ impl Default for BspUploadFileConfig {
 ///   extrinsic, waiting for it to be successfully included in a block.
 pub struct BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -88,8 +85,8 @@ where
 
 impl<NT, Runtime> Clone for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspUploadFileTask<NT, Runtime> {
@@ -103,8 +100,8 @@ where
 
 impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -125,8 +122,8 @@ where
 /// upload requests.
 impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
@@ -154,8 +151,8 @@ where
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
 impl<NT, Runtime> EventHandler<RemoteUploadRequest<Runtime>> for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
@@ -222,8 +219,8 @@ where
 /// storing extrinsic (and update the local forest root).
 impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
@@ -407,8 +404,8 @@ where
 
 impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
@@ -448,9 +445,7 @@ where
         }
 
         // Construct file metadata.
-        // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
-        // TODO: (event.who.as_ref()).to_vec(),
-        let who = <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec();
+        let who = event.who.as_ref().to_vec();
         let metadata = FileMetadata::new(
             who,
             event.bucket_id.as_ref().to_vec(),
@@ -927,7 +922,7 @@ where
             return Ok(false);
         }
 
-        let owner = Runtime::Hash::from(event.who.as_ref());
+        let owner = Runtime::Hashing::hash(event.who.as_ref());
         is_allowed = read_file_storage
             .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
             .map_err(|e| {

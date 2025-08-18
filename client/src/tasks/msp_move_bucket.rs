@@ -58,8 +58,8 @@ impl Default for MspMoveBucketConfig {
 /// Downloads bucket files from BSPs (Backup Storage Providers).
 pub struct MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -71,8 +71,8 @@ where
 
 impl<NT, Runtime> Clone for MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> MspRespondMoveBucketTask<NT, Runtime> {
@@ -87,8 +87,8 @@ where
 
 impl<NT, Runtime> MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -104,8 +104,8 @@ where
 impl<NT, Runtime> EventHandler<MoveBucketRequestedForMsp<Runtime>>
     for MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
@@ -135,8 +135,8 @@ where
 impl<NT, Runtime> EventHandler<StartMovedBucketDownload<Runtime>>
     for MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
@@ -254,8 +254,8 @@ where
 
 impl<NT, Runtime> MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     /// Internal implementation of the move bucket request handling.

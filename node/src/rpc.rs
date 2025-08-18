@@ -33,7 +33,7 @@ where
     /// Transaction pool instance.
     pub pool: Arc<P>,
     /// RPC configuration.
-    pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS>>,
+    pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS, Runtime>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
 }
@@ -46,7 +46,7 @@ where
     Runtime: StorageEnableRuntime,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
-    FSH: ForestStorageHandler + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};

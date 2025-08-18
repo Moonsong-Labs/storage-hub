@@ -23,7 +23,7 @@ pub type EventToReactTo<Runtime> = MultipleNewChallengeSeeds<Runtime>;
 /// The event to react to can be configured by setting the [`EventToReactTo`] type.
 pub struct SpReactToEventMockTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -31,7 +31,7 @@ where
 
 impl<NT, Runtime> Clone for SpReactToEventMockTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> SpReactToEventMockTask<NT, Runtime> {
@@ -43,7 +43,7 @@ where
 
 impl<NT, Runtime> SpReactToEventMockTask<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -55,7 +55,7 @@ where
 
 impl<NT, Runtime> EventHandler<EventToReactTo<Runtime>> for SpReactToEventMockTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
+    NT: ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: EventToReactTo<Runtime>) -> anyhow::Result<()> {

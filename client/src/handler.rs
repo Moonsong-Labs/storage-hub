@@ -82,7 +82,7 @@ where
 /// Represents the handler for the Storage Hub service.
 pub struct StorageHubHandler<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     /// The task spawner for spawning asynchronous tasks.
@@ -107,7 +107,7 @@ where
 
 impl<NT, Runtime> Debug for StorageHubHandler<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -119,7 +119,7 @@ where
 
 impl<NT, Runtime> Clone for StorageHubHandler<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> StorageHubHandler<NT, Runtime> {
@@ -139,7 +139,7 @@ where
 
 impl<NT, Runtime> StorageHubHandler<NT, Runtime>
 where
-    NT: ShNodeType,
+    NT: ShNodeType<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(
@@ -186,8 +186,8 @@ pub trait RunnableTasks {
 
 impl<S: ShStorageLayer, Runtime> RunnableTasks for StorageHubHandler<(BspProvider, S), Runtime>
 where
-    (BspProvider, S): ShNodeType + 'static,
-    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
+    (BspProvider, S): ShNodeType<Runtime> + 'static,
+    <(BspProvider, S) as ShNodeType<Runtime>>::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn run_tasks(&mut self) {
@@ -198,8 +198,8 @@ where
 
 impl<S: ShStorageLayer, Runtime> RunnableTasks for StorageHubHandler<(MspProvider, S), Runtime>
 where
-    (MspProvider, S): ShNodeType + 'static,
-    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
+    (MspProvider, S): ShNodeType<Runtime> + 'static,
+    <(MspProvider, S) as ShNodeType<Runtime>>::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn run_tasks(&mut self) {
@@ -209,7 +209,7 @@ where
 
 impl<S: ShStorageLayer, Runtime> RunnableTasks for StorageHubHandler<(UserRole, S), Runtime>
 where
-    (UserRole, S): ShNodeType + 'static,
+    (UserRole, S): ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     async fn run_tasks(&mut self) {
@@ -219,7 +219,7 @@ where
 
 impl<S, Runtime> StorageHubHandler<(UserRole, S), Runtime>
 where
-    (UserRole, S): ShNodeType + 'static,
+    (UserRole, S): ShNodeType<Runtime> + 'static,
     Runtime: StorageEnableRuntime,
 {
     fn start_user_tasks(&self) {
@@ -247,8 +247,8 @@ where
 
 impl<S, Runtime> StorageHubHandler<(MspProvider, S), Runtime>
 where
-    (MspProvider, S): ShNodeType + 'static,
-    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
+    (MspProvider, S): ShNodeType<Runtime> + 'static,
+    <(MspProvider, S) as ShNodeType<Runtime>>::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn start_msp_tasks(&self) {
@@ -295,8 +295,8 @@ where
 
 impl<S, Runtime> StorageHubHandler<(BspProvider, S), Runtime>
 where
-    (BspProvider, S): ShNodeType + 'static,
-    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
+    (BspProvider, S): ShNodeType<Runtime> + 'static,
+    <(BspProvider, S) as ShNodeType<Runtime>>::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn initialise_bsp(&mut self) {

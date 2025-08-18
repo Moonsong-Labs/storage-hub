@@ -71,7 +71,7 @@ impl<Runtime: StorageEnableRuntime> SubmittedTransaction<Runtime> {
         blockchain: &ActorHandle<BlockchainService<FSH, Runtime>>,
     ) -> Result<(), WatchTransactionError>
     where
-        FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+        FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
         Runtime: StorageEnableRuntime,
     {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
@@ -116,7 +116,7 @@ impl<Runtime: StorageEnableRuntime> SubmittedTransaction<Runtime> {
         blockchain: &ActorHandle<BlockchainService<FSH, Runtime>>,
     ) -> Result<StorageHubEventsVec<Runtime>, WatchTransactionError>
     where
-        FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+        FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
         Runtime: StorageEnableRuntime,
     {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
@@ -155,7 +155,7 @@ impl<Runtime: StorageEnableRuntime> SubmittedTransaction<Runtime> {
         blockchain: &ActorHandle<BlockchainService<FSH, Runtime>>,
     ) -> Result<Extrinsic<Runtime>, WatchTransactionError>
     where
-        FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+        FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
         Runtime: StorageEnableRuntime,
     {
         let block_hash;

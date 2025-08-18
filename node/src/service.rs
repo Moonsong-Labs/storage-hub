@@ -217,12 +217,16 @@ async fn init_sh_builder<R, S>(
     maybe_db_pool: Option<DbPool>,
 ) -> Option<(
     StorageHubBuilder<R, S, Runtime>,
-    StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH>,
+    StorageHubClientRpcConfig<
+        <(R, S) as ShNodeType<Runtime>>::FL,
+        <(R, S) as ShNodeType<Runtime>>::FSH,
+        Runtime,
+    >,
 )>
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
     match provider_options {
@@ -311,7 +315,7 @@ async fn finish_sh_builder_and_run_tasks<R, S>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
 {
@@ -352,7 +356,7 @@ async fn start_dev_impl<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
@@ -785,7 +789,7 @@ async fn start_dev_in_maintenance_mode<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
@@ -981,7 +985,7 @@ async fn start_node_impl<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
@@ -1264,7 +1268,7 @@ async fn start_node_in_maintenance_mode<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,

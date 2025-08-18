@@ -1,4 +1,6 @@
-use std::{collections::HashSet, fmt::Debug, path::PathBuf, str::FromStr, sync::Arc};
+use std::{
+    collections::HashSet, fmt::Debug, marker::PhantomData, path::PathBuf, str::FromStr, sync::Arc,
+};
 
 use futures::StreamExt;
 use jsonrpsee::{
@@ -56,28 +58,31 @@ pub struct RpcConfig {
     pub remote_file: RemoteFileConfig,
 }
 
-pub struct StorageHubClientRpcConfig<FL, FSH> {
+pub struct StorageHubClientRpcConfig<FL, FSH, Runtime> {
     pub file_storage: Arc<RwLock<FL>>,
     pub forest_storage_handler: FSH,
     pub keystore: KeystorePtr,
     pub config: RpcConfig,
+    _runtime: PhantomData<Runtime>,
 }
 
-impl<FL, FSH: Clone> Clone for StorageHubClientRpcConfig<FL, FSH> {
+impl<FL, FSH: Clone, Runtime> Clone for StorageHubClientRpcConfig<FL, FSH, Runtime> {
     fn clone(&self) -> Self {
         Self {
             file_storage: self.file_storage.clone(),
             forest_storage_handler: self.forest_storage_handler.clone(),
             keystore: self.keystore.clone(),
             config: self.config.clone(),
+            _runtime: PhantomData,
         }
     }
 }
 
-impl<FL, FSH> StorageHubClientRpcConfig<FL, FSH>
+impl<FL, FSH, Runtime> StorageHubClientRpcConfig<FL, FSH, Runtime>
 where
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Send + Sync,
+    FSH: ForestStorageHandler<Runtime> + Send + Sync,
+    Runtime: StorageEnableRuntime,
 {
     pub fn new(
         file_storage: Arc<RwLock<FL>>,
@@ -90,6 +95,7 @@ where
             forest_storage_handler,
             keystore,
             config,
+            _runtime: PhantomData,
         }
     }
 }
@@ -296,11 +302,11 @@ impl<FL, FSH, Runtime, Block> StorageHubClientRpc<FL, FSH, Runtime, Block>
 where
     Runtime: StorageEnableRuntime,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Send + Sync,
+    FSH: ForestStorageHandler<Runtime> + Send + Sync,
 {
     pub fn new(
         client: Arc<ParachainClient<Runtime::RuntimeApi>>,
-        storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH>,
+        storage_hub_client_rpc_config: StorageHubClientRpcConfig<FL, FSH, Runtime>,
     ) -> Self {
         Self {
             client,
@@ -323,7 +329,7 @@ impl<FL, FSH, Runtime> StorageHubClientApiServer
 where
     Runtime: StorageEnableRuntime,
     FL: FileStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
-    FSH: ForestStorageHandler + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
 {
     async fn load_file_in_storage(
         &self,

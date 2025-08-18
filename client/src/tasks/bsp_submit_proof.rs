@@ -75,8 +75,8 @@ impl Default for BspSubmitProofConfig {
 ///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
 pub struct BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -86,8 +86,8 @@ where
 
 impl<NT, Runtime> Clone for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspSubmitProofTask<NT, Runtime> {
@@ -100,8 +100,8 @@ where
 
 impl<NT, Runtime> BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -123,8 +123,8 @@ where
 impl<NT, Runtime> EventHandler<MultipleNewChallengeSeeds<Runtime>>
     for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
@@ -164,8 +164,8 @@ where
 impl<NT, Runtime> EventHandler<ProcessSubmitProofRequest<Runtime>>
     for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
@@ -368,8 +368,8 @@ where
 impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied<Runtime>>
     for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
@@ -414,8 +414,8 @@ where
 
 impl<NT, Runtime> BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn queue_submit_proof_request(

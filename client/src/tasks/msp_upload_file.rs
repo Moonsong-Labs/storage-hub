@@ -10,10 +10,7 @@ use sc_tracing::tracing::*;
 use shc_blockchain_service::types::{MspRespondStorageRequest, RespondStorageRequest};
 use shc_blockchain_service::{capacity_manager::CapacityRequestData, types::SendExtrinsicOptions};
 use sp_core::H256;
-use sp_runtime::{
-    traits::{SaturatedConversion, Zero},
-    AccountId32,
-};
+use sp_runtime::traits::{SaturatedConversion, Zero};
 
 use pallet_file_system::types::RejectedStorageRequest;
 use shc_actors_framework::event_bus::EventHandler;
@@ -66,8 +63,8 @@ const LOG_TARGET: &str = "msp-upload-file-task";
 ///   forest storage to reflect the result.
 pub struct MspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -76,8 +73,8 @@ where
 
 impl<NT, Runtime> Clone for MspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> MspUploadFileTask<NT, Runtime> {
@@ -90,8 +87,8 @@ where
 
 impl<NT, Runtime> MspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -112,8 +109,8 @@ where
 /// upload requests.
 impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for MspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
@@ -141,8 +138,8 @@ where
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
 impl<NT, Runtime> EventHandler<RemoteUploadRequest<Runtime>> for MspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
@@ -193,8 +190,8 @@ where
 /// storage requests.
 impl<NT, Runtime> EventHandler<ProcessMspRespondStoringRequest> for MspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: ProcessMspRespondStoringRequest) -> anyhow::Result<()> {
@@ -375,8 +372,8 @@ where
 
 impl<NT, Runtime> MspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
@@ -436,9 +433,7 @@ where
         }
 
         // Construct file metadata.
-        // TODO: For now we are using AccountId32, but we should use the Runtime::AccountId type.
-        // TODO: (event.who.as_ref()).to_vec(),
-        let who = <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec();
+        let who = event.who.as_ref().to_vec();
         let metadata = FileMetadata::new(
             who,
             event.bucket_id.as_ref().to_vec(),
