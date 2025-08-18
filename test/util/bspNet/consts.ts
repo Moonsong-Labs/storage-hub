@@ -35,6 +35,12 @@ export const NODE_INFOS = {
     p2pPort: 30333,
     AddressId: "5C8NC6YuAivp3knYC58Taycx2scQoDcDd3MCEEgyw36Gh1R4"
   },
+  fisherman: {
+    containerName: "storage-hub-sh-fisherman-1",
+    port: 9999,
+    p2pPort: 30666,
+    nodeKey: "0x23b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b315"
+  },
   toxiproxy: {
     containerName: "toxiproxy",
     port: 8474

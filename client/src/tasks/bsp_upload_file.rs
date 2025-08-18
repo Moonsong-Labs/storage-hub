@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
+use pallet_file_system_runtime_api::QueryBspConfirmChunksToProveForFileError;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
@@ -280,20 +281,35 @@ where
                     confirm_storing_requests_with_chunks_to_prove
                         .push((confirm_storing_request, chunks_to_prove));
                 }
-                Err(e) => {
-                    let mut confirm_storing_request = confirm_storing_request.clone();
-                    confirm_storing_request.increment_try_count();
-                    if confirm_storing_request.try_count > self.config.max_try_count {
-                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key, e);
-                    } else {
-                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, self.config.max_try_count);
-                        self.storage_hub_handler
-                            .blockchain
-                            .queue_confirm_bsp_request(confirm_storing_request)
-                            .await?;
+                Err(e) => match e {
+                    QueryBspConfirmChunksToProveForFileError::StorageRequestNotFound => {
+                        trace!(target: LOG_TARGET, "Skipping {:?} for stale storage request not found in chain state.", confirm_storing_request.file_key);
+                        continue;
                     }
-                }
+                    QueryBspConfirmChunksToProveForFileError::ConfirmChunks(internal_err) => {
+                        trace!(target: LOG_TARGET, "Skipping {:?}. Runtime could not return data due to some corrupted state: {:?}", confirm_storing_request.file_key, internal_err);
+                        continue;
+                    }
+                    _ => {
+                        let mut confirm_storing_request = confirm_storing_request.clone();
+                        confirm_storing_request.increment_try_count();
+                        if confirm_storing_request.try_count > self.config.max_try_count {
+                            error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key, e);
+                        } else {
+                            error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, self.config.max_try_count);
+                            self.storage_hub_handler
+                                .blockchain
+                                .queue_confirm_bsp_request(confirm_storing_request)
+                                .await?;
+                        }
+                    }
+                },
             }
+        }
+
+        if confirm_storing_requests_with_chunks_to_prove.iter().count() == 0 {
+            trace!(target: LOG_TARGET, "Skipping ConfirmStoringRequest: No keys to confirm after querying chunks to prove.");
+            return Ok(());
         }
 
         // Generate the proof for the files and get metadatas.

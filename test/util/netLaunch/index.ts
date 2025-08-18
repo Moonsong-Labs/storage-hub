@@ -124,6 +124,12 @@ export class NetworkLauncher {
       delete composeYaml.services.toxiproxy;
     }
 
+    // Remove fisherman service if not enabled
+    if (!this.config.fisherman || this.type !== "fullnet") {
+      // biome-ignore lint/performance/noDelete: to ensure compose file is valid
+      delete composeYaml.services["sh-fisherman"];
+    }
+
     if (this.config.extrinsicRetryTimeout) {
       composeYaml.services["sh-bsp"].command.push(
         `--extrinsic-retry-timeout=${this.config.extrinsicRetryTimeout}`
@@ -152,14 +158,15 @@ export class NetworkLauncher {
     if (this.config.indexer) {
       composeYaml.services["sh-user"].command.push("--indexer");
       composeYaml.services["sh-user"].command.push(
-        "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+        "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
       );
       if (this.type === "fullnet") {
         composeYaml.services["sh-msp-1"].command.push(
-          "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
+        composeYaml.services["sh-msp-2"].command.push("--indexer");
         composeYaml.services["sh-msp-2"].command.push(
-          "--database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
+          "--indexer-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub"
         );
       }
     }
@@ -307,6 +314,18 @@ export class NetworkLauncher {
       }
     });
 
+    // Only start fisherman service if it's enabled and we're using fullnet
+    if (this.config.fisherman && this.type === "fullnet") {
+      await compose.upOne("sh-fisherman", {
+        cwd: cwd,
+        config: tmpFile,
+        log: verbose,
+        env: {
+          ...process.env
+        }
+      });
+    }
+
     return this;
   }
 
@@ -371,7 +390,7 @@ export class NetworkLauncher {
   }
 
   public async getApi(serviceName = "sh-user") {
-    return BspNetTestApi.create(`ws://127.0.0.1:${await this.getPort(serviceName)}`);
+    return BspNetTestApi.create(`ws://127.0.0.1:${this.getPort(serviceName)}`);
   }
 
   public async setupBsp(api: EnrichedBspApi, who: string, multiaddress: string, bspId?: string) {
@@ -858,4 +877,9 @@ export type NetLaunchConfig = {
    * Only applies when `noisy` is set to true.
    */
   toxics?: ToxicInfo[];
+
+  /**
+   * Optional parameter to run the fisherman service.
+   */
+  fisherman?: boolean;
 };

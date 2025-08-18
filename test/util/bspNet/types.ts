@@ -157,8 +157,14 @@ export type BspNetConfig = {
    * Optional parameter to set the indexer mode when indexer is enabled.
    * 'full' - indexes all events (default)
    * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
+   * 'fishing' - indexes only events related to fishing (fisherman service)
    */
-  indexerMode?: "full" | "lite";
+  indexerMode?: "full" | "lite" | "fishing";
+
+  /**
+   * If true, runs fisherman service.
+   */
+  fisherman?: boolean;
 };
 
 /**
@@ -349,7 +355,9 @@ export type TestOptions = {
    * 'full' - indexes all events (default)
    * 'lite' - indexes only essential events as defined in LITE_MODE_EVENTS.md
    */
-  indexerMode?: "full" | "lite";
+  indexerMode?: "full" | "lite" | "fishing";
+  /** If true, runs fisherman service */
+  fisherman?: boolean;
 };
 
 /**
