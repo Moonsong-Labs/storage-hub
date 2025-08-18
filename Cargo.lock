@@ -14062,6 +14062,7 @@ dependencies = [
  "async-trait",
  "axum",
  "axum-test",
+ "bigdecimal",
  "chrono",
  "diesel",
  "diesel-async",

@@ -8,6 +8,7 @@ edition = "2021"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
+bigdecimal = { workspace = true }
 chrono = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
