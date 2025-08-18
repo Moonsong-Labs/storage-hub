@@ -168,7 +168,7 @@ impl<Runtime: StorageEnableRuntime> CapacityRequestQueue<Runtime> {
 }
 
 /// Configuration parameters determining values for capacity increases.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct CapacityConfig<Runtime: StorageEnableRuntime> {
     /// Maximum storage capacity of the provider in bytes.
     ///
@@ -198,6 +198,12 @@ impl<Runtime: StorageEnableRuntime> CapacityConfig<Runtime> {
 
     pub fn max_capacity(&self) -> StorageDataUnit<Runtime> {
         self.max_capacity
+    }
+}
+
+impl<Runtime: StorageEnableRuntime> Default for CapacityConfig<Runtime> {
+    fn default() -> Self {
+        Self::new(Zero::zero(), Zero::zero())
     }
 }
 

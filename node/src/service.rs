@@ -330,9 +330,10 @@ async fn init_sh_builder<R, S>(
     Option<(
         StorageHubBuilder<R, S, Runtime>,
         StorageHubClientRpcConfig<
-        <(R, S) as ShNodeType<Runtime>>::FL,
-        <(R, S) as ShNodeType<Runtime>>::FSH,
-        Runtime,
+            <(R, S) as ShNodeType<Runtime>>::FL,
+            <(R, S) as ShNodeType<Runtime>>::FSH,
+            Runtime,
+        >,
     )>,
     sc_service::Error,
 >

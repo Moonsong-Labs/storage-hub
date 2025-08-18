@@ -64,9 +64,9 @@ impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (UserRole, NoStorage
 }
 
 /// FishermanRole uses ForestStorageSingle for processing file deletions
-impl ShNodeType for (FishermanRole, NoStorageLayer) {
+impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (FishermanRole, NoStorageLayer) {
     type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
-    type FSH = ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
+    type FSH = ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>;
 }
 
 /// Supported roles used in the StorageHub system implement this trait.
@@ -167,11 +167,11 @@ impl<Runtime: StorageEnableRuntime> MspForestStorageHandlerT<Runtime>
 }
 
 /// The type of Forest Storage handler used by a Fisherman implements this trait.
-pub trait FishermanForestStorageHandlerT:
-    ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static
+pub trait FishermanForestStorageHandlerT<Runtime: StorageEnableRuntime>:
+    ForestStorageHandler<Runtime, Key = NoKey> + Clone + Send + Sync + 'static
 {
 }
-impl FishermanForestStorageHandlerT
-    for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
+impl<Runtime: StorageEnableRuntime> FishermanForestStorageHandlerT<Runtime>
+    for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
 {
 }

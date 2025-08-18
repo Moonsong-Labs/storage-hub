@@ -13,7 +13,7 @@ const LOG_TARGET: &str = "fisherman-process-file-deletion-task";
 pub struct FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -22,7 +22,7 @@ where
 impl<NT, Runtime> Clone for FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> FishermanProcessFileDeletionTask<NT, Runtime> {
@@ -35,7 +35,7 @@ where
 impl<NT, Runtime> FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime>,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -45,17 +45,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<ProcessFileDeletionRequest<Runtime>>
+impl<NT, Runtime> EventHandler<FileDeletionRequest<Runtime>>
     for FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(
-        &mut self,
-        event: ProcessFileDeletionRequest<Runtime>,
-    ) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: FileDeletionRequest<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for file key: {:?}",

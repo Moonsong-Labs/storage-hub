@@ -458,8 +458,9 @@ where
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         // Fisherman only needs forest storage for proof construction
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
-        self.forest_storage_handler =
-            Some(<(FishermanRole, NoStorageLayer) as ShNodeType>::FSH::new());
+        self.forest_storage_handler = Some(<(FishermanRole, NoStorageLayer) as ShNodeType<
+            RuntimeApi,
+        >>::FSH::new());
 
         self
     }
@@ -610,14 +611,14 @@ where
     }
 }
 
-impl<RuntimeApi> Buildable<(FishermanRole, NoStorageLayer), RuntimeApi>
-    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
+impl<Runtime: StorageEnableRuntime> Buildable<(FishermanRole, NoStorageLayer), Runtime>
+    for StorageHubBuilder<FishermanRole, NoStorageLayer, Runtime>
 where
-    (FishermanRole, NoStorageLayer): ShNodeType,
-    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntime,
+    (FishermanRole, NoStorageLayer): ShNodeType<Runtime>,
+    <(FishermanRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH:
+        FishermanForestStorageHandlerT<Runtime>,
 {
-    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime> {
         // TODO: Split StorageHubHandler into separate handlers or configurations to avoid unnecessary setting fields
         StorageHubHandler::new(
             self.task_spawner

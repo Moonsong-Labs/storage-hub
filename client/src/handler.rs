@@ -222,8 +222,9 @@ where
 
 impl<Runtime> RunnableTasks for StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime>
 where
-    (FishermanRole, NoStorageLayer): ShNodeType + 'static,
-    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
+    (FishermanRole, NoStorageLayer): ShNodeType<Runtime> + 'static,
+    <(FishermanRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH:
+        FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn run_tasks(&mut self) {
@@ -385,11 +386,11 @@ where
     }
 }
 
-impl<RuntimeApi> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi>
+impl<Runtime: StorageEnableRuntime> StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime>
 where
-    (FishermanRole, NoStorageLayer): ShNodeType + 'static,
-    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntime,
+    (FishermanRole, NoStorageLayer): ShNodeType<Runtime> + 'static,
+    <(FishermanRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH:
+        FishermanForestStorageHandlerT<Runtime>,
 {
     fn start_fisherman_tasks(&self) {
         log::info!("🎣 Starting Fisherman tasks");
@@ -402,7 +403,7 @@ where
             context: self.clone(),
             critical: true,
             [
-                FileDeletionRequest => FishermanProcessFileDeletionTask,
+                FileDeletionRequest<Runtime> => FishermanProcessFileDeletionTask,
             ]
         );
 
