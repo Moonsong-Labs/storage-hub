@@ -27,8 +27,8 @@ where
     NT::FSH: FishermanForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
-    fisherman_service: ActorHandle<FishermanService<RuntimeApi>>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
+    fisherman_service: ActorHandle<FishermanService<Runtime>>,
 }
 
 impl<NT, Runtime> Clone for FishermanProcessFileDeletionTask<NT, Runtime>
@@ -51,10 +51,10 @@ where
     NT::FSH: FishermanForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    pub fn new(
-        storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
-        fisherman_service: ActorHandle<FishermanService<RuntimeApi>>,
-    ) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
+        let fisherman_service = storage_hub_handler.fisherman.clone()
+            .expect("FishermanProcessFileDeletionTask requires fisherman service handle");
+        
         Self {
             storage_hub_handler,
             fisherman_service,
@@ -62,14 +62,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FileDeletionRequest>
+impl<NT, Runtime> EventHandler<ProcessFileDeletionRequest>
     for FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: FishermanForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for signed intention file key: {:?}",
@@ -185,12 +185,11 @@ where
     }
 }
 
-impl<NT, RuntimeApi> FishermanProcessFileDeletionTask<NT, RuntimeApi>
+impl<NT, Runtime> FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT::FSH: FishermanForestStorageHandlerT,
+    Runtime: StorageEnableRuntime,
 {
     async fn process_deletion_for_target(
         &self,

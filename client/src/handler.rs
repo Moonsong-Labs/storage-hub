@@ -12,7 +12,7 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, FileDeletionRequest, FinalisedBucketMovedAway,
+        AcceptedBspVolunteer, FinalisedBucketMovedAway,
         FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
         LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
         MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
@@ -29,6 +29,7 @@ use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
 };
+use shc_fisherman_service::ProcessFileDeletionRequest;
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
@@ -103,6 +104,8 @@ where
     pub peer_manager: Arc<BspPeerManager>,
     /// The file download manager for rate-limiting downloads.
     pub file_download_manager: Arc<FileDownloadManager>,
+    /// The fisherman service handle (only used for FishermanRole)
+    pub fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<Runtime>>>,
 }
 
 impl<NT, Runtime> Debug for StorageHubHandler<NT, Runtime>
@@ -133,6 +136,7 @@ where
             indexer_db_pool: self.indexer_db_pool.clone(),
             peer_manager: self.peer_manager.clone(),
             file_download_manager: self.file_download_manager.clone(),
+            fisherman: self.fisherman.clone(),
         }
     }
 }
@@ -151,6 +155,7 @@ where
         provider_config: ProviderConfig,
         indexer_db_pool: Option<DbPool>,
         peer_manager: Arc<BspPeerManager>,
+        fisherman: Option<ActorHandle<shc_fisherman_service::FishermanService<Runtime>>>,
     ) -> Self {
         // Get the data directory path from the peer manager's directory
         // This assumes the peer manager stores data in a similar location to where we want our download state
@@ -172,6 +177,7 @@ where
             indexer_db_pool,
             peer_manager,
             file_download_manager,
+            fisherman,
         }
     }
 }
@@ -390,15 +396,17 @@ where
     fn start_fisherman_tasks(&self) {
         log::info!("🎣 Starting Fisherman tasks");
 
-        // Subscribe to FileDeletionRequest events from the BlockchainService
+        let fisherman = self.fisherman.as_ref().expect("Fisherman service not set for FishermanRole");
+
+        // Subscribe to ProcessFileDeletionRequest events from the FishermanService
         // The fisherman monitors and processes file deletion requests
         subscribe_actor_event_map!(
-            service: &self.blockchain,
+            service: fisherman,
             spawner: &self.task_spawner,
             context: self.clone(),
             critical: true,
             [
-                FileDeletionRequest => FishermanProcessFileDeletionTask,
+                ProcessFileDeletionRequest => FishermanProcessFileDeletionTask,
             ]
         );
 

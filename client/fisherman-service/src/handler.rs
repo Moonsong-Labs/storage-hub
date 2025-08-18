@@ -91,14 +91,10 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         &mut self,
         block_number: BlockNumber,
         block_hash: H256,
-    ) -> Result<(), FishermanServiceError>
-    where
-        RuntimeApi: StorageEnableRuntimeApi,
-        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    {
+    ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
 
-        let events = get_events_at_block(&self.client, &block_hash)?;
+        let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
         for event_record in events.iter() {
             let event: Result<storage_hub_runtime::RuntimeEvent, _> =
@@ -147,11 +143,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         &self,
         from_block: BlockNumber,
         provider: crate::events::FileDeletionTarget,
-    ) -> Result<Vec<FileKeyChange>, FishermanServiceError>
-    where
-        RuntimeApi: StorageEnableRuntimeApi,
-        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    {
+    ) -> Result<Vec<FileKeyChange>, FishermanServiceError> {
         // Get the current best block
         let best_block_info = self.client.info();
         let best_block_number = best_block_info.best_number;
@@ -177,7 +169,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                 })?;
 
             // Get events at this block
-            let events = get_events_at_block(&self.client, &block_hash)?;
+            let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
             // Process events for file key changes
             for event_record in events.iter() {

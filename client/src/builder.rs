@@ -502,6 +502,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            None,
         )
     }
 }
@@ -547,6 +548,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            None,
         )
     }
 }
@@ -593,6 +595,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            None,
         )
     }
 }
@@ -611,6 +614,7 @@ where
                 .as_ref()
                 .expect("Task Spawner not set")
                 .clone(),
+            // Not needed by the fisherman service
             self.file_transfer
                 .as_ref()
                 .expect("File Transfer not set.")
@@ -619,6 +623,7 @@ where
                 .as_ref()
                 .expect("Blockchain Service not set.")
                 .clone(),
+            // Not needed by the fisherman service
             self.file_storage
                 .as_ref()
                 .expect("File Storage not set.")
@@ -627,6 +632,7 @@ where
                 .as_ref()
                 .expect("Forest Storage Handler not set.")
                 .clone(),
+            // Not needed by the fisherman service
             ProviderConfig {
                 // Use minimal/default config for fisherman
                 capacity_config: self.capacity_config.unwrap_or_default(),
@@ -639,7 +645,9 @@ where
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
+            // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
+            self.fisherman,
         )
     }
 }
