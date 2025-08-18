@@ -206,8 +206,6 @@ impl<T> StorageEnableRuntimeApi for T where
 /// - `Extension` - The transaction extension type for additional transaction logic
 /// - `RuntimeApi` - The set of runtime APIs that must be available to the client
 pub trait StorageEnableRuntime:
-    // TODO: Remove the restriction that `AccountId = sp_runtime::AccountId32` once we abstract the File and Forest Managers from the AccountId type.
-    // TODO:
     // TODO: Consider removing the restriction that `Hash = H256`.
     frame_system::Config<
         Hash = shp_types::Hash,
