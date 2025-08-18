@@ -125,8 +125,20 @@ type HostFunctions = (
     frame_benchmarking::benchmarking::HostFunctions,
 );
 
-// TODO: Consider not using `ParachainExecutor` as the runtime might not be a parachain.
+/// The wasm executor used by the StorageHub client, which has the set of host functions
+/// that are available in a regular Polkadot Parachain.
+///
+/// The fact that we're using a `ParachainExecutor` is only because we're using the
+/// set of host functions that are available in a regular Polkadot Parachain.
+/// If this client would require a different set of host functions, we would need to
+/// use a different executor, with a different set of host functions.
 pub type ParachainExecutor = WasmExecutor<HostFunctions>;
+
+/// The full client used by the StorageHub client, which uses the [`ParachainExecutor`]
+/// as the wasm executor.
+///
+/// It is abstracted over the set of runtime APIs, defined later by a `Runtime` type that
+/// should implement the [`StorageEnableRuntime`](crate::traits::StorageEnableRuntime) trait.
 pub type ParachainClient<RuntimeApi> =
     TFullClient<shp_opaque::Block, RuntimeApi, ParachainExecutor>;
 
