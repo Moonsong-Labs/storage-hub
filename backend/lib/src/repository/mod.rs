@@ -29,11 +29,13 @@ use bigdecimal::BigDecimal;
 use chrono::NaiveDateTime;
 
 pub mod error;
+pub mod mock;
 pub mod pool;
 pub mod postgres;
 
 // Re-export main types for convenience
 pub use error::{RepositoryError, RepositoryResult};
+pub use mock::MockRepository;
 pub use pool::SmartPool;
 pub use postgres::Repository;
 
@@ -133,7 +135,7 @@ pub struct File {
 #[async_trait]
 pub trait StorageOperations: Send + Sync {
     // ============ BSP Operations ============
-    
+
     /// Create a new BSP in the database.
     ///
     /// # Arguments
@@ -142,7 +144,7 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * The created BSP with generated ID and timestamps
     async fn create_bsp(&self, new_bsp: NewBsp) -> RepositoryResult<Bsp>;
-    
+
     /// Get a BSP by its database ID.
     ///
     /// # Arguments
@@ -151,7 +153,7 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * `Some(Bsp)` if found, `None` otherwise
     async fn get_bsp_by_id(&self, id: i64) -> RepositoryResult<Option<Bsp>>;
-    
+
     /// Update a BSP's capacity.
     ///
     /// # Arguments
@@ -161,7 +163,7 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * The updated BSP
     async fn update_bsp_capacity(&self, id: i64, capacity: BigDecimal) -> RepositoryResult<Bsp>;
-    
+
     /// List BSPs with pagination.
     ///
     /// # Arguments
@@ -171,9 +173,9 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * Vector of BSPs
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>>;
-    
+
     // ============ Bucket Operations ============
-    
+
     /// Create a new Bucket in the database.
     ///
     /// # Arguments
@@ -182,7 +184,7 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * The created Bucket with generated ID and timestamps
     async fn create_bucket(&self, new_bucket: NewBucket) -> RepositoryResult<Bucket>;
-    
+
     /// Get a Bucket by its database ID.
     ///
     /// # Arguments
@@ -191,7 +193,7 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * `Some(Bucket)` if found, `None` otherwise
     async fn get_bucket_by_id(&self, id: i64) -> RepositoryResult<Option<Bucket>>;
-    
+
     /// Get all Buckets for a user account.
     ///
     /// # Arguments
@@ -200,9 +202,9 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * Vector of Buckets owned by the user
     async fn get_buckets_by_user(&self, user_account: &str) -> RepositoryResult<Vec<Bucket>>;
-    
+
     // ============ File Operations ============
-    
+
     /// Get a File by its key.
     ///
     /// # Arguments
@@ -211,7 +213,7 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * `Some(File)` if found, `None` otherwise
     async fn get_file_by_key(&self, key: &[u8]) -> RepositoryResult<Option<File>>;
-    
+
     /// Get all Files for a user account.
     ///
     /// # Arguments
@@ -220,7 +222,7 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * Vector of Files owned by the user
     async fn get_files_by_user(&self, user_account: &[u8]) -> RepositoryResult<Vec<File>>;
-    
+
     /// Get all Files in a Bucket.
     ///
     /// # Arguments
