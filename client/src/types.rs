@@ -7,7 +7,7 @@ use shc_forest_manager::{
     in_memory::InMemoryForestStorage, rocksdb::RocksDBForestStorage, traits::ForestStorageHandler,
 };
 
-use super::forest_storage::{ForestStorageCaching, ForestStorageSingle};
+use super::forest_storage::{ForestStorageCaching, ForestStorageSingle, NoKey};
 
 /// A StorageHub node must [`FileStorage`](shc_file_manager::traits::FileStorage) and a [`ForestStorageHandler`]
 /// to store and retrieve Files and Forests, respectively.
@@ -63,6 +63,12 @@ impl<Runtime: StorageEnableRuntime> ShNodeType<Runtime> for (UserRole, NoStorage
     type FSH = ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>;
 }
 
+/// FishermanRole uses ForestStorageSingle for processing file deletions
+impl ShNodeType for (FishermanRole, NoStorageLayer) {
+    type FL = InMemoryFileStorage<StorageProofsMerkleTrieLayout>;
+    type FSH = ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>;
+}
+
 /// Supported roles used in the StorageHub system implement this trait.
 ///
 /// Currently supported roles are:
@@ -83,6 +89,11 @@ impl ShRole for MspProvider {}
 /// Only used for testing.
 pub struct UserRole;
 impl ShRole for UserRole {}
+
+/// Fisherman role. Implements the [`ShRole`] trait.
+/// Used for monitoring and processing file deletion requests.
+pub struct FishermanRole;
+impl ShRole for FishermanRole {}
 
 /// Storage layers supported by the StorageHub system.
 ///
@@ -152,5 +163,15 @@ impl<Runtime: StorageEnableRuntime> MspForestStorageHandlerT<Runtime>
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
         Runtime,
     >
+{
+}
+
+/// The type of Forest Storage handler used by a Fisherman implements this trait.
+pub trait FishermanForestStorageHandlerT:
+    ForestStorageHandler<Key = NoKey> + Clone + Send + Sync + 'static
+{
+}
+impl FishermanForestStorageHandlerT
+    for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
 {
 }

@@ -131,6 +131,7 @@ export async function describeMspNet<
     fullNetConfig.extrinsicRetryTimeout = options.extrinsicRetryTimeout;
     fullNetConfig.indexer = options.indexer;
     fullNetConfig.indexerMode = options.indexerMode;
+    fullNetConfig.fisherman = options.fisherman;
 
     const describeFunc = options?.only ? describe.only : options?.skip ? describe.skip : describe;
 

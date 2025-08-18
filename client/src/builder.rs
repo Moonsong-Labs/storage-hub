@@ -18,7 +18,9 @@ use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
+use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 use shc_forest_manager::traits::ForestStorageHandler;
+use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
 
 use crate::tasks::{
@@ -31,9 +33,9 @@ use super::{
     bsp_peer_manager::BspPeerManager,
     handler::{ProviderConfig, StorageHubHandler},
     types::{
-        BspForestStorageHandlerT, BspProvider, InMemoryStorageLayer, MspForestStorageHandlerT,
-        MspProvider, NoStorageLayer, RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer,
-        UserRole,
+        BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
+        InMemoryStorageLayer, MspForestStorageHandlerT, MspProvider, NoStorageLayer,
+        RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole,
     },
 };
 
@@ -52,6 +54,7 @@ where
     file_transfer: Option<ActorHandle<FileTransferService<Runtime>>>,
     blockchain:
         Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType<Runtime>>::FSH, Runtime>>>,
+    fisherman: Option<ActorHandle<FishermanService<Runtime>>>,
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType<Runtime>>::FL>>>,
     forest_storage_handler: Option<<(R, S) as ShNodeType<Runtime>>::FSH>,
@@ -80,6 +83,7 @@ where
             task_spawner: Some(task_spawner),
             file_transfer: None,
             blockchain: None,
+            fisherman: None,
             storage_path: None,
             file_storage: None,
             forest_storage_handler: None,
@@ -186,6 +190,26 @@ where
             .await;
 
         self.blockchain = Some(blockchain_service_handle);
+        self
+    }
+
+    /// Spawn the Fisherman Service.
+    ///
+    /// The Fisherman Service monitors the blockchain for file deletion requests
+    /// and constructs proofs of inclusion for storage providers to remove files.
+    pub async fn with_fisherman(
+        &mut self,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    ) -> &mut Self {
+        let fisherman_service_handle = spawn_fisherman_service::<Runtime>(
+            self.task_spawner
+                .as_ref()
+                .expect("Task spawner is not set."),
+            client,
+        )
+        .await;
+
+        self.fisherman = Some(fisherman_service_handle);
         self
     }
 
@@ -426,6 +450,21 @@ where
     }
 }
 
+impl<RuntimeApi> StorageLayerBuilder
+    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
+where
+    RuntimeApi: StorageEnableRuntime,
+{
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+        // Fisherman only needs forest storage for proof construction
+        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
+        self.forest_storage_handler =
+            Some(<(FishermanRole, NoStorageLayer) as ShNodeType>::FSH::new());
+
+        self
+    }
+}
+
 /// Abstraction trait to build the [`StorageHubHandler`].
 ///
 /// This trait is implemented by the different [`StorageHubBuilder`] variants,
@@ -571,6 +610,53 @@ where
     }
 }
 
+impl<RuntimeApi> Buildable<(FishermanRole, NoStorageLayer), RuntimeApi>
+    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
+where
+    (FishermanRole, NoStorageLayer): ShNodeType,
+    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntime,
+{
+    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi> {
+        // TODO: Split StorageHubHandler into separate handlers or configurations to avoid unnecessary setting fields
+        StorageHubHandler::new(
+            self.task_spawner
+                .as_ref()
+                .expect("Task Spawner not set")
+                .clone(),
+            self.file_transfer
+                .as_ref()
+                .expect("File Transfer not set.")
+                .clone(),
+            self.blockchain
+                .as_ref()
+                .expect("Blockchain Service not set.")
+                .clone(),
+            self.file_storage
+                .as_ref()
+                .expect("File Storage not set.")
+                .clone(),
+            self.forest_storage_handler
+                .as_ref()
+                .expect("Forest Storage Handler not set.")
+                .clone(),
+            ProviderConfig {
+                // Use minimal/default config for fisherman
+                capacity_config: self.capacity_config.unwrap_or_default(),
+                msp_charge_fees: Default::default(),
+                msp_move_bucket: Default::default(),
+                bsp_upload_file: Default::default(),
+                bsp_move_bucket: Default::default(),
+                bsp_charge_fees: Default::default(),
+                bsp_submit_proof: Default::default(),
+                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
+            },
+            self.indexer_db_pool.clone(),
+            self.peer_manager.expect("Peer Manager not set"),
+        )
+    }
+}
+
 /// Configuration options for the MSP Charge Fees task.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct MspChargeFeesOptions {
@@ -707,8 +793,21 @@ impl<Runtime: StorageEnableRuntime> Into<BlockchainServiceConfig<Runtime>>
 /// Configuration for the indexer.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct IndexerOptions {
-    /// Whether to enable the indexer.
-    pub indexer: bool,
+    /// Indexing mode
+    pub indexer_mode: IndexerMode,
     /// Postgres database URL.
-    pub database_url: Option<String>,
+    ///
+    /// Deserializing as "indexer_database_url" to match the expected field name in the toml file.
+    #[serde(rename = "indexer_database_url")]
+    pub database_url: String,
+}
+
+/// Configuration for the fisherman.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct FishermanOptions {
+    /// Postgres database URL.
+    ///
+    /// Deserializing as "fisherman_database_url" to match the expected field name in the toml file.
+    #[serde(rename = "fisherman_database_url")]
+    pub database_url: String,
 }
