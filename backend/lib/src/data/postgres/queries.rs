@@ -35,18 +35,6 @@ impl PostgresClient {
         todo!("Add to shc-indexer-db: SELECT * FROM files WHERE file_id = $1")
     }
 
-    /// Get all files for a specific user
-    ///
-    /// # Arguments
-    /// * `user_id` - The user's account ID
-    ///
-    /// # Returns
-    /// A vector of files owned by the user
-    pub async fn get_files_by_user(&self, _user_id: &str) -> Result<Vec<File>, PostgresError> {
-        todo!(
-            "Add to shc-indexer-db: SELECT * FROM files WHERE owner = $1 ORDER BY created_at DESC"
-        )
-    }
 
     /// Get payment streams for a specific user
     ///
@@ -109,36 +97,27 @@ impl PostgresClient {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
-    use crate::data::postgres::{AnyDbConnection, DbConfig, PgConnection};
 
     #[tokio::test]
     #[ignore = "Requires actual database"]
-    // TODO
+    // TODO: Phase 3 - Update to use Repository pattern
     async fn test_get_active_bsps() {
-        let config = DbConfig::new("postgres://localhost/storagehub");
-        let pg_conn = PgConnection::new(config)
-            .await
-            .expect("Failed to create connection");
-        let client = PostgresClient::new(Arc::new(AnyDbConnection::Postgres(pg_conn))).await;
-
+        // Test temporarily disabled during Phase 1 cleanup
+        // Will be reimplemented with Repository pattern in Phase 3
+        let client = PostgresClient::new().await;
         let result = client.get_active_bsps().await;
-        assert!(result.is_ok());
+        assert!(result.is_err()); // Expected: NotImplemented error
     }
 
     #[tokio::test]
     #[ignore = "Requires actual database"]
-    // TODO
+    // TODO: Phase 3 - Update to use Repository pattern
     async fn test_get_file_by_id() {
-        let config = DbConfig::new("postgres://localhost/storagehub");
-        let pg_conn = PgConnection::new(config)
-            .await
-            .expect("Failed to create connection");
-        let client = PostgresClient::new(Arc::new(AnyDbConnection::Postgres(pg_conn))).await;
-
+        // Test temporarily disabled during Phase 1 cleanup
+        // Will be reimplemented with Repository pattern in Phase 3
+        let client = PostgresClient::new().await;
         let result = client.get_file_by_id("test-file-id").await;
-        assert!(result.is_ok());
+        assert!(result.is_err()); // Expected: NotImplemented error
     }
 }

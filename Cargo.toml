@@ -52,8 +52,8 @@ codec = { package = "parity-scale-codec", version = "3.0.0", features = [
 	"derive",
 ], default-features = false }
 color-print = "0.3.4"
-diesel = { version = "2.2.4", features = ["postgres", "sqlite", "chrono", "numeric"] }
-diesel-async = { version = "0.5.0", features = ["bb8", "postgres", "sqlite"] }
+diesel = { version = "2.2.4", features = ["postgres", "chrono", "numeric"] }
+diesel-async = { version = "0.5.0", features = ["bb8", "postgres"] }
 futures-timer = "3.0.1"
 hash-db = "0.16.0"
 hex = { version = "0.4.3", default-features = false }

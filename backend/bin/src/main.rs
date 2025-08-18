@@ -16,7 +16,7 @@ use sh_msp_backend_lib::{
     api::create_app,
     config::Config,
     data::{
-        postgres::{AnyDbConnection, DbConfig, PgConnection, PostgresClient},
+        postgres::PostgresClient,
         rpc::{AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection},
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
@@ -125,20 +125,20 @@ async fn create_postgres_client(config: &Config) -> Result<Arc<PostgresClient>> 
     //     }
     // }
 
-    let db_config = DbConfig::new(&config.database.url);
-    let pg_conn = PgConnection::new(db_config)
-        .await
-        .context("Failed to create PostgreSQL connection")?;
-
-    let conn = AnyDbConnection::Real(pg_conn);
-    let client = PostgresClient::new(Arc::new(conn)).await;
-
-    client
-        .test_connection()
-        .await
-        .context("Failed to connect to PostgreSQL")?;
-
-    info!("Connected to PostgreSQL");
+    // TODO: Phase 3 - Replace with Repository initialization
+    // The PostgreSQL client is temporarily disabled during Phase 1 cleanup.
+    // In Phase 3, this will be replaced with:
+    // - SmartPool initialization
+    // - Repository pattern implementation
+    // - Proper dependency injection
+    
+    info!("PostgreSQL client temporarily disabled during Phase 1 cleanup");
+    info!("Database operations will return NotImplemented errors");
+    
+    let client = PostgresClient::new().await;
+    
+    // Skip connection test during Phase 1 cleanup
+    // client.test_connection().await.context("Failed to connect to PostgreSQL")?;
     Ok(Arc::new(client))
 }
 

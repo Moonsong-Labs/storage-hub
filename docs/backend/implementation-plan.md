@@ -6,63 +6,68 @@ This plan details the complete refactoring of the database backend from a comple
 
 ## Phase 1: Remove Outdated Components
 
-### Prerequisites
-- [ ] Backup current implementation for reference
-- [ ] Ensure all tests are documented before removal
-- [ ] Document any critical logic that needs preservation
+### Objective
+Remove all outdated database abstraction layers and multi-backend support infrastructure to prepare for the simplified repository pattern implementation.
 
 ### Steps
 
-1. **Remove AnyBackend Implementation**
+1. **Remove Multi-Backend Abstractions**
    - File: `backend/lib/src/data/any_backend.rs`
-   - Operation: Delete entire file
-   - Details: This abstraction layer is no longer needed with the repository pattern
-   - Success: File removed, no compilation errors from dependent code
-
-2. **Remove AnyConnection Implementation**
-   - File: `backend/lib/src/data/any_connection.rs`
-   - Operation: Delete entire file
-   - Details: Connection switching will be handled at repository level
-   - Success: File removed
-
-3. **Remove SQLite Backend**
-   - Files: 
-     - `backend/lib/src/data/sqlite/connection.rs`
-     - `backend/lib/src/data/sqlite/mod.rs`
-     - `backend/lib/src/data/sqlite/sqlite_connection.rs`
-   - Operation: Delete entire sqlite module
-   - Details: Focus on PostgreSQL with mock repository for testing
-   - Success: SQLite module removed
-
-4. **Clean Up Mock Connection**
-   - File: `backend/lib/src/data/postgres/mock_connection.rs`
    - Operation: Delete file
-   - Details: Will be replaced with MockRepository at higher level
-   - Success: Old mock system removed
+   - Details: The AnyBackend abstraction is no longer needed with repository pattern
+   - Success: File deleted, imports updated
 
-5. **Simplify Connection Module**
-   - File: `backend/lib/src/data/postgres/connection.rs`
-   - Operation: Remove DbConnection trait, AnyDbConnection enum, AnyAsyncConnection enum
-   - Details: Keep only PgConnection implementation using deadpool-diesel
-   - Success: Connection module contains only PostgreSQL pool logic
+2. **Remove AnyConnection Abstraction**
+   - File: `backend/lib/src/data/any_connection.rs`
+   - Operation: Delete file
+   - Details: Multi-connection abstraction replaced by SmartPool
+   - Success: File deleted, references removed
 
-6. **Update Cargo Dependencies**
-   - File: `backend/lib/Cargo.toml`
-   - Operation: Remove SQLite features, add deadpool-diesel
-   - Details:
-     ```toml
-     # Remove sqlite feature from diesel
-     diesel = { version = "2.2.4", features = ["postgres", "chrono", "numeric"] }
-     # Add deadpool-diesel
-     deadpool-diesel = { version = "0.6", features = ["postgres", "rt_tokio_1"] }
-     # Keep diesel-async for AsyncPgConnection
-     diesel-async = { version = "0.5.0", features = ["bb8", "postgres"] }
-     ```
-   - Success: Dependencies updated, cargo check passes
+3. **Remove SQLite Implementation**
+   - File: `backend/lib/src/data/sqlite/` entire directory
+   - Operation: Delete directory and all contents
+   - Details: SQLite support removed in favor of PostgreSQL-only with mock repository
+   - Success: Directory removed, module declarations updated
+
+4. **Remove Connection Abstractions**
+   - Files:
+     - `backend/lib/src/data/postgres/connection.rs` - Contains AnyDbConnection and AnyAsyncConnection enums
+     - `backend/lib/src/data/postgres/pg_connection.rs` - PgConnection wrapper
+     - `backend/lib/src/data/postgres/mock_connection.rs` - Old mock connection system
+   - Operation: Delete files
+   - Details: These abstractions will be replaced by SmartPool and repository pattern
+   - Success: Files deleted, module exports updated
+
+5. **Clean Up Dependencies**
+   - File: Root `Cargo.toml`
+   - Operation: Remove SQLite features from diesel dependencies
+   - Details: Remove "sqlite" from diesel and diesel-async feature lists
+   - Success: Dependencies updated to PostgreSQL-only
+
+6. **Update Module Declarations**
+   - Files:
+     - `backend/lib/src/data/mod.rs` - Remove deleted module declarations
+     - `backend/lib/src/data/postgres/mod.rs` - Remove connection module exports
+   - Operation: Update module declarations
+   - Details: Clean up references to removed modules
+   - Success: Module structure updated
+
+7. **Stub PostgresClient**
+   - File: `backend/lib/src/data/postgres/client.rs`
+   - Operation: Replace implementation with stubs returning NotImplemented errors
+   - Details: Maintain method signatures as guide for repository implementation
+   - Success: Client stubbed with all method signatures preserved
+
+8. **Update Main Binary**
+   - File: `backend/bin/src/main.rs`
+   - Operation: Remove old database initialization code
+   - Details: Remove references to AnyDbConnection and connection initialization
+   - Success: Binary updated to compile without connection abstractions
 
 ### Testing Strategy
-- [ ] Run `cargo clean && cargo build` to ensure no dangling references
-- [ ] Document any compilation errors for addressing in Phase 2
+- Verify compilation with `SKIP_WASM_BUILD=1 cargo check`
+- Ensure no dangling references to removed types
+- Document any compilation issues and resolutions
 
 ### Rollback Plan
 Git revert to restore deleted files if critical functionality is discovered
