@@ -16,36 +16,24 @@ pub use error::{Error, Result};
 #[cfg(all(test, feature = "mocks"))]
 #[allow(dead_code)]
 mod tests {
-    use std::sync::Arc;
 
     use axum::http::StatusCode;
     use axum_test::TestServer;
-    use data::storage::{BoxedStorageWrapper, InMemoryStorage};
 
     use super::*;
 
-    // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
-    // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
-
-    /// Creates a test application with in-memory storage
+    /// Creates a test application with mocked services
+    #[cfg(feature = "mocks")]
     fn create_test_app() -> axum::Router {
-        // Create in-memory storage
-        let memory_storage = InMemoryStorage::new();
-        let boxed_storage = BoxedStorageWrapper::new(memory_storage);
-        let _storage: Arc<dyn data::storage::BoxedStorage> = Arc::new(boxed_storage);
-
-        // WIP: Mock PostgreSQL connection commented out until diesel traits are fully implemented
-        // let mock_conn = MockDbConnection::new();
-        // let db_conn = Arc::new(AnyDbConnection::Mock(mock_conn));
-        // let postgres: Arc<PostgresClient> = Arc::new(PostgresClient::new(db_conn));
-
-        // For now, we'll panic in tests that need postgres
-        panic!("Test requires PostgreSQL mock implementation - currently WIP")
+        // Create test services with all mocks
+        let services = services::Services::test();
+        
+        // Create the app with test services
+        api::create_app(services)
     }
 
+    #[cfg(feature = "mocks")]
     #[tokio::test]
-    #[ignore = "Requires test app setup with mocked services"]
-    // TODO
     async fn test_health_endpoint() {
         // Create test server
         let app = create_test_app();
@@ -59,13 +47,12 @@ mod tests {
 
         // Assert response body
         let json: serde_json::Value = response.json();
-        assert_eq!(json["status"], "ok");
+        assert_eq!(json["status"], "healthy");
         assert_eq!(json["service"], "storagehub-backend");
     }
 
+    #[cfg(feature = "mocks")]
     #[tokio::test]
-    #[ignore = "Requires test app setup with mocked services"]
-    // TODO
     async fn test_counter_endpoints() {
         // Create test server
         let app = create_test_app();

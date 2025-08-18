@@ -129,6 +129,7 @@ mod tests {
     use super::*;
     
     #[tokio::test]
+    #[ignore] // Requires actual database connection
     async fn test_pool_creation() {
         // This test will fail without a valid database URL
         // It's mainly to verify compilation

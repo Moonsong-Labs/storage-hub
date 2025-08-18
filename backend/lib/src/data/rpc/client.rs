@@ -139,7 +139,7 @@ mod tests {
     use super::*;
     use crate::{
         constants::test::{
-            accounts, blockchain, buckets, file_keys, file_metadata, helpers, peers,
+            accounts, blockchain, file_keys, file_metadata, helpers,
         },
         data::rpc::{AnyRpcConnection, ErrorMode, MockConnection},
     };

@@ -5,14 +5,14 @@
 
 use shc_indexer_db::models::{Bsp, File, Msp, PaymentStream};
 
-use super::{PostgresClient, PostgresError};
+use super::DBClient;
 
-impl PostgresClient {
+impl DBClient {
     /// Get all active backup storage providers (BSPs)
     ///
     /// # Returns
     /// A vector of active BSPs from the indexer database
-    pub async fn get_active_bsps(&self) -> Result<Vec<Bsp>, PostgresError> {
+    pub async fn get_active_bsps(&self) -> Result<Vec<Bsp>, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT * FROM bsp WHERE status = 'Active'")
     }
 
@@ -20,7 +20,7 @@ impl PostgresClient {
     ///
     /// # Returns
     /// A vector of active MSPs from the indexer database
-    pub async fn get_active_msps(&self) -> Result<Vec<Msp>, PostgresError> {
+    pub async fn get_active_msps(&self) -> Result<Vec<Msp>, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT * FROM msp WHERE status = 'Active'")
     }
 
@@ -31,7 +31,7 @@ impl PostgresClient {
     ///
     /// # Returns
     /// The file metadata if found
-    pub async fn get_file_by_id(&self, _file_id: &str) -> Result<Option<File>, PostgresError> {
+    pub async fn get_file_by_id(&self, _file_id: &str) -> Result<Option<File>, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT * FROM files WHERE file_id = $1")
     }
 
@@ -46,7 +46,7 @@ impl PostgresClient {
     pub async fn get_payment_streams_for_user(
         &self,
         _user_id: &str,
-    ) -> Result<Vec<PaymentStream>, PostgresError> {
+    ) -> Result<Vec<PaymentStream>, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT * FROM payment_streams WHERE user_account = $1 ORDER BY created_at DESC")
     }
 
@@ -60,7 +60,7 @@ impl PostgresClient {
     pub async fn get_active_payment_streams_for_provider(
         &self,
         _provider_id: &str,
-    ) -> Result<Vec<PaymentStream>, PostgresError> {
+    ) -> Result<Vec<PaymentStream>, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT * FROM payment_streams WHERE provider_account = $1 AND status = 'Active' ORDER BY created_at DESC")
     }
 
@@ -74,7 +74,7 @@ impl PostgresClient {
     pub async fn get_total_storage_used_by_user(
         &self,
         _user_id: &str,
-    ) -> Result<i64, PostgresError> {
+    ) -> Result<i64, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT COALESCE(SUM(size), 0) FROM files WHERE owner = $1")
     }
 
@@ -82,7 +82,7 @@ impl PostgresClient {
     ///
     /// # Returns
     /// The number of active backup storage providers
-    pub async fn count_active_bsps(&self) -> Result<i64, PostgresError> {
+    pub async fn count_active_bsps(&self) -> Result<i64, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT COUNT(*) FROM bsp WHERE status = 'Active'")
     }
 
@@ -90,7 +90,7 @@ impl PostgresClient {
     ///
     /// # Returns
     /// The number of active main storage providers
-    pub async fn count_active_msps(&self) -> Result<i64, PostgresError> {
+    pub async fn count_active_msps(&self) -> Result<i64, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT COUNT(*) FROM msp WHERE status = 'Active'")
     }
 }
@@ -99,25 +99,74 @@ impl PostgresClient {
 mod tests {
     use super::*;
 
+    #[cfg(feature = "mocks")]
     #[tokio::test]
-    #[ignore = "Requires actual database"]
-    // TODO: Phase 3 - Update to use Repository pattern
-    async fn test_get_active_bsps() {
-        // Test temporarily disabled during Phase 1 cleanup
-        // Will be reimplemented with Repository pattern in Phase 3
-        let client = PostgresClient::new().await;
-        let result = client.get_active_bsps().await;
-        assert!(result.is_err()); // Expected: NotImplemented error
+    async fn test_db_client_with_mock_repository() {
+        use std::sync::Arc;
+        use crate::repository::{MockRepository, StorageOperations, NewBsp};
+        use bigdecimal::BigDecimal;
+        
+        // Create mock repository and add test data
+        let mock_repo = MockRepository::new();
+        
+        // Add a test BSP
+        let new_bsp = NewBsp {
+            account: "test-account".to_string(),
+            capacity: BigDecimal::from(1000),
+            stake: BigDecimal::from(500),
+            onchain_bsp_id: "bsp-1".to_string(),
+            merkle_root: vec![1, 2, 3],
+            multiaddresses: vec![vec![4, 5, 6]],
+        };
+        
+        let created_bsp = mock_repo.create_bsp(new_bsp).await.unwrap();
+        
+        // Create DBClient with mock repository
+        let client = DBClient::new(Arc::new(mock_repo));
+        
+        // Test that we can retrieve the BSP
+        let retrieved_bsp = client.get_bsp_by_id(created_bsp.id).await.unwrap();
+        assert!(retrieved_bsp.is_some());
+        
+        let bsp = retrieved_bsp.unwrap();
+        assert_eq!(bsp.account, "test-account");
+        assert_eq!(bsp.onchain_bsp_id, "bsp-1");
     }
-
+    
+    #[cfg(feature = "mocks")]
     #[tokio::test]
-    #[ignore = "Requires actual database"]
-    // TODO: Phase 3 - Update to use Repository pattern
-    async fn test_get_file_by_id() {
-        // Test temporarily disabled during Phase 1 cleanup
-        // Will be reimplemented with Repository pattern in Phase 3
-        let client = PostgresClient::new().await;
-        let result = client.get_file_by_id("test-file-id").await;
-        assert!(result.is_err()); // Expected: NotImplemented error
+    async fn test_db_client_file_operations() {
+        use std::sync::Arc;
+        use crate::repository::{MockRepository, NewFile};
+        
+        let mock_repo = MockRepository::new();
+        
+        // Add a test file using the mock repository directly
+        let new_file = NewFile {
+            account: vec![1, 2, 3],
+            file_key: vec![4, 5, 6],
+            bucket_id: 1,
+            location: vec![7, 8, 9],
+            fingerprint: vec![10, 11, 12],
+            size: 1024,
+            step: 1,
+        };
+        
+        // Create the file directly in the mock repository
+        let created_file = mock_repo.create_file(new_file).await.unwrap();
+        
+        // Now create the DBClient with the mock that contains data
+        let client = DBClient::new(Arc::new(mock_repo));
+        
+        // Test file retrieval - should now find the file
+        let result = client.get_file_by_key(&[4, 5, 6]).await.unwrap();
+        assert_eq!(result.file_key, vec![4, 5, 6]);
+        assert_eq!(result.account, vec![1, 2, 3]);
+        assert_eq!(result.size, 1024);
+        
+        // Test getting files by user
+        let files = client.get_files_by_user(&[1, 2, 3], None, None).await.unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].id, created_file.id);
     }
 }

@@ -1,9 +1,10 @@
-//! PostgreSQL data access module
+//! Database access module using repository pattern
 //!
-//! This module provides read-only access to the StorageHub indexer database,
-//! allowing the backend to query blockchain-indexed data.
+//! This module provides database access through a repository abstraction,
+//! allowing the backend to query blockchain-indexed data with support for
+//! both production PostgreSQL and mock implementations.
 
-pub mod client;
+pub mod db_client;
 pub mod queries;
 
-pub use client::{PostgresClient, PostgresError};
+pub use db_client::DBClient;

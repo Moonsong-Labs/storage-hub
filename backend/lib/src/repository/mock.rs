@@ -244,6 +244,15 @@ impl MockRepository {
         }
     }
     
+    /// Delete a file by its key (mock-specific helper)
+    pub async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()> {
+        let mut files = self.files.write().await;
+        match files.remove(file_key) {
+            Some(_) => Ok(()),
+            None => Err(RepositoryError::not_found("File")),
+        }
+    }
+    
     /// Clear all data (useful for test cleanup)
     pub async fn clear_all(&self) {
         let mut bsps = self.bsps.write().await;

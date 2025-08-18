@@ -6,20 +6,17 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-// WIP: Mock imports - postgres mocks commented out until diesel traits are fully implemented
 #[cfg(feature = "mocks")]
-use sh_msp_backend_lib::data::{
-    // postgres::{MockPostgresClient, MockDbConnection},
-    rpc::MockConnection,
-};
+use sh_msp_backend_lib::data::rpc::MockConnection;
 use sh_msp_backend_lib::{
     api::create_app,
     config::Config,
     data::{
-        postgres::PostgresClient,
+        postgres::DBClient,
         rpc::{AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection},
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
+    repository::Repository,
     services::Services,
 };
 use tracing::{debug, info};
@@ -113,32 +110,39 @@ fn load_config() -> Result<Config> {
     Ok(config)
 }
 
-async fn create_postgres_client(config: &Config) -> Result<Arc<PostgresClient>> {
-    // WIP: Mock mode handling - commented out until diesel traits are fully implemented
-    // #[cfg(feature = "mocks")]
-    // {
-    //     if config.database.mock_mode {
-    //         info!("Using mock PostgreSQL connection (mock_mode enabled)");
-    //         let mock_conn = AnyDbConnection::Mock(MockDbConnection::new());
-    //         let client = PostgresClient::new(Arc::new(mock_conn));
-    //         return Ok(Arc::new(client));
-    //     }
-    // }
+async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {
+    #[cfg(feature = "mocks")]
+    {
+        if config.database.mock_mode {
+            info!("Using mock repository (mock_mode enabled)");
+            
+            use sh_msp_backend_lib::repository::MockRepository;
+            
+            let mock_repo = MockRepository::new();
+            let client = DBClient::new(Arc::new(mock_repo));
+            
+            // Test the connection (mock always succeeds)
+            client.test_connection()
+                .await
+                .context("Failed to test mock connection")?;
+            
+            return Ok(Arc::new(client));
+        }
+    }
 
-    // TODO: Phase 3 - Replace with Repository initialization
-    // The PostgreSQL client is temporarily disabled during Phase 1 cleanup.
-    // In Phase 3, this will be replaced with:
-    // - SmartPool initialization
-    // - Repository pattern implementation
-    // - Proper dependency injection
+    // Initialize real repository for database access
+    let repository = Repository::new(&config.database.url)
+        .await
+        .context("Failed to create repository with database connection")?;
     
-    info!("PostgreSQL client temporarily disabled during Phase 1 cleanup");
-    info!("Database operations will return NotImplemented errors");
+    let client = DBClient::new(Arc::new(repository));
     
-    let client = PostgresClient::new().await;
+    // Test the connection
+    client.test_connection()
+        .await
+        .context("Failed to connect to PostgreSQL")?;
     
-    // Skip connection test during Phase 1 cleanup
-    // client.test_connection().await.context("Failed to connect to PostgreSQL")?;
+    info!("Connected to PostgreSQL database");
     Ok(Arc::new(client))
 }
 
