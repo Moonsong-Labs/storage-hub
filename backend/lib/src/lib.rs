@@ -27,7 +27,7 @@ mod tests {
     fn create_test_app() -> axum::Router {
         // Create test services with all mocks
         let services = services::Services::test();
-        
+
         // Create the app with test services
         api::create_app(services)
     }

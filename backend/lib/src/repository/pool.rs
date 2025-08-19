@@ -8,16 +8,20 @@
 //! - Normal pooling in production mode (32 connections)
 //! - Zero runtime overhead (test code compiled out in release)
 
-use diesel_async::pooled_connection::{bb8::Pool, AsyncDieselConnectionManager};
-use diesel_async::AsyncPgConnection;
-use std::sync::Arc;
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+
+use diesel_async::{
+    pooled_connection::{bb8::Pool, AsyncDieselConnectionManager},
+    AsyncPgConnection,
+};
 
 use super::error::RepositoryError;
 
 pub type DbPool = Pool<AsyncPgConnection>;
-pub type DbConnection<'a> = diesel_async::pooled_connection::bb8::PooledConnection<'a, AsyncPgConnection>;
+pub type DbConnection<'a> =
+    diesel_async::pooled_connection::bb8::PooledConnection<'a, AsyncPgConnection>;
 
 /// Smart connection pool that automatically manages test transactions.
 ///
@@ -32,7 +36,7 @@ pub type DbConnection<'a> = diesel_async::pooled_connection::bb8::PooledConnecti
 pub struct SmartPool {
     /// The underlying bb8 pool
     inner: Arc<DbPool>,
-    
+
     /// Track whether test transaction has been initialized (test mode only)
     #[cfg(test)]
     test_tx_initialized: AtomicBool,
@@ -49,7 +53,7 @@ impl SmartPool {
     pub async fn new(database_url: &str) -> Result<Self, RepositoryError> {
         // Create the connection manager
         let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(database_url);
-        
+
         // Configure pool based on compile mode
         #[cfg(test)]
         let pool = {
@@ -60,7 +64,7 @@ impl SmartPool {
                 .await
                 .map_err(|e| RepositoryError::Pool(format!("Failed to create test pool: {}", e)))?
         };
-        
+
         #[cfg(not(test))]
         let pool = {
             // Normal pool size for production
@@ -68,16 +72,18 @@ impl SmartPool {
                 .max_size(32)
                 .build(manager)
                 .await
-                .map_err(|e| RepositoryError::Pool(format!("Failed to create production pool: {}", e)))?
+                .map_err(|e| {
+                    RepositoryError::Pool(format!("Failed to create production pool: {}", e))
+                })?
         };
-        
+
         Ok(Self {
             inner: Arc::new(pool),
             #[cfg(test)]
             test_tx_initialized: AtomicBool::new(false),
         })
     }
-    
+
     /// Get a connection from the pool.
     ///
     /// In test mode, this will automatically begin a test transaction
@@ -88,37 +94,38 @@ impl SmartPool {
     pub async fn get(&self) -> Result<DbConnection<'_>, RepositoryError> {
         // Get connection from pool
         #[allow(unused_mut)]
-        let mut conn = self.inner
+        let mut conn = self
+            .inner
             .get()
             .await
             .map_err(|e| RepositoryError::Pool(format!("Failed to get connection: {}", e)))?;
-        
+
         // Begin test transaction if in test mode and not yet initialized
         #[cfg(test)]
         {
             use diesel_async::AsyncConnection;
-            
+
             if !self.test_tx_initialized.load(Ordering::Acquire) {
                 // Begin test transaction that will rollback automatically
                 conn.begin_test_transaction()
                     .await
                     .map_err(|e| RepositoryError::Database(e))?;
-                
+
                 // Mark as initialized
                 self.test_tx_initialized.store(true, Ordering::Release);
             }
         }
-        
+
         Ok(conn)
     }
-    
+
     /// Get the maximum size of the connection pool.
     ///
     /// Returns 1 in test mode, 32 in production mode.
     pub fn max_size(&self) -> usize {
         #[cfg(test)]
         return 1;
-        
+
         #[cfg(not(test))]
         return 32;
     }
@@ -127,7 +134,7 @@ impl SmartPool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[tokio::test]
     #[ignore] // Requires actual database connection
     async fn test_pool_creation() {
@@ -136,7 +143,7 @@ mod tests {
         let result = SmartPool::new("postgres://invalid:invalid@localhost/invalid").await;
         assert!(result.is_err());
     }
-    
+
     #[test]
     fn test_pool_size() {
         // In test mode, pool size should be 1

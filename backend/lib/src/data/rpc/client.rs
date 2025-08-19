@@ -138,9 +138,7 @@ impl StorageHubRpcClient {
 mod tests {
     use super::*;
     use crate::{
-        constants::test::{
-            accounts, blockchain, file_keys, file_metadata, helpers,
-        },
+        constants::test::{accounts, blockchain, file_keys, file_metadata, helpers},
         data::rpc::{AnyRpcConnection, ErrorMode, MockConnection},
     };
 

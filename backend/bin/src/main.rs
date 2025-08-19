@@ -115,17 +115,18 @@ async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {
     {
         if config.database.mock_mode {
             info!("Using mock repository (mock_mode enabled)");
-            
+
             use sh_msp_backend_lib::repository::MockRepository;
-            
+
             let mock_repo = MockRepository::new();
             let client = DBClient::new(Arc::new(mock_repo));
-            
+
             // Test the connection (mock always succeeds)
-            client.test_connection()
+            client
+                .test_connection()
                 .await
                 .context("Failed to test mock connection")?;
-            
+
             return Ok(Arc::new(client));
         }
     }
@@ -134,14 +135,15 @@ async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {
     let repository = Repository::new(&config.database.url)
         .await
         .context("Failed to create repository with database connection")?;
-    
+
     let client = DBClient::new(Arc::new(repository));
-    
+
     // Test the connection
-    client.test_connection()
+    client
+        .test_connection()
         .await
         .context("Failed to connect to PostgreSQL")?;
-    
+
     info!("Connected to PostgreSQL database");
     Ok(Arc::new(client))
 }

@@ -243,6 +243,7 @@ impl MockConnectionBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::test::{counter::*, network::*};
 
     #[tokio::test]
     async fn test_mock_connection_basic() {
@@ -252,7 +253,7 @@ mod tests {
         conn.set_response(
             "system_health",
             serde_json::json!({
-                "peers": 5,
+                "peers": DEFAULT_PEER_COUNT,
                 "isSyncing": false,
                 "shouldHavePeers": true
             }),
@@ -260,7 +261,7 @@ mod tests {
 
         // Test system health call
         let health: Value = conn.call("system_health", ()).await.unwrap();
-        assert_eq!(health["peers"], 5);
+        assert_eq!(health["peers"], DEFAULT_PEER_COUNT);
         assert_eq!(health["isSyncing"], false);
 
         // Test connection status
@@ -311,13 +312,13 @@ mod tests {
     #[tokio::test]
     async fn test_mock_connection_builder() {
         let conn = MockConnectionBuilder::new()
-            .with_response("test", serde_json::json!(42))
+            .with_response("test", serde_json::json!(TEST_RESPONSE_VALUE))
             .with_latency_ms(10)
             .with_error_mode(ErrorMode::None)
             .build();
 
         let response: i32 = conn.call("test", ()).await.unwrap();
-        assert_eq!(response, 42);
+        assert_eq!(response, TEST_RESPONSE_VALUE);
     }
 
     #[tokio::test]

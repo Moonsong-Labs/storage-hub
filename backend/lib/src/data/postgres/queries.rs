@@ -31,10 +31,12 @@ impl DBClient {
     ///
     /// # Returns
     /// The file metadata if found
-    pub async fn get_file_by_id(&self, _file_id: &str) -> Result<Option<File>, crate::error::Error> {
+    pub async fn get_file_by_id(
+        &self,
+        _file_id: &str,
+    ) -> Result<Option<File>, crate::error::Error> {
         todo!("Add to shc-indexer-db: SELECT * FROM files WHERE file_id = $1")
     }
-
 
     /// Get payment streams for a specific user
     ///
@@ -98,74 +100,83 @@ impl DBClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::test::{
+        accounts::*, bsp::*, buckets, file_keys::*, file_metadata::*, merkle::*, network::*,
+    };
 
     #[cfg(feature = "mocks")]
     #[tokio::test]
     async fn test_db_client_with_mock_repository() {
         use std::sync::Arc;
-        use crate::repository::{MockRepository, StorageOperations, NewBsp};
+
         use bigdecimal::BigDecimal;
-        
+
+        use crate::repository::{MockRepository, NewBsp, StorageOperations};
+
         // Create mock repository and add test data
         let mock_repo = MockRepository::new();
-        
+
         // Add a test BSP
         let new_bsp = NewBsp {
-            account: "test-account".to_string(),
-            capacity: BigDecimal::from(1000),
-            stake: BigDecimal::from(500),
-            onchain_bsp_id: "bsp-1".to_string(),
-            merkle_root: vec![1, 2, 3],
-            multiaddresses: vec![vec![4, 5, 6]],
+            account: TEST_BSP_ACCOUNT_STR.to_string(),
+            capacity: BigDecimal::from(DEFAULT_CAPACITY),
+            stake: BigDecimal::from(DEFAULT_STAKE * 5),
+            onchain_bsp_id: TEST_BSP_ONCHAIN_ID_STR.to_string(),
+            merkle_root: BSP_MERKLE_ROOT.to_vec(),
+            multiaddresses: vec![TEST_MULTIADDRESSES.to_vec()],
         };
-        
+
         let created_bsp = mock_repo.create_bsp(new_bsp).await.unwrap();
-        
+
         // Create DBClient with mock repository
         let client = DBClient::new(Arc::new(mock_repo));
-        
+
         // Test that we can retrieve the BSP
         let retrieved_bsp = client.get_bsp_by_id(created_bsp.id).await.unwrap();
         assert!(retrieved_bsp.is_some());
-        
+
         let bsp = retrieved_bsp.unwrap();
-        assert_eq!(bsp.account, "test-account");
-        assert_eq!(bsp.onchain_bsp_id, "bsp-1");
+        assert_eq!(bsp.account, TEST_BSP_ACCOUNT_STR);
+        assert_eq!(bsp.onchain_bsp_id, TEST_BSP_ONCHAIN_ID_STR);
     }
-    
+
     #[cfg(feature = "mocks")]
     #[tokio::test]
     async fn test_db_client_file_operations() {
         use std::sync::Arc;
+
         use crate::repository::{MockRepository, NewFile};
-        
+
         let mock_repo = MockRepository::new();
-        
+
         // Add a test file using the mock repository directly
         let new_file = NewFile {
-            account: vec![1, 2, 3],
-            file_key: vec![4, 5, 6],
-            bucket_id: 1,
-            location: vec![7, 8, 9],
-            fingerprint: vec![10, 11, 12],
-            size: 1024,
-            step: 1,
+            account: TEST_USER_ACCOUNT.to_vec(),
+            file_key: ALTERNATIVE_FILE_KEY.to_vec(),
+            bucket_id: buckets::TEST_BUCKET_ID_INT,
+            location: ALTERNATIVE_LOCATION.to_vec(),
+            fingerprint: ALTERNATIVE_FINGERPRINT.to_vec(),
+            size: TEST_FILE_SIZE,
+            step: UPDATED_STEP,
         };
-        
+
         // Create the file directly in the mock repository
         let created_file = mock_repo.create_file(new_file).await.unwrap();
-        
+
         // Now create the DBClient with the mock that contains data
         let client = DBClient::new(Arc::new(mock_repo));
-        
+
         // Test file retrieval - should now find the file
-        let result = client.get_file_by_key(&[4, 5, 6]).await.unwrap();
-        assert_eq!(result.file_key, vec![4, 5, 6]);
-        assert_eq!(result.account, vec![1, 2, 3]);
-        assert_eq!(result.size, 1024);
-        
+        let result = client.get_file_by_key(ALTERNATIVE_FILE_KEY).await.unwrap();
+        assert_eq!(result.file_key, ALTERNATIVE_FILE_KEY);
+        assert_eq!(result.account, TEST_USER_ACCOUNT);
+        assert_eq!(result.size, TEST_FILE_SIZE);
+
         // Test getting files by user
-        let files = client.get_files_by_user(&[1, 2, 3], None, None).await.unwrap();
+        let files = client
+            .get_files_by_user(TEST_USER_ACCOUNT, None, None)
+            .await
+            .unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].id, created_file.id);
     }

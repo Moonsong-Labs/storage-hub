@@ -91,82 +91,83 @@ impl Storage for InMemoryStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::constants::test::counter::*;
 
     #[tokio::test]
     async fn test_increment_counter() {
         let storage = InMemoryStorage::new();
 
-        let result = storage.increment_counter("test", 1).await.unwrap();
-        assert_eq!(result, 1);
+        let result = storage.increment_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT).await.unwrap();
+        assert_eq!(result, DEFAULT_INCREMENT);
 
-        let result = storage.increment_counter("test", 1).await.unwrap();
-        assert_eq!(result, 2);
+        let result = storage.increment_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT).await.unwrap();
+        assert_eq!(result, DEFAULT_INCREMENT * 2);
 
-        let result = storage.increment_counter("test", 5).await.unwrap();
-        assert_eq!(result, 7);
+        let result = storage.increment_counter(TEST_COUNTER_KEY, LARGE_INCREMENT).await.unwrap();
+        assert_eq!(result, DEFAULT_INCREMENT * 2 + LARGE_INCREMENT);
     }
 
     #[tokio::test]
     async fn test_decrement_counter() {
         let storage = InMemoryStorage::new();
 
-        storage.set_counter("test", 10).await.unwrap();
+        storage.set_counter(TEST_COUNTER_KEY, SET_VALUE).await.unwrap();
 
-        let result = storage.decrement_counter("test", 1).await.unwrap();
-        assert_eq!(result, 9);
+        let result = storage.decrement_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT).await.unwrap();
+        assert_eq!(result, SET_VALUE - DEFAULT_INCREMENT);
 
-        let result = storage.decrement_counter("test", 5).await.unwrap();
-        assert_eq!(result, 4);
+        let result = storage.decrement_counter(TEST_COUNTER_KEY, LARGE_INCREMENT).await.unwrap();
+        assert_eq!(result, SET_VALUE - DEFAULT_INCREMENT - LARGE_INCREMENT);
     }
 
     #[tokio::test]
     async fn test_get_counter() {
         let storage = InMemoryStorage::new();
 
-        let result = storage.get_counter("test").await.unwrap();
-        assert_eq!(result, 0);
+        let result = storage.get_counter(TEST_COUNTER_KEY).await.unwrap();
+        assert_eq!(result, INITIAL_VALUE);
 
-        storage.set_counter("test", 42).await.unwrap();
-        let result = storage.get_counter("test").await.unwrap();
-        assert_eq!(result, 42);
+        storage.set_counter(TEST_COUNTER_KEY, EXPECTED_VALUE).await.unwrap();
+        let result = storage.get_counter(TEST_COUNTER_KEY).await.unwrap();
+        assert_eq!(result, EXPECTED_VALUE);
     }
 
     #[tokio::test]
     async fn test_set_counter() {
         let storage = InMemoryStorage::new();
 
-        let result = storage.set_counter("test", 10).await.unwrap();
-        assert_eq!(result, 0);
+        let result = storage.set_counter(TEST_COUNTER_KEY, SET_VALUE).await.unwrap();
+        assert_eq!(result, INITIAL_VALUE);
 
-        let result = storage.set_counter("test", 20).await.unwrap();
-        assert_eq!(result, 10);
+        let result = storage.set_counter(TEST_COUNTER_KEY, SET_VALUE * 2).await.unwrap();
+        assert_eq!(result, SET_VALUE);
     }
 
     #[tokio::test]
     async fn test_delete_counter() {
         let storage = InMemoryStorage::new();
 
-        let result = storage.delete_counter("test").await.unwrap();
-        assert_eq!(result, 0);
+        let result = storage.delete_counter(TEST_COUNTER_KEY).await.unwrap();
+        assert_eq!(result, INITIAL_VALUE);
 
-        storage.set_counter("test", 42).await.unwrap();
-        let result = storage.delete_counter("test").await.unwrap();
-        assert_eq!(result, 42);
+        storage.set_counter(TEST_COUNTER_KEY, EXPECTED_VALUE).await.unwrap();
+        let result = storage.delete_counter(TEST_COUNTER_KEY).await.unwrap();
+        assert_eq!(result, EXPECTED_VALUE);
 
-        let result = storage.get_counter("test").await.unwrap();
-        assert_eq!(result, 0);
+        let result = storage.get_counter(TEST_COUNTER_KEY).await.unwrap();
+        assert_eq!(result, INITIAL_VALUE);
     }
 
     #[tokio::test]
     async fn test_saturation_arithmetic() {
         let storage = InMemoryStorage::new();
 
-        storage.set_counter("test", i64::MAX - 1).await.unwrap();
-        let result = storage.increment_counter("test", 2).await.unwrap();
+        storage.set_counter(TEST_COUNTER_KEY, i64::MAX - 1).await.unwrap();
+        let result = storage.increment_counter(TEST_COUNTER_KEY, 2).await.unwrap();
         assert_eq!(result, i64::MAX);
 
-        storage.set_counter("test", i64::MIN + 1).await.unwrap();
-        let result = storage.decrement_counter("test", 2).await.unwrap();
+        storage.set_counter(TEST_COUNTER_KEY, i64::MIN + 1).await.unwrap();
+        let result = storage.decrement_counter(TEST_COUNTER_KEY, 2).await.unwrap();
         assert_eq!(result, i64::MIN);
     }
 }

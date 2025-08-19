@@ -56,19 +56,19 @@ impl Services {
             rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
             storage::{BoxedStorageWrapper, InMemoryStorage},
         };
-        
+
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
-        
+
         // Create mock database client
         let postgres = Arc::new(DBClient::test());
-        
+
         // Create mock RPC client
         let mock_conn = MockConnection::new();
         let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
         let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
-        
+
         Self::new(storage, postgres, rpc)
     }
 }
