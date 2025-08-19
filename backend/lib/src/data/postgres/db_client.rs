@@ -308,3 +308,137 @@ impl DBClient {
         Self::new(Arc::new(mock_repo))
     }
 }
+
+// Test-only mutable operations
+#[cfg(test)]
+impl DBClient {
+    /// Create a new BSP (test only)
+    pub async fn create_bsp(
+        &self,
+        new_bsp: crate::repository::NewBsp,
+    ) -> crate::error::Result<shc_indexer_db::models::Bsp> {
+        // In tests, StorageOperations includes IndexerOpsMut
+        let bsp = self
+            .repository
+            .create_bsp(new_bsp)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
+        
+        Ok(shc_indexer_db::models::Bsp {
+            id: bsp.id,
+            account: bsp.account,
+            capacity: bsp.capacity,
+            stake: bsp.stake,
+            last_tick_proven: bsp.last_tick_proven,
+            onchain_bsp_id: bsp.onchain_bsp_id,
+            merkle_root: bsp.merkle_root,
+            created_at: bsp.created_at,
+            updated_at: bsp.updated_at,
+        })
+    }
+
+    /// Update BSP capacity (test only)
+    pub async fn update_bsp_capacity(
+        &self,
+        id: i64,
+        capacity: bigdecimal::BigDecimal,
+    ) -> crate::error::Result<shc_indexer_db::models::Bsp> {
+        let bsp = self
+            .repository
+            .update_bsp_capacity(id, capacity)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
+        
+        Ok(shc_indexer_db::models::Bsp {
+            id: bsp.id,
+            account: bsp.account,
+            capacity: bsp.capacity,
+            stake: bsp.stake,
+            last_tick_proven: bsp.last_tick_proven,
+            onchain_bsp_id: bsp.onchain_bsp_id,
+            merkle_root: bsp.merkle_root,
+            created_at: bsp.created_at,
+            updated_at: bsp.updated_at,
+        })
+    }
+
+    /// Delete a BSP (test only)
+    pub async fn delete_bsp(&self, account: &str) -> crate::error::Result<()> {
+        self.repository
+            .delete_bsp(account)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Create a new bucket (test only)
+    pub async fn create_bucket(
+        &self,
+        new_bucket: crate::repository::NewBucket,
+    ) -> crate::error::Result<shc_indexer_db::models::Bucket> {
+        let bucket = self
+            .repository
+            .create_bucket(new_bucket)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
+        
+        Ok(shc_indexer_db::models::Bucket {
+            id: bucket.id,
+            msp_id: bucket.msp_id,
+            account: bucket.account,
+            onchain_bucket_id: bucket.onchain_bucket_id,
+            name: bucket.name,
+            collection_id: bucket.collection_id,
+            private: bucket.private,
+            merkle_root: bucket.merkle_root,
+            created_at: bucket.created_at,
+            updated_at: bucket.updated_at,
+        })
+    }
+
+    /// Create a new file (test only)
+    pub async fn create_file(
+        &self,
+        new_file: crate::repository::NewFile,
+    ) -> crate::error::Result<shc_indexer_db::models::File> {
+        let file = self
+            .repository
+            .create_file(new_file)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
+        
+        Ok(shc_indexer_db::models::File {
+            id: file.id,
+            account: file.account,
+            file_key: file.file_key,
+            bucket_id: file.bucket_id,
+            location: file.location,
+            fingerprint: file.fingerprint,
+            size: file.size,
+            step: file.step,
+            created_at: file.created_at,
+            updated_at: file.updated_at,
+        })
+    }
+
+    /// Update file step (test only)
+    pub async fn update_file_step(&self, file_key: &[u8], step: i32) -> crate::error::Result<()> {
+        self.repository
+            .update_file_step(file_key, step)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Delete a file (test only)
+    pub async fn delete_file(&self, file_key: &[u8]) -> crate::error::Result<()> {
+        self.repository
+            .delete_file(file_key)
+            .await
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
+    }
+
+    /// Clear all data (test only)
+    pub async fn clear_all(&self) -> crate::error::Result<()> {
+        self.repository.clear_all().await;
+        Ok(())
+    }
+}

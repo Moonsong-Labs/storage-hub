@@ -78,30 +78,21 @@ pub struct NewFile {
     pub step: i32,
 }
 
-// ============ Repository Trait ============
+// ============ Repository Traits ============
 
-/// Main trait defining all storage operations.
+/// Read-only operations for indexer data access.
 ///
-/// This trait provides a unified interface for database operations,
-/// allowing both production PostgreSQL and mock in-memory implementations.
+/// This trait provides read-only access to database entities,
+/// ensuring that production code cannot accidentally modify data.
 ///
 /// ## Implementation Notes
 /// - All methods are async and return `RepositoryResult<T>`
-/// - Methods follow consistent naming: `create_*`, `get_*_by_*`, `update_*`, `list_*`
+/// - Methods follow consistent naming: `get_*_by_*`, `list_*`
 /// - Pagination is supported through `limit` and `offset` parameters
 /// - Optional return types indicate entities that may not exist
 #[async_trait]
-pub trait StorageOperations: Send + Sync {
-    // ============ BSP Operations ============
-
-    /// Create a new BSP in the database.
-    ///
-    /// # Arguments
-    /// * `new_bsp` - BSP data to insert
-    ///
-    /// # Returns
-    /// * The created BSP with generated ID and timestamps
-    async fn create_bsp(&self, new_bsp: NewBsp) -> RepositoryResult<Bsp>;
+pub trait IndexerOps: Send + Sync {
+    // ============ BSP Read Operations ============
 
     /// Get a BSP by its database ID.
     ///
@@ -111,16 +102,6 @@ pub trait StorageOperations: Send + Sync {
     /// # Returns
     /// * `Some(Bsp)` if found, `None` otherwise
     async fn get_bsp_by_id(&self, id: i64) -> RepositoryResult<Option<Bsp>>;
-
-    /// Update a BSP's capacity.
-    ///
-    /// # Arguments
-    /// * `id` - Database ID of the BSP
-    /// * `capacity` - New capacity value
-    ///
-    /// # Returns
-    /// * The updated BSP
-    async fn update_bsp_capacity(&self, id: i64, capacity: BigDecimal) -> RepositoryResult<Bsp>;
 
     /// List BSPs with pagination.
     ///
@@ -132,16 +113,7 @@ pub trait StorageOperations: Send + Sync {
     /// * Vector of BSPs
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>>;
 
-    // ============ Bucket Operations ============
-
-    /// Create a new Bucket in the database.
-    ///
-    /// # Arguments
-    /// * `new_bucket` - Bucket data to insert
-    ///
-    /// # Returns
-    /// * The created Bucket with generated ID and timestamps
-    async fn create_bucket(&self, new_bucket: NewBucket) -> RepositoryResult<Bucket>;
+    // ============ Bucket Read Operations ============
 
     /// Get a Bucket by its database ID.
     ///
@@ -161,7 +133,7 @@ pub trait StorageOperations: Send + Sync {
     /// * Vector of Buckets owned by the user
     async fn get_buckets_by_user(&self, user_account: &str) -> RepositoryResult<Vec<Bucket>>;
 
-    // ============ File Operations ============
+    // ============ File Read Operations ============
 
     /// Get a File by its key.
     ///
@@ -190,3 +162,98 @@ pub trait StorageOperations: Send + Sync {
     /// * Vector of Files in the bucket
     async fn get_files_by_bucket(&self, bucket_id: i64) -> RepositoryResult<Vec<File>>;
 }
+
+/// Mutable operations for test environments.
+///
+/// This trait extends `IndexerOps` with write operations,
+/// ensuring they are only available in test environments.
+///
+/// ## Implementation Notes
+/// - All methods are async and return `RepositoryResult<T>`
+/// - Methods follow consistent naming: `create_*`, `update_*`, `delete_*`
+/// - This trait always exists but implementations are conditional
+#[async_trait]
+pub trait IndexerOpsMut: IndexerOps {
+    // ============ BSP Write Operations ============
+
+    /// Create a new BSP in the database.
+    ///
+    /// # Arguments
+    /// * `new_bsp` - BSP data to insert
+    ///
+    /// # Returns
+    /// * The created BSP with generated ID and timestamps
+    async fn create_bsp(&self, new_bsp: NewBsp) -> RepositoryResult<Bsp>;
+
+    /// Update a BSP's capacity.
+    ///
+    /// # Arguments
+    /// * `id` - Database ID of the BSP
+    /// * `capacity` - New capacity value
+    ///
+    /// # Returns
+    /// * The updated BSP
+    async fn update_bsp_capacity(&self, id: i64, capacity: BigDecimal) -> RepositoryResult<Bsp>;
+
+    /// Delete a BSP by account.
+    ///
+    /// # Arguments
+    /// * `account` - Account of the BSP to delete
+    async fn delete_bsp(&self, account: &str) -> RepositoryResult<()>;
+
+    // ============ Bucket Write Operations ============
+
+    /// Create a new Bucket in the database.
+    ///
+    /// # Arguments
+    /// * `new_bucket` - Bucket data to insert
+    ///
+    /// # Returns
+    /// * The created Bucket with generated ID and timestamps
+    async fn create_bucket(&self, new_bucket: NewBucket) -> RepositoryResult<Bucket>;
+
+    // ============ File Write Operations ============
+
+    /// Create a new File in the database.
+    ///
+    /// # Arguments
+    /// * `new_file` - File data to insert
+    ///
+    /// # Returns
+    /// * The created File with generated ID and timestamps
+    async fn create_file(&self, new_file: NewFile) -> RepositoryResult<File>;
+
+    /// Update a file's step.
+    ///
+    /// # Arguments
+    /// * `file_key` - Key of the file to update
+    /// * `step` - New step value
+    async fn update_file_step(&self, file_key: &[u8], step: i32) -> RepositoryResult<()>;
+
+    /// Delete a file by key.
+    ///
+    /// # Arguments
+    /// * `file_key` - Key of the file to delete
+    async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()>;
+
+    /// Clear all data from the repository.
+    ///
+    /// This is primarily used for test cleanup.
+    async fn clear_all(&self);
+}
+
+// ============ Backward Compatibility Trait Aliases ============
+
+// Production and mocks-only alias - read-only
+#[cfg(not(test))]
+pub trait StorageOperations: IndexerOps {}
+
+#[cfg(not(test))]
+impl<T: IndexerOps> StorageOperations for T {}
+
+// Test alias - read and write
+#[cfg(test)]
+pub trait StorageOperations: IndexerOps + IndexerOpsMut {}
+
+#[cfg(test)]
+impl<T: IndexerOps + IndexerOpsMut> StorageOperations for T {}

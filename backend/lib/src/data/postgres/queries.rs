@@ -111,7 +111,7 @@ mod tests {
 
         use bigdecimal::BigDecimal;
 
-        use crate::repository::{MockRepository, NewBsp, StorageOperations};
+        use crate::repository::{MockRepository, NewBsp, IndexerOpsMut};
 
         // Create mock repository and add test data
         let mock_repo = MockRepository::new();
@@ -145,7 +145,7 @@ mod tests {
     async fn test_db_client_file_operations() {
         use std::sync::Arc;
 
-        use crate::repository::{MockRepository, NewFile};
+        use crate::repository::{MockRepository, NewFile, IndexerOpsMut};
 
         let mock_repo = MockRepository::new();
 
@@ -156,8 +156,8 @@ mod tests {
             bucket_id: buckets::TEST_BUCKET_ID_INT,
             location: ALTERNATIVE_LOCATION.to_vec(),
             fingerprint: ALTERNATIVE_FINGERPRINT.to_vec(),
-            size: TEST_FILE_SIZE,
-            step: UPDATED_STEP,
+            size: TEST_FILE_SIZE as i64,
+            step: UPDATED_STEP as i32,
         };
 
         // Create the file directly in the mock repository
@@ -170,7 +170,7 @@ mod tests {
         let result = client.get_file_by_key(ALTERNATIVE_FILE_KEY).await.unwrap();
         assert_eq!(result.file_key, ALTERNATIVE_FILE_KEY);
         assert_eq!(result.account, TEST_USER_ACCOUNT);
-        assert_eq!(result.size, TEST_FILE_SIZE);
+        assert_eq!(result.size, TEST_FILE_SIZE as i64);
 
         // Test getting files by user
         let files = client

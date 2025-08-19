@@ -16,7 +16,7 @@ use bigdecimal::BigDecimal;
 use chrono::Utc;
 use tokio::sync::RwLock;
 
-use super::{Bsp, Bucket, File, NewBsp, NewBucket, NewFile, StorageOperations};
+use super::{Bsp, Bucket, File, IndexerOps, IndexerOpsMut, NewBsp, NewBucket, NewFile};
 use crate::repository::error::{RepositoryError, RepositoryResult};
 
 /// Mock repository implementation using in-memory storage
@@ -51,8 +51,71 @@ impl Default for MockRepository {
 }
 
 #[async_trait]
-impl StorageOperations for MockRepository {
-    // ============ BSP Operations ============
+impl IndexerOps for MockRepository {
+    // ============ BSP Read Operations ============
+
+    async fn get_bsp_by_id(&self, id: i64) -> RepositoryResult<Option<Bsp>> {
+        let bsps = self.bsps.read().await;
+        Ok(bsps.get(&id).cloned())
+    }
+
+    async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>> {
+        let bsps = self.bsps.read().await;
+        let mut all_bsps: Vec<Bsp> = bsps.values().cloned().collect();
+        all_bsps.sort_by_key(|b| b.id);
+
+        Ok(all_bsps
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect())
+    }
+
+    // ============ Bucket Read Operations ============
+
+    async fn get_bucket_by_id(&self, id: i64) -> RepositoryResult<Option<Bucket>> {
+        let buckets = self.buckets.read().await;
+        Ok(buckets.get(&id).cloned())
+    }
+
+    async fn get_buckets_by_user(&self, user_account: &str) -> RepositoryResult<Vec<Bucket>> {
+        let buckets = self.buckets.read().await;
+        Ok(buckets
+            .values()
+            .filter(|b| b.account == user_account)
+            .cloned()
+            .collect())
+    }
+
+    // ============ File Read Operations ============
+
+    async fn get_file_by_key(&self, key: &[u8]) -> RepositoryResult<Option<File>> {
+        let files = self.files.read().await;
+        Ok(files.get(key).cloned())
+    }
+
+    async fn get_files_by_user(&self, user_account: &[u8]) -> RepositoryResult<Vec<File>> {
+        let files = self.files.read().await;
+        Ok(files
+            .values()
+            .filter(|f| f.account == user_account)
+            .cloned()
+            .collect())
+    }
+
+    async fn get_files_by_bucket(&self, bucket_id: i64) -> RepositoryResult<Vec<File>> {
+        let files = self.files.read().await;
+        Ok(files
+            .values()
+            .filter(|f| f.bucket_id == bucket_id)
+            .cloned()
+            .collect())
+    }
+}
+
+#[async_trait]
+impl IndexerOpsMut for MockRepository {
+    // ============ BSP Write Operations ============
 
     async fn create_bsp(&self, new_bsp: NewBsp) -> RepositoryResult<Bsp> {
         let mut bsps = self.bsps.write().await;
@@ -88,11 +151,6 @@ impl StorageOperations for MockRepository {
         Ok(bsp)
     }
 
-    async fn get_bsp_by_id(&self, id: i64) -> RepositoryResult<Option<Bsp>> {
-        let bsps = self.bsps.read().await;
-        Ok(bsps.get(&id).cloned())
-    }
-
     async fn update_bsp_capacity(&self, id: i64, capacity: BigDecimal) -> RepositoryResult<Bsp> {
         let mut bsps = self.bsps.write().await;
         match bsps.get_mut(&id) {
@@ -105,19 +163,19 @@ impl StorageOperations for MockRepository {
         }
     }
 
-    async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>> {
-        let bsps = self.bsps.read().await;
-        let mut all_bsps: Vec<Bsp> = bsps.values().cloned().collect();
-        all_bsps.sort_by_key(|b| b.id);
+    async fn delete_bsp(&self, account: &str) -> RepositoryResult<()> {
+        let mut bsps = self.bsps.write().await;
+        let id_to_remove = bsps.values().find(|b| b.account == account).map(|b| b.id);
 
-        Ok(all_bsps
-            .into_iter()
-            .skip(offset as usize)
-            .take(limit as usize)
-            .collect())
+        if let Some(id) = id_to_remove {
+            bsps.remove(&id);
+            Ok(())
+        } else {
+            Err(RepositoryError::not_found("BSP"))
+        }
     }
 
-    // ============ Bucket Operations ============
+    // ============ Bucket Write Operations ============
 
     async fn create_bucket(&self, new_bucket: NewBucket) -> RepositoryResult<Bucket> {
         let mut buckets = self.buckets.write().await;
@@ -141,52 +199,9 @@ impl StorageOperations for MockRepository {
         Ok(bucket)
     }
 
-    async fn get_bucket_by_id(&self, id: i64) -> RepositoryResult<Option<Bucket>> {
-        let buckets = self.buckets.read().await;
-        Ok(buckets.get(&id).cloned())
-    }
+    // ============ File Write Operations ============
 
-    async fn get_buckets_by_user(&self, user_account: &str) -> RepositoryResult<Vec<Bucket>> {
-        let buckets = self.buckets.read().await;
-        Ok(buckets
-            .values()
-            .filter(|b| b.account == user_account)
-            .cloned()
-            .collect())
-    }
-
-    // ============ File Operations ============
-
-    async fn get_file_by_key(&self, key: &[u8]) -> RepositoryResult<Option<File>> {
-        let files = self.files.read().await;
-        Ok(files.get(key).cloned())
-    }
-
-    async fn get_files_by_user(&self, user_account: &[u8]) -> RepositoryResult<Vec<File>> {
-        let files = self.files.read().await;
-        Ok(files
-            .values()
-            .filter(|f| f.account == user_account)
-            .cloned()
-            .collect())
-    }
-
-    async fn get_files_by_bucket(&self, bucket_id: i64) -> RepositoryResult<Vec<File>> {
-        let files = self.files.read().await;
-        Ok(files
-            .values()
-            .filter(|f| f.bucket_id == bucket_id)
-            .cloned()
-            .collect())
-    }
-}
-
-// ============ Extended Mock Repository Methods ============
-// These methods are specific to the mock and useful for testing
-
-impl MockRepository {
-    /// Create a file (mock-specific helper method for testing)
-    pub async fn create_file(&self, new_file: NewFile) -> RepositoryResult<File> {
+    async fn create_file(&self, new_file: NewFile) -> RepositoryResult<File> {
         let mut files = self.files.write().await;
 
         // Check for duplicate key
@@ -219,21 +234,7 @@ impl MockRepository {
         Ok(file)
     }
 
-    /// Delete a BSP by account (mock-specific helper)
-    pub async fn delete_bsp(&self, account: &str) -> RepositoryResult<()> {
-        let mut bsps = self.bsps.write().await;
-        let id_to_remove = bsps.values().find(|b| b.account == account).map(|b| b.id);
-
-        if let Some(id) = id_to_remove {
-            bsps.remove(&id);
-            Ok(())
-        } else {
-            Err(RepositoryError::not_found("BSP"))
-        }
-    }
-
-    /// Update file step (mock-specific helper)
-    pub async fn update_file_step(&self, file_key: &[u8], step: i32) -> RepositoryResult<()> {
+    async fn update_file_step(&self, file_key: &[u8], step: i32) -> RepositoryResult<()> {
         let mut files = self.files.write().await;
         match files.get_mut(file_key) {
             Some(file) => {
@@ -245,8 +246,7 @@ impl MockRepository {
         }
     }
 
-    /// Delete a file by its key (mock-specific helper)
-    pub async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()> {
+    async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()> {
         let mut files = self.files.write().await;
         match files.remove(file_key) {
             Some(_) => Ok(()),
@@ -254,8 +254,7 @@ impl MockRepository {
         }
     }
 
-    /// Clear all data (useful for test cleanup)
-    pub async fn clear_all(&self) {
+    async fn clear_all(&self) {
         let mut bsps = self.bsps.write().await;
         let mut buckets = self.buckets.write().await;
         let mut files = self.files.write().await;
@@ -269,14 +268,15 @@ impl MockRepository {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use bigdecimal::FromPrimitive;
 
     use super::*;
     use crate::constants::test::{
-        accounts::*, bsp::*, buckets::*, counter::*, file_keys::*, file_metadata::*, merkle::*,
-        msp::*, network::*, pagination::*, peers::*,
+        accounts::*, bsp::*, buckets::*, file_metadata::*, merkle::*,
+        msp::*, network::*, pagination::*,
     };
 
     #[tokio::test]
@@ -310,7 +310,7 @@ mod tests {
         assert_eq!(updated.capacity, BigDecimal::from_i64(UPDATED_CAPACITY).unwrap());
 
         // List BSPs
-        let list = repo.list_bsps(DEFAULT_PAGE_SIZE, DEFAULT_OFFSET).await.unwrap();
+        let list = repo.list_bsps(DEFAULT_PAGE_SIZE as i64, DEFAULT_OFFSET as i64).await.unwrap();
         assert_eq!(list.len(), 1);
 
         // Delete BSP (using helper method)
@@ -357,8 +357,8 @@ mod tests {
             bucket_id: TEST_BUCKET_ID_INT,
             location: TEST_LOCATION_STR.to_vec(),
             fingerprint: TEST_FINGERPRINT.to_vec(),
-            size: TEST_FILE_SIZE,
-            step: INITIAL_STEP,
+            size: TEST_FILE_SIZE as i64,
+            step: INITIAL_STEP as i32,
         };
 
         let created = repo.create_file(new_file.clone()).await.unwrap();
@@ -377,13 +377,13 @@ mod tests {
         assert_eq!(files.len(), 1);
 
         // Update step (using helper method)
-        repo.update_file_step(TEST_FILE_KEY_STR, UPDATED_STEP).await.unwrap();
+        repo.update_file_step(TEST_FILE_KEY_STR, UPDATED_STEP as i32).await.unwrap();
         let updated = repo
             .get_file_by_key(TEST_FILE_KEY_STR)
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(updated.step, UPDATED_STEP);
+        assert_eq!(updated.step, UPDATED_STEP as i32);
     }
 
     #[tokio::test]
@@ -415,7 +415,7 @@ mod tests {
         }
 
         // Verify all BSPs were created
-        let bsps = repo.list_bsps(LARGE_PAGE_SIZE, DEFAULT_OFFSET).await.unwrap();
+        let bsps = repo.list_bsps(LARGE_PAGE_SIZE as i64, DEFAULT_OFFSET as i64).await.unwrap();
         assert_eq!(bsps.len(), TEST_COUNT);
     }
 
@@ -453,7 +453,7 @@ mod tests {
         repo.clear_all().await;
 
         // Verify data is gone
-        assert_eq!(repo.list_bsps(DEFAULT_PAGE_SIZE, DEFAULT_OFFSET).await.unwrap().len(), 0);
-        assert_eq!(repo.get_buckets_by_user(TEST_ACCOUNT).await.unwrap().len(), 0);
+        assert_eq!(repo.list_bsps(DEFAULT_PAGE_SIZE as i64, DEFAULT_OFFSET as i64).await.unwrap().len(), 0);
+        assert_eq!(repo.get_buckets_by_user(TEST_USER_ACCOUNT_STR).await.unwrap().len(), 0);
     }
 }
