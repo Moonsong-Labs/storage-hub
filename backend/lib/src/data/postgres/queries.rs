@@ -99,10 +99,16 @@ impl DBClient {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::constants::test::{
-        accounts::*, bsp::*, buckets, file_keys::*, file_metadata::*, merkle::*, network::*,
+        accounts::{TEST_BSP_ACCOUNT_STR, TEST_USER_ACCOUNT},
+        bsp::{DEFAULT_CAPACITY, DEFAULT_STAKE, TEST_BSP_ONCHAIN_ID_STR},
+        buckets,
+        file_keys::ALTERNATIVE_FILE_KEY,
+        file_metadata::{ALTERNATIVE_FINGERPRINT, ALTERNATIVE_LOCATION, TEST_FILE_SIZE, UPDATED_STEP},
+        merkle::BSP_MERKLE_ROOT,
+        network::TEST_MULTIADDRESSES,
     };
+    use crate::data::postgres::DBClient;
 
     #[cfg(feature = "mocks")]
     #[tokio::test]

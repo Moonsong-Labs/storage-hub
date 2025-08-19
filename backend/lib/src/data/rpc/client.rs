@@ -134,7 +134,7 @@ impl StorageHubRpcClient {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mocks"))]
 mod tests {
     use super::*;
     use crate::{
