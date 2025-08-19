@@ -1,7 +1,7 @@
 {
     "name": "storagehub-e2e-dappwright",
     "version": "1.0.0",
-    "description": "StorageHub E2E tests using dAppwright for MetaMask automation",
+    "description": "StorageHub SDK E2E tests using dAppwright for MetaMask automation",
     "type": "module",
     "scripts": {
         "test": "npm run test:headless",
