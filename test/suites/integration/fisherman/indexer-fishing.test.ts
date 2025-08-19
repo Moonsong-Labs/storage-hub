@@ -27,7 +27,7 @@ import {
   verifyNoOrphanedMspAssociations
 } from "../../../util/indexerHelpers";
 import { sealAndWaitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
-import { chargeUserUntilInsolvent } from "../../../util/indexerHelpers"
+import { chargeUserUntilInsolvent } from "../../../util/indexerHelpers";
 
 describeMspNet(
   "Fisherman Indexer - Fishing Mode",
