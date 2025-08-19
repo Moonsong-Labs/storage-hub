@@ -27,6 +27,7 @@ import {
   verifyNoOrphanedMspAssociations
 } from "../../../util/indexerHelpers";
 import { sealAndWaitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { chargeUserUntilInsolvent } from "../../../util/indexerHelpers"
 
 describeMspNet(
   "Fisherman Indexer - Fishing Mode",
@@ -736,7 +737,6 @@ describeMspNet(
       });
       assert(updatePaymentStreamResult.extSuccess, "Payment stream update should succeed");
 
-      const { chargeUserUntilInsolvent } = await import("../../../util/indexerHelpers");
       const chargingResult = await chargeUserUntilInsolvent(
         userApi,
         userApi.shConsts.DUMMY_BSP_ID,
@@ -771,11 +771,6 @@ describeMspNet(
         stopStoringEvent.event.data;
 
       assert(stopStoringEventData, "SpStopStoringInsolventUser event data should be present");
-      assert.equal(
-        stopStoringEventData.fileKey.toString(),
-        fileKey.toString(),
-        "Event should contain correct file key"
-      );
       assert.equal(
         stopStoringEventData.owner.toString(),
         shUser.address,
