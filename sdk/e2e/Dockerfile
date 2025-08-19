@@ -1,7 +1,6 @@
 FROM mcr.microsoft.com/playwright:v1.54.2-jammy
 
-# Use pnpm 8.x to match local setup
-RUN corepack enable && corepack prepare pnpm@8.12.1 --activate
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 WORKDIR /work/sdk/e2e
 
