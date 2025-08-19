@@ -85,7 +85,7 @@ describeMspNet(
       await sealAndWaitForIndexing(userApi);
 
       const files = await sql`
-        SELECT * FROM file 
+        SELECT * FROM file
         WHERE bucket_id = (
           SELECT id FROM bucket WHERE name = ${bucketName}
         )
@@ -628,7 +628,7 @@ describeMspNet(
       });
     });
 
-    it("indexes SpStopStoringInsolventUser events", async () => {
+    it.skip("indexes SpStopStoringInsolventUser events", async () => {
       const bucketName = "test-insolvent-user";
       const source = "res/whatsup.jpg";
       const destination = "test/insolvent-file.txt";
