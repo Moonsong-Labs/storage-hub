@@ -130,6 +130,45 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
                     self.emit(event);
                 }
+                storage_hub_runtime::RuntimeEvent::FileSystem(
+                    pallet_file_system::Event::StorageRequestExpired { file_key },
+                ) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Found StorageRequestExpired event for file key: {:?}",
+                        file_key
+                    );
+
+                    let event = crate::events::ProcessIncompleteStorageRequest { file_key };
+
+                    self.emit(event);
+                }
+                storage_hub_runtime::RuntimeEvent::FileSystem(
+                    pallet_file_system::Event::StorageRequestRevoked { file_key },
+                ) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Found StorageRequestRevoked event for file key: {:?}",
+                        file_key
+                    );
+
+                    let event = crate::events::ProcessIncompleteStorageRequest { file_key };
+
+                    self.emit(event);
+                }
+                storage_hub_runtime::RuntimeEvent::FileSystem(
+                    pallet_file_system::Event::StorageRequestRejected { file_key, .. },
+                ) => {
+                    info!(
+                        target: LOG_TARGET,
+                        "🎣 Found StorageRequestRejected event for file key: {:?}",
+                        file_key
+                    );
+
+                    let event = crate::events::ProcessIncompleteStorageRequest { file_key };
+
+                    self.emit(event);
+                }
                 _ => {}
             }
         }

@@ -29,7 +29,7 @@ use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
 };
-use shc_fisherman_service::ProcessFileDeletionRequest;
+use shc_fisherman_service::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_indexer_db::DbPool;
 
@@ -42,7 +42,7 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
-        fisherman_process_file_deletion::FishermanProcessFileDeletionTask,
+        fisherman_process_file_deletion::{FishermanProcessFileDeletionTask, FishermanProcessIncompleteStorageTask},
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
@@ -407,6 +407,7 @@ where
             critical: true,
             [
                 ProcessFileDeletionRequest => FishermanProcessFileDeletionTask,
+                ProcessIncompleteStorageRequest => FishermanProcessIncompleteStorageTask,
             ]
         );
 

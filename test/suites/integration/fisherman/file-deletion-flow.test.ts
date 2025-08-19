@@ -11,13 +11,32 @@ import {
 } from "../../../util";
 import type { H256 } from "@polkadot/types/interfaces";
 
+/**
+ * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
+ * 
+ * Purpose: Tests the standard, straightforward file deletion workflow using finalized blocks.
+ *          This is the foundation test for fisherman file deletion functionality.
+ * 
+ * What makes this test unique:
+ * - Uses finalized blocks throughout (standard blockchain behavior)
+ * - Tests basic file storage and deletion workflow step-by-step
+ * - Creates storage requests with single replication target
+ * - Focuses on core functionality without edge cases or complex scenarios
+ * 
+ * Test Scenario:
+ * 1. Creates storage request with single replication target (MSP only initially)
+ * 2. BSP volunteers and confirms storage (using whatsup.jpg for automatic volunteering)
+ * 3. MSP accepts storage request and confirms storage
+ * 4. User sends file deletion request
+ * 5. Verifies fisherman indexes all events correctly
+ */
 describeMspNet(
   "Fisherman File Deletion Flow",
   {
     initialised: false,
     indexer: true,
     fisherman: true,
-    fishermanIndexerMode: "fishing"
+    indexerMode: "fishing"
   },
   ({ before, it, createUserApi, createBspApi, createMsp1Api, createFishermanApi, createSqlClient }) => {
     let userApi: EnrichedBspApi;
@@ -48,6 +67,13 @@ describeMspNet(
       fishermanApi = await createFishermanApi() as EnrichedBspApi;
       assert(fishermanApi, "Fisherman API should be created successfully");
 
+      // Wait for fisherman node to be ready and connected to database
+      await fishermanApi.docker.waitForLog({
+        containerName: ShConsts.NODE_INFOS.fisherman.containerName,
+        searchString: "💤 Idle",
+        timeout: 15000
+      });
+
       assert(createMsp1Api, "MSP1 API should be available");
       const maybeMspApi = await createMsp1Api();
       assert(maybeMspApi, "MSP API not available");
@@ -59,12 +85,6 @@ describeMspNet(
       await userApi.block.seal();
       await userApi.block.seal();
 
-      // Wait for fisherman indexer to start in fishing mode
-      await fishermanApi.docker.waitForLog({
-        containerName: ShConsts.NODE_INFOS.fisherman.containerName,
-        searchString: "IndexerService starting up in Fishing mode!",
-        timeout: 10000
-      });
     });
 
     it("creates storage request with single replication target and indexes events", async () => {

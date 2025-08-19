@@ -19,5 +19,17 @@ pub struct ProcessFileDeletionRequest {
     /// The signed intention
     pub signature: MultiSignature,
 }
+
+/// Event triggered when fisherman detects an incomplete storage request
+///
+/// These events indicate storage requests that failed (expired, revoked, or rejected)
+/// and require file deletion without user signature validation.
+#[derive(Clone, ActorEvent)]
+#[actor(actor = "fisherman_service")]
+pub struct ProcessIncompleteStorageRequest {
+    /// The file key that needs to be deleted
+    pub file_key: sp_core::H256,
+}
+
 #[ActorEventBus("fisherman_service")]
 pub struct FishermanServiceEventBusProvider;

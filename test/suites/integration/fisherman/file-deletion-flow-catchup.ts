@@ -11,13 +11,31 @@ import {
 } from "../../../util";
 import type { H256 } from "@polkadot/types/interfaces";
 
+/**
+ * FISHERMAN FILE DELETION FLOW WITH CATCHUP
+ * 
+ * Purpose: Tests the fisherman's ability to process file deletion events from UNFINALIZED blocks
+ *          during blockchain catchup scenarios.
+ * 
+ * What makes this test unique:
+ * - Creates unfinalized blocks with blockchain activity (transfers)
+ * - Sends file deletion requests in unfinalized blocks (finaliseBlock: false)
+ * - Tests fisherman indexer's catchup mechanism when processing events from non-finalized portions
+ * - Verifies the gap between finalized head and current head during processing
+ * 
+ * Test Scenario:
+ * 1. Sets up file storage with both BSP and MSP confirming storage
+ * 2. Creates 3 unfinalized blocks with transfer activity
+ * 3. Sends file deletion request in an unfinalized block
+ * 4. Verifies fisherman can index and process events from unfinalized blocks
+ */
 describeMspNet(
   "Fisherman File Deletion Flow with Catchup",
   {
     initialised: false,
     indexer: true,
     fisherman: true,
-    fishermanIndexerMode: "fishing"
+    indexerMode: "fishing"
   },
   ({ before, it, createUserApi, createBspApi, createMsp1Api, createFishermanApi, createSqlClient }) => {
     let userApi: EnrichedBspApi;
@@ -34,28 +52,27 @@ describeMspNet(
     before(async () => {
       userApi = await createUserApi();
       bspApi = await createBspApi();
+      const maybeMsp1Api = await createMsp1Api();
+
+      assert(maybeMsp1Api, "MSP API not available");
+      mspApi = maybeMsp1Api;
       sql = createSqlClient();
 
-      // Wait for fisherman node to be ready
       await userApi.docker.waitForLog({
-        containerName: ShConsts.NODE_INFOS.fisherman.containerName,
         searchString: "💤 Idle",
-        timeout: 30000
+        containerName: "storage-hub-sh-user-1",
+        timeout: 10000
       });
 
-      // Create fisherman and MSP APIs
+      // Create fisherman API
       assert(createFishermanApi, "Fisherman API should be available when fisherman is enabled");
       fishermanApi = await createFishermanApi() as EnrichedBspApi;
       assert(fishermanApi, "Fisherman API should be created successfully");
 
-      assert(createMsp1Api, "MSP1 API should be available");
-      const maybeMspApi = await createMsp1Api();
-      assert(maybeMspApi, "MSP API not available");
-      mspApi = maybeMspApi;
-
-      // Initialize blockchain state
       await userApi.rpc.engine.createBlock(true, true);
+
       await sleep(1000);
+
       await userApi.block.seal();
       await userApi.block.seal();
 
@@ -196,7 +213,7 @@ describeMspNet(
         await userApi.block.seal({
           calls: [
             userApi.tx.balances.transferAllowDeath(
-              userApi.shConsts.NODE_INFOS.bsp1.AddressId,
+              userApi.shConsts.NODE_INFOS.bsp.AddressId,
               1000000n
             )
           ],

@@ -1,7 +1,7 @@
 //! # Fisherman Service
 //!
 //! The Fisherman Service is responsible for handling file deletion requests in the StorageHub network.
-//! It monitors the blockchain for file deletion request events and constructs the necessary proofs for  
+//! It monitors the blockchain for file deletion request events and constructs the necessary proofs for
 //! storage providers to remove files from their storage.
 //!
 //! ## Key Features
@@ -25,6 +25,7 @@ pub use self::handler::{
 };
 pub use events::{
     FileDeletionTarget, FishermanServiceEventBusProvider, ProcessFileDeletionRequest,
+    ProcessIncompleteStorageRequest,
 };
 
 /// Spawn the fisherman service as an actor
