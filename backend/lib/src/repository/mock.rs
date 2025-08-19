@@ -268,15 +268,14 @@ impl IndexerOpsMut for MockRepository {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use bigdecimal::FromPrimitive;
 
     use super::*;
     use crate::constants::test::{
-        accounts::*, bsp::*, buckets::*, file_metadata::*, merkle::*,
-        msp::*, network::*, pagination::*,
+        accounts::*, bsp::*, buckets::*, file_metadata::*, merkle::*, msp::*, network::*,
+        pagination::*,
     };
 
     #[tokio::test]
@@ -304,13 +303,22 @@ mod tests {
 
         // Update capacity
         let updated = repo
-            .update_bsp_capacity(DEFAULT_BSP_ID, BigDecimal::from_i64(UPDATED_CAPACITY).unwrap())
+            .update_bsp_capacity(
+                DEFAULT_BSP_ID,
+                BigDecimal::from_i64(UPDATED_CAPACITY).unwrap(),
+            )
             .await
             .unwrap();
-        assert_eq!(updated.capacity, BigDecimal::from_i64(UPDATED_CAPACITY).unwrap());
+        assert_eq!(
+            updated.capacity,
+            BigDecimal::from_i64(UPDATED_CAPACITY).unwrap()
+        );
 
         // List BSPs
-        let list = repo.list_bsps(DEFAULT_PAGE_SIZE as i64, DEFAULT_OFFSET as i64).await.unwrap();
+        let list = repo
+            .list_bsps(DEFAULT_PAGE_SIZE as i64, DEFAULT_OFFSET as i64)
+            .await
+            .unwrap();
         assert_eq!(list.len(), 1);
 
         // Delete BSP (using helper method)
@@ -342,7 +350,10 @@ mod tests {
         assert!(found.is_some());
 
         // Get by user
-        let buckets = repo.get_buckets_by_user(TEST_USER_ACCOUNT_STR).await.unwrap();
+        let buckets = repo
+            .get_buckets_by_user(TEST_USER_ACCOUNT_STR)
+            .await
+            .unwrap();
         assert_eq!(buckets.len(), 1);
     }
 
@@ -369,7 +380,10 @@ mod tests {
         assert!(found.is_some());
 
         // Get by user
-        let files = repo.get_files_by_user(ALTERNATIVE_USER_ACCOUNT_STR.as_bytes()).await.unwrap();
+        let files = repo
+            .get_files_by_user(ALTERNATIVE_USER_ACCOUNT_STR.as_bytes())
+            .await
+            .unwrap();
         assert_eq!(files.len(), 1);
 
         // Get by bucket
@@ -377,7 +391,9 @@ mod tests {
         assert_eq!(files.len(), 1);
 
         // Update step (using helper method)
-        repo.update_file_step(TEST_FILE_KEY_STR, UPDATED_STEP as i32).await.unwrap();
+        repo.update_file_step(TEST_FILE_KEY_STR, UPDATED_STEP as i32)
+            .await
+            .unwrap();
         let updated = repo
             .get_file_by_key(TEST_FILE_KEY_STR)
             .await
@@ -415,7 +431,10 @@ mod tests {
         }
 
         // Verify all BSPs were created
-        let bsps = repo.list_bsps(LARGE_PAGE_SIZE as i64, DEFAULT_OFFSET as i64).await.unwrap();
+        let bsps = repo
+            .list_bsps(LARGE_PAGE_SIZE as i64, DEFAULT_OFFSET as i64)
+            .await
+            .unwrap();
         assert_eq!(bsps.len(), TEST_COUNT);
     }
 
@@ -453,7 +472,19 @@ mod tests {
         repo.clear_all().await;
 
         // Verify data is gone
-        assert_eq!(repo.list_bsps(DEFAULT_PAGE_SIZE as i64, DEFAULT_OFFSET as i64).await.unwrap().len(), 0);
-        assert_eq!(repo.get_buckets_by_user(TEST_USER_ACCOUNT_STR).await.unwrap().len(), 0);
+        assert_eq!(
+            repo.list_bsps(DEFAULT_PAGE_SIZE as i64, DEFAULT_OFFSET as i64)
+                .await
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_eq!(
+            repo.get_buckets_by_user(TEST_USER_ACCOUNT_STR)
+                .await
+                .unwrap()
+                .len(),
+            0
+        );
     }
 }

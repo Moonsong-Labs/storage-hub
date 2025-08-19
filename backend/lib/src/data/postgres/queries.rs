@@ -99,16 +99,20 @@ impl DBClient {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::test::{
-        accounts::{TEST_BSP_ACCOUNT_STR, TEST_USER_ACCOUNT},
-        bsp::{DEFAULT_CAPACITY, DEFAULT_STAKE, TEST_BSP_ONCHAIN_ID_STR},
-        buckets,
-        file_keys::ALTERNATIVE_FILE_KEY,
-        file_metadata::{ALTERNATIVE_FINGERPRINT, ALTERNATIVE_LOCATION, TEST_FILE_SIZE, UPDATED_STEP},
-        merkle::BSP_MERKLE_ROOT,
-        network::TEST_MULTIADDRESSES,
+    use crate::{
+        constants::test::{
+            accounts::{TEST_BSP_ACCOUNT_STR, TEST_USER_ACCOUNT},
+            bsp::{DEFAULT_CAPACITY, DEFAULT_STAKE, TEST_BSP_ONCHAIN_ID_STR},
+            buckets,
+            file_keys::ALTERNATIVE_FILE_KEY,
+            file_metadata::{
+                ALTERNATIVE_FINGERPRINT, ALTERNATIVE_LOCATION, TEST_FILE_SIZE, UPDATED_STEP,
+            },
+            merkle::BSP_MERKLE_ROOT,
+            network::TEST_MULTIADDRESSES,
+        },
+        data::postgres::DBClient,
     };
-    use crate::data::postgres::DBClient;
 
     #[cfg(feature = "mocks")]
     #[tokio::test]
@@ -117,7 +121,7 @@ mod tests {
 
         use bigdecimal::BigDecimal;
 
-        use crate::repository::{MockRepository, NewBsp, IndexerOpsMut};
+        use crate::repository::{IndexerOpsMut, MockRepository, NewBsp};
 
         // Create mock repository and add test data
         let mock_repo = MockRepository::new();
@@ -151,7 +155,7 @@ mod tests {
     async fn test_db_client_file_operations() {
         use std::sync::Arc;
 
-        use crate::repository::{MockRepository, NewFile, IndexerOpsMut};
+        use crate::repository::{IndexerOpsMut, MockRepository, NewFile};
 
         let mock_repo = MockRepository::new();
 

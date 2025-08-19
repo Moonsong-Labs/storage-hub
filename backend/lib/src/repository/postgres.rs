@@ -13,27 +13,20 @@
 //! - Comprehensive error handling
 
 use async_trait::async_trait;
-use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
-
-use super::{
-    error::RepositoryResult,
-    pool::SmartPool,
-    IndexerOps,
-};
-
-#[cfg(test)]
-use super::{IndexerOpsMut, NewBsp, NewBucket, NewFile};
 #[cfg(test)]
 use bigdecimal::BigDecimal;
 #[cfg(test)]
 use chrono::Utc;
-
-// Import models and schema from shc_indexer_db
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use shc_indexer_db::{
     models::{Bsp, Bucket, File},
     schema::{bsp, bucket, file},
 };
+
+use super::{error::RepositoryResult, pool::SmartPool, IndexerOps};
+#[cfg(test)]
+use super::{IndexerOpsMut, NewBsp, NewBucket, NewFile};
 
 /// PostgreSQL repository implementation.
 ///
@@ -200,11 +193,11 @@ impl IndexerOpsMut for Repository {
 
     async fn delete_bsp(&self, account: &str) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
-        
+
         diesel::delete(bsp::table.filter(bsp::account.eq(account)))
             .execute(&mut *conn)
             .await?;
-        
+
         Ok(())
     }
 
@@ -238,7 +231,7 @@ impl IndexerOpsMut for Repository {
     async fn create_file(&self, new_file: NewFile) -> RepositoryResult<File> {
         let mut conn = self.pool.get().await?;
         let now = Utc::now().naive_utc();
-        
+
         let result = diesel::insert_into(file::table)
             .values((
                 file::account.eq(&new_file.account),
@@ -253,13 +246,13 @@ impl IndexerOpsMut for Repository {
             ))
             .get_result(&mut *conn)
             .await?;
-        
+
         Ok(result)
     }
 
     async fn update_file_step(&self, file_key: &[u8], step: i32) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
-        
+
         diesel::update(file::table.filter(file::file_key.eq(file_key)))
             .set((
                 file::step.eq(step),
@@ -267,17 +260,17 @@ impl IndexerOpsMut for Repository {
             ))
             .execute(&mut *conn)
             .await?;
-        
+
         Ok(())
     }
 
     async fn delete_file(&self, file_key: &[u8]) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
-        
+
         diesel::delete(file::table.filter(file::file_key.eq(file_key)))
             .execute(&mut *conn)
             .await?;
-        
+
         Ok(())
     }
 

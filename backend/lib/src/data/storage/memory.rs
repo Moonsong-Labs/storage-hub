@@ -97,13 +97,22 @@ mod tests {
     async fn test_increment_counter() {
         let storage = InMemoryStorage::new();
 
-        let result = storage.increment_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT).await.unwrap();
+        let result = storage
+            .increment_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT)
+            .await
+            .unwrap();
         assert_eq!(result, DEFAULT_INCREMENT);
 
-        let result = storage.increment_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT).await.unwrap();
+        let result = storage
+            .increment_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT)
+            .await
+            .unwrap();
         assert_eq!(result, DEFAULT_INCREMENT * 2);
 
-        let result = storage.increment_counter(TEST_COUNTER_KEY, LARGE_INCREMENT).await.unwrap();
+        let result = storage
+            .increment_counter(TEST_COUNTER_KEY, LARGE_INCREMENT)
+            .await
+            .unwrap();
         assert_eq!(result, DEFAULT_INCREMENT * 2 + LARGE_INCREMENT);
     }
 
@@ -111,12 +120,21 @@ mod tests {
     async fn test_decrement_counter() {
         let storage = InMemoryStorage::new();
 
-        storage.set_counter(TEST_COUNTER_KEY, SET_VALUE).await.unwrap();
+        storage
+            .set_counter(TEST_COUNTER_KEY, SET_VALUE)
+            .await
+            .unwrap();
 
-        let result = storage.decrement_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT).await.unwrap();
+        let result = storage
+            .decrement_counter(TEST_COUNTER_KEY, DEFAULT_INCREMENT)
+            .await
+            .unwrap();
         assert_eq!(result, SET_VALUE - DEFAULT_INCREMENT);
 
-        let result = storage.decrement_counter(TEST_COUNTER_KEY, LARGE_INCREMENT).await.unwrap();
+        let result = storage
+            .decrement_counter(TEST_COUNTER_KEY, LARGE_INCREMENT)
+            .await
+            .unwrap();
         assert_eq!(result, SET_VALUE - DEFAULT_INCREMENT - LARGE_INCREMENT);
     }
 
@@ -127,7 +145,10 @@ mod tests {
         let result = storage.get_counter(TEST_COUNTER_KEY).await.unwrap();
         assert_eq!(result, INITIAL_VALUE);
 
-        storage.set_counter(TEST_COUNTER_KEY, EXPECTED_VALUE).await.unwrap();
+        storage
+            .set_counter(TEST_COUNTER_KEY, EXPECTED_VALUE)
+            .await
+            .unwrap();
         let result = storage.get_counter(TEST_COUNTER_KEY).await.unwrap();
         assert_eq!(result, EXPECTED_VALUE);
     }
@@ -136,10 +157,16 @@ mod tests {
     async fn test_set_counter() {
         let storage = InMemoryStorage::new();
 
-        let result = storage.set_counter(TEST_COUNTER_KEY, SET_VALUE).await.unwrap();
+        let result = storage
+            .set_counter(TEST_COUNTER_KEY, SET_VALUE)
+            .await
+            .unwrap();
         assert_eq!(result, INITIAL_VALUE);
 
-        let result = storage.set_counter(TEST_COUNTER_KEY, SET_VALUE * 2).await.unwrap();
+        let result = storage
+            .set_counter(TEST_COUNTER_KEY, SET_VALUE * 2)
+            .await
+            .unwrap();
         assert_eq!(result, SET_VALUE);
     }
 
@@ -150,7 +177,10 @@ mod tests {
         let result = storage.delete_counter(TEST_COUNTER_KEY).await.unwrap();
         assert_eq!(result, INITIAL_VALUE);
 
-        storage.set_counter(TEST_COUNTER_KEY, EXPECTED_VALUE).await.unwrap();
+        storage
+            .set_counter(TEST_COUNTER_KEY, EXPECTED_VALUE)
+            .await
+            .unwrap();
         let result = storage.delete_counter(TEST_COUNTER_KEY).await.unwrap();
         assert_eq!(result, EXPECTED_VALUE);
 
@@ -162,12 +192,24 @@ mod tests {
     async fn test_saturation_arithmetic() {
         let storage = InMemoryStorage::new();
 
-        storage.set_counter(TEST_COUNTER_KEY, i64::MAX - 1).await.unwrap();
-        let result = storage.increment_counter(TEST_COUNTER_KEY, 2).await.unwrap();
+        storage
+            .set_counter(TEST_COUNTER_KEY, i64::MAX - 1)
+            .await
+            .unwrap();
+        let result = storage
+            .increment_counter(TEST_COUNTER_KEY, 2)
+            .await
+            .unwrap();
         assert_eq!(result, i64::MAX);
 
-        storage.set_counter(TEST_COUNTER_KEY, i64::MIN + 1).await.unwrap();
-        let result = storage.decrement_counter(TEST_COUNTER_KEY, 2).await.unwrap();
+        storage
+            .set_counter(TEST_COUNTER_KEY, i64::MIN + 1)
+            .await
+            .unwrap();
+        let result = storage
+            .decrement_counter(TEST_COUNTER_KEY, 2)
+            .await
+            .unwrap();
         assert_eq!(result, i64::MIN);
     }
 }

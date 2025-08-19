@@ -27,9 +27,6 @@ pub fn routes(services: Services) -> Router {
 #[cfg(all(test, feature = "mocks"))]
 #[allow(dead_code)]
 mod tests {
-    // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
-    // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
-
     use axum::http::StatusCode;
     use axum_test::TestServer;
 

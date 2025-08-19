@@ -37,7 +37,6 @@ pub use error::{RepositoryError, RepositoryResult};
 pub use mock::MockRepository;
 pub use pool::SmartPool;
 pub use postgres::Repository;
-
 // Re-export models from shc_indexer_db as our standard
 pub use shc_indexer_db::models::{Bsp, Bucket, File};
 

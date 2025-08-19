@@ -323,7 +323,7 @@ impl DBClient {
             .create_bsp(new_bsp)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-        
+
         Ok(shc_indexer_db::models::Bsp {
             id: bsp.id,
             account: bsp.account,
@@ -348,7 +348,7 @@ impl DBClient {
             .update_bsp_capacity(id, capacity)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-        
+
         Ok(shc_indexer_db::models::Bsp {
             id: bsp.id,
             account: bsp.account,
@@ -380,7 +380,7 @@ impl DBClient {
             .create_bucket(new_bucket)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-        
+
         Ok(shc_indexer_db::models::Bucket {
             id: bucket.id,
             msp_id: bucket.msp_id,
@@ -405,7 +405,7 @@ impl DBClient {
             .create_file(new_file)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-        
+
         Ok(shc_indexer_db::models::File {
             id: file.id,
             account: file.account,

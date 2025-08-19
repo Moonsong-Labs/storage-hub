@@ -46,9 +46,6 @@ pub async fn health_check_detailed(
 #[cfg(all(test, feature = "mocks"))]
 #[allow(dead_code)]
 mod tests {
-    // WIP: Mock PostgreSQL imports commented out until diesel traits are fully implemented
-    // use crate::data::postgres::{AnyDbConnection, MockDbConnection, PostgresClient};
-
     use super::*;
 
     fn create_test_services() -> Services {
