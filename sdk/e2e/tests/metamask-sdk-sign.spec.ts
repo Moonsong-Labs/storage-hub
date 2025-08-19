@@ -1,10 +1,11 @@
 import { type BrowserContext, type Page, test as baseTest, expect } from "@playwright/test";
-// Fingerprint taken from StorageHub node E2E tests
-// See: test/util/bspNet/consts.ts → TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint
-const EXPECTED_FINGERPRINT_HEX = "0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970";
 import dappwright, { type Dappwright, MetaMaskWallet } from "@tenkeylabs/dappwright";
 
 export { expect } from "@playwright/test";
+
+// Fingerprint taken from StorageHub node E2E tests
+// See: test/util/bspNet/consts.ts → TEST_ARTEFACTS["res/adolphus.jpg"].fingerprint
+const EXPECTED_FINGERPRINT_HEX = "0x34eb5f637e05fc18f857ccb013250076534192189894d174ee3aa6d3525f6970";
 
 let sharedBrowserContext: BrowserContext;
 
