@@ -16,7 +16,7 @@ pub mod handler;
 use std::sync::Arc;
 
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
 
 pub use self::handler::{FishermanService, FishermanServiceCommand, FishermanServiceError};
@@ -28,15 +28,10 @@ pub use events::{
 ///
 /// This function creates and spawns a new FishermanService actor that will monitor
 /// the StorageHub network for file deletion requests and construct proofs of inclusion to delete file keys from Bucket and BSP forests.
-pub async fn spawn_fisherman_service<
-    RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection> + Send + 'static,
->(
+pub async fn spawn_fisherman_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
-    client: Arc<ParachainClient<RuntimeApi>>,
-) -> ActorHandle<FishermanService<RuntimeApi>>
-where
-    RuntimeApi::RuntimeApi: Send,
-{
+    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+) -> ActorHandle<FishermanService<Runtime>> {
     // Create a named task spawner for the fisherman service
     let task_spawner = task_spawner
         .with_name("fisherman-service")
