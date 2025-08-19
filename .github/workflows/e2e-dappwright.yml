@@ -17,19 +17,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8.12.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 23
-          cache: 'pnpm'
-          cache-dependency-path: |
-            sdk/e2e/pnpm-lock.yaml
-            sdk/pnpm-lock.yaml
+      - name: Setup pnpm & cache
+        uses: ./.github/workflow-templates/setup-pnpm
 
       - name: Install Rust toolchain (for wasm)
         uses: dtolnay/rust-toolchain@stable
