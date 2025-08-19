@@ -26,7 +26,6 @@
 
 use async_trait::async_trait;
 use bigdecimal::BigDecimal;
-use chrono::NaiveDateTime;
 
 pub mod error;
 pub mod mock;
@@ -39,7 +38,10 @@ pub use mock::MockRepository;
 pub use pool::SmartPool;
 pub use postgres::Repository;
 
-// ============ Data Models ============
+// Re-export models from shc_indexer_db as our standard
+pub use shc_indexer_db::models::{Bsp, Bucket, File};
+
+// ============ Input Types for Creating Records ============
 
 /// Input type for creating a new BSP
 #[derive(Debug, Clone)]
@@ -74,50 +76,6 @@ pub struct NewFile {
     pub fingerprint: Vec<u8>,
     pub size: i64,
     pub step: i32,
-}
-
-/// Simplified BSP model for repository operations
-#[derive(Debug, Clone)]
-pub struct Bsp {
-    pub id: i64,
-    pub account: String,
-    pub capacity: BigDecimal,
-    pub stake: BigDecimal,
-    pub last_tick_proven: i64,
-    pub onchain_bsp_id: String,
-    pub merkle_root: Vec<u8>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
-}
-
-/// Simplified Bucket model for repository operations
-#[derive(Debug, Clone)]
-pub struct Bucket {
-    pub id: i64,
-    pub msp_id: Option<i64>,
-    pub account: String,
-    pub onchain_bucket_id: Vec<u8>,
-    pub name: Vec<u8>,
-    pub collection_id: Option<String>,
-    pub private: bool,
-    pub merkle_root: Vec<u8>,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
-}
-
-/// Simplified File model for repository operations
-#[derive(Debug, Clone)]
-pub struct File {
-    pub id: i64,
-    pub account: Vec<u8>,
-    pub file_key: Vec<u8>,
-    pub bucket_id: i64,
-    pub location: Vec<u8>,
-    pub fingerprint: Vec<u8>,
-    pub size: i64,
-    pub step: i32,
-    pub created_at: NaiveDateTime,
-    pub updated_at: NaiveDateTime,
 }
 
 // ============ Repository Trait ============
