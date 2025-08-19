@@ -18,7 +18,7 @@ use sp_trie::CompactProof;
 use storage_hub_runtime::Runtime;
 use trie_db::TrieLayout;
 
-use crate::traits::ExtensionOperations;
+use crate::traits::{ExtensionOperations, StorageEnableRuntime};
 
 /// Size of each batch in bytes (2 MiB)
 /// This is the maximum size of a batch of chunks that can be uploaded in a single call
@@ -32,6 +32,7 @@ pub type HasherOutT<T> = <<T as TrieLayout>::Hash as Hasher>::Out;
 /// Following types are shared between the client and the runtime.
 /// They are defined as generic types in the runtime and made concrete using the runtime config
 /// here to be used by the node/client.
+pub type AccountId<Runtime> = <Runtime as frame_system::Config>::AccountId;
 pub type FileKeyVerifier = <Runtime as pallet_proofs_dealer::Config>::KeyVerifier;
 pub type FileKeyProof = <FileKeyVerifier as CommitmentVerifier>::Proof;
 pub type Hash = shp_file_metadata::Hash<H_LENGTH>;
@@ -231,6 +232,16 @@ impl MinimalExtension {
     pub fn new(era: generic::Era, nonce: u32, tip: Tip) -> Self {
         Self { era, nonce, tip }
     }
+}
+
+//TODO: This should be moved to the runtime crate once the SH Client is abstracted
+//TODO: from the runtime. If we put it there now, we will have a cyclic dependency.
+impl StorageEnableRuntime for storage_hub_runtime::Runtime {
+    type Address = storage_hub_runtime::Address;
+    type Call = storage_hub_runtime::RuntimeCall;
+    type Signature = storage_hub_runtime::Signature;
+    type Extension = storage_hub_runtime::SignedExtra;
+    type RuntimeApi = storage_hub_runtime::apis::RuntimeApi;
 }
 
 //TODO: This should be moved to the runtime crate once the SH Client is abstracted

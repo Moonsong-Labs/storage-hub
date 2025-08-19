@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{MaxUsersToCharge, StorageProviderId};
 use sp_core::Get;
 
@@ -28,26 +28,24 @@ impl Default for MspChargeFeesConfig {
     }
 }
 
-pub struct MspChargeFeesTask<NT, RuntimeApi>
+pub struct MspChargeFeesTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
     /// Configuration for this task
     config: MspChargeFeesConfig,
 }
 
-impl<NT, RuntimeApi> Clone for MspChargeFeesTask<NT, RuntimeApi>
+impl<NT, Runtime> Clone for MspChargeFeesTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> MspChargeFeesTask<NT, RuntimeApi> {
+    fn clone(&self) -> MspChargeFeesTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             config: self.config.clone(),
@@ -55,14 +53,13 @@ where
     }
 }
 
-impl<NT, RuntimeApi> MspChargeFeesTask<NT, RuntimeApi>
+impl<NT, Runtime> MspChargeFeesTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             config: storage_hub_handler.provider_config.msp_charge_fees.clone(),
@@ -76,12 +73,11 @@ where
 ///
 /// This task will:
 /// - Charge users for the MSP when triggered
-impl<NT, RuntimeApi> EventHandler<NotifyPeriod> for MspChargeFeesTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<NotifyPeriod> for MspChargeFeesTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<()> {
         info!(
@@ -137,7 +133,7 @@ where
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call, Default::default())
+                .send_extrinsic(call.into(), Default::default())
                 .await;
 
             match charging_result {
