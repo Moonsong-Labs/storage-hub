@@ -15,7 +15,7 @@ use std::collections::HashSet;
 ///
 /// The proof must contain at least one chunk to be considered valid.
 #[derive(Clone, ActorEvent)]
-#[actor(actor = "file_transfer_service", generics(Runtime: StorageEnableRuntime))]
+#[actor(actor = "file_transfer_service")]
 pub struct RemoteUploadRequest<Runtime: StorageEnableRuntime> {
     /// The peer ID of the receiver node.
     pub peer: PeerId,
