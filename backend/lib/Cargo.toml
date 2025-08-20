@@ -29,7 +29,9 @@ shc-indexer-db = { path = "../../client/indexer-db" }
 
 [dev-dependencies]
 axum-test = { workspace = true }
+futures = { workspace = true }
 
 [features]
 default = []
 mocks = []
+test-helpers = []

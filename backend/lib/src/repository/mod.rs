@@ -3,6 +3,11 @@
 //! This module provides a clean abstraction over database operations using the repository pattern.
 //! It includes automatic test transaction management through SmartPool and comprehensive error handling.
 //!
+//! ## Test Coverage Status: Scaffolding
+//! Current tests provide basic CRUD coverage for MockRepository only.
+//! Production PostgreSQL implementation requires testcontainers or test database.
+//! See mock::tests module for detailed missing coverage list.
+//!
 //! ## Key Components
 //! - [`SmartPool`] - Connection pool with automatic test transaction support
 //! - [`RepositoryError`] - Comprehensive error types for repository operations
@@ -50,7 +55,6 @@ pub struct NewBsp {
     pub stake: BigDecimal,
     pub onchain_bsp_id: String,
     pub merkle_root: Vec<u8>,
-    pub multiaddresses: Vec<Vec<u8>>,
 }
 
 /// Input type for creating a new Bucket

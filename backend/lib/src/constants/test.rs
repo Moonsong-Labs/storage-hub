@@ -204,6 +204,9 @@ pub mod pagination {
 
     /// Default page offset
     pub const DEFAULT_OFFSET: usize = 0;
+
+    /// Total number of BSPs for pagination tests
+    pub const TOTAL_BSPS_FOR_PAGINATION: usize = 25;
 }
 
 /// Test counter values
@@ -234,6 +237,21 @@ pub mod counter {
 pub mod timestamps {
     /// Standard test timestamp (2023-11-14 22:13:20 UTC)
     pub const TEST_TIMESTAMP: i64 = 1_700_000_000;
+}
+
+/// Test error cases
+pub mod error_cases {
+    /// Non-existent entity ID for testing
+    pub const NON_EXISTENT_ID: i64 = 999;
+
+    /// Non-existent account string for testing
+    pub const NON_EXISTENT_ACCOUNT: &str = "nonexistent";
+
+    /// Non-existent file key for testing
+    pub const NON_EXISTENT_FILE_KEY: &[u8] = b"nonexistent";
+
+    /// Test concurrent operation count
+    pub const CONCURRENT_TEST_COUNT: usize = 10;
 }
 
 /// Helper functions for creating test data

@@ -14066,6 +14066,7 @@ dependencies = [
  "chrono",
  "diesel",
  "diesel-async",
+ "futures",
  "hex",
  "jsonrpsee 0.24.9",
  "parking_lot 0.12.3",
