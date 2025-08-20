@@ -3,8 +3,8 @@
  *
  * Any concrete wallet (e.g. a browser extension wallet, a hardware wallet or a
  * mobile-SDK based wallet) must extend this class and implement the methods
- * for retrieving the active account address and for signing transactions or
- * arbitrary messages.
+ * for retrieving the active account address, sending transactions, and
+ * signing arbitrary messages.
  */
 import type { TransactionRequest } from 'ethers';
 
@@ -36,15 +36,4 @@ export abstract class WalletBase {
    * @returns   A signature string, typically hex-encoded.
    */
   public abstract signMessage(msg: Uint8Array | string): Promise<string>;
-
-  /**
-   * Optional capability: sign a raw, unsigned transaction and return the signature.
-   *
-   * Default implementation indicates the capability is not supported. Wallets
-   * that can sign offline (e.g. `LocalWallet`) should override this.
-   */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  public signTransaction(_tx: Uint8Array): Promise<string> {
-    return Promise.reject(new Error('signTransaction is not supported by this wallet'));
-  }
 }
