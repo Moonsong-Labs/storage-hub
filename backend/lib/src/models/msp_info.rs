@@ -1,5 +1,5 @@
-use serde::Serialize;
 use chrono::{DateTime, Utc};
+use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub struct InfoResponse {

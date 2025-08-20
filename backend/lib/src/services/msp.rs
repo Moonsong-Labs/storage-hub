@@ -1,12 +1,14 @@
 //! MSP service implementation with mock data
 
-use crate::models::*;
-use crate::error::Error;
-use chrono::Utc;
 use std::sync::Arc;
-use crate::data::postgres::PostgresClientTrait;
-use crate::data::rpc::StorageHubRpcClient;
-use crate::data::storage::BoxedStorage;
+
+use chrono::Utc;
+
+use crate::{
+    data::{postgres::PostgresClientTrait, rpc::StorageHubRpcClient, storage::BoxedStorage},
+    error::Error,
+    models::*,
+};
 
 /// Service for handling MSP-related operations
 #[derive(Clone)]
@@ -85,7 +87,7 @@ impl MspService {
                 price_per_gb_block: 0.8,
                 data_limit_per_bucket_bytes: 21474836480,
                 is_available: false,
-            }
+            },
         ])
     }
 
@@ -120,32 +122,40 @@ impl MspService {
         // Mock implementation returns sample buckets
         Ok(vec![
             Bucket {
-                bucket_id: "d8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692".to_string(),
+                bucket_id: "d8793e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26692"
+                    .to_string(),
                 name: "Documents".to_string(),
-                root: "3de0c6d1959ece558ec030f37292e383a9c95f497e8235b89701b914be9bd1fb".to_string(),
+                root: "3de0c6d1959ece558ec030f37292e383a9c95f497e8235b89701b914be9bd1fb"
+                    .to_string(),
                 is_public: false,
                 size_bytes: 12345678,
-                value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32".to_string(),
+                value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32"
+                    .to_string(),
                 file_count: 12,
             },
             Bucket {
-                bucket_id: "a1234e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26693".to_string(),
+                bucket_id: "a1234e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26693"
+                    .to_string(),
                 name: "Photos".to_string(),
-                root: "4ef1d7e2070fd659bd1d060b3096f38b5a1d65e608347ca90802c0a1b9bde2fc".to_string(),
+                root: "4ef1d7e2070fd659bd1d060b3096f38b5a1d65e608347ca90802c0a1b9bde2fc"
+                    .to_string(),
                 is_public: true,
                 size_bytes: 987654321,
-                value_prop_id: "a12345ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c45".to_string(),
+                value_prop_id: "a12345ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c45"
+                    .to_string(),
                 file_count: 156,
             },
             Bucket {
-                bucket_id: "b5678e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26694".to_string(),
+                bucket_id: "b5678e4187f5642e96016a96fb33849a7e03eda91358b311bbd426ed38b26694"
+                    .to_string(),
                 name: "Projects".to_string(),
                 root: "5af2e8f3181ge770ce2e161c4107g49c6b2e76f719458db01913d1c1c9ce3gd".to_string(),
                 is_public: false,
                 size_bytes: 45678901,
-                value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32".to_string(),
+                value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32"
+                    .to_string(),
                 file_count: 34,
-            }
+            },
         ])
     }
 
@@ -158,7 +168,8 @@ impl MspService {
             root: "3de0c6d1959ece558ec030f37292e383a9c95f497e8235b89701b914be9bd1fb".to_string(),
             is_public: false,
             size_bytes: 12345678,
-            value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32".to_string(),
+            value_prop_id: "f32282ba18056b02cf2feb4cea92aa4552131617cdb7da03acaa554e4e736c32"
+                .to_string(),
             file_count: 12,
         })
     }
@@ -178,22 +189,31 @@ impl MspService {
                             node_type: "file".to_string(),
                             children: None,
                             size_bytes: Some(54321),
-                            file_key: Some("d298c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f2".to_string()),
+                            file_key: Some(
+                                "d298c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f2"
+                                    .to_string(),
+                            ),
                         },
                         FileTree {
                             name: "chapter1.pdf".to_string(),
                             node_type: "file".to_string(),
                             children: None,
                             size_bytes: Some(234567),
-                            file_key: Some("a123c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f3".to_string()),
+                            file_key: Some(
+                                "a123c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f3"
+                                    .to_string(),
+                            ),
                         },
                         FileTree {
                             name: "references.docx".to_string(),
                             node_type: "file".to_string(),
                             children: None,
                             size_bytes: Some(45678),
-                            file_key: Some("b456c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f4".to_string()),
-                        }
+                            file_key: Some(
+                                "b456c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f4"
+                                    .to_string(),
+                            ),
+                        },
                     ]),
                     size_bytes: None,
                     file_key: None,
@@ -207,15 +227,21 @@ impl MspService {
                             node_type: "file".to_string(),
                             children: None,
                             size_bytes: Some(123456),
-                            file_key: Some("c789c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f5".to_string()),
+                            file_key: Some(
+                                "c789c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f5"
+                                    .to_string(),
+                            ),
                         },
                         FileTree {
                             name: "Q2-2024.pdf".to_string(),
                             node_type: "file".to_string(),
                             children: None,
                             size_bytes: Some(134567),
-                            file_key: Some("d890c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f6".to_string()),
-                        }
+                            file_key: Some(
+                                "d890c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f6"
+                                    .to_string(),
+                            ),
+                        },
                     ]),
                     size_bytes: None,
                     file_key: None,
@@ -225,8 +251,11 @@ impl MspService {
                     node_type: "file".to_string(),
                     children: None,
                     size_bytes: Some(2048),
-                    file_key: Some("e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7".to_string()),
-                }
+                    file_key: Some(
+                        "e901c8d212325fe2f18964fd2ea6e7375e2f90835b638ddb3c08692edd7840f7"
+                            .to_string(),
+                    ),
+                },
             ]),
             size_bytes: None,
             file_key: None,
@@ -238,7 +267,8 @@ impl MspService {
         // Mock implementation
         Ok(FileInfo {
             file_key: file_key.to_string(),
-            fingerprint: "5d7a3700e1f7d973c064539f1b18c988dace6b4f1a57650165e9b58305db090f".to_string(),
+            fingerprint: "5d7a3700e1f7d973c064539f1b18c988dace6b4f1a57650165e9b58305db090f"
+                .to_string(),
             bucket_id: bucket_id.to_string(),
             name: "Q1-2024.pdf".to_string(),
             location: "/files/documents/reports".to_string(),
@@ -249,7 +279,11 @@ impl MspService {
     }
 
     /// Distribute a file to BSPs
-    pub async fn distribute_file(&self, _bucket_id: &str, file_key: &str) -> Result<DistributeResponse, Error> {
+    pub async fn distribute_file(
+        &self,
+        _bucket_id: &str,
+        file_key: &str,
+    ) -> Result<DistributeResponse, Error> {
         // Mock implementation
         Ok(DistributeResponse {
             status: "distribution_initiated".to_string(),
@@ -273,13 +307,13 @@ impl MspService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::mock::{MockDbConnection, MockConnection};
+    use crate::data::mock::{MockConnection, MockDbConnection};
 
     async fn create_test_service() -> MspService {
         let storage = Arc::new(MockConnection::new());
         let postgres = Arc::new(MockDbConnection::new());
         let rpc = Arc::new(StorageHubRpcClient::mock().await);
-        
+
         MspService::new(storage, postgres, rpc)
     }
 
@@ -287,7 +321,7 @@ mod tests {
     async fn test_get_info() {
         let service = create_test_service().await;
         let info = service.get_info().await.unwrap();
-        
+
         assert_eq!(info.status, "active");
         assert!(!info.multiaddresses.is_empty());
     }
@@ -296,7 +330,7 @@ mod tests {
     async fn test_get_stats() {
         let service = create_test_service().await;
         let stats = service.get_stats().await.unwrap();
-        
+
         assert!(stats.capacity.total_bytes > 0);
         assert!(stats.capacity.available_bytes <= stats.capacity.total_bytes);
     }
@@ -305,7 +339,7 @@ mod tests {
     async fn test_get_value_props() {
         let service = create_test_service().await;
         let props = service.get_value_props().await.unwrap();
-        
+
         assert!(!props.is_empty());
         assert!(props.iter().any(|p| p.is_available));
     }
@@ -314,7 +348,7 @@ mod tests {
     async fn test_list_user_buckets() {
         let service = create_test_service().await;
         let buckets = service.list_user_buckets("0x123").await.unwrap();
-        
+
         assert!(!buckets.is_empty());
         assert!(buckets.iter().all(|b| !b.bucket_id.is_empty()));
     }
@@ -323,7 +357,7 @@ mod tests {
     async fn test_get_file_tree() {
         let service = create_test_service().await;
         let tree = service.get_file_tree("bucket123").await.unwrap();
-        
+
         assert_eq!(tree.node_type, "folder");
         assert!(tree.children.is_some());
     }
