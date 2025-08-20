@@ -930,6 +930,8 @@ impl pallet_file_system::Config for Runtime {
         runtime_params::dynamic_params::runtime_config::MaxReplicationTarget;
     type TickRangeToMaximumThreshold =
         runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold;
+    type OffchainSignature = Signature;
+    type OffchainPublicKey = <Signature as Verify>::Signer;
 }
 
 // Converter from the Balance type to the BlockNumber type for math.

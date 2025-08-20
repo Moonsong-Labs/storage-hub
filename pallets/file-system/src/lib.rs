@@ -68,8 +68,8 @@ pub mod pallet {
     use shp_traits::ProofsDealerInterface;
     use sp_runtime::{
         traits::{
-            Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, One, Saturating,
-            Zero,
+            Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, ConvertBack, IdentifyAccount,
+            One, Saturating, Verify, Zero,
         },
         BoundedVec,
     };
@@ -256,6 +256,16 @@ pub mod pallet {
 
         /// Converter from the StorageDataUnit type to the Balance type.
         type StorageDataUnitToBalance: Convert<StorageDataUnit<Self>, BalanceOf<Self>>;
+
+        /// Off-Chain signature type.
+        ///
+        /// Can verify whether an `Self::OffchainPublicKey` created a signature.
+        type OffchainSignature: Verify<Signer = Self::OffchainPublicKey> + Parameter;
+
+        /// Off-Chain public key.
+        ///
+        /// Must identify as an on-chain `Self::AccountId`.
+        type OffchainPublicKey: IdentifyAccount<AccountId = Self::AccountId>;
 
         /// The treasury account of the runtime, where a fraction of each payment goes.
         #[pallet::constant]
@@ -735,6 +745,12 @@ pub mod pallet {
             amount_to_transfer: BalanceOf<T>,
             error: DispatchError,
         },
+        /// Notifies that a file deletion has been requested.
+        /// Contains a signed intention that allows any actor to execute the actual deletion.
+        FileDeletionRequested {
+            signed_delete_intention: FileOperationIntention<T>,
+            signature: T::OffchainSignature,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -903,6 +919,8 @@ pub mod pallet {
         FailedToComputeFileKey,
         /// Failed to create file metadata
         FailedToCreateFileMetadata,
+        /// Invalid signature provided for file operation
+        InvalidSignature,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1382,6 +1400,43 @@ pub mod pallet {
                 msp_id,
                 owner,
                 bucket_id,
+            });
+
+            Ok(())
+        }
+
+        /// Request deletion of a file using a signed delete intention.
+        ///
+        /// The origin must be signed and the signature must be valid for the given delete intention.
+        /// The delete intention must contain the file key and the delete operation.
+        /// File metadata is provided separately for ownership verification.
+        #[pallet::call_index(16)]
+        #[pallet::weight(Weight::zero())]
+        pub fn request_delete_file(
+            origin: OriginFor<T>,
+            signed_intention: FileOperationIntention<T>,
+            signature: T::OffchainSignature,
+            bucket_id: BucketIdFor<T>,
+            location: FileLocation<T>,
+            size: StorageDataUnit<T>,
+            fingerprint: Fingerprint<T>,
+        ) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+
+            Self::do_request_delete_file(
+                who.clone(),
+                signed_intention.clone(),
+                signature.clone(),
+                bucket_id,
+                location,
+                size,
+                fingerprint,
+            )?;
+
+            // Emit the event
+            Self::deposit_event(Event::FileDeletionRequested {
+                signed_delete_intention: signed_intention,
+                signature,
             });
 
             Ok(())
