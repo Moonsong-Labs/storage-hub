@@ -110,12 +110,14 @@ interface FileSystem {
     /// @dev Get pending file deletion requests count for a user
     /// @param user The user address
     /// @return count The number of pending deletion requests
+    /// @custom:selector 945238db
     function getPendingFileDeletionRequestsCount(address user) external view returns (uint32 count);
 
     /// @dev Derive a bucket ID from owner and bucket name
     /// @param owner The owner address
     /// @param name The bucket name
     /// @return bucketId The derived bucket ID
+    /// @custom:selector a9f1a69d
     function deriveBucketId(address owner, bytes memory name) external view returns (bytes32 bucketId);
 
     // Events
