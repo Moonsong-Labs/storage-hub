@@ -4,15 +4,9 @@ use hex;
 use sc_tracing::tracing::*;
 use shc_actors_framework::actor::ActorHandle;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
+use shc_blockchain_service::events::FileDeletionRequest;
 use shc_common::traits::StorageEnableRuntime;
-use shc_common::types::{StorageProofsMerkleTrieLayout, StorageProviderId};
-use shc_fisherman_service::events::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest};
 use shc_fisherman_service::{FileKeyOperation, FishermanService, FishermanServiceCommand};
-use shc_forest_manager::in_memory::InMemoryForestStorage;
-use shc_forest_manager::traits::ForestStorage;
-use sp_core::H256;
-use sp_runtime::{AccountId32, MultiSignature};
 
 use crate::{
     handler::StorageHubHandler,
@@ -174,14 +168,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<ProcessFileDeletionRequest>
+impl<NT, Runtime> EventHandler<FileDeletionRequest>
     for FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: FishermanForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for signed intention file key: {:?}",
