@@ -11,6 +11,8 @@ use crate::data::{
 };
 
 pub mod auth;
+// TODO(SCAFFOLDING): Counter module is for demonstration only
+// Remove when implementing real MSP services
 pub mod counter;
 pub mod health;
 pub mod msp;
@@ -24,6 +26,8 @@ use msp::MspService;
 #[derive(Clone)]
 pub struct Services {
     pub auth: Arc<AuthService>,
+    // TODO(SCAFFOLDING): Counter service field is for demonstration only
+    // Remove when implementing real MSP services
     pub counter: Arc<CounterService>,
     pub health: Arc<HealthService>,
     pub msp: Arc<MspService>,
