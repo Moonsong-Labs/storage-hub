@@ -13,8 +13,8 @@ use pallet_file_system::{
     Call as FileSystemCall,
 };
 use precompile_utils::prelude::*;
-use sp_core::{ConstU32, H160, U256, H256};
 use shp_traits::ReadBucketsInterface;
+use sp_core::{ConstU32, H160, H256, U256};
 use sp_runtime::{traits::Dispatchable, BoundedVec};
 use sp_std::{marker::PhantomData, vec::Vec};
 
@@ -39,7 +39,12 @@ pub const SELECTOR_LOG_STORAGE_REQUEST_REVOKED: [u8; 32] =
 pub const SELECTOR_LOG_FILE_DELETION_REQUESTED: [u8; 32] =
     keccak256!("FileDeletionRequested(bytes32,address)");
 
-pub fn log_bucket_created(address: impl Into<H160>, who: impl Into<H160>, bucket_id: H256, msp_id: H256) -> Log {
+pub fn log_bucket_created(
+    address: impl Into<H160>,
+    who: impl Into<H160>,
+    bucket_id: H256,
+    msp_id: H256,
+) -> Log {
     log4(
         address.into(),
         SELECTOR_LOG_BUCKET_CREATED,
@@ -50,7 +55,12 @@ pub fn log_bucket_created(address: impl Into<H160>, who: impl Into<H160>, bucket
     )
 }
 
-pub fn log_bucket_move_requested(address: impl Into<H160>, who: impl Into<H160>, bucket_id: H256, new_msp_id: H256) -> Log {
+pub fn log_bucket_move_requested(
+    address: impl Into<H160>,
+    who: impl Into<H160>,
+    bucket_id: H256,
+    new_msp_id: H256,
+) -> Log {
     log4(
         address.into(),
         SELECTOR_LOG_BUCKET_MOVE_REQUESTED,
@@ -61,7 +71,12 @@ pub fn log_bucket_move_requested(address: impl Into<H160>, who: impl Into<H160>,
     )
 }
 
-pub fn log_bucket_privacy_updated(address: impl Into<H160>, who: impl Into<H160>, bucket_id: H256, private: bool) -> Log {
+pub fn log_bucket_privacy_updated(
+    address: impl Into<H160>,
+    who: impl Into<H160>,
+    bucket_id: H256,
+    private: bool,
+) -> Log {
     log4(
         address.into(),
         SELECTOR_LOG_BUCKET_PRIVACY_UPDATED,
@@ -72,7 +87,12 @@ pub fn log_bucket_privacy_updated(address: impl Into<H160>, who: impl Into<H160>
     )
 }
 
-pub fn log_collection_created(address: impl Into<H160>, who: impl Into<H160>, bucket_id: H256, collection_id: U256) -> Log {
+pub fn log_collection_created(
+    address: impl Into<H160>,
+    who: impl Into<H160>,
+    bucket_id: H256,
+    collection_id: U256,
+) -> Log {
     log4(
         address.into(),
         SELECTOR_LOG_COLLECTION_CREATED,
@@ -93,7 +113,12 @@ pub fn log_bucket_deleted(address: impl Into<H160>, who: impl Into<H160>, bucket
     )
 }
 
-pub fn log_storage_request_issued(address: impl Into<H160>, who: impl Into<H160>, file_key: H256, bucket_id: H256) -> Log {
+pub fn log_storage_request_issued(
+    address: impl Into<H160>,
+    who: impl Into<H160>,
+    file_key: H256,
+    bucket_id: H256,
+) -> Log {
     log4(
         address.into(),
         SELECTOR_LOG_STORAGE_REQUEST_ISSUED,
@@ -113,7 +138,11 @@ pub fn log_storage_request_revoked(address: impl Into<H160>, file_key: H256) -> 
     )
 }
 
-pub fn log_file_deletion_requested(address: impl Into<H160>, file_key: H256, owner: impl Into<H160>) -> Log {
+pub fn log_file_deletion_requested(
+    address: impl Into<H160>,
+    file_key: H256,
+    owner: impl Into<H160>,
+) -> Log {
     log3(
         address.into(),
         SELECTOR_LOG_FILE_DELETION_REQUESTED,
@@ -166,7 +195,7 @@ where
         handle.record_cost(RuntimeHelper::<Runtime>::db_write_gas_cost())?;
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-        let name: BoundedVec<u8, <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::BucketNameLimit> = 
+        let name: BoundedVec<u8, <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::BucketNameLimit> =
             BoundedVec::try_from(name.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Bucket name too long"))?;
         let value_prop_id = value_prop_id.into();
 
@@ -344,7 +373,7 @@ where
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
         let bucket_id_runtime = bucket_id.clone().into();
-        let location: BoundedVec<u8, <Runtime as pallet_file_system::Config>::MaxFilePathSize> = 
+        let location: BoundedVec<u8, <Runtime as pallet_file_system::Config>::MaxFilePathSize> =
             BoundedVec::try_from(location.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Location path too long"))?;
         let fingerprint = fingerprint.into();
         let size = size.into();
@@ -392,7 +421,7 @@ where
 
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
-		
+
         // Emit EVM log for StorageRequestIssued event
         // Event signature: StorageRequestIssued(address indexed who, bytes32 indexed fileKey, bytes32 indexed bucketId)
         let log = log_storage_request_issued(
@@ -461,7 +490,7 @@ where
 
         let signature_bytes: Vec<u8> = signature.into();
         let bucket_id = bucket_id.into();
-        let location: BoundedVec<u8, <Runtime as pallet_file_system::Config>::MaxFilePathSize> = 
+        let location: BoundedVec<u8, <Runtime as pallet_file_system::Config>::MaxFilePathSize> =
             BoundedVec::try_from(location.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Location path too long"))?;
         let size = size.into();
         let fingerprint = fingerprint.into();
@@ -496,10 +525,10 @@ where
             file_key_h256,
             handle.context().caller,
         );
-        
+
         // Record gas costs automatically based on the log structure
         handle.record_log_costs(&[&log])?;
-        
+
         // Emit the log
         log.record(handle)?;
 
@@ -514,12 +543,12 @@ where
         user_address: Address,
     ) -> EvmResult<u32> {
         handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-        
+
         let user_account = Runtime::AddressMapping::into_account_id(user_address.0);
-        
+
         let pending_requests = pallet_file_system::PendingFileDeletionRequests::<Runtime>::get(&user_account);
         let count = pending_requests.len() as u32;
-        
+
         Ok(count)
     }
 
@@ -532,19 +561,19 @@ where
         name: BoundedBytes<ConstU32<100>>,
     ) -> EvmResult<H256> {
         handle.record_cost(RuntimeHelper::<Runtime>::db_read_gas_cost())?;
-        
+
         let owner_account = Runtime::AddressMapping::into_account_id(owner.0);
         let name_vec = name.as_bytes().to_vec();
-        let name_bounded: BoundedVec<u8, <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::BucketNameLimit> = 
+        let name_bounded: BoundedVec<u8, <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::BucketNameLimit> =
             BoundedVec::try_from(name_vec).map_err(|_| RevertReason::custom("Bucket name too long"))?;
-        
+
         let bucket_id = <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::derive_bucket_id(
             &owner_account,
             name_bounded,
         );
-        
+
         let bucket_id_h256: H256 = bucket_id.into();
-        
+
         Ok(bucket_id_h256)
     }
 }
