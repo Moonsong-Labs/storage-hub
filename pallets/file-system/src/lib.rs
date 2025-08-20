@@ -380,7 +380,7 @@ pub mod pallet {
 
         /// Maximum replication target that a user can select for a new storage request.
         #[pallet::constant]
-        type MaxReplicationTarget: Get<ReplicationTargetType<Self>>;
+        type MaxReplicationTarget: Get<u32>;
 
         /// The amount of ticks that the user has to pay upfront when issuing a storage request.
         ///
@@ -1585,7 +1585,7 @@ pub mod pallet {
                 T::SuperHighSecurityReplicationTarget::get();
             let ultra_high_security_replication_target =
                 T::UltraHighSecurityReplicationTarget::get();
-            let max_replication_target = T::MaxReplicationTarget::get();
+            let max_replication_target: ReplicationTargetType<T> = T::MaxReplicationTarget::get().into();
             let storage_request_ttl = T::StorageRequestTtl::get();
             let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
             let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();

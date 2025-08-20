@@ -869,7 +869,7 @@ where
 
         // Ensure that the chosen replication target is not greater than the maximum allowed replication target.
         ensure!(
-            replication_target <= T::MaxReplicationTarget::get(),
+            replication_target <= T::MaxReplicationTarget::get().into(),
             Error::<T>::ReplicationTargetExceedsMaximum
         );
 
@@ -1309,42 +1309,43 @@ where
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
         // Fetch incomplete storage request metadata
-        let mut incomplete_metadata = IncompleteStorageRequests::<T>::get(&file_key)
+        // If there is no entry for the file key, return an error.
+        let mut incomplete_storage_request_metadata = IncompleteStorageRequests::<T>::get(&file_key)
             .ok_or(Error::<T>::StorageRequestNotFound)?;
         
         // Verify file key integrity
         let computed_file_key = Self::compute_file_key(
-            incomplete_metadata.owner.clone(),
-            incomplete_metadata.bucket_id,
-            incomplete_metadata.location.clone(),
-            incomplete_metadata.size,
-            incomplete_metadata.fingerprint,
+            incomplete_storage_request_metadata.owner.clone(),
+            incomplete_storage_request_metadata.bucket_id,
+            incomplete_storage_request_metadata.location.clone(),
+            incomplete_storage_request_metadata.size,
+            incomplete_storage_request_metadata.fingerprint,
         )
         .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
         
         ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
         
         // Validate provider is in pending removal lists
-        let provider_found = incomplete_metadata.pending_msp_removal == Some(provider_id) ||
-            incomplete_metadata.pending_bsp_removals.contains(&provider_id);
+        let provider_found = incomplete_storage_request_metadata.pending_msp_removal == Some(provider_id) ||
+            incomplete_storage_request_metadata.pending_bsp_removals.contains(&provider_id);
         
         ensure!(provider_found, Error::<T>::ProviderNotStoringFile);
         
         // Perform deletion based on provider type
         if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
             Self::delete_file_from_msp(
-                incomplete_metadata.owner.clone(),
+                incomplete_storage_request_metadata.owner.clone(),
                 file_key,
-                incomplete_metadata.size,
-                incomplete_metadata.bucket_id,
+                incomplete_storage_request_metadata.size,
+                incomplete_storage_request_metadata.bucket_id,
                 provider_id,
                 forest_proof,
             )?;
         } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
             Self::delete_file_from_bsp(
-                incomplete_metadata.owner.clone(),
+                incomplete_storage_request_metadata.owner.clone(),
                 file_key,
-                incomplete_metadata.size,
+                incomplete_storage_request_metadata.size,
                 provider_id,
                 forest_proof,
             )?;
@@ -1353,15 +1354,15 @@ where
         }
         
         // Remove provider from pending lists
-        incomplete_metadata.remove_provider(provider_id);
+        incomplete_storage_request_metadata.remove_provider(provider_id);
         
         // Check if all providers have removed their files
-        if incomplete_metadata.is_fully_cleaned() {
+        if incomplete_storage_request_metadata.is_fully_cleaned() {
             // All done - remove the entire entry
             IncompleteStorageRequests::<T>::remove(&file_key);
         } else {
             // Still have pending removals - update the metadata
-            IncompleteStorageRequests::<T>::insert(&file_key, incomplete_metadata);
+            IncompleteStorageRequests::<T>::insert(&file_key, incomplete_storage_request_metadata);
         }
         
         // Emit event

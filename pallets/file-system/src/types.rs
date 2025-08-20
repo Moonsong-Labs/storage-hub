@@ -490,6 +490,9 @@ pub type StorageDataUnit<T> =
 /// Alias for the `ReplicationTargetType` type used in the FileSystem pallet.
 pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
 
+/// Alias for the `MaxReplicationTarget` type used in the FileSystem pallet.
+pub type MaxReplicationTarget<T> = <T as crate::Config>::MaxReplicationTarget;
+
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;
 
@@ -576,8 +579,8 @@ pub struct IncompleteStorageRequestMetadata<T: Config> {
     pub size: StorageDataUnit<T>,
     /// File fingerprint
     pub fingerprint: Fingerprint<T>,
-    /// BSPs that still need to remove the file (bounded by reasonable max BSP count)
-    pub pending_bsp_removals: BoundedVec<ProviderIdFor<T>, frame_support::traits::ConstU32<32>>,
+    /// BSPs that still need to remove the file (bounded by max number of BSPs that can have confirmed)
+    pub pending_bsp_removals: BoundedVec<ProviderIdFor<T>, MaxReplicationTarget<T>>,
     /// MSP that still needs to remove the file (if any)
     pub pending_msp_removal: Option<ProviderIdFor<T>>,
 }
@@ -589,21 +592,17 @@ impl<T: Config> IncompleteStorageRequestMetadata<T> {
     }
     
     /// Remove a provider from pending lists, returns true if found and removed
-    pub fn remove_provider(&mut self, provider_id: ProviderIdFor<T>) -> bool {
+    pub fn remove_provider(&mut self, provider_id: ProviderIdFor<T>) {
         // Check MSP first
         if let Some(msp_id) = self.pending_msp_removal {
             if msp_id == provider_id {
                 self.pending_msp_removal = None;
-                return true;
             }
         }
         
         // Check BSPs 
         if let Some(index) = self.pending_bsp_removals.iter().position(|&id| id == provider_id) {
             self.pending_bsp_removals.swap_remove(index);
-            return true;
         }
-        
-        false
     }
 }
