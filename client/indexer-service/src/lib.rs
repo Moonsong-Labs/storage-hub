@@ -3,7 +3,7 @@ pub mod handler;
 use std::sync::Arc;
 
 use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
 use shc_indexer_db::DbPool;
 
@@ -19,6 +19,9 @@ pub enum IndexerMode {
     /// Lite indexing mode - indexes only essential data for storage operations
     #[serde(rename = "lite")]
     Lite,
+    /// Fishing mode - indexes only events relevant to fisherman monitoring (file tracking)
+    #[serde(rename = "fishing")]
+    Fishing,
 }
 
 impl Default for IndexerMode {
@@ -34,22 +37,21 @@ impl std::str::FromStr for IndexerMode {
         match s.to_lowercase().as_str() {
             "full" => Ok(Self::Full),
             "lite" => Ok(Self::Lite),
+            "fishing" => Ok(Self::Fishing),
             _ => Err(format!(
-                "Invalid indexer mode: '{}'. Expected 'full' or 'lite'",
+                "Invalid indexer mode: '{}'. Expected 'full', 'lite', or 'fishing'",
                 s
             )),
         }
     }
 }
 
-pub async fn spawn_indexer_service<
-    RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>,
->(
+pub async fn spawn_indexer_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
-    client: Arc<ParachainClient<RuntimeApi>>,
+    client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: IndexerMode,
-) -> ActorHandle<IndexerService<RuntimeApi>> {
+) -> ActorHandle<IndexerService<Runtime>> {
     let task_spawner = task_spawner
         .with_name("indexer-service")
         .with_group("network");

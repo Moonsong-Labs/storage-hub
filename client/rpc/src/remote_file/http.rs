@@ -255,8 +255,6 @@ impl RemoteFileHandler for HttpFileHandler {
 mod tests {
     use super::*;
     use mockito::Server;
-    #[allow(unused_imports)]
-    use std::io::Write;
 
     const TEST_MAX_FILE_SIZE: u64 = 100 * 1024 * 1024; // 100MB for tests
 
@@ -268,7 +266,7 @@ mod tests {
             follow_redirects: true,
             max_redirects: 3,
             user_agent: "Test-Agent".to_string(),
-            chunk_size: 8096,
+            chunk_size: 8192,
             chunks_buffer: 512,
         };
         HttpFileHandler::new(config, url).unwrap()

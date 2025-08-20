@@ -99,7 +99,8 @@ use syn::{
     parse::{Parse, ParseStream},
     parse_macro_input,
     spanned::Spanned,
-    Attribute, DeriveInput, Ident, LitStr, Token, Type,
+    token::Comma,
+    Attribute, DeriveInput, Generics, Ident, LitStr, Token, Type,
 };
 
 /// Parser for the `#[actor(actor = "...")]` attribute that accompanies the `ActorEvent` derive macro.
@@ -839,9 +840,13 @@ fn to_snake_case(s: &str) -> String {
 ///     service = ServiceType,
 ///     default_mode = "ImmediateResponse",
 ///     default_error_type = CustomError,
-///     default_inner_channel_type = "futures::channel::oneshot::Receiver"
+///     default_inner_channel_type = futures::channel::oneshot::Receiver,
 /// )]
-/// pub enum CommandEnum {
+/// pub enum CommandEnum<T, U>
+/// where
+///     T: SomeTrait,
+///     U: AnotherTrait,
+/// {
 ///     // command variants
 /// }
 /// ```
@@ -861,6 +866,7 @@ impl Parse for ActorCommandArgs {
 
         while !input.is_empty() {
             let key: Ident = input.parse()?;
+
             let _: Token![=] = input.parse()?;
 
             if key == "service" {
@@ -1301,6 +1307,9 @@ fn generate_method_impl(
 /// - `default_error_type`: (Optional) Default error type for command responses
 /// - `default_inner_channel_type`: (Optional) Default channel type for AsyncResponse mode
 ///
+/// Note: Generic parameters and bounds should be declared on the enum itself. They are automatically merged
+/// with any generics from the `service` type.
+///
 /// # Command Mode Options
 ///
 /// - `FireAndForget`: No response is expected
@@ -1315,7 +1324,11 @@ fn generate_method_impl(
 ///     default_mode = "ImmediateResponse",
 ///     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 /// )]
-/// pub enum BlockchainServiceCommand {
+/// pub enum BlockchainServiceCommand<Runtime, OtherType>
+/// where
+///     Runtime: StorageEnableRuntime,
+///     OtherType: SomeTrait,
+/// {
 ///     #[command(success_type = SubmittedTransaction)]
 ///     SendExtrinsic {
 ///         call: storage_hub_runtime::RuntimeCall,
@@ -1361,6 +1374,43 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
     let default_mode = args.default_mode;
     let default_error_type = args.default_error_type;
     let default_inner_channel_type = args.default_inner_channel_type;
+
+    let service_token_stream: proc_macro::TokenStream = service_type.into_token_stream().into();
+    let service = parse_macro_input!(service_token_stream as syn::TypePath);
+
+    let empty: proc_macro::TokenStream = quote! {< >}.into();
+    let mut impl_merged_generics: syn::AngleBracketedGenericArguments =
+        parse_macro_input!(empty as syn::AngleBracketedGenericArguments);
+
+    // Getting segments[0] means we only accept simple struct (e.g FileTransferService and not something::FileTransferService)
+    if !service.path.segments[0].arguments.is_empty() {
+        let args: proc_macro::TokenStream = service.path.segments[0]
+            .arguments
+            .clone()
+            .into_token_stream()
+            .into();
+        impl_merged_generics = parse_macro_input!(args as syn::AngleBracketedGenericArguments);
+    }
+
+    // Merging generics from the service and the one define in the enum
+    let generics_yay: Generics = input.generics.clone();
+
+    if !generics_yay.params.is_empty() {
+        for generic in input.generics.clone().params {
+            let generic_token_stream: proc_macro::TokenStream = generic.into_token_stream().into();
+            let generic_arg = parse_macro_input!(generic_token_stream as syn::GenericArgument);
+            let found = impl_merged_generics
+                .args
+                .clone()
+                .into_iter()
+                .find(|g| g == &generic_arg);
+
+            if found.is_none() {
+                impl_merged_generics.args.push_punct(Comma::default());
+                impl_merged_generics.args.push_value(generic_arg);
+            }
+        }
+    }
 
     // Generate interface trait name
     let interface_name = Ident::new(&format!("{}Interface", enum_name), Span::call_site());
@@ -1509,21 +1559,31 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Build the updated enum
     let vis = &input.vis;
-    let generics = &input.generics;
+    let generics: &Generics = &input.generics;
 
     // Process the service type
-    let (service_type_path, impl_generics, _type_generics, where_clause) =
-        process_service_type(service_type);
+    let (
+        service_type_path,
+        _service_impl_generics,
+        _type_generics,
+        _service_where_clause,
+        _service_generic_params,
+        _service_where_bounds,
+    ) = process_service_type(service_type);
+
+    let (_impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
     // Generate the interface trait and implementation
     let trait_def = quote! {
         #[async_trait::async_trait]
-        pub trait #interface_name {
+        pub trait #interface_name #generics
+        #where_clause
+        {
             #(#trait_method_signatures)*
         }
 
         #[async_trait::async_trait]
-        impl #impl_generics #interface_name for shc_actors_framework::actor::ActorHandle<#service_type_path>
+        impl #impl_merged_generics #interface_name #ty_generics for shc_actors_framework::actor::ActorHandle<#service_type_path>
         #where_clause
         {
             #(#trait_method_implementations)*
@@ -1532,7 +1592,8 @@ pub fn actor_command(args: TokenStream, input: TokenStream) -> TokenStream {
 
     // Output the result
     let result = quote! {
-        #vis enum #enum_name #generics {
+        #vis enum #enum_name #generics
+        {
             #(#updated_variants,)*
         }
 
@@ -1550,9 +1611,18 @@ fn process_service_type(
     proc_macro2::TokenStream,
     proc_macro2::TokenStream,
     proc_macro2::TokenStream,
+    Vec<syn::Ident>,               // service generic parameters
+    Vec<proc_macro2::TokenStream>, // service where bounds
 ) {
     // Default values for when we have no generics
-    let default_result = (quote! { #service_type }, quote! {}, quote! {}, quote! {});
+    let default_result = (
+        quote! { #service_type },
+        quote! {},
+        quote! {},
+        quote! {},
+        Vec::new(),
+        Vec::new(),
+    );
 
     // Parse the service type to extract its parts
     match service_type {
@@ -1677,6 +1747,8 @@ fn process_service_type(
                                 impl_generics,
                                 type_generics,
                                 where_clause,
+                                generic_params,
+                                where_bounds,
                             );
                         }
                     }
@@ -1686,7 +1758,14 @@ fn process_service_type(
                 }
 
                 // For path with no angle brackets (simple types)
-                _ => (quote! { #service_type }, quote! {}, quote! {}, quote! {}),
+                _ => (
+                    quote! { #service_type },
+                    quote! {},
+                    quote! {},
+                    quote! {},
+                    Vec::new(),
+                    Vec::new(),
+                ),
             }
         }
         // Fallback for any other type - just use it as is

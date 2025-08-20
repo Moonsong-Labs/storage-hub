@@ -13,13 +13,13 @@ use shc_blockchain_service::{
     capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
     BlockchainService,
 };
-use shc_common::{
-    traits::{StorageEnableApiCollection, StorageEnableRuntimeApi},
-    types::ParachainClient,
-};
+use shc_common::traits::StorageEnableRuntime;
+use shc_common::types::ParachainClient;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
+use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
 use shc_forest_manager::traits::ForestStorageHandler;
+use shc_indexer_service::IndexerMode;
 use shc_rpc::{RpcConfig, StorageHubClientRpcConfig};
 
 use crate::tasks::{
@@ -32,9 +32,9 @@ use super::{
     bsp_peer_manager::BspPeerManager,
     handler::{ProviderConfig, StorageHubHandler},
     types::{
-        BspForestStorageHandlerT, BspProvider, InMemoryStorageLayer, MspForestStorageHandlerT,
-        MspProvider, NoStorageLayer, RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer,
-        UserRole,
+        BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
+        InMemoryStorageLayer, MspForestStorageHandlerT, MspProvider, NoStorageLayer,
+        RocksDbStorageLayer, ShNodeType, ShRole, ShStorageLayer, UserRole,
     },
 };
 
@@ -42,17 +42,17 @@ use super::{
 ///
 /// Abstracted over [`ShRole`] `R` and [`ShStorageLayer`] `S` to avoid any callers from having to know the internals of the
 /// StorageHub system, such as the right storage layers to use for a given role.
-pub struct StorageHubBuilder<R, S, RuntimeApi>
+pub struct StorageHubBuilder<R, S, Runtime>
 where
     R: ShRole,
     S: ShStorageLayer,
     (R, S): ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     task_spawner: Option<TaskSpawner>,
     file_transfer: Option<ActorHandle<FileTransferService>>,
-    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH, RuntimeApi>>>,
+    blockchain: Option<ActorHandle<BlockchainService<<(R, S) as ShNodeType>::FSH, Runtime>>>,
+    fisherman: Option<ActorHandle<FishermanService<Runtime>>>,
     storage_path: Option<String>,
     file_storage: Option<Arc<RwLock<<(R, S) as ShNodeType>::FL>>>,
     forest_storage_handler: Option<<(R, S) as ShNodeType>::FSH>,
@@ -71,17 +71,17 @@ where
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
-impl<R: ShRole, S: ShStorageLayer, RuntimeApi> StorageHubBuilder<R, S, RuntimeApi>
+impl<R: ShRole, S: ShStorageLayer, Runtime> StorageHubBuilder<R, S, Runtime>
 where
     (R, S): ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     pub fn new(task_spawner: TaskSpawner) -> Self {
         Self {
             task_spawner: Some(task_spawner),
             file_transfer: None,
             blockchain: None,
+            fisherman: None,
             storage_path: None,
             file_storage: None,
             forest_storage_handler: None,
@@ -146,7 +146,7 @@ where
     /// Call [`setup_storage_layer`](StorageHubBuilder::setup_storage_layer) before calling this method.
     pub async fn with_blockchain(
         &mut self,
-        client: Arc<ParachainClient<RuntimeApi>>,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         keystore: KeystorePtr,
         rpc_handlers: Arc<RpcHandlers>,
         rocksdb_root_path: impl Into<PathBuf>,
@@ -168,7 +168,7 @@ where
         let blockchain_service_config = self.blockchain_service_config.clone().unwrap_or_default();
 
         let blockchain_service_handle =
-            spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH, RuntimeApi>(
+            spawn_blockchain_service::<<(R, S) as ShNodeType>::FSH, Runtime>(
                 self.task_spawner
                     .as_ref()
                     .expect("Task spawner is not set."),
@@ -185,6 +185,26 @@ where
             .await;
 
         self.blockchain = Some(blockchain_service_handle);
+        self
+    }
+
+    /// Spawn the Fisherman Service.
+    ///
+    /// The Fisherman Service monitors the blockchain for file deletion requests
+    /// and constructs proofs of inclusion for storage providers to remove files.
+    pub async fn with_fisherman(
+        &mut self,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+    ) -> &mut Self {
+        let fisherman_service_handle = spawn_fisherman_service::<Runtime>(
+            self.task_spawner
+                .as_ref()
+                .expect("Task spawner is not set."),
+            client,
+        )
+        .await;
+
+        self.fisherman = Some(fisherman_service_handle);
         self
     }
 
@@ -336,11 +356,9 @@ pub trait StorageLayerBuilder {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self;
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<BspProvider, InMemoryStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, InMemoryStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
@@ -351,11 +369,9 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<BspProvider, RocksDbStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<BspProvider, RocksDbStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
         self.storage_path = storage_path.clone();
@@ -374,11 +390,9 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<MspProvider, InMemoryStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, InMemoryStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
@@ -389,11 +403,9 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder
-    for StorageHubBuilder<MspProvider, RocksDbStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<MspProvider, RocksDbStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, storage_path: Option<String>) -> &mut Self {
         let storage_path = storage_path.expect("Storage path not set");
@@ -411,14 +423,28 @@ where
     }
 }
 
-impl<RuntimeApi> StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer, RuntimeApi>
+impl<Runtime> StorageLayerBuilder for StorageHubBuilder<UserRole, NoStorageLayer, Runtime>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
         self.forest_storage_handler = Some(<(UserRole, NoStorageLayer) as ShNodeType>::FSH::new());
+
+        self
+    }
+}
+
+impl<RuntimeApi> StorageLayerBuilder
+    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
+where
+    RuntimeApi: StorageEnableRuntime,
+{
+    fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
+        // Fisherman only needs forest storage for proof construction
+        self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
+        self.forest_storage_handler =
+            Some(<(FishermanRole, NoStorageLayer) as ShNodeType>::FSH::new());
 
         self
     }
@@ -429,23 +455,18 @@ where
 /// This trait is implemented by the different [`StorageHubBuilder`] variants,
 /// and build a [`StorageHubHandler`] with the required configuration for the
 /// corresponding [`ShRole`].
-pub trait Buildable<
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>,
->
-{
-    fn build(self) -> StorageHubHandler<NT, RuntimeApi>;
+pub trait Buildable<NT: ShNodeType, Runtime: StorageEnableRuntime> {
+    fn build(self) -> StorageHubHandler<NT, Runtime>;
 }
 
-impl<S: ShStorageLayer, RuntimeApi> Buildable<(BspProvider, S), RuntimeApi>
-    for StorageHubBuilder<BspProvider, S, RuntimeApi>
+impl<S: ShStorageLayer, Runtime> Buildable<(BspProvider, S), Runtime>
+    for StorageHubBuilder<BspProvider, S, Runtime>
 where
     (BspProvider, S): ShNodeType,
     <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn build(self) -> StorageHubHandler<(BspProvider, S), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(BspProvider, S), Runtime> {
         StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
@@ -483,15 +504,14 @@ where
     }
 }
 
-impl<S: ShStorageLayer, RuntimeApi> Buildable<(MspProvider, S), RuntimeApi>
-    for StorageHubBuilder<MspProvider, S, RuntimeApi>
+impl<S: ShStorageLayer, Runtime> Buildable<(MspProvider, S), Runtime>
+    for StorageHubBuilder<MspProvider, S, Runtime>
 where
     (MspProvider, S): ShNodeType,
     <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn build(self) -> StorageHubHandler<(MspProvider, S), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(MspProvider, S), Runtime> {
         StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
@@ -529,16 +549,15 @@ where
     }
 }
 
-impl<RuntimeApi> Buildable<(UserRole, NoStorageLayer), RuntimeApi>
-    for StorageHubBuilder<UserRole, NoStorageLayer, RuntimeApi>
+impl<Runtime> Buildable<(UserRole, NoStorageLayer), Runtime>
+    for StorageHubBuilder<UserRole, NoStorageLayer, Runtime>
 where
     (UserRole, NoStorageLayer): ShNodeType,
     <(UserRole, NoStorageLayer) as ShNodeType>::FSH:
         ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer), RuntimeApi> {
+    fn build(self) -> StorageHubHandler<(UserRole, NoStorageLayer), Runtime> {
         StorageHubHandler::new(
             self.task_spawner
                 .as_ref()
@@ -568,6 +587,53 @@ where
                 bsp_move_bucket: self.bsp_move_bucket_config.unwrap_or_default(),
                 bsp_charge_fees: self.bsp_charge_fees_config.unwrap_or_default(),
                 bsp_submit_proof: self.bsp_submit_proof_config.unwrap_or_default(),
+                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
+            },
+            self.indexer_db_pool.clone(),
+            self.peer_manager.expect("Peer Manager not set"),
+        )
+    }
+}
+
+impl<RuntimeApi> Buildable<(FishermanRole, NoStorageLayer), RuntimeApi>
+    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
+where
+    (FishermanRole, NoStorageLayer): ShNodeType,
+    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
+    RuntimeApi: StorageEnableRuntime,
+{
+    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi> {
+        // TODO: Split StorageHubHandler into separate handlers or configurations to avoid unnecessary setting fields
+        StorageHubHandler::new(
+            self.task_spawner
+                .as_ref()
+                .expect("Task Spawner not set")
+                .clone(),
+            self.file_transfer
+                .as_ref()
+                .expect("File Transfer not set.")
+                .clone(),
+            self.blockchain
+                .as_ref()
+                .expect("Blockchain Service not set.")
+                .clone(),
+            self.file_storage
+                .as_ref()
+                .expect("File Storage not set.")
+                .clone(),
+            self.forest_storage_handler
+                .as_ref()
+                .expect("Forest Storage Handler not set.")
+                .clone(),
+            ProviderConfig {
+                // Use minimal/default config for fisherman
+                capacity_config: self.capacity_config.unwrap_or_default(),
+                msp_charge_fees: Default::default(),
+                msp_move_bucket: Default::default(),
+                bsp_upload_file: Default::default(),
+                bsp_move_bucket: Default::default(),
+                bsp_charge_fees: Default::default(),
+                bsp_submit_proof: Default::default(),
                 blockchain_service: self.blockchain_service_config.unwrap_or_default(),
             },
             self.indexer_db_pool.clone(),
@@ -705,8 +771,21 @@ impl Into<BlockchainServiceConfig> for BlockchainServiceOptions {
 /// Configuration for the indexer.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct IndexerOptions {
-    /// Whether to enable the indexer.
-    pub indexer: bool,
+    /// Indexing mode
+    pub indexer_mode: IndexerMode,
     /// Postgres database URL.
-    pub database_url: Option<String>,
+    ///
+    /// Deserializing as "indexer_database_url" to match the expected field name in the toml file.
+    #[serde(rename = "indexer_database_url")]
+    pub database_url: String,
+}
+
+/// Configuration for the fisherman.
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct FishermanOptions {
+    /// Postgres database URL.
+    ///
+    /// Deserializing as "fisherman_database_url" to match the expected field name in the toml file.
+    #[serde(rename = "fisherman_database_url")]
+    pub database_url: String,
 }

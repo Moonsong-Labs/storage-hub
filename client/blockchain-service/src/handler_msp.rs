@@ -11,7 +11,7 @@ use sp_core::H256;
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
 use shc_actors_framework::actor::Actor;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
     types::{BlockHash, BlockNumber, Fingerprint, ProviderId, StorageRequestMetadata},
@@ -41,11 +41,10 @@ use crate::{
 // TODO: Make this configurable in the config file
 const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     /// Handles the initial sync of a MSP, after coming out of syncing mode.
     ///

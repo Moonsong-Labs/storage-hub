@@ -1,66 +1,62 @@
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_fisherman_service::events::ProcessFileDeletionRequest;
+use shc_blockchain_service::events::FileDeletionRequest;
+use shc_common::traits::StorageEnableRuntime;
 
 use crate::{
     handler::StorageHubHandler,
-    types::{BspForestStorageHandlerT, ShNodeType},
+    types::{FishermanForestStorageHandlerT, ShNodeType},
 };
 
 const LOG_TARGET: &str = "fisherman-process-file-deletion-task";
 
-pub struct FishermanProcessFileDeletionTask<NT, RuntimeApi>
+pub struct FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT::FSH: FishermanForestStorageHandlerT,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
 }
 
-impl<NT, RuntimeApi> Clone for FishermanProcessFileDeletionTask<NT, RuntimeApi>
+impl<NT, Runtime> Clone for FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT::FSH: FishermanForestStorageHandlerT,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> FishermanProcessFileDeletionTask<NT, RuntimeApi> {
+    fn clone(&self) -> FishermanProcessFileDeletionTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT, RuntimeApi> FishermanProcessFileDeletionTask<NT, RuntimeApi>
+impl<NT, Runtime> FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT::FSH: FishermanForestStorageHandlerT,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<ProcessFileDeletionRequest>
-    for FishermanProcessFileDeletionTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<FileDeletionRequest>
+    for FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT::FSH: FishermanForestStorageHandlerT,
+    Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for file key: {:?}",
-            event.signed_file_operation_intention.file_key,
+            event.file_key,
         );
 
         // TODO: Implement file deletion request handling (non-exhaustive):
