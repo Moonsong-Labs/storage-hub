@@ -328,7 +328,9 @@ where
                     })
                     .delete();
                 state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .delete();
                 state_store_context
                     .access_value(
@@ -555,7 +557,9 @@ where
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .write(data);
                 state_store_context.commit();
             }

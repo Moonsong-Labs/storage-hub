@@ -218,13 +218,17 @@ where
 ///
 /// This event is triggered by the runtime when it decides it is the right time to submit a confirm
 /// storing extrinsic (and update the local forest root).
-impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest<Runtime>>
+    for BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
     NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: ProcessConfirmStoringRequest<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest: {:?}",

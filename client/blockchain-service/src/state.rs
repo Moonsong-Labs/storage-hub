@@ -50,7 +50,7 @@ pub struct OngoingProcessConfirmStoringRequestCf<Runtime: StorageEnableRuntime> 
 impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf
     for OngoingProcessConfirmStoringRequestCf<Runtime>
 {
-    type Value = ProcessConfirmStoringRequestData;
+    type Value = ProcessConfirmStoringRequestData<Runtime>;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str = "ongoing_process_confirm_storing_request";
 }
@@ -86,7 +86,7 @@ pub struct PendingConfirmStoringRequestCf<Runtime: StorageEnableRuntime> {
 }
 impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingConfirmStoringRequestCf<Runtime> {
     type Key = u64;
-    type Value = ConfirmStoringRequest;
+    type Value = ConfirmStoringRequest<Runtime>;
 
     const SCALE_ENCODED_NAME: &'static str = "pending_confirm_storing_request";
 }
@@ -166,9 +166,13 @@ impl PendingConfirmStoringRequestRightIndexName {
     pub const NAME: &'static str = "pending_confirm_storing_request_right_index";
 }
 
-pub struct OngoingProcessMspRespondStorageRequestCf;
-impl SingleScaleEncodedValueCf for OngoingProcessMspRespondStorageRequestCf {
-    type Value = ProcessMspRespondStoringRequestData;
+pub struct OngoingProcessMspRespondStorageRequestCf<Runtime: StorageEnableRuntime> {
+    pub(crate) phantom: std::marker::PhantomData<Runtime>,
+}
+impl<Runtime: StorageEnableRuntime> SingleScaleEncodedValueCf
+    for OngoingProcessMspRespondStorageRequestCf<Runtime>
+{
+    type Value = ProcessMspRespondStoringRequestData<Runtime>;
 
     const SINGLE_SCALE_ENCODED_VALUE_NAME: &'static str =
         "ongoing_process_msp_respond_storage_request";
@@ -181,13 +185,22 @@ impl OngoingProcessMspRespondStorageRequestName {
 }
 
 /// Pending respond storage requests.
-#[derive(Default)]
-pub struct PendingMspRespondStorageRequestCf;
-impl ScaleEncodedCf for PendingMspRespondStorageRequestCf {
+pub struct PendingMspRespondStorageRequestCf<Runtime: StorageEnableRuntime> {
+    pub(crate) phantom: std::marker::PhantomData<Runtime>,
+}
+impl<Runtime: StorageEnableRuntime> ScaleEncodedCf for PendingMspRespondStorageRequestCf<Runtime> {
     type Key = u64;
-    type Value = RespondStorageRequest;
+    type Value = RespondStorageRequest<Runtime>;
 
     const SCALE_ENCODED_NAME: &'static str = "pending_msp_respond_storage_request";
+}
+
+impl<Runtime: StorageEnableRuntime> Default for PendingMspRespondStorageRequestCf<Runtime> {
+    fn default() -> Self {
+        Self {
+            phantom: std::marker::PhantomData,
+        }
+    }
 }
 
 /// Non-generic name holder for the `PendingMspRespondStorageRequest` column family
@@ -416,10 +429,11 @@ impl<'a> BlockchainServiceStateStoreRwContext<'a> {
         }
     }
 
-    pub fn pending_msp_respond_storage_request_deque(
+    pub fn pending_msp_respond_storage_request_deque<Runtime: StorageEnableRuntime>(
         &'a self,
-    ) -> PendingMspRespondStorageRequestDequeAPI<'a> {
+    ) -> PendingMspRespondStorageRequestDequeAPI<'a, Runtime> {
         PendingMspRespondStorageRequestDequeAPI {
+            phantom: std::marker::PhantomData,
             db_context: &self.db_context,
         }
     }
@@ -480,29 +494,37 @@ impl<'a, Runtime: StorageEnableRuntime> ProvidesTypedDbSingleAccess
 impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
     for PendingConfirmStoringRequestDequeAPI<'a, Runtime>
 {
-    type Value = ConfirmStoringRequest;
+    type Value = ConfirmStoringRequest<Runtime>;
     type LeftIndexCF = PendingConfirmStoringRequestLeftIndexCf;
     type RightIndexCF = PendingConfirmStoringRequestRightIndexCf;
     type DataCF = PendingConfirmStoringRequestCf<Runtime>;
 }
 
-pub struct PendingMspRespondStorageRequestDequeAPI<'a> {
+pub struct PendingMspRespondStorageRequestDequeAPI<'a, Runtime: StorageEnableRuntime> {
     db_context: &'a TypedDbContext<'a, TypedRocksDB, BufferedWriteSupport<'a, TypedRocksDB>>,
+    pub(crate) phantom: std::marker::PhantomData<Runtime>,
 }
 
-impl<'a> ProvidesDbContext for PendingMspRespondStorageRequestDequeAPI<'a> {
+impl<'a, Runtime: StorageEnableRuntime> ProvidesDbContext
+    for PendingMspRespondStorageRequestDequeAPI<'a, Runtime>
+{
     fn db_context(&self) -> &TypedDbContext<TypedRocksDB, BufferedWriteSupport<TypedRocksDB>> {
         &self.db_context
     }
 }
 
-impl<'a> ProvidesTypedDbSingleAccess for PendingMspRespondStorageRequestDequeAPI<'a> {}
+impl<'a, Runtime: StorageEnableRuntime> ProvidesTypedDbSingleAccess
+    for PendingMspRespondStorageRequestDequeAPI<'a, Runtime>
+{
+}
 
-impl<'a> CFDequeAPI for PendingMspRespondStorageRequestDequeAPI<'a> {
-    type Value = RespondStorageRequest;
+impl<'a, Runtime: StorageEnableRuntime> CFDequeAPI
+    for PendingMspRespondStorageRequestDequeAPI<'a, Runtime>
+{
+    type Value = RespondStorageRequest<Runtime>;
     type LeftIndexCF = PendingMspRespondStorageRequestLeftIndexCf;
     type RightIndexCF = PendingMspRespondStorageRequestRightIndexCf;
-    type DataCF = PendingMspRespondStorageRequestCf;
+    type DataCF = PendingMspRespondStorageRequestCf<Runtime>;
 }
 
 pub struct PendingStopStoringForInsolventUserRequestDequeAPI<'a, Runtime: StorageEnableRuntime> {

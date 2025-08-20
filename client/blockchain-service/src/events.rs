@@ -102,8 +102,8 @@ pub struct AcceptedBspVolunteer<Runtime: StorageEnableRuntime> {
 #[derive(Debug, Clone, Encode, Decode)]
 pub enum ForestWriteLockTaskData<Runtime: StorageEnableRuntime> {
     SubmitProofRequest(ProcessSubmitProofRequestData<Runtime>),
-    ConfirmStoringRequest(ProcessConfirmStoringRequestData),
-    MspRespondStorageRequest(ProcessMspRespondStoringRequestData),
+    ConfirmStoringRequest(ProcessConfirmStoringRequestData<Runtime>),
+    MspRespondStorageRequest(ProcessMspRespondStoringRequestData<Runtime>),
     StopStoringForInsolventUserRequest(ProcessStopStoringForInsolventUserRequestData<Runtime>),
     FileDeletionRequest(ProcessFileDeletionRequestData<Runtime>),
 }
@@ -116,18 +116,18 @@ impl<Runtime: StorageEnableRuntime> From<ProcessSubmitProofRequestData<Runtime>>
     }
 }
 
-impl<Runtime: StorageEnableRuntime> From<ProcessConfirmStoringRequestData>
+impl<Runtime: StorageEnableRuntime> From<ProcessConfirmStoringRequestData<Runtime>>
     for ForestWriteLockTaskData<Runtime>
 {
-    fn from(data: ProcessConfirmStoringRequestData) -> Self {
+    fn from(data: ProcessConfirmStoringRequestData<Runtime>) -> Self {
         Self::ConfirmStoringRequest(data)
     }
 }
 
-impl<Runtime: StorageEnableRuntime> From<ProcessMspRespondStoringRequestData>
+impl<Runtime: StorageEnableRuntime> From<ProcessMspRespondStoringRequestData<Runtime>>
     for ForestWriteLockTaskData<Runtime>
 {
-    fn from(data: ProcessMspRespondStoringRequestData) -> Self {
+    fn from(data: ProcessMspRespondStoringRequestData<Runtime>) -> Self {
         Self::MspRespondStorageRequest(data)
     }
 }
@@ -175,26 +175,26 @@ pub struct ProcessSubmitProofRequest<Runtime: StorageEnableRuntime> {
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct ProcessConfirmStoringRequestData {
-    pub confirm_storing_requests: Vec<ConfirmStoringRequest>,
+pub struct ProcessConfirmStoringRequestData<Runtime: StorageEnableRuntime> {
+    pub confirm_storing_requests: Vec<ConfirmStoringRequest<Runtime>>,
 }
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProcessConfirmStoringRequest {
-    pub data: ProcessConfirmStoringRequestData,
+pub struct ProcessConfirmStoringRequest<Runtime: StorageEnableRuntime> {
+    pub data: ProcessConfirmStoringRequestData<Runtime>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct ProcessMspRespondStoringRequestData {
-    pub respond_storing_requests: Vec<RespondStorageRequest>,
+pub struct ProcessMspRespondStoringRequestData<Runtime: StorageEnableRuntime> {
+    pub respond_storing_requests: Vec<RespondStorageRequest<Runtime>>,
 }
 
 #[derive(Debug, Clone, ActorEvent)]
 #[actor(actor = "blockchain_service")]
-pub struct ProcessMspRespondStoringRequest {
-    pub data: ProcessMspRespondStoringRequestData,
+pub struct ProcessMspRespondStoringRequest<Runtime: StorageEnableRuntime> {
+    pub data: ProcessMspRespondStoringRequestData<Runtime>,
     pub forest_root_write_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
 }
 

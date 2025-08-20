@@ -1308,7 +1308,9 @@ where
         // Check if there was an ongoing process msp respond storage request task.
         // Note: This would only exist if the node was running as an MSP.
         let maybe_ongoing_process_msp_respond_storage_request = state_store_context
-            .access_value(&OngoingProcessMspRespondStorageRequestCf)
+            .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
+                phantom: Default::default(),
+            })
             .read();
 
         // If there was an ongoing process msp respond storage request task, we need to re-queue the requests.

@@ -188,13 +188,17 @@ where
 ///
 /// The MSP will call the `msp_respond_storage_requests_multiple_buckets` extrinsic on the FileSystem pallet to respond to the
 /// storage requests.
-impl<NT, Runtime> EventHandler<ProcessMspRespondStoringRequest> for MspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<ProcessMspRespondStoringRequest<Runtime>>
+    for MspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType<Runtime> + 'static,
     NT::FSH: MspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessMspRespondStoringRequest) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: ProcessMspRespondStoringRequest<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing ProcessMspRespondStoringRequest: {:?}",
