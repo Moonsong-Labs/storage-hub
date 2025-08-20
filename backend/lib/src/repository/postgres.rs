@@ -24,9 +24,12 @@ use shc_indexer_db::{
     schema::{bsp, bucket, file},
 };
 
-use super::{error::RepositoryResult, pool::SmartPool, IndexerOps};
+use crate::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
 #[cfg(test)]
-use super::{IndexerOpsMut, NewBsp, NewBucket, NewFile};
+use crate::{
+    constants::test::DEFAULT_TEST_DATABASE_URL,
+    repository::{IndexerOpsMut, NewBsp, NewBucket, NewFile},
+};
 
 /// PostgreSQL repository implementation.
 ///
@@ -48,6 +51,25 @@ impl Repository {
         Ok(Self {
             pool: SmartPool::new(database_url).await?,
         })
+    }
+}
+
+#[cfg(test)]
+impl Repository {
+    /// Creates a test repository with a real database connection.
+    ///
+    /// This function creates a repository connected to a test database that will
+    /// automatically rollback all changes after the test completes.
+    ///
+    /// # Panics
+    /// Panics if the test database URL is not configured or connection fails.
+    pub async fn test() -> Self {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| DEFAULT_TEST_DATABASE_URL.to_string());
+
+        Self::new(&database_url)
+            .await
+            .expect("Failed to create test repository")
     }
 }
 

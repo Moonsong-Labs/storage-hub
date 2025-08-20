@@ -24,21 +24,21 @@ impl CounterService {
         self.storage
             .increment_counter(DEFAULT_COUNTER_KEY, DEFAULT_INCREMENT)
             .await
-            .map_err(|e| crate::error::Error::Storage(e))
+            .map_err(crate::error::Error::Storage)
     }
 
     pub async fn decrement(&self) -> Result<i64> {
         self.storage
             .decrement_counter(DEFAULT_COUNTER_KEY, DEFAULT_INCREMENT)
             .await
-            .map_err(|e| crate::error::Error::Storage(e))
+            .map_err(crate::error::Error::Storage)
     }
 
     pub async fn get(&self) -> Result<i64> {
         self.storage
             .get_counter(DEFAULT_COUNTER_KEY)
             .await
-            .map_err(|e| crate::error::Error::Storage(e))
+            .map_err(crate::error::Error::Storage)
     }
 }
 

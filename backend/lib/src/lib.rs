@@ -8,10 +8,6 @@ pub mod error;
 pub mod repository;
 pub mod services;
 
-// Export test_helpers for integration tests
-#[cfg(any(test, feature = "test-helpers"))]
-pub mod test_helpers;
-
 pub use api::create_app;
 pub use config::Config;
 pub use error::{Error, Result};
@@ -20,7 +16,6 @@ pub use error::{Error, Result};
 #[cfg(all(test, feature = "mocks"))]
 #[allow(dead_code)]
 mod tests {
-
     use axum::http::StatusCode;
     use axum_test::TestServer;
 

@@ -12,6 +12,8 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+#[cfg(test)]
+use diesel_async::AsyncConnection;
 use diesel_async::{
     pooled_connection::{bb8::Pool, AsyncDieselConnectionManager},
     AsyncPgConnection,
@@ -103,13 +105,11 @@ impl SmartPool {
         // Begin test transaction if in test mode and not yet initialized
         #[cfg(test)]
         {
-            use diesel_async::AsyncConnection;
-
             if !self.test_tx_initialized.load(Ordering::Acquire) {
                 // Begin test transaction that will rollback automatically
                 conn.begin_test_transaction()
                     .await
-                    .map_err(|e| RepositoryError::Database(e))?;
+                    .map_err(RepositoryError::Database)?;
 
                 // Mark as initialized
                 self.test_tx_initialized.store(true, Ordering::Release);

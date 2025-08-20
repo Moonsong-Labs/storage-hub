@@ -6,6 +6,8 @@
 
 use std::sync::Arc;
 
+#[cfg(all(test, feature = "mocks"))]
+use crate::repository::MockRepository;
 use crate::repository::StorageOperations;
 
 /// Database client that delegates to a repository implementation
@@ -187,8 +189,6 @@ impl DBClient {
 impl DBClient {
     /// Create a test database client with mock repository
     pub fn test() -> Self {
-        use crate::repository::MockRepository;
-
         let mock_repo = MockRepository::new();
         Self::new(Arc::new(mock_repo))
     }

@@ -3,6 +3,11 @@
 use std::sync::Arc;
 
 use crate::data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
+#[cfg(all(test, feature = "mocks"))]
+use crate::data::{
+    rpc::{AnyRpcConnection, MockConnection},
+    storage::{BoxedStorageWrapper, InMemoryStorage},
+};
 
 // TODO(SCAFFOLDING): Counter module is for demonstration only
 // Remove when implementing real MSP services
@@ -51,12 +56,6 @@ impl Services {
 impl Services {
     /// Create a test services container with in-memory storage and mocks
     pub fn test() -> Self {
-        use crate::data::{
-            postgres::DBClient,
-            rpc::{AnyRpcConnection, MockConnection, StorageHubRpcClient},
-            storage::{BoxedStorageWrapper, InMemoryStorage},
-        };
-
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));

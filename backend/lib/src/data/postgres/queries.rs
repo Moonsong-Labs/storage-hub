@@ -97,8 +97,12 @@ impl DBClient {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mocks"))]
 mod tests {
+    use std::sync::Arc;
+
+    use bigdecimal::BigDecimal;
+
     use crate::{
         constants::test::{
             accounts::{TEST_BSP_ACCOUNT_STR, TEST_USER_ACCOUNT},
@@ -109,20 +113,13 @@ mod tests {
                 ALTERNATIVE_FINGERPRINT, ALTERNATIVE_LOCATION, TEST_FILE_SIZE, UPDATED_STEP,
             },
             merkle::BSP_MERKLE_ROOT,
-            network::TEST_MULTIADDRESSES,
         },
         data::postgres::DBClient,
+        repository::{IndexerOpsMut, MockRepository, NewBsp, NewFile},
     };
 
-    #[cfg(feature = "mocks")]
     #[tokio::test]
     async fn test_db_client_with_mock_repository() {
-        use std::sync::Arc;
-
-        use bigdecimal::BigDecimal;
-
-        use crate::repository::{IndexerOpsMut, MockRepository, NewBsp};
-
         // Create mock repository and add test data
         let mock_repo = MockRepository::new();
 
@@ -133,7 +130,6 @@ mod tests {
             stake: BigDecimal::from(DEFAULT_STAKE * 5),
             onchain_bsp_id: TEST_BSP_ONCHAIN_ID_STR.to_string(),
             merkle_root: BSP_MERKLE_ROOT.to_vec(),
-            multiaddresses: vec![TEST_MULTIADDRESSES.to_vec()],
         };
 
         let created_bsp = mock_repo.create_bsp(new_bsp).await.unwrap();
@@ -150,13 +146,8 @@ mod tests {
         assert_eq!(bsp.onchain_bsp_id, TEST_BSP_ONCHAIN_ID_STR);
     }
 
-    #[cfg(feature = "mocks")]
     #[tokio::test]
     async fn test_db_client_file_operations() {
-        use std::sync::Arc;
-
-        use crate::repository::{IndexerOpsMut, MockRepository, NewFile};
-
         let mock_repo = MockRepository::new();
 
         // Add a test file using the mock repository directly

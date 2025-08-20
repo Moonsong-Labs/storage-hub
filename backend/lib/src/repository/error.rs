@@ -86,17 +86,16 @@ impl RepositoryError {
 
     /// Check if this error is due to a database constraint violation.
     pub fn is_constraint_violation(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Self::Database(diesel::result::Error::DatabaseError(
                 diesel::result::DatabaseErrorKind::UniqueViolation,
                 _,
-            )) => true,
-            Self::Database(diesel::result::Error::DatabaseError(
+            )) | Self::Database(diesel::result::Error::DatabaseError(
                 diesel::result::DatabaseErrorKind::ForeignKeyViolation,
                 _,
-            )) => true,
-            _ => false,
-        }
+            ))
+        )
     }
 }
 
