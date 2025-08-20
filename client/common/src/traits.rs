@@ -213,9 +213,9 @@ pub trait StorageEnableRuntime:
         RuntimeEvent: Into<StorageEnableEvents<Self>>,
     >
         + pallet_storage_providers::Config<
-            MerklePatriciaRoot = <Self as frame_system::Config>::Hash,
-            ValuePropId = <Self as frame_system::Config>::Hash,
-            ProviderId = <Self as frame_system::Config>::Hash,
+            MerklePatriciaRoot = shp_types::Hash,
+            ValuePropId = shp_types::Hash,
+            ProviderId = shp_types::Hash,
             BucketNameLimit: Send + Sync,
             MaxCommitmentSize: Send + Sync,
             MaxMultiAddressSize: Send + Sync,
@@ -224,7 +224,7 @@ pub trait StorageEnableRuntime:
         >
         + pallet_proofs_dealer::Config<
             ProvidersPallet = pallet_storage_providers::Pallet<Self>,
-            MerkleTrieHash = <Self as frame_system::Config>::Hash,
+            MerkleTrieHash = shp_types::Hash,
             ForestVerifier = ForestVerifier,
             KeyVerifier = FileKeyVerifier,
             MaxCustomChallengesPerBlock: Send + Sync,
@@ -239,7 +239,7 @@ pub trait StorageEnableRuntime:
             ProofDealer = pallet_proofs_dealer::Pallet<Self>,
             PaymentStreams = pallet_payment_streams::Pallet<Self>,
             Nfts = pallet_nfts::Pallet<Self>,
-            Fingerprint = <Self as frame_system::Config>::Hash,
+            Fingerprint = shp_types::Hash,
             OffchainSignature: Send + Sync,
             MaxBatchConfirmStorageRequests: Send + Sync,
             MaxFilePathSize: Send + Sync,

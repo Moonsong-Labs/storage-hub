@@ -14840,6 +14840,7 @@ dependencies = [
  "shc-forest-manager",
  "shp-constants",
  "shp-traits",
+ "shp-types",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-blockchain",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
