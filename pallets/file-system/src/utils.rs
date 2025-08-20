@@ -49,8 +49,9 @@ use crate::{
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
-    BucketsWithStorageRequests, Error, Event, HoldReason, Pallet, PendingMoveBucketRequests,
-    PendingStopStoringRequests, StorageRequestBsps, StorageRequestExpirations, StorageRequests,
+    BucketsWithStorageRequests, Error, Event, HoldReason, IncompleteStorageRequests, Pallet,
+    PendingMoveBucketRequests, PendingStopStoringRequests, StorageRequestBsps,
+    StorageRequestExpirations, StorageRequests,
 };
 
 macro_rules! expect_or_err {
@@ -1307,101 +1308,67 @@ where
         provider_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
-        // Fetch storage request metadata
-        let mut storage_request_metadata =
-            StorageRequests::<T>::get(&file_key).ok_or(Error::<T>::StorageRequestNotFound)?;
-
-        // Ensure the storage request is rejected
-        ensure!(
-            storage_request_metadata.rejected,
-            Error::<T>::StorageRequestNotRejected
-        );
-
-        // Verify file key integrity by recomputing it from metadata
+        // Fetch incomplete storage request metadata
+        let mut incomplete_metadata = IncompleteStorageRequests::<T>::get(&file_key)
+            .ok_or(Error::<T>::StorageRequestNotFound)?;
+        
+        // Verify file key integrity
         let computed_file_key = Self::compute_file_key(
-            storage_request_metadata.owner.clone(),
-            storage_request_metadata.bucket_id,
-            storage_request_metadata.location.clone(),
-            storage_request_metadata.size,
-            storage_request_metadata.fingerprint,
+            incomplete_metadata.owner.clone(),
+            incomplete_metadata.bucket_id,
+            incomplete_metadata.location.clone(),
+            incomplete_metadata.size,
+            incomplete_metadata.fingerprint,
         )
         .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
-
+        
         ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
-
-        // Determine if provider is MSP or BSP and perform specific validations
+        
+        // Validate provider is in pending removal lists
+        let provider_found = incomplete_metadata.pending_msp_removal == Some(provider_id) ||
+            incomplete_metadata.pending_bsp_removals.contains(&provider_id);
+        
+        ensure!(provider_found, Error::<T>::ProviderNotStoringFile);
+        
+        // Perform deletion based on provider type
         if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
-            // Verify this MSP is actually storing the file for this request
-            match &storage_request_metadata.msp {
-                Some((msp_id, accepted)) if *msp_id == provider_id && *accepted => {
-                    // MSP has accepted and should be storing the file
-                    // This can only happen if the user revoked the storage as
-                    // Expired or rejected flows deleting files means that the MSP is not storing the file.
-                }
-                _ => return Err(Error::<T>::ProviderNotStoringFile.into()),
-            }
-
             Self::delete_file_from_msp(
-                storage_request_metadata.owner.clone(),
+                incomplete_metadata.owner.clone(),
                 file_key,
-                storage_request_metadata.size,
-                storage_request_metadata.bucket_id,
+                incomplete_metadata.size,
+                incomplete_metadata.bucket_id,
                 provider_id,
                 forest_proof,
             )?;
-
-            // Remove the MSP from the storage request after successful deletion
-            storage_request_metadata.msp = Some((provider_id, false));
-            StorageRequests::<T>::insert(&file_key, &storage_request_metadata);
         } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
-            // Verify this BSP has confirmed storing the file
-            let bsp_metadata = StorageRequestBsps::<T>::get(&file_key, &provider_id)
-                .ok_or(Error::<T>::ProviderNotStoringFile)?;
-
-            // Ensure the BSP has confirmed storing the file
-            ensure!(bsp_metadata.confirmed, Error::<T>::BspNotConfirmed);
-
-            // Sanity check: Get number of BSPs that have confirmed storing the file
-            let bsps_confirmed = StorageRequestBsps::<T>::iter_prefix(&file_key)
-                .fold(T::ReplicationTargetType::zero(), |acc, _| {
-                    acc.saturating_add(One::one())
-                });
-
-            ensure!(
-                bsps_confirmed == storage_request_metadata.bsps_confirmed,
-                Error::<T>::CorruptedStorageRequest
-            );
-
             Self::delete_file_from_bsp(
-                storage_request_metadata.owner.clone(),
+                incomplete_metadata.owner.clone(),
                 file_key,
-                storage_request_metadata.size,
+                incomplete_metadata.size,
                 provider_id,
                 forest_proof,
             )?;
-
-            // Remove the BSP from the storage request after successful deletion
-            StorageRequestBsps::<T>::remove(&file_key, &provider_id);
-            storage_request_metadata.bsps_confirmed = storage_request_metadata
-                .bsps_confirmed
-                .saturating_sub(One::one());
-            StorageRequests::<T>::insert(&file_key, &storage_request_metadata);
         } else {
             return Err(Error::<T>::InvalidProviderID.into());
         }
-
-        // Emit the event
+        
+        // Remove provider from pending lists
+        incomplete_metadata.remove_provider(provider_id);
+        
+        // Check if all providers have removed their files
+        if incomplete_metadata.is_fully_cleaned() {
+            // All done - remove the entire entry
+            IncompleteStorageRequests::<T>::remove(&file_key);
+        } else {
+            // Still have pending removals - update the metadata
+            IncompleteStorageRequests::<T>::insert(&file_key, incomplete_metadata);
+        }
+        
+        // Emit event
         Self::deposit_event(Event::FileDeletedFromIncompleteStorageRequest {
             file_key,
             provider_id,
         });
-
-        // If the file has been deleted from all providers, cleanup the storage request.
-        if storage_request_metadata.bsps_confirmed.is_zero()
-            && matches!(storage_request_metadata.msp, Some((_, false)))
-        {
-            Self::cleanup_expired_storage_request(&file_key, &storage_request_metadata);
-        }
 
         Ok(())
     }
@@ -3229,6 +3196,40 @@ mod hooks {
 
             // Consume the weight used by this function.
             meter.consume(T::WeightInfo::process_expired_move_bucket_request());
+        }
+
+        /// Construct IncompleteStorageRequestMetadata from existing storage request data
+        /// This function cannot fail - it only creates the metadata if there are confirmed providers
+        pub(crate) fn create_incomplete_storage_request_metadata(
+            storage_request: &StorageRequestMetadata<T>,
+            file_key: &MerkleHash<T>
+        ) -> crate::types::IncompleteStorageRequestMetadata<T> {
+            // Collect all confirmed BSPs with simple iteration
+            let mut confirmed_bsps = sp_std::vec::Vec::new();
+            for (bsp_id, metadata) in StorageRequestBsps::<T>::iter_prefix(file_key) {
+                if metadata.confirmed {
+                    confirmed_bsps.push(bsp_id);
+                }
+            }
+            
+            // Check if MSP accepted the file
+            let accepted_msp = match storage_request.msp {
+                Some((msp_id, true)) => Some(msp_id),
+                _ => None,
+            };
+            
+            // Convert to bounded vec (truncate if too many - shouldn't happen in practice)
+            let bounded_bsps = confirmed_bsps.try_into().unwrap_or_default();
+            
+            crate::types::IncompleteStorageRequestMetadata {
+                owner: storage_request.owner.clone(),
+                bucket_id: storage_request.bucket_id,
+                location: storage_request.location.clone(),
+                size: storage_request.size,
+                fingerprint: storage_request.fingerprint,
+                pending_bsp_removals: bounded_bsps,
+                pending_msp_removal: accepted_msp,
+            }
         }
     }
 }

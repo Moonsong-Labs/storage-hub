@@ -527,6 +527,19 @@ pub mod pallet {
     pub type PendingMoveBucketRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, MoveBucketRequestMetadata<T>>;
 
+    /// Incomplete storage requests that need provider-by-provider file removal.
+    ///
+    /// This mapping tracks storage requests that have been expired or rejected but still have
+    /// confirmed providers storing files. Each entry tracks which providers still need to remove
+    /// their files. Once all providers have removed their files, the entry is automatically cleaned up.
+    #[pallet::storage]
+    pub type IncompleteStorageRequests<T: Config> = StorageMap<
+        _,
+        Blake2_128Concat,
+        MerkleHash<T>,
+        IncompleteStorageRequestMetadata<T>,
+    >;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {

@@ -561,3 +561,49 @@ pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;
 /// Alias for the `TickNumber` used in the ProofsDealer pallet.
 pub type TickNumber<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber;
+
+/// Ephemeral metadata for incomplete storage requests that need provider-by-provider file removal.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct IncompleteStorageRequestMetadata<T: Config> {
+    /// File owner for validation
+    pub owner: T::AccountId,
+    /// Bucket containing the file
+    pub bucket_id: BucketIdFor<T>,
+    /// File location/path
+    pub location: FileLocation<T>,
+    /// File size
+    pub size: StorageDataUnit<T>,
+    /// File fingerprint
+    pub fingerprint: Fingerprint<T>,
+    /// BSPs that still need to remove the file (bounded by reasonable max BSP count)
+    pub pending_bsp_removals: BoundedVec<ProviderIdFor<T>, frame_support::traits::ConstU32<32>>,
+    /// MSP that still needs to remove the file (if any)
+    pub pending_msp_removal: Option<ProviderIdFor<T>>,
+}
+
+impl<T: Config> IncompleteStorageRequestMetadata<T> {
+    /// Check if all providers have removed their files
+    pub fn is_fully_cleaned(&self) -> bool {
+        self.pending_bsp_removals.is_empty() && self.pending_msp_removal.is_none()
+    }
+    
+    /// Remove a provider from pending lists, returns true if found and removed
+    pub fn remove_provider(&mut self, provider_id: ProviderIdFor<T>) -> bool {
+        // Check MSP first
+        if let Some(msp_id) = self.pending_msp_removal {
+            if msp_id == provider_id {
+                self.pending_msp_removal = None;
+                return true;
+            }
+        }
+        
+        // Check BSPs 
+        if let Some(index) = self.pending_bsp_removals.iter().position(|&id| id == provider_id) {
+            self.pending_bsp_removals.swap_remove(index);
+            return true;
+        }
+        
+        false
+    }
+}
