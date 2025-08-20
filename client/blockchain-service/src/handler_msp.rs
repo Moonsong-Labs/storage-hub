@@ -5,7 +5,7 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_runtime::SaturatedConversion;
+use sp_runtime::{traits::Block as BlockT, SaturatedConversion};
 
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
@@ -100,7 +100,7 @@ where
         _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         self.forest_root_changes_catchup(&tree_route).await;
     }

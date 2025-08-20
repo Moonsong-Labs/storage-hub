@@ -1,6 +1,5 @@
 use anyhow::anyhow;
 use futures::prelude::*;
-use shc_common::traits::StorageEnableRuntime;
 use std::{collections::BTreeMap, marker::PhantomData, path::PathBuf, sync::Arc};
 
 use sc_client_api::{
@@ -9,10 +8,14 @@ use sc_client_api::{
 use sc_service::RpcHandlers;
 use sc_tracing::tracing::{debug, error, info, trace, warn};
 use serde::Deserialize;
+use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
+use sp_runtime::{
+    traits::{Block as BlockT, Header},
+    SaturatedConversion, Saturating,
+};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -165,7 +168,7 @@ where
 /// Merged event loop message for the BlockchainService actor.
 enum MergedEventLoopMessage<Block, Runtime>
 where
-    Block: cumulus_primitives_core::BlockT,
+    Block: BlockT,
     Runtime: StorageEnableRuntime,
 {
     Command(BlockchainServiceCommand<Runtime>),
@@ -1198,7 +1201,7 @@ where
         &mut self,
         notification: BlockImportNotification<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         // If the node is running in maintenance mode, we don't process block imports.
         if self.maintenance_mode {
@@ -1273,7 +1276,7 @@ where
     /// Handle the situation after the node comes out of syncing mode (i.e. hasn't processed many of the last blocks).
     async fn handle_initial_sync<Block>(&mut self, notification: BlockImportNotification<Block>)
     where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         let block_hash = notification.hash;
         let block_number = *notification.header.number();
@@ -1361,7 +1364,7 @@ where
         block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
@@ -1458,7 +1461,7 @@ where
         &mut self,
         notification: FinalityNotification<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         let block_hash = notification.hash;
         let block_number = *notification.header.number();

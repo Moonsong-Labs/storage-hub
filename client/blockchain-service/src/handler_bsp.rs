@@ -7,7 +7,7 @@ use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
 use sp_core::{Get, U256};
-use sp_runtime::traits::Zero;
+use sp_runtime::traits::{Block as BlockT, Zero};
 
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetChallengeSeedError, ProofsDealerApi,
@@ -63,7 +63,7 @@ where
         block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         self.forest_root_changes_catchup(&tree_route).await;
         let block_number: U256 = (*block_number).into();

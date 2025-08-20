@@ -4,7 +4,6 @@ use serde_json::Number;
 use std::{cmp::max, sync::Arc, vec};
 
 use codec::{Decode, Encode};
-use cumulus_primitives_core::BlockT;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
@@ -35,7 +34,7 @@ use sp_core::{Blake2Hasher, Hasher, U256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
-    traits::{CheckedSub, One, Saturating, Zero},
+    traits::{Block as BlockT, CheckedSub, One, Saturating, Zero},
     SaturatedConversion,
 };
 use substrate_frame_rpc_system::AccountNonceApi;
@@ -227,7 +226,7 @@ where
         block_import_notification: &BlockImportNotification<Block>,
     ) -> NewBlockNotificationKind<Block, Runtime>
     where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         let last_best_block = self.best_block;
         let new_block_info: MinimalBlockInfo<Runtime> = block_import_notification.into();
@@ -759,7 +758,7 @@ where
     /// some blocks in [`TreeRoute::route`] are "retracted" blocks and some are "enacted" blocks.
     pub(crate) async fn forest_root_changes_catchup<Block>(&self, tree_route: &TreeRoute<Block>)
     where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         // Retracted blocks, i.e. the blocks from the `TreeRoute` that are reverted in the reorg.
         for block in tree_route.retracted() {
@@ -822,7 +821,7 @@ where
     /// 2. [`pallet_proofs_dealer::Event::MutationsApplied`]: for mutations applied to the Buckets of an MSP.
     async fn apply_forest_root_changes<Block>(&self, block: &HashAndNumber<Block>, revert: bool)
     where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         if revert {
             trace!(target: LOG_TARGET, "Reverting Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);

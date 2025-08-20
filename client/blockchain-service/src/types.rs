@@ -8,7 +8,6 @@ use std::{
 };
 
 use codec::{Decode, Encode};
-use cumulus_primitives_core::BlockT;
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
 use shc_common::{
@@ -23,7 +22,7 @@ use shc_common::{
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::H256;
 use sp_runtime::{
-    traits::{Header, Zero},
+    traits::{Block as BlockT, Header, Zero},
     DispatchError, SaturatedConversion,
 };
 
@@ -450,7 +449,7 @@ pub struct MinimalBlockInfo<Runtime: StorageEnableRuntime> {
 impl<Block, Runtime: StorageEnableRuntime> From<&BlockImportNotification<Block>>
     for MinimalBlockInfo<Runtime>
 where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+    Block: BlockT<Hash = Runtime::Hash>,
 {
     fn from(notification: &BlockImportNotification<Block>) -> Self {
         Self {
@@ -463,7 +462,7 @@ where
 impl<Block, Runtime: StorageEnableRuntime> From<BlockImportNotification<Block>>
     for MinimalBlockInfo<Runtime>
 where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+    Block: BlockT<Hash = Runtime::Hash>,
 {
     fn from(notification: BlockImportNotification<Block>) -> Self {
         Self {
@@ -475,7 +474,7 @@ where
 
 impl<Block, Runtime: StorageEnableRuntime> Into<HashAndNumber<Block>> for MinimalBlockInfo<Runtime>
 where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+    Block: BlockT<Hash = Runtime::Hash>,
 {
     fn into(self) -> HashAndNumber<Block> {
         HashAndNumber {
@@ -489,7 +488,7 @@ where
 
 impl<Block, Runtime: StorageEnableRuntime> From<HashAndNumber<Block>> for MinimalBlockInfo<Runtime>
 where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+    Block: BlockT<Hash = Runtime::Hash>,
 {
     fn from(hash_and_number: HashAndNumber<Block>) -> Self {
         Self {
@@ -512,7 +511,7 @@ impl<Runtime: StorageEnableRuntime> Default for MinimalBlockInfo<Runtime> {
 /// of this enum.
 pub enum NewBlockNotificationKind<Block, Runtime: StorageEnableRuntime>
 where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+    Block: BlockT<Hash = Runtime::Hash>,
 {
     /// The block is a new best block, built on top of the previous best block.
     ///
