@@ -3,10 +3,6 @@ name = "sh-msp-backend"
 version = "0.1.0"
 edition = "2021"
 
-[[bin]]
-name = "backend"
-path = "src/main.rs"
-
 [dependencies]
 anyhow = { workspace = true }
 axum = { workspace = true }
