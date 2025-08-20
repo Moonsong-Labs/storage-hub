@@ -1,5 +1,6 @@
-use serde::Serialize;
 use chrono::{DateTime, Utc};
+use serde::Serialize;
+
 use crate::models::buckets::FileTree;
 
 #[derive(Debug, Serialize)]
