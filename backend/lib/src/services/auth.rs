@@ -1,6 +1,8 @@
-use crate::models::*;
-use crate::error::Error;
-use crate::api::validation::{validate_eth_address, generate_mock_jwt};
+use crate::{
+    api::validation::{generate_mock_jwt, validate_eth_address},
+    error::Error,
+    models::*,
+};
 
 #[derive(Clone)]
 pub struct AuthService {
@@ -12,9 +14,13 @@ impl AuthService {
         Self {}
     }
 
-    pub async fn generate_nonce(&self, address: &str, chain_id: u64) -> Result<NonceResponse, Error> {
+    pub async fn generate_nonce(
+        &self,
+        address: &str,
+        chain_id: u64,
+    ) -> Result<NonceResponse, Error> {
         validate_eth_address(address)?;
-        
+
         Ok(NonceResponse {
             message: format!(
                 "example.com wants you to sign in with your Ethereum account:\n{}\n\n\
@@ -30,7 +36,11 @@ impl AuthService {
         })
     }
 
-    pub async fn verify_signature(&self, _message: &str, signature: &str) -> Result<VerifyResponse, Error> {
+    pub async fn verify_signature(
+        &self,
+        _message: &str,
+        signature: &str,
+    ) -> Result<VerifyResponse, Error> {
         if !signature.starts_with("0x") || signature.len() != 132 {
             return Err(Error::Unauthorized("Invalid signature".to_string()));
         }
