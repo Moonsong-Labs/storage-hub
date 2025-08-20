@@ -57,26 +57,11 @@ impl DBClient {
         &self,
         file_key: &[u8],
     ) -> crate::error::Result<shc_indexer_db::models::File> {
-        let file = self
-            .repository
+        self.repository
             .get_file_by_key(file_key)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))?
-            .ok_or_else(|| crate::error::Error::NotFound("File not found".to_string()))?;
-
-        // Convert from repository File to shc_indexer_db::models::File
-        Ok(shc_indexer_db::models::File {
-            id: file.id,
-            account: file.account,
-            file_key: file.file_key,
-            bucket_id: file.bucket_id,
-            location: file.location,
-            fingerprint: file.fingerprint,
-            size: file.size,
-            step: file.step,
-            created_at: file.created_at,
-            updated_at: file.updated_at,
-        })
+            .ok_or_else(|| crate::error::Error::NotFound("File not found".to_string()))
     }
 
     /// Get all files for a user
@@ -86,28 +71,10 @@ impl DBClient {
         _limit: Option<i64>,
         _offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::File>> {
-        let files = self
-            .repository
+        self.repository
             .get_files_by_user(user_account)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        // Convert from repository Files to shc_indexer_db::models::File
-        Ok(files
-            .into_iter()
-            .map(|f| shc_indexer_db::models::File {
-                id: f.id,
-                account: f.account,
-                file_key: f.file_key,
-                bucket_id: f.bucket_id,
-                location: f.location,
-                fingerprint: f.fingerprint,
-                size: f.size,
-                step: f.step,
-                created_at: f.created_at,
-                updated_at: f.updated_at,
-            })
-            .collect())
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
     /// Get files for a user stored by a specific MSP
@@ -128,24 +95,10 @@ impl DBClient {
         &self,
         bsp_id: i64,
     ) -> crate::error::Result<Option<shc_indexer_db::models::Bsp>> {
-        let bsp = self
-            .repository
+        self.repository
             .get_bsp_by_id(bsp_id)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        // Convert from repository Bsp to shc_indexer_db::models::Bsp
-        Ok(bsp.map(|b| shc_indexer_db::models::Bsp {
-            id: b.id,
-            account: b.account,
-            capacity: b.capacity,
-            stake: b.stake,
-            last_tick_proven: b.last_tick_proven,
-            onchain_bsp_id: b.onchain_bsp_id,
-            merkle_root: b.merkle_root,
-            created_at: b.created_at,
-            updated_at: b.updated_at,
-        }))
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
     /// Get all BSPs with optional pagination
@@ -157,27 +110,10 @@ impl DBClient {
         let limit = limit.unwrap_or(100);
         let offset = offset.unwrap_or(0);
 
-        let bsps = self
-            .repository
+        self.repository
             .list_bsps(limit, offset)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        // Convert from repository Bsps to shc_indexer_db::models::Bsp
-        Ok(bsps
-            .into_iter()
-            .map(|b| shc_indexer_db::models::Bsp {
-                id: b.id,
-                account: b.account,
-                capacity: b.capacity,
-                stake: b.stake,
-                last_tick_proven: b.last_tick_proven,
-                onchain_bsp_id: b.onchain_bsp_id,
-                merkle_root: b.merkle_root,
-                created_at: b.created_at,
-                updated_at: b.updated_at,
-            })
-            .collect())
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
     /// Get an MSP by its ID
@@ -212,28 +148,10 @@ impl DBClient {
         _limit: Option<i64>,
         _offset: Option<i64>,
     ) -> crate::error::Result<Vec<shc_indexer_db::models::File>> {
-        let files = self
-            .repository
+        self.repository
             .get_files_by_bucket(bucket_id)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        // Convert from repository Files to shc_indexer_db::models::File
-        Ok(files
-            .into_iter()
-            .map(|f| shc_indexer_db::models::File {
-                id: f.id,
-                account: f.account,
-                file_key: f.file_key,
-                bucket_id: f.bucket_id,
-                location: f.location,
-                fingerprint: f.fingerprint,
-                size: f.size,
-                step: f.step,
-                created_at: f.created_at,
-                updated_at: f.updated_at,
-            })
-            .collect())
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
     /// Get a bucket by its ID
@@ -241,26 +159,11 @@ impl DBClient {
         &self,
         bucket_id: i64,
     ) -> crate::error::Result<shc_indexer_db::models::Bucket> {
-        let bucket = self
-            .repository
+        self.repository
             .get_bucket_by_id(bucket_id)
             .await
             .map_err(|e| crate::error::Error::Database(e.to_string()))?
-            .ok_or_else(|| crate::error::Error::NotFound("Bucket not found".to_string()))?;
-
-        // Convert from repository Bucket to shc_indexer_db::models::Bucket
-        Ok(shc_indexer_db::models::Bucket {
-            id: bucket.id,
-            msp_id: bucket.msp_id,
-            account: bucket.account,
-            onchain_bucket_id: bucket.onchain_bucket_id,
-            name: bucket.name,
-            collection_id: bucket.collection_id,
-            private: bucket.private,
-            merkle_root: bucket.merkle_root,
-            created_at: bucket.created_at,
-            updated_at: bucket.updated_at,
-        })
+            .ok_or_else(|| crate::error::Error::NotFound("Bucket not found".to_string()))
     }
 
     /// Get all buckets for a user
@@ -273,28 +176,10 @@ impl DBClient {
         // Convert user_account bytes to string
         let user_str = String::from_utf8_lossy(user_account);
 
-        let buckets = self
-            .repository
+        self.repository
             .get_buckets_by_user(&user_str)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        // Convert from repository Buckets to shc_indexer_db::models::Bucket
-        Ok(buckets
-            .into_iter()
-            .map(|b| shc_indexer_db::models::Bucket {
-                id: b.id,
-                msp_id: b.msp_id,
-                account: b.account,
-                onchain_bucket_id: b.onchain_bucket_id,
-                name: b.name,
-                collection_id: b.collection_id,
-                private: b.private,
-                merkle_root: b.merkle_root,
-                created_at: b.created_at,
-                updated_at: b.updated_at,
-            })
-            .collect())
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 }
 
@@ -318,23 +203,10 @@ impl DBClient {
         new_bsp: crate::repository::NewBsp,
     ) -> crate::error::Result<shc_indexer_db::models::Bsp> {
         // In tests, StorageOperations includes IndexerOpsMut
-        let bsp = self
-            .repository
+        self.repository
             .create_bsp(new_bsp)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        Ok(shc_indexer_db::models::Bsp {
-            id: bsp.id,
-            account: bsp.account,
-            capacity: bsp.capacity,
-            stake: bsp.stake,
-            last_tick_proven: bsp.last_tick_proven,
-            onchain_bsp_id: bsp.onchain_bsp_id,
-            merkle_root: bsp.merkle_root,
-            created_at: bsp.created_at,
-            updated_at: bsp.updated_at,
-        })
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
     /// Update BSP capacity (test only)
@@ -343,23 +215,10 @@ impl DBClient {
         id: i64,
         capacity: bigdecimal::BigDecimal,
     ) -> crate::error::Result<shc_indexer_db::models::Bsp> {
-        let bsp = self
-            .repository
+        self.repository
             .update_bsp_capacity(id, capacity)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        Ok(shc_indexer_db::models::Bsp {
-            id: bsp.id,
-            account: bsp.account,
-            capacity: bsp.capacity,
-            stake: bsp.stake,
-            last_tick_proven: bsp.last_tick_proven,
-            onchain_bsp_id: bsp.onchain_bsp_id,
-            merkle_root: bsp.merkle_root,
-            created_at: bsp.created_at,
-            updated_at: bsp.updated_at,
-        })
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
     /// Delete a BSP (test only)
@@ -375,24 +234,10 @@ impl DBClient {
         &self,
         new_bucket: crate::repository::NewBucket,
     ) -> crate::error::Result<shc_indexer_db::models::Bucket> {
-        let bucket = self
-            .repository
+        self.repository
             .create_bucket(new_bucket)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        Ok(shc_indexer_db::models::Bucket {
-            id: bucket.id,
-            msp_id: bucket.msp_id,
-            account: bucket.account,
-            onchain_bucket_id: bucket.onchain_bucket_id,
-            name: bucket.name,
-            collection_id: bucket.collection_id,
-            private: bucket.private,
-            merkle_root: bucket.merkle_root,
-            created_at: bucket.created_at,
-            updated_at: bucket.updated_at,
-        })
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
     /// Create a new file (test only)
@@ -400,24 +245,10 @@ impl DBClient {
         &self,
         new_file: crate::repository::NewFile,
     ) -> crate::error::Result<shc_indexer_db::models::File> {
-        let file = self
-            .repository
+        self.repository
             .create_file(new_file)
             .await
-            .map_err(|e| crate::error::Error::Database(e.to_string()))?;
-
-        Ok(shc_indexer_db::models::File {
-            id: file.id,
-            account: file.account,
-            file_key: file.file_key,
-            bucket_id: file.bucket_id,
-            location: file.location,
-            fingerprint: file.fingerprint,
-            size: file.size,
-            step: file.step,
-            created_at: file.created_at,
-            updated_at: file.updated_at,
-        })
+            .map_err(|e| crate::error::Error::Database(e.to_string()))
     }
 
     /// Update file step (test only)

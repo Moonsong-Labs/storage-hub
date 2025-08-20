@@ -143,10 +143,4 @@ mod tests {
         let result = SmartPool::new("postgres://invalid:invalid@localhost/invalid").await;
         assert!(result.is_err());
     }
-
-    #[test]
-    fn test_pool_size() {
-        // In test mode, pool size should be 1
-        assert_eq!(1, 1); // Placeholder - would use actual pool in real test
-    }
 }
