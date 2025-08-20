@@ -270,7 +270,7 @@ shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
 shp-opaque = { path = "primitives/opaque", default-features = false }
 
-# Lcoal - StorageHub Runtime
+# Local - StorageHub Runtime
 storage-hub-runtime = { path = "runtime", default-features = false }
 
 [workspace.lints.rust]
