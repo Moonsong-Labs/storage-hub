@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::Utc;
 
 use crate::{
-    data::{postgres::PostgresClientTrait, rpc::StorageHubRpcClient, storage::BoxedStorage},
+    data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::*,
 };
@@ -16,7 +16,7 @@ pub struct MspService {
     #[allow(dead_code)]
     storage: Arc<dyn BoxedStorage>,
     #[allow(dead_code)]
-    postgres: Arc<dyn PostgresClientTrait>,
+    postgres: Arc<DBClient>,
     #[allow(dead_code)]
     rpc: Arc<StorageHubRpcClient>,
 }
@@ -25,7 +25,7 @@ impl MspService {
     /// Create a new MSP service
     pub fn new(
         storage: Arc<dyn BoxedStorage>,
-        postgres: Arc<dyn PostgresClientTrait>,
+        postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
         Self {
@@ -307,12 +307,18 @@ impl MspService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::mock::{MockConnection, MockDbConnection};
+    use crate::data::{
+        rpc::{AnyRpcConnection, MockConnection},
+        storage::{BoxedStorageWrapper, InMemoryStorage},
+    };
 
     async fn create_test_service() -> MspService {
-        let storage = Arc::new(MockConnection::new());
-        let postgres = Arc::new(MockDbConnection::new());
-        let rpc = Arc::new(StorageHubRpcClient::mock().await);
+        let memory_storage = InMemoryStorage::new();
+        let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
+        let postgres = Arc::new(DBClient::test());
+        let mock_conn = MockConnection::new();
+        let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
+        let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
 
         MspService::new(storage, postgres, rpc)
     }
