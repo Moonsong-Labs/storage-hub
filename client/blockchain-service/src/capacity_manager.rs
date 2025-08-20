@@ -6,7 +6,7 @@ use log::{debug, error};
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
-use sp_runtime::traits::{CheckedAdd, One, Saturating, Zero};
+use sp_runtime::traits::{CheckedAdd, CheckedDiv, One, Saturating, Zero};
 
 use pallet_storage_providers_runtime_api::{
     QueryEarliestChangeCapacityBlockError, QueryStorageProviderCapacityError, StorageProvidersApi,
@@ -110,7 +110,8 @@ impl<Runtime: StorageEnableRuntime> CapacityRequestQueue<Runtime> {
         let jumps_needed = total_required
             .saturating_add(self.capacity_config.jump_capacity)
             .saturating_sub(One::one())
-            / self.capacity_config.jump_capacity;
+            .checked_div(&self.capacity_config.jump_capacity)
+            .unwrap_or(One::one());
         let total_jump_capacity = jumps_needed * self.capacity_config.jump_capacity;
 
         // Calculate new total capacity
