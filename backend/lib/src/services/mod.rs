@@ -43,7 +43,7 @@ impl Services {
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
-        let auth = Arc::new(AuthService::new());
+        let auth = Arc::new(AuthService::default());
         let counter = Arc::new(CounterService::new(storage.clone()));
         let health = Arc::new(HealthService::new(
             storage.clone(),

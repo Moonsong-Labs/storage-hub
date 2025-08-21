@@ -4,16 +4,12 @@ use crate::{
     models::*,
 };
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct AuthService {
     // In real implementation, would store nonces and sessions
 }
 
 impl AuthService {
-    pub fn new() -> Self {
-        Self {}
-    }
-
     pub async fn generate_nonce(
         &self,
         address: &str,
