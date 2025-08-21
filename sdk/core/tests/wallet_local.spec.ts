@@ -7,7 +7,7 @@ describe('LocalWallet', () => {
     // ---- Test data ----
     // 12-word mnemonic and its first account (m/44'/60'/0'/0/0)
     const TEST_MNEMONIC_12 = 'test test test test test test test test test test test junk';
-    const TEST_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+    const TEST_PRIVATE_KEY_12 = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
     const TEST_ADDRESS_12 = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
     // 24-word mnemonic and its first account (m/44'/60'/0'/0/0)
     const TEST_MNEMONIC_24 = 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art';
