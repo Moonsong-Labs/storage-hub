@@ -12407,7 +12407,7 @@ mod delete_file_for_incomplete_storage_request_tests {
     // This test suite only involves BSPs (not MSPs) which files need to be deleted
     // As, if the MSP accepts the file, the storage request gets accepted (no deletion is needed)
     mod success {
-        use crate::types::RejectedStorageRequestReason;
+        use crate::{types::RejectedStorageRequestReason, IncompleteStorageRequests};
 
         use super::*;
         use pallet_payment_streams::types::UnitsProvidedFor;
@@ -12490,9 +12490,27 @@ mod delete_file_for_incomplete_storage_request_tests {
                     .into(),
                 );
 
-                // Verify the storage request was marked as rejected
-                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
-                assert!(storage_request.rejected, "Storage request should be marked as rejected");
+                // Verify the all storage request related data was removed from the storage
+                assert!(StorageRequests::<Test>::get(&file_key).is_none(), "Storage request should be removed");
+                // Storage request should be removed from bucket associations
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+                // All BSPs should be removed from storage request associations
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
+                );
+
+                // Verify the incomplete storage request was created
+                assert!(IncompleteStorageRequests::<Test>::get(&file_key).is_some(), "Incomplete storage request should be created");
+
+                // Verify the incomplete storage request has the correct BSPs
+                let incomplete_storage_request = IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(incomplete_storage_request.pending_bsp_removals, vec![bsp_id]);
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
 
                 // Create forest proof showing BSP stores the file
                 let forest_proof = CompactProof {
@@ -12559,23 +12577,10 @@ mod delete_file_for_incomplete_storage_request_tests {
                     "Payment stream should be removed after file deletion"
                 );
 
-                // 1. Storage request should be completely removed
+                // Incomplete storage request should be completely removed after all providers removed their files
                 assert!(
-                    StorageRequests::<Test>::get(&file_key).is_none(),
-                    "Storage request should be completely removed"
-                );
-
-                // 2. Storage request should be removed from bucket associations
-                assert!(
-                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_none(),
-                    "Storage request should be removed from bucket associations"
-                );
-
-                // 3. All BSPs should be removed from storage request associations
-                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
-                assert!(
-                    final_bsps.is_empty(),
-                    "No BSPs should remain associated with the storage request after deletion"
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should be completely removed after all providers removed their files"
                 );
 
                 // TODO: Check that the challenge cycles stop (we need a proper implementation of apply_delta to be able to test this)

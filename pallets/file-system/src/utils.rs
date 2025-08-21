@@ -41,11 +41,11 @@ use crate::{
     types::{
         BucketIdFor, BucketMoveRequestResponse, BucketNameFor, CollectionConfigFor,
         CollectionIdFor, EitherAccountIdOrMspId, ExpirationItem, FileKeyHasher, FileKeyWithProof,
-        FileLocation, FileOperation, FileOperationIntention, Fingerprint, ForestProof, MerkleHash,
-        MoveBucketRequestMetadata, MultiAddresses, PeerIds, PendingStopStoringRequest,
-        ProviderIdFor, RejectedStorageRequest, ReplicationTarget, ReplicationTargetType,
-        StorageDataUnit, StorageRequestBspsMetadata, StorageRequestMetadata,
-        StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
+        FileLocation, FileOperation, FileOperationIntention, Fingerprint, ForestProof,
+        IncompleteStorageRequestMetadata, MerkleHash, MoveBucketRequestMetadata, MultiAddresses,
+        PeerIds, PendingStopStoringRequest, ProviderIdFor, RejectedStorageRequest,
+        ReplicationTarget, ReplicationTargetType, StorageDataUnit, StorageRequestBspsMetadata,
+        StorageRequestMetadata, StorageRequestMspAcceptedFileKeys, StorageRequestMspBucketResponse,
         StorageRequestMspResponse, TickNumber, ValuePropId,
     },
     weights::WeightInfo,
@@ -1310,9 +1310,10 @@ where
     ) -> DispatchResult {
         // Fetch incomplete storage request metadata
         // If there is no entry for the file key, return an error.
-        let mut incomplete_storage_request_metadata = IncompleteStorageRequests::<T>::get(&file_key)
-            .ok_or(Error::<T>::StorageRequestNotFound)?;
-        
+        let mut incomplete_storage_request_metadata =
+            IncompleteStorageRequests::<T>::get(&file_key)
+                .ok_or(Error::<T>::StorageRequestNotFound)?;
+
         // Verify file key integrity
         let computed_file_key = Self::compute_file_key(
             incomplete_storage_request_metadata.owner.clone(),
@@ -1322,15 +1323,18 @@ where
             incomplete_storage_request_metadata.fingerprint,
         )
         .map_err(|_| Error::<T>::FailedToComputeFileKey)?;
-        
+
         ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
-        
+
         // Validate provider is in pending removal lists
-        let provider_found = incomplete_storage_request_metadata.pending_msp_removal == Some(provider_id) ||
-            incomplete_storage_request_metadata.pending_bsp_removals.contains(&provider_id);
-        
+        let provider_found = incomplete_storage_request_metadata.pending_msp_removal
+            == Some(provider_id)
+            || incomplete_storage_request_metadata
+                .pending_bsp_removals
+                .contains(&provider_id);
+
         ensure!(provider_found, Error::<T>::ProviderNotStoringFile);
-        
+
         // Perform deletion based on provider type
         if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
             Self::delete_file_from_msp(
@@ -1352,10 +1356,10 @@ where
         } else {
             return Err(Error::<T>::InvalidProviderID.into());
         }
-        
+
         // Remove provider from pending lists
         incomplete_storage_request_metadata.remove_provider(provider_id);
-        
+
         // Check if all providers have removed their files
         if incomplete_storage_request_metadata.is_fully_cleaned() {
             // All done - remove the entire entry
@@ -1364,7 +1368,7 @@ where
             // Still have pending removals - update the metadata
             IncompleteStorageRequests::<T>::insert(&file_key, incomplete_storage_request_metadata);
         }
-        
+
         // Emit event
         Self::deposit_event(Event::FileDeletedFromIncompleteStorageRequest {
             file_key,
@@ -2895,6 +2899,40 @@ where
 
         Ok(())
     }
+
+    /// Construct IncompleteStorageRequestMetadata from existing storage request data
+    pub(crate) fn create_incomplete_storage_request_metadata(
+        storage_request: &StorageRequestMetadata<T>,
+        file_key: &MerkleHash<T>,
+    ) -> IncompleteStorageRequestMetadata<T> {
+        // Collect all confirmed BSPs with simple iteration
+        let mut confirmed_bsps = sp_std::vec::Vec::new();
+        for (bsp_id, metadata) in StorageRequestBsps::<T>::iter_prefix(file_key) {
+            if metadata.confirmed {
+                confirmed_bsps.push(bsp_id);
+            }
+        }
+
+        // Check if MSP accepted the file
+        let accepted_msp = match storage_request.msp {
+            Some((msp_id, true)) => Some(msp_id),
+            _ => None,
+        };
+
+        // Convert to bounded vec
+        // TODO HERMAN: make type explicit and truncate if too many (would never happen in practice)
+        let bounded_bsps = confirmed_bsps.try_into().unwrap_or_default();
+
+        IncompleteStorageRequestMetadata {
+            owner: storage_request.owner.clone(),
+            bucket_id: storage_request.bucket_id,
+            location: storage_request.location.clone(),
+            size: storage_request.size,
+            fingerprint: storage_request.fingerprint,
+            pending_bsp_removals: bounded_bsps,
+            pending_msp_removal: accepted_msp,
+        }
+    }
 }
 
 mod hooks {
@@ -2903,9 +2941,9 @@ mod hooks {
         types::{MerkleHash, RejectedStorageRequestReason, StorageRequestMetadata, TickNumber},
         utils::BucketIdFor,
         weights::WeightInfo,
-        BucketsWithStorageRequests, Event, HoldReason, MoveBucketRequestExpirations,
-        NextStartingTickToCleanUp, Pallet, PendingMoveBucketRequests, StorageRequestBsps,
-        StorageRequestExpirations, StorageRequests,
+        BucketsWithStorageRequests, Event, HoldReason, IncompleteStorageRequests,
+        MoveBucketRequestExpirations, NextStartingTickToCleanUp, Pallet, PendingMoveBucketRequests,
+        StorageRequestBsps, StorageRequestExpirations, StorageRequests,
     };
     use frame_support::traits::{fungible::MutateHold, tokens::Precision};
     use sp_runtime::{
@@ -3082,7 +3120,7 @@ mod hooks {
                 .fold(0u32, |acc, _| acc.saturating_add(One::one()));
 
             match storage_request_metadata {
-                Some(mut storage_request_metadata) => match storage_request_metadata.msp {
+                Some(storage_request_metadata) => match storage_request_metadata.msp {
                     None | Some((_, true)) => {
                         // If the request was originated by a request to stop storing from a BSP for a file that had no
                         // storage request open, or if the MSP has already accepted storing the file (and the bucket and
@@ -3103,33 +3141,26 @@ mod hooks {
                     }
                     Some((_msp_id, false)) => {
                         // If the MSP did not accept the file in time, treat the storage request as rejected.
-                        // If no BSP has already confirmed storing the file, we just clean up the storage request
-                        if storage_request_metadata.bsps_confirmed.is_zero() {
-                            // Clean up storage request data
-                            Self::cleanup_expired_storage_request(
+                        if !storage_request_metadata.bsps_confirmed.is_zero() {
+                            // There are BSPs that have confirmed storing the file, so we need to create an incomplete storage request metadata
+                            // This will allow the fisherman node to delete the file from the confirmed BSPs.
+                            let incomplete_storage_request_metadata =
+                                Self::create_incomplete_storage_request_metadata(
+                                    &storage_request_metadata,
+                                    &file_key,
+                                );
+                            // Add to storage mapping
+                            IncompleteStorageRequests::<T>::insert(
                                 &file_key,
-                                &storage_request_metadata,
-                            );
-
-                            // Consume the weight used.
-                            meter.consume(
-                                T::WeightInfo::process_expired_storage_request_msp_rejected(
-                                    amount_of_volunteered_bsps,
-                                ),
-                            );
-                        } else {
-                            // If there are BSPs that have confirmed storing the file, we update the storage request
-                            // to indicate that it was rejected. This will allow the fisherman node to delete the file from the confirmed BSPs.
-                            storage_request_metadata.rejected = true;
-                            StorageRequests::<T>::insert(&file_key, storage_request_metadata);
-
-                            // Consume the weight used.
-                            meter.consume(
-                                T::WeightInfo::process_expired_storage_request_msp_rejected(
-                                    amount_of_volunteered_bsps,
-                                ),
+                                incomplete_storage_request_metadata,
                             );
                         }
+                        // Clean up all storage request related data
+                        Self::cleanup_expired_storage_request(&file_key, &storage_request_metadata);
+                        // Consume the weight used.
+                        meter.consume(T::WeightInfo::process_expired_storage_request_msp_rejected(
+                            amount_of_volunteered_bsps,
+                        ));
                         // Emit the StorageRequestRejected event
                         // If there are BSPs that have confirmed storing the file,
                         // this event will be used by the fisherman node to delete the file from the confirmed BSPs.
@@ -3197,40 +3228,6 @@ mod hooks {
 
             // Consume the weight used by this function.
             meter.consume(T::WeightInfo::process_expired_move_bucket_request());
-        }
-
-        /// Construct IncompleteStorageRequestMetadata from existing storage request data
-        /// This function cannot fail - it only creates the metadata if there are confirmed providers
-        pub(crate) fn create_incomplete_storage_request_metadata(
-            storage_request: &StorageRequestMetadata<T>,
-            file_key: &MerkleHash<T>
-        ) -> crate::types::IncompleteStorageRequestMetadata<T> {
-            // Collect all confirmed BSPs with simple iteration
-            let mut confirmed_bsps = sp_std::vec::Vec::new();
-            for (bsp_id, metadata) in StorageRequestBsps::<T>::iter_prefix(file_key) {
-                if metadata.confirmed {
-                    confirmed_bsps.push(bsp_id);
-                }
-            }
-            
-            // Check if MSP accepted the file
-            let accepted_msp = match storage_request.msp {
-                Some((msp_id, true)) => Some(msp_id),
-                _ => None,
-            };
-            
-            // Convert to bounded vec (truncate if too many - shouldn't happen in practice)
-            let bounded_bsps = confirmed_bsps.try_into().unwrap_or_default();
-            
-            crate::types::IncompleteStorageRequestMetadata {
-                owner: storage_request.owner.clone(),
-                bucket_id: storage_request.bucket_id,
-                location: storage_request.location.clone(),
-                size: storage_request.size,
-                fingerprint: storage_request.fingerprint,
-                pending_bsp_removals: bounded_bsps,
-                pending_msp_removal: accepted_msp,
-            }
         }
     }
 }

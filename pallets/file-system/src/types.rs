@@ -590,8 +590,8 @@ impl<T: Config> IncompleteStorageRequestMetadata<T> {
     pub fn is_fully_cleaned(&self) -> bool {
         self.pending_bsp_removals.is_empty() && self.pending_msp_removal.is_none()
     }
-    
-    /// Remove a provider from pending lists, returns true if found and removed
+
+    /// Remove a provider from pending lists
     pub fn remove_provider(&mut self, provider_id: ProviderIdFor<T>) {
         // Check MSP first
         if let Some(msp_id) = self.pending_msp_removal {
@@ -599,10 +599,7 @@ impl<T: Config> IncompleteStorageRequestMetadata<T> {
                 self.pending_msp_removal = None;
             }
         }
-        
-        // Check BSPs 
-        if let Some(index) = self.pending_bsp_removals.iter().position(|&id| id == provider_id) {
-            self.pending_bsp_removals.swap_remove(index);
-        }
+        // Check BSPs
+        self.pending_bsp_removals.retain(|&id| id != provider_id);
     }
 }

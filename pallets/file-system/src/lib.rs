@@ -533,12 +533,8 @@ pub mod pallet {
     /// confirmed providers storing files. Each entry tracks which providers still need to remove
     /// their files. Once all providers have removed their files, the entry is automatically cleaned up.
     #[pallet::storage]
-    pub type IncompleteStorageRequests<T: Config> = StorageMap<
-        _,
-        Blake2_128Concat,
-        MerkleHash<T>,
-        IncompleteStorageRequestMetadata<T>,
-    >;
+    pub type IncompleteStorageRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, MerkleHash<T>, IncompleteStorageRequestMetadata<T>>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -1585,7 +1581,8 @@ pub mod pallet {
                 T::SuperHighSecurityReplicationTarget::get();
             let ultra_high_security_replication_target =
                 T::UltraHighSecurityReplicationTarget::get();
-            let max_replication_target: ReplicationTargetType<T> = T::MaxReplicationTarget::get().into();
+            let max_replication_target: ReplicationTargetType<T> =
+                T::MaxReplicationTarget::get().into();
             let storage_request_ttl = T::StorageRequestTtl::get();
             let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
             let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();
