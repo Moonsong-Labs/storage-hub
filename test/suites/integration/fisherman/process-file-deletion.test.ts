@@ -78,37 +78,6 @@ describeMspNet(
       await waitForIndexing(userApi);
     });
 
-    // Helper function to verify fisherman preparation logs
-    async function verifyFishermanPreparationLogs(
-      api: EnrichedBspApi,
-      fileKey: string,
-      expectedPatterns: string[]
-    ): Promise<void> {
-      const hexFileKey = fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey;
-
-      // Wait for the main processing log
-      const processingFound = await waitForFishermanProcessing(
-        api,
-        `Processing file deletion request for signed intention file key: 0x${hexFileKey}`
-      );
-      assert(processingFound, "Should find fisherman processing log");
-
-      // Wait for extrinsic submission log
-      const submittingExtrinsic = await waitForFishermanProcessing(
-        api,
-        "Submitting delete_file extrinsic"
-      );
-      assert(submittingExtrinsic, "Should find extrinsic submission log");
-
-      // Check for additional expected patterns
-      for (const pattern of expectedPatterns) {
-        const found = await waitForFishermanProcessing(api, pattern, 5000);
-        if (!found) {
-          console.warn(`Expected fisherman log pattern not found: ${pattern}`);
-        }
-      }
-    }
-
     it("processes FileDeletionRequested event and prepares delete_file extrinsic", async () => {
       const bucketName = "test-fisherman-deletion";
       const source = "res/smile.jpg";
