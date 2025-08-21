@@ -203,21 +203,16 @@ describeMspNet(
       ]);
 
       // Verify delete_file extrinsics are submitted
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi);
-      assert(deleteFileFound, "Should find delete_file extrinsic in transaction pool");
+      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2);
+      assert(
+        deleteFileFound,
+        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
+      );
 
-      // Verify extrinsic is present in transaction pool
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFile",
-        module: "fileSystem",
-        checkTxPool: true,
-        timeout: 15000
-      });
-
-      // Seal block to process the extrinsic
+      // Seal block to process the extrinsics
       const deletionResult = await userApi.block.seal();
 
-      // Verify deletion completion events
+      // Verify both deletion completion events
       assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
     });
