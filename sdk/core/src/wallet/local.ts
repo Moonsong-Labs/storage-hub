@@ -1,12 +1,12 @@
-import {
-  Wallet as EthersWallet,
-  Transaction,
-  hexlify,
-  type Provider,
-  type TransactionRequest,
-} from 'ethers';
 import { WalletBase } from './base.js';
 import { WalletError } from './errors.js';
+import {
+  hexlify,
+  type Provider,
+  Transaction,
+  type TransactionRequest,
+  Wallet as EthersWallet,
+} from 'ethers';
 
 /**
  * A local, in-memory wallet implementation.
@@ -52,7 +52,7 @@ export class LocalWallet extends WalletBase {
     try {
       const wallet = EthersWallet.fromPhrase(mnemonic);
       return new LocalWallet(new EthersWallet(wallet.privateKey, provider), provider);
-    } catch (err) {
+    } catch {
       throw new WalletError('InvalidMnemonic');
     }
   }

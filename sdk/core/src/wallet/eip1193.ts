@@ -1,5 +1,5 @@
 import { WalletBase } from './base.js';
-import { BrowserProvider, type TransactionRequest, type Eip1193Provider } from 'ethers';
+import { BrowserProvider, type Eip1193Provider, type TransactionRequest } from 'ethers';
 
 declare global {
   /**
