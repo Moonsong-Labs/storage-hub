@@ -155,7 +155,7 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     await it("downloaded file passed integrity checks", async () => {
       const saveFileToDisk = await bspApi.rpc.storagehubclient.saveFileToDisk(
-        bspConfirmRes_fileKeys[0],
+        bspConfirmRes_fileKeys[0][0],
         "/storage/test/whatsup.jpg"
       );
       assert(saveFileToDisk.isSuccess);

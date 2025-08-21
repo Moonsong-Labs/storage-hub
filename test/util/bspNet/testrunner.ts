@@ -206,7 +206,9 @@ export async function describeMspNet<
         createBspApi: () => bspApiPromise,
         createMsp1Api: () => msp1ApiPromise,
         createMsp2Api: () => msp2ApiPromise,
-        createFishermanApi: fullNetConfig.fisherman ? () => fishermanApiPromise : undefined,
+        createFishermanApi: fullNetConfig.fisherman
+          ? () => fishermanApiPromise as Promise<EnrichedBspApi>
+          : undefined,
         createApi: (endpoint) => BspNetTestApi.create(endpoint),
         createSqlClient: () => createSqlClient(),
         bspNetConfig: fullNetConfig,

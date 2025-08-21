@@ -9,8 +9,7 @@ import {
   sleep,
   waitFor,
   assertEventPresent,
-  ShConsts,
-  sealBlock
+  ShConsts
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
