@@ -6,7 +6,6 @@ pub mod routes;
 pub mod validation;
 
 use axum::{
-    extract::DefaultBodyLimit,
     http::{header::CONTENT_TYPE, Method},
     Router,
 };
@@ -27,7 +26,6 @@ pub fn create_app(services: Services) -> Router {
 
     router
         .layer(cors)
-        .layer(DefaultBodyLimit::max(200 * 1024 * 1024))
 }
 
 #[cfg(all(test, feature = "mocks"))]
