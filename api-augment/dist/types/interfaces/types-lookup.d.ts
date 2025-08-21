@@ -5843,8 +5843,6 @@ declare module "@polkadot/types/lookup" {
     readonly bspsConfirmed: u32;
     readonly bspsVolunteered: u32;
     readonly depositPaid: u128;
-    readonly rejected: bool;
-    readonly revoked: bool;
   }
   /** @name PalletFileSystemStorageRequestBspsMetadata (480) */
   interface PalletFileSystemStorageRequestBspsMetadata extends Struct {
@@ -5969,9 +5967,9 @@ declare module "@polkadot/types/lookup" {
     readonly isProviderNotStoringFile: boolean;
     readonly isInvalidProviderID: boolean;
     readonly isInvalidSignedOperation: boolean;
-    readonly isStorageRequestNotRejected: boolean;
     readonly isFileKeyMismatch: boolean;
     readonly isCorruptedStorageRequest: boolean;
+    readonly isIncompleteStorageRequestNotFound: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
       | "StorageRequestNotFound"
@@ -6059,9 +6057,9 @@ declare module "@polkadot/types/lookup" {
       | "ProviderNotStoringFile"
       | "InvalidProviderID"
       | "InvalidSignedOperation"
-      | "StorageRequestNotRejected"
       | "FileKeyMismatch"
-      | "CorruptedStorageRequest";
+      | "CorruptedStorageRequest"
+      | "IncompleteStorageRequestNotFound";
   }
   /** @name PalletProofsDealerProofSubmissionRecord (491) */
   interface PalletProofsDealerProofSubmissionRecord extends Struct {

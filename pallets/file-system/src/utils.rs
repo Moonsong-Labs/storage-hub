@@ -955,8 +955,6 @@ where
             bsps_volunteered: zero,
             expires_at: expiration_tick,
             deposit_paid: deposit,
-            rejected: false,
-            revoked: false,
         };
 
         // Hold the required deposit from the user.

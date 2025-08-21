@@ -4762,9 +4762,7 @@ export default {
     bspsRequired: "u32",
     bspsConfirmed: "u32",
     bspsVolunteered: "u32",
-    depositPaid: "u128",
-    rejected: "bool",
-    revoked: "bool"
+    depositPaid: "u128"
   },
   /**
    * Lookup480: pallet_file_system::types::StorageRequestBspsMetadata<T>
@@ -4905,9 +4903,9 @@ export default {
       "ProviderNotStoringFile",
       "InvalidProviderID",
       "InvalidSignedOperation",
-      "StorageRequestNotRejected",
       "FileKeyMismatch",
-      "CorruptedStorageRequest"
+      "CorruptedStorageRequest",
+      "IncompleteStorageRequestNotFound"
     ]
   },
   /**

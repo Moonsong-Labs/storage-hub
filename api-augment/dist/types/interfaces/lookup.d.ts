@@ -4494,8 +4494,6 @@ declare const _default: {
     bspsConfirmed: string;
     bspsVolunteered: string;
     depositPaid: string;
-    rejected: string;
-    revoked: string;
   };
   /**
    * Lookup480: pallet_file_system::types::StorageRequestBspsMetadata<T>
