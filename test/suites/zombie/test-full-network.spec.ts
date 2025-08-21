@@ -1,4 +1,5 @@
-import { test, describe, after } from "node:test";
+import { strictEqual } from "node:assert";
+import { after, describe, test } from "node:test";
 import {
   alice,
   bob,
@@ -12,7 +13,6 @@ import {
   getZombieClients,
   sendTransaction
 } from "../../util";
-import { strictEqual } from "node:assert";
 
 describe("Full Network Suite", { concurrency: 2 }, async () => {
   const { relayApi, storageApi } = await getZombieClients({
@@ -75,7 +75,7 @@ describe("Full Network Suite", { concurrency: 2 }, async () => {
   describe("StorageHub", async () => {
     test("Check StorageHub RT Version", async () => {
       const { specName, specVersion } = storageApi.consts.system.version;
-      strictEqual(specName.toString(), "storage-hub-runtime");
+      strictEqual(specName.toString(), "sh-runtime-parachain");
       strictEqual(specVersion.toNumber() > 0, true);
     });
 
