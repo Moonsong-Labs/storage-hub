@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# External dependencies
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
@@ -29,7 +28,6 @@ tower-http = { workspace = true }
 # Workspace dependencies
 shc-indexer-db = { workspace = true, default-features = true }
 
-# Additional dependencies from mock-endpoints
 [dev-dependencies]
 axum-test = { workspace = true }
 futures = { workspace = true }
