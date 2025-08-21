@@ -1360,10 +1360,8 @@ where
 
         // Check if all providers have removed their files
         if incomplete_storage_request_metadata.is_fully_cleaned() {
-            // All done - remove the entire entry
             IncompleteStorageRequests::<T>::remove(&file_key);
         } else {
-            // Still have pending removals - update the metadata
             IncompleteStorageRequests::<T>::insert(&file_key, incomplete_storage_request_metadata);
         }
 
@@ -2918,8 +2916,7 @@ where
         };
 
         // Convert to bounded vec
-        // TODO HERMAN: make type explicit and truncate if too many (would never happen in practice)
-        let bounded_bsps = confirmed_bsps.try_into().unwrap_or_default();
+        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
 
         IncompleteStorageRequestMetadata {
             owner: storage_request.owner.clone(),
