@@ -12,11 +12,10 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, FinalisedBucketMovedAway,
-        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
-        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
-        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
-        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
+        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
+        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
+        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
@@ -42,7 +41,9 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
-        fisherman_process_file_deletion::{FishermanProcessFileDeletionTask, FishermanProcessIncompleteStorageTask},
+        fisherman_process_file_deletion::{
+            FishermanProcessFileDeletionTask, FishermanProcessIncompleteStorageTask,
+        },
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
@@ -396,7 +397,10 @@ where
     fn start_fisherman_tasks(&self) {
         log::info!("🎣 Starting Fisherman tasks");
 
-        let fisherman = self.fisherman.as_ref().expect("Fisherman service not set for FishermanRole");
+        let fisherman = self
+            .fisherman
+            .as_ref()
+            .expect("Fisherman service not set for FishermanRole");
 
         // Subscribe to ProcessFileDeletionRequest events from the FishermanService
         // The fisherman monitors and processes file deletion requests

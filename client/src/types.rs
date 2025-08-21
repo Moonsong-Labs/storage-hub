@@ -100,7 +100,7 @@ pub struct RocksDbStorageLayer;
 impl ShStorageLayer for RocksDbStorageLayer {}
 
 /// In-memory storage layer. Implements the [`ShStorageLayer`] trait.
-/// Used for testing. Stored data is lost when the node is stopped.
+/// Stored data is lost when the node is stopped.
 pub struct InMemoryStorageLayer;
 impl ShStorageLayer for InMemoryStorageLayer {}
 

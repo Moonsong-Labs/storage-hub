@@ -3,8 +3,13 @@ import { waitFor } from "../index";
 import { hexToBuffer } from "../indexerHelpers";
 import type { ApiPromise } from "@polkadot/api";
 
-export const sealAndWaitForIndexing = async (api: EnrichedBspApi): Promise<void> => {
-  await api.block.seal();
+export const waitForIndexing = async (
+  api: EnrichedBspApi,
+  sealBlock: boolean = true
+): Promise<void> => {
+  if (sealBlock) {
+    await api.block.seal();
+  }
 
   const currentBlock = (await api.query.system.number()).toNumber();
 
@@ -24,7 +29,7 @@ export const waitForFileInStorage = async (api: ApiPromise, fileKey: string) => 
 
 export const verifyFileIndexed = async (sql: SqlClient, bucketName: string, fileKey: string) => {
   const files = await sql`
-    SELECT * FROM file 
+    SELECT * FROM file
     WHERE bucket_id = (
       SELECT id FROM bucket WHERE name = ${bucketName}
     )
@@ -52,8 +57,8 @@ export const verifyProviderAssociation = async (
   const columnName = providerType === "msp" ? "msp_id" : "bsp_id";
 
   const associations = await sql`
-    SELECT * FROM ${sql(tableName)} 
-    WHERE file_key = ${hexToBuffer(fileKey)} 
+    SELECT * FROM ${sql(tableName)}
+    WHERE file_key = ${hexToBuffer(fileKey)}
     AND ${sql(columnName)} = ${hexToBuffer(providerId)}
   `;
 

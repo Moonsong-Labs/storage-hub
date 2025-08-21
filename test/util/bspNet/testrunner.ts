@@ -160,10 +160,12 @@ export async function describeMspNet<
         bspApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.bsp.port}`);
         msp1ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp1.port}`);
         msp2ApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.msp2.port}`);
-        
+
         // Create fisherman API if fisherman is enabled
         if (fullNetConfig.fisherman) {
-          fishermanApiPromise = BspNetTestApi.create(`ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`);
+          fishermanApiPromise = BspNetTestApi.create(
+            `ws://127.0.0.1:${ShConsts.NODE_INFOS.fisherman.port}`
+          );
         }
       });
 
@@ -174,11 +176,11 @@ export async function describeMspNet<
           await msp1ApiPromise,
           await msp2ApiPromise
         ];
-        
+
         if (fishermanApiPromise) {
           apis.push(await fishermanApiPromise);
         }
-        
+
         await cleardownTest({
           api: apis,
           keepNetworkAlive: options?.keepAlive

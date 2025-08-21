@@ -14752,11 +14752,13 @@ dependencies = [
  "diesel",
  "diesel-async",
  "futures",
+ "hex",
  "log",
  "sc-network",
  "serde",
  "serde_json",
  "shc-common",
+ "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "thiserror 1.0.69",
  "tokio",
 ]

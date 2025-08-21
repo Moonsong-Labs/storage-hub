@@ -10,6 +10,9 @@ use thiserror::Error;
 
 pub mod models;
 pub mod schema;
+pub mod types;
+
+pub use types::{OnchainBspId, OnchainMspId};
 
 pub type DbPool = Pool<AsyncPgConnection>;
 pub type DbConnection<'a> = PooledConnection<'a, AsyncPgConnection>;

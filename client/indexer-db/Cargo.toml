@@ -29,3 +29,5 @@ bigdecimal = { workspace = true }
 sc-network = { workspace = true }
 
 shc-common = { workspace = true }
+sp-core = { workspace = true }
+hex = { workspace = true }

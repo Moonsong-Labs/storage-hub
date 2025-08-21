@@ -7,22 +7,27 @@ import {
   bspKey,
   sleep,
   waitFor,
-  ShConsts
+  ShConsts,
+  assertEventPresent
 } from "../../../util";
+import {
+  waitForDeleteFileExtrinsic,
+  waitForFishermanProcessing
+} from "../../../util/fisherman/fishermanHelpers";
 import type { H256 } from "@polkadot/types/interfaces";
 
 /**
  * FISHERMAN FILE DELETION FLOW WITH CATCHUP
- * 
+ *
  * Purpose: Tests the fisherman's ability to process file deletion events from UNFINALIZED blocks
  *          during blockchain catchup scenarios.
- * 
+ *
  * What makes this test unique:
  * - Creates unfinalized blocks with blockchain activity (transfers)
  * - Sends file deletion requests in unfinalized blocks (finaliseBlock: false)
  * - Tests fisherman indexer's catchup mechanism when processing events from non-finalized portions
  * - Verifies the gap between finalized head and current head during processing
- * 
+ *
  * Test Scenario:
  * 1. Sets up file storage with both BSP and MSP confirming storage
  * 2. Creates 3 unfinalized blocks with transfer activity
@@ -37,7 +42,15 @@ describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api, createFishermanApi, createSqlClient }) => {
+  ({
+    before,
+    it,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createFishermanApi,
+    createSqlClient
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -66,7 +79,7 @@ describeMspNet(
 
       // Create fisherman API
       assert(createFishermanApi, "Fisherman API should be available when fisherman is enabled");
-      fishermanApi = await createFishermanApi() as EnrichedBspApi;
+      fishermanApi = (await createFishermanApi()) as EnrichedBspApi;
       assert(fishermanApi, "Fisherman API should be created successfully");
 
       await userApi.rpc.engine.createBlock(true, true);
@@ -190,7 +203,7 @@ describeMspNet(
       assert(files.length > 0, "File should be indexed");
 
       const bspFiles = await sql`
-        SELECT * FROM bsp_file 
+        SELECT * FROM bsp_file
         WHERE file_id = (
           SELECT id FROM file WHERE file_key = ${fileKey.toString()}
         )
@@ -198,7 +211,7 @@ describeMspNet(
       assert(bspFiles.length > 0, "BSP file association should be indexed");
 
       const mspFiles = await sql`
-        SELECT * FROM msp_file 
+        SELECT * FROM msp_file
         WHERE file_id = (
           SELECT id FROM file WHERE file_key = ${fileKey.toString()}
         )
@@ -230,11 +243,14 @@ describeMspNet(
       const currentHead = await userApi.rpc.chain.getHeader();
 
       console.log(`Current head: ${currentHead.number.toString()}`);
-      console.log(`Finalized head number: ${(await userApi.rpc.chain.getHeader(finalizedHead)).number.toString()}`);
+      console.log(
+        `Finalized head number: ${(await userApi.rpc.chain.getHeader(finalizedHead)).number.toString()}`
+      );
 
       // There should be a gap between finalized and current head
       assert(
-        currentHead.number.toNumber() > (await userApi.rpc.chain.getHeader(finalizedHead)).number.toNumber(),
+        currentHead.number.toNumber() >
+          (await userApi.rpc.chain.getHeader(finalizedHead)).number.toNumber(),
         "Current head should be ahead of finalized head"
       );
     });
@@ -258,7 +274,10 @@ describeMspNet(
       };
 
       // Create signature for the intention - encode the object
-      const intentionType = userApi.createType("PalletFileSystemFileOperationIntention", fileOperationIntention);
+      const intentionType = userApi.createType(
+        "PalletFileSystemFileOperationIntention",
+        fileOperationIntention
+      );
       const encodedIntention = intentionType.toHex();
       const rawSignature = shUser.sign(encodedIntention);
 
@@ -305,19 +324,58 @@ describeMspNet(
       const currentHead2 = await userApi.rpc.chain.getHeader();
 
       console.log(`After deletion - Current head: ${currentHead2.number.toString()}`);
-      console.log(`After deletion - Finalized head number: ${(await userApi.rpc.chain.getHeader(finalizedHead2)).number.toString()}`);
+      console.log(
+        `After deletion - Finalized head number: ${(await userApi.rpc.chain.getHeader(finalizedHead2)).number.toString()}`
+      );
 
       // Verify fisherman can index events from unfinalized blocks
       // The indexer should still process events even though they're in unfinalized blocks
       console.log("Fisherman indexer is processing events from unfinalized blocks in catchup mode");
 
-      // TODO: Once the fisherman extrinsic for file deletion is merged to main,
-      // add test verification for:
-      // 1. Fisherman node sends extrinsic to delete file on-chain
-      // 2. Verify the appropriate event is emitted
-      // 3. Verify database state is updated accordingly
-      // 4. Verify fisherman properly handles unfinalized blocks during catchup
-      console.log("TODO: Verify fisherman sends file deletion extrinsic from unfinalized blocks (not yet merged to main)");
+      // Verify fisherman processes the FileDeletionRequested event even from unfinalized blocks
+      const processingFound = await waitForFishermanProcessing(
+        userApi,
+        `Processing file deletion request for signed intention file key: ${fileKey}`
+      );
+      assert(processingFound, "Should find fisherman processing log even from unfinalized blocks");
+
+      // Wait for fisherman to prepare deletion parameters
+      const preparationFound = await waitForFishermanProcessing(
+        userApi,
+        "File deletion parameters prepared:"
+      );
+      assert(preparationFound, "Should find fisherman preparation log");
+
+      // Wait for extrinsic submission log
+      const submittingExtrinsic = await waitForFishermanProcessing(
+        userApi,
+        "Submitting delete_file extrinsic"
+      );
+      assert(submittingExtrinsic, "Should find extrinsic submission log");
+
+      // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
+      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2);
+      assert(
+        deleteFileFound,
+        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
+      );
+
+      // Now finalize the blocks to process the extrinsics
+      const currentHead3 = await userApi.rpc.chain.getHeader();
+      await userApi.block.seal({ finaliseBlock: true });
+
+      // Verify deletion completion events
+      const { events } = await userApi.block.seal({ finaliseBlock: true });
+
+      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", events);
+
+      console.log(
+        "✓ Fisherman successfully processed deletion from unfinalized blocks during catchup"
+      );
+      console.log(
+        `✓ Processed deletion from block ${currentHead3.number.toString()} before it was finalized`
+      );
     });
   }
 );

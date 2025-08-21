@@ -4,112 +4,112 @@ services:
     container_name: storage-hub-sh-bsp-1
     platform: linux/amd64
     ports:
-      - "9666:9944"
-      - "30350:30350"
+      - '9666:9944'
+      - '30350:30350'
     volumes:
       - ./dev-keystores/bsp:/keystore:rw
     command:
       [
-        "--dev",
-        "--provider",
-        "--provider-type=bsp",
-        "--max-storage-capacity=4294967295",
-        "--jump-capacity=1073741824",
-        "--name=sh-bsp",
-        "--no-hardware-benchmarks",
-        "--unsafe-rpc-external",
-        "--rpc-methods=unsafe",
-        "--port=30350",
-        "--rpc-cors=all",
-        "--node-key=0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be",
-        "--keystore-path=/keystore",
-        "--sealing=manual",
-        "--base-path=/data",
+        '--dev',
+        '--provider',
+        '--provider-type=bsp',
+        '--max-storage-capacity=4294967295',
+        '--jump-capacity=1073741824',
+        '--name=sh-bsp',
+        '--no-hardware-benchmarks',
+        '--unsafe-rpc-external',
+        '--rpc-methods=unsafe',
+        '--port=30350',
+        '--rpc-cors=all',
+        '--node-key=0x2e6e3670c96202a2d6f5a58b7ac9092c5a51e0250f324eec2111ca94f5e568be',
+        '--keystore-path=/keystore',
+        '--sealing=manual',
+        '--base-path=/data',
       ]
   sh-msp-1:
     image: storage-hub:local
     container_name: storage-hub-sh-msp-1
     platform: linux/amd64
     ports:
-      - "9777:9944"
-      - "30555:30350"
+      - '9777:9944'
+      - '30555:30350'
     volumes:
       - ./dev-keystores/msp:/keystore:rw
     command:
       [
-        "--dev",
-        "--provider",
-        "--provider-type=msp",
-        "--max-storage-capacity=4294967295",
-        "--jump-capacity=1073741824",
-        "--name=sh-msp-1",
-        "--no-hardware-benchmarks",
-        "--unsafe-rpc-external",
-        "--rpc-methods=unsafe",
-        "--port=30350",
-        "--rpc-cors=all",
-        "--node-key=${NODE_KEY}",
-        "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
-        "--keystore-path=/keystore",
-        "--sealing=manual",
-        "--base-path=/data",
-        "--msp-charging-period=12",
+        '--dev',
+        '--provider',
+        '--provider-type=msp',
+        '--max-storage-capacity=4294967295',
+        '--jump-capacity=1073741824',
+        '--name=sh-msp-1',
+        '--no-hardware-benchmarks',
+        '--unsafe-rpc-external',
+        '--rpc-methods=unsafe',
+        '--port=30350',
+        '--rpc-cors=all',
+        '--node-key=${NODE_KEY}',
+        '--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}',
+        '--keystore-path=/keystore',
+        '--sealing=manual',
+        '--base-path=/data',
+        '--msp-charging-period=12',
       ]
   sh-msp-2:
     image: storage-hub:local
     container_name: storage-hub-sh-msp-2
     platform: linux/amd64
     ports:
-      - "9778:9944"
-      - "30556:30350"
+      - '9778:9944'
+      - '30556:30350'
     volumes:
       - ./dev-keystores/msp-two:/keystore:rw
     command:
       [
-        "--dev",
-        "--provider",
-        "--provider-type=msp",
-        "--max-storage-capacity=4294967295",
-        "--jump-capacity=1073741824",
-        "--name=sh-msp-2",
-        "--no-hardware-benchmarks",
-        "--unsafe-rpc-external",
-        "--rpc-methods=unsafe",
-        "--port=30350",
-        "--rpc-cors=all",
-        "--node-key=${NODE_KEY}",
-        "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
-        "--keystore-path=/keystore",
-        "--sealing=manual",
-        "--base-path=/data",
-        "--msp-charging-period=12",
+        '--dev',
+        '--provider',
+        '--provider-type=msp',
+        '--max-storage-capacity=4294967295',
+        '--jump-capacity=1073741824',
+        '--name=sh-msp-2',
+        '--no-hardware-benchmarks',
+        '--unsafe-rpc-external',
+        '--rpc-methods=unsafe',
+        '--port=30350',
+        '--rpc-cors=all',
+        '--node-key=${NODE_KEY}',
+        '--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}',
+        '--keystore-path=/keystore',
+        '--sealing=manual',
+        '--base-path=/data',
+        '--msp-charging-period=12',
       ]
   sh-user:
     image: storage-hub:local
     platform: linux/amd64
     container_name: storage-hub-sh-user-1
     ports:
-      - "9888:9944"
-      - "30444:30444"
+      - '9888:9944'
+      - '30444:30444'
     volumes:
       - ./dev-keystores/user:/keystore:rw
       - ./resource:/res:ro
     command:
       [
-        "--dev",
-        "--name=sh-user",
-        "--provider",
-        "--provider-type=user",
-        "--no-hardware-benchmarks",
-        "--unsafe-rpc-external",
-        "--rpc-methods=unsafe",
-        "--port=30444",
-        "--rpc-cors=all",
-        "--node-key=0x13b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314",
-        "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
-        "--keystore-path=/keystore",
-        "--sealing=manual",
-        "--base-path=/data",
+        '--dev',
+        '--name=sh-user',
+        '--provider',
+        '--provider-type=user',
+        '--no-hardware-benchmarks',
+        '--unsafe-rpc-external',
+        '--rpc-methods=unsafe',
+        '--port=30444',
+        '--rpc-cors=all',
+        '--node-key=0x13b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b314',
+        '--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}',
+        '--keystore-path=/keystore',
+        '--sealing=manual',
+        '--base-path=/data',
       ]
 
   sh-fisherman:
@@ -117,26 +117,28 @@ services:
     container_name: storage-hub-sh-fisherman-1
     platform: linux/amd64
     ports:
-      - "9999:9944"
-      - "30666:30666"
+      - '9999:9944'
+      - '30666:30666'
     volumes:
       - ./dev-keystores/user:/keystore:rw
+    environment:
+      - RUST_LOG=fisherman-service=info,fisherman-process-file-deletion-task=info,fisherman-process-incomplete-storage-task=info
     command:
       [
-        "--dev",
-        "--name=sh-fisherman",
-        "--no-hardware-benchmarks",
-        "--unsafe-rpc-external",
-        "--rpc-methods=unsafe",
-        "--port=30666",
-        "--rpc-cors=all",
-        "--node-key=0x23b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b315",
-        "--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}",
-        "--keystore-path=/keystore",
-        "--sealing=manual",
-        "--base-path=/data",
-        "--fisherman",
-        "--fisherman-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub",
+        '--dev',
+        '--name=sh-fisherman',
+        '--no-hardware-benchmarks',
+        '--unsafe-rpc-external',
+        '--rpc-methods=unsafe',
+        '--port=30666',
+        '--rpc-cors=all',
+        '--node-key=0x23b3b1c917dda506f152816aad4685eefa54fe57792165b31141ac893610b315',
+        '--bootnodes=/ip4/${BSP_IP:-default_bsp_ip}/tcp/30350/p2p/${BSP_PEER_ID:-default_bsp_peer_id}',
+        '--keystore-path=/keystore',
+        '--sealing=manual',
+        '--base-path=/data',
+        '--fisherman',
+        '--fisherman-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub',
       ]
 
   sh-postgres:
@@ -147,14 +149,14 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=storage_hub
     ports:
-      - "5432:5432"
+      - '5432:5432'
 
   toxiproxy:
     image: shopify/toxiproxy
     container_name: toxiproxy
     ports:
-      - "8474:8474"
-      - "30350:30350"
+      - '8474:8474'
+      - '30350:30350'
     volumes:
       - ./toxiproxy.json:/etc/toxiproxy.json
     command: -config /etc/toxiproxy.json -host=0.0.0.0

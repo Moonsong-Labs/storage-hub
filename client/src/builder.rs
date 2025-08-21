@@ -445,6 +445,7 @@ where
     fn setup_storage_layer(&mut self, _storage_path: Option<String>) -> &mut Self {
         // Fisherman only needs forest storage for proof construction
         self.file_storage = Some(Arc::new(RwLock::new(InMemoryFileStorage::new())));
+        // Ephemeral storage layer
         self.forest_storage_handler =
             Some(<(FishermanRole, NoStorageLayer) as ShNodeType>::FSH::new());
 
@@ -648,53 +649,6 @@ where
             // Not needed by the fisherman service
             self.peer_manager.expect("Peer Manager not set"),
             self.fisherman,
-        )
-    }
-}
-
-impl<RuntimeApi> Buildable<(FishermanRole, NoStorageLayer), RuntimeApi>
-    for StorageHubBuilder<FishermanRole, NoStorageLayer, RuntimeApi>
-where
-    (FishermanRole, NoStorageLayer): ShNodeType,
-    <(FishermanRole, NoStorageLayer) as ShNodeType>::FSH: FishermanForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntime,
-{
-    fn build(self) -> StorageHubHandler<(FishermanRole, NoStorageLayer), RuntimeApi> {
-        // TODO: Split StorageHubHandler into separate handlers or configurations to avoid unnecessary setting fields
-        StorageHubHandler::new(
-            self.task_spawner
-                .as_ref()
-                .expect("Task Spawner not set")
-                .clone(),
-            self.file_transfer
-                .as_ref()
-                .expect("File Transfer not set.")
-                .clone(),
-            self.blockchain
-                .as_ref()
-                .expect("Blockchain Service not set.")
-                .clone(),
-            self.file_storage
-                .as_ref()
-                .expect("File Storage not set.")
-                .clone(),
-            self.forest_storage_handler
-                .as_ref()
-                .expect("Forest Storage Handler not set.")
-                .clone(),
-            ProviderConfig {
-                // Use minimal/default config for fisherman
-                capacity_config: self.capacity_config.unwrap_or_default(),
-                msp_charge_fees: Default::default(),
-                msp_move_bucket: Default::default(),
-                bsp_upload_file: Default::default(),
-                bsp_move_bucket: Default::default(),
-                bsp_charge_fees: Default::default(),
-                bsp_submit_proof: Default::default(),
-                blockchain_service: self.blockchain_service_config.unwrap_or_default(),
-            },
-            self.indexer_db_pool.clone(),
-            self.peer_manager.expect("Peer Manager not set"),
         )
     }
 }

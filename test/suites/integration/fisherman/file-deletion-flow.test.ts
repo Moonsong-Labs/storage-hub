@@ -7,22 +7,25 @@ import {
   bspKey,
   sleep,
   waitFor,
-  ShConsts
+  ShConsts,
+  assertEventPresent
 } from "../../../util";
+import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 import type { H256 } from "@polkadot/types/interfaces";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
- * 
+ *
  * Purpose: Tests the standard, straightforward file deletion workflow using finalized blocks.
  *          This is the foundation test for fisherman file deletion functionality.
- * 
+ *
  * What makes this test unique:
  * - Uses finalized blocks throughout (standard blockchain behavior)
  * - Tests basic file storage and deletion workflow step-by-step
  * - Creates storage requests with single replication target
  * - Focuses on core functionality without edge cases or complex scenarios
- * 
+ *
  * Test Scenario:
  * 1. Creates storage request with single replication target (MSP only initially)
  * 2. BSP volunteers and confirms storage (using whatsup.jpg for automatic volunteering)
@@ -38,7 +41,15 @@ describeMspNet(
     fisherman: true,
     indexerMode: "fishing"
   },
-  ({ before, it, createUserApi, createBspApi, createMsp1Api, createFishermanApi, createSqlClient }) => {
+  ({
+    before,
+    it,
+    createUserApi,
+    createBspApi,
+    createMsp1Api,
+    createFishermanApi,
+    createSqlClient
+  }) => {
     let userApi: EnrichedBspApi;
     let bspApi: EnrichedBspApi;
     let mspApi: EnrichedBspApi;
@@ -64,7 +75,7 @@ describeMspNet(
 
       // Create fisherman and MSP APIs
       assert(createFishermanApi, "Fisherman API should be available when fisherman is enabled");
-      fishermanApi = await createFishermanApi() as EnrichedBspApi;
+      fishermanApi = (await createFishermanApi()) as EnrichedBspApi;
       assert(fishermanApi, "Fisherman API should be created successfully");
 
       // Wait for fisherman node to be ready and connected to database
@@ -84,7 +95,6 @@ describeMspNet(
       await sleep(1000);
       await userApi.block.seal();
       await userApi.block.seal();
-
     });
 
     it("creates storage request with single replication target and indexes events", async () => {
@@ -138,7 +148,7 @@ describeMspNet(
 
       // Verify file is indexed
       const files = await sql`
-        SELECT * FROM file 
+        SELECT * FROM file
         WHERE bucket_id = (
           SELECT id FROM bucket WHERE name = ${bucketName}
         )
@@ -219,7 +229,7 @@ describeMspNet(
 
       // Verify BSP-file association is indexed
       const bspFiles = await sql`
-        SELECT * FROM bsp_file 
+        SELECT * FROM bsp_file
         WHERE file_id = (
           SELECT id FROM file WHERE file_key = ${bspFileKey}
         )
@@ -279,7 +289,7 @@ describeMspNet(
 
       // Verify MSP-file association is indexed
       const mspFiles = await sql`
-        SELECT * FROM msp_file 
+        SELECT * FROM msp_file
         WHERE file_id = (
           SELECT id FROM file WHERE file_key = ${fileKey}
         )
@@ -307,7 +317,10 @@ describeMspNet(
       };
 
       // Create signature for the intention - encode the object
-      const intentionType = userApi.createType("PalletFileSystemFileOperationIntention", fileOperationIntention);
+      const intentionType = userApi.createType(
+        "PalletFileSystemFileOperationIntention",
+        fileOperationIntention
+      );
       const encodedIntention = intentionType.toHex();
       const rawSignature = shUser.sign(encodedIntention);
 
@@ -346,15 +359,26 @@ describeMspNet(
       assert.equal(eventFileKey.toString(), fileKey.toString());
 
       // Wait for indexing to process the deletion request
-      await userApi.block.seal();
-      await userApi.block.seal();
+      // Don't seal a new block since we already sealed the deletion request above
+      await waitForIndexing(userApi, false);
 
-      // TODO: Once the fisherman extrinsic for file deletion is merged to main,
-      // add test verification for:
-      // 1. Fisherman node sends extrinsic to delete file on-chain
-      // 2. Verify the appropriate event is emitted
-      // 3. Verify database state is updated accordingly
-      console.log("TODO: Verify fisherman sends file deletion extrinsic (not yet merged to main)");
+      // Verify delete_file extrinsics are submitted (should be 2: one for BSP and one for MSP)
+      const deleteFileFound = await waitForDeleteFileExtrinsic(fishermanApi, 2);
+      assert(
+        deleteFileFound,
+        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
+      );
+
+      // Seal block to process the extrinsics
+      const deletionResult = await userApi.block.seal();
+
+      // Verify deletion completion events
+      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
+
+      console.log(
+        "✓ Fisherman successfully submitted delete_file extrinsics and deletion completed"
+      );
     });
   }
 );

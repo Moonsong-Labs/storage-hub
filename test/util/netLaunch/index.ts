@@ -46,7 +46,7 @@ export class NetworkLauncher {
   constructor(
     private readonly type: NetworkType,
     private readonly config: NetLaunchConfig
-  ) { }
+  ) {}
 
   private loadComposeFile() {
     assert(this.type, "Network type has not been set yet");
@@ -321,7 +321,7 @@ export class NetworkLauncher {
         config: tmpFile,
         log: verbose,
         env: {
-          ...process.env,
+          ...process.env
         }
       });
     }

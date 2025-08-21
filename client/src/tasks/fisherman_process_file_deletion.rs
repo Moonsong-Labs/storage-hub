@@ -4,9 +4,21 @@ use hex;
 use sc_tracing::tracing::*;
 use shc_actors_framework::actor::ActorHandle;
 use shc_actors_framework::event_bus::EventHandler;
-use shc_blockchain_service::events::FileDeletionRequest;
+use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
+use shc_blockchain_service::types::SendExtrinsicOptions;
 use shc_common::traits::StorageEnableRuntime;
+use shc_common::types::{
+    Fingerprint, ForestProof as CommonForestProof, StorageData, StorageProofsMerkleTrieLayout,
+    StorageProviderId,
+};
+use shc_fisherman_service::events::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest};
 use shc_fisherman_service::{FileKeyOperation, FishermanService, FishermanServiceCommand};
+use shc_forest_manager::in_memory::InMemoryForestStorage;
+use shc_forest_manager::traits::ForestStorage;
+use sp_core::crypto::AccountId32;
+use sp_core::H256;
+use sp_runtime::MultiSignature;
+use std::time::Duration;
 
 use crate::{
     handler::StorageHubHandler,
@@ -16,7 +28,7 @@ use crate::{
 /// Data structure holding common file deletion information retrieved from database
 struct FileDeletionData {
     file_metadata: shc_common::types::FileMetadata,
-    bsp_ids: Vec<String>,
+    bsp_ids: Vec<shc_indexer_db::OnchainBspId>,
     bucket_target: shc_fisherman_service::events::FileDeletionTarget,
     file_account: Vec<u8>,
 }
@@ -168,14 +180,14 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<FileDeletionRequest>
+impl<NT, Runtime> EventHandler<ProcessFileDeletionRequest>
     for FishermanProcessFileDeletionTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: FishermanForestStorageHandlerT,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: FileDeletionRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for signed intention file key: {:?}",
@@ -213,14 +225,9 @@ where
 
         // Process BSP targets in parallel
         for onchain_bsp_id in deletion_data.bsp_ids {
-            // Validate BSP ID format
-            let bsp_id_bytes = hex::decode(&onchain_bsp_id)
-                .map_err(|e| anyhow!("Failed to decode BSP ID: {:?}", e))?;
-            let bsp_id_array: [u8; 32] = bsp_id_bytes
-                .try_into()
-                .map_err(|_| anyhow!("Invalid BSP ID length"))?;
+            // Convert OnchainBspId to H256 for the target
             let bsp_target =
-                shc_fisherman_service::events::FileDeletionTarget::BspId(H256::from(bsp_id_array));
+                shc_fisherman_service::events::FileDeletionTarget::BspId(onchain_bsp_id.into());
 
             let self_clone = self.clone();
 
@@ -291,14 +298,9 @@ where
 
         // Process BSP targets in parallel
         for onchain_bsp_id in deletion_data.bsp_ids {
-            // Validate BSP ID format
-            let bsp_id_bytes = hex::decode(&onchain_bsp_id)
-                .map_err(|e| anyhow!("Failed to decode BSP ID: {:?}", e))?;
-            let bsp_id_array: [u8; 32] = bsp_id_bytes
-                .try_into()
-                .map_err(|_| anyhow!("Invalid BSP ID length"))?;
+            // Convert OnchainBspId to H256 for the target
             let bsp_target =
-                shc_fisherman_service::events::FileDeletionTarget::BspId(H256::from(bsp_id_array));
+                shc_fisherman_service::events::FileDeletionTarget::BspId(onchain_bsp_id.into());
 
             let self_clone = self.clone();
 
@@ -346,16 +348,17 @@ where
             deletion_target
         );
 
-        // Use the common logic function
-        process_deletion_common(
-            &self.storage_hub_handler,
-            &self.fisherman_service,
-            file_key,
-            deletion_target,
-            file_metadata,
-            file_account,
-        )
-        .await?;
+        // Use the common logic function to get parameters
+        let (_file_owner, _bucket_id, _location, _size, _fingerprint, _provider_id, _forest_proof) =
+            process_deletion_common(
+                &self.storage_hub_handler,
+                &self.fisherman_service,
+                file_key,
+                deletion_target,
+                file_metadata,
+                file_account,
+            )
+            .await?;
 
         info!(
             target: LOG_TARGET_INCOMPLETE,
@@ -363,6 +366,8 @@ where
         );
 
         // TODO: When PR #444 is merged, submit the extrinsic here without requiring user signature
+        // This will use a different extrinsic that doesn't require user signature for incomplete storage requests
+        // The extrinsic parameters are already prepared above and can be used when the PR is merged
 
         Ok(())
     }
@@ -378,7 +383,7 @@ where
         &self,
         event: &ProcessFileDeletionRequest,
         file_key: &H256,
-        _signature: &MultiSignature,
+        signature: &MultiSignature,
         deletion_target: shc_fisherman_service::events::FileDeletionTarget,
         file_metadata: &shc_common::types::FileMetadata,
         file_account: &[u8],
@@ -390,16 +395,17 @@ where
             deletion_target
         );
 
-        // Use the common logic function
-        process_deletion_common(
-            &self.storage_hub_handler,
-            &self.fisherman_service,
-            file_key,
-            deletion_target,
-            file_metadata,
-            file_account,
-        )
-        .await?;
+        // Use the common logic function to get parameters
+        let (file_owner, bucket_id, location, size, fingerprint, provider_id, forest_proof) =
+            process_deletion_common(
+                &self.storage_hub_handler,
+                &self.fisherman_service,
+                file_key,
+                deletion_target,
+                file_metadata,
+                file_account,
+            )
+            .await?;
 
         // Log the signed intention file key for signed deletions
         info!(
@@ -410,10 +416,49 @@ where
 
         info!(
             target: LOG_TARGET,
-            "All parameters ready for delete_file extrinsic (not calling as requested)"
+            "Submitting delete_file extrinsic"
         );
 
-        // This is where we would call the delete_file extrinsic
+        // Build the delete_file extrinsic call
+        let call =
+            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::delete_file {
+                file_owner: file_owner.clone(),
+                signed_intention: event.signed_file_operation_intention.clone(),
+                signature: signature.clone(),
+                bucket_id,
+                location: location
+                    .try_into()
+                    .map_err(|_| anyhow!("Location too long"))?,
+                size,
+                fingerprint: H256::from_slice(fingerprint.as_ref()),
+                provider_id: match provider_id {
+                    StorageProviderId::BackupStorageProvider(id) => id,
+                    StorageProviderId::MainStorageProvider(id) => id,
+                },
+                forest_proof: forest_proof.proof,
+            });
+
+        // Submit the extrinsic
+        self.storage_hub_handler
+            .blockchain
+            .send_extrinsic(
+                call.into(),
+                SendExtrinsicOptions::new(Duration::from_secs(60)),
+            )
+            .await
+            .map_err(|e| {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to submit delete_file extrinsic: {:?}", e
+                );
+                anyhow!("Failed to submit delete_file extrinsic: {:?}", e)
+            })?;
+
+        info!(
+            target: LOG_TARGET,
+            "Successfully submitted delete_file extrinsic for file key {:?}",
+            file_key
+        );
 
         Ok(())
     }
@@ -427,7 +472,15 @@ async fn process_deletion_common<NT, Runtime>(
     deletion_target: shc_fisherman_service::events::FileDeletionTarget,
     file_metadata: &shc_common::types::FileMetadata,
     file_account: &[u8],
-) -> anyhow::Result<()>
+) -> anyhow::Result<(
+    AccountId32,
+    H256,
+    Vec<u8>,
+    StorageData,
+    Fingerprint,
+    StorageProviderId,
+    CommonForestProof<StorageProofsMerkleTrieLayout>,
+)>
 where
     NT: ShNodeType,
     NT::FSH: FishermanForestStorageHandlerT,
@@ -485,10 +538,11 @@ where
         // Fetch all file keys for the deletion target from finalized data
         let all_file_keys = match &deletion_target {
             shc_fisherman_service::events::FileDeletionTarget::BspId(bsp_id) => {
-                let bsp_id_hex = hex::encode(bsp_id.as_ref());
+                // Convert H256 to OnchainBspId for database query
+                let onchain_bsp_id = shc_indexer_db::OnchainBspId::from(*bsp_id);
                 shc_indexer_db::models::bsp::BspFile::get_all_file_keys_for_bsp(
                     &mut conn,
-                    &bsp_id_hex,
+                    onchain_bsp_id,
                 )
                 .await
                 .map_err(|e| anyhow!("Failed to get all file keys for BSP: {:?}", e))?
@@ -608,7 +662,7 @@ where
             .generate_proof(vec![(*file_key).into()])
             .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
 
-        forest_proof_result.proof
+        forest_proof_result
     };
 
     // Validate and convert file owner account
@@ -639,8 +693,16 @@ where
         size,
         fingerprint,
         provider_id,
-        forest_proof.encoded_nodes.len()
+        forest_proof.proof.encoded_nodes.len()
     );
 
-    Ok(())
+    Ok((
+        file_owner,
+        bucket_id,
+        location,
+        size,
+        fingerprint.clone(),
+        provider_id,
+        forest_proof,
+    ))
 }

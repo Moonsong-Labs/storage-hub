@@ -15,25 +15,29 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import { sealAndWaitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { waitForIndexing as waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import {
+  waitForDeleteFileExtrinsic,
+  waitForFishermanProcessing
+} from "../../../util/fisherman/fishermanHelpers";
 
 /**
  * FISHERMAN PROCESS FILE DELETION - COMPREHENSIVE EVENT PROCESSING
- * 
+ *
  * Purpose: Tests the fisherman's comprehensive event processing capabilities for various
  *          file deletion scenarios and edge cases.
- * 
+ *
  * What makes this test unique:
  * - Tests MULTIPLE types of deletion-related events:
  *   * FileDeletionRequested - direct user deletion requests
  *   * StorageRequestExpired - cleanup of expired storage requests
- *   * StorageRequestRevoked - cleanup of user-revoked requests  
+ *   * StorageRequestRevoked - cleanup of user-revoked requests
  *   * StorageRequestRejected - cleanup of provider-rejected requests
  * - Tests multiple provider scenarios (both BSP and MSP for same file)
  * - Includes extensive log verification for fisherman processing
  * - Uses container pausing/resuming to simulate network conditions
  * - Tests fisherman's preparation of delete_file extrinsics
- * 
+ *
  * Test Scenarios:
  * 1. FileDeletionRequested: Normal user-initiated deletion with multiple providers
  * 2. StorageRequestExpired: Paused providers causing expiration, fisherman cleanup
@@ -72,59 +76,8 @@ describeMspNet(
 
       await userApi.rpc.engine.createBlock(true, true);
 
-      await sleep(1000);
-
-      await sealAndWaitForIndexing(userApi);
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
     });
-
-    // Helper function to wait for fisherman to process an event
-    async function waitForFishermanProcessing(
-      api: EnrichedBspApi,
-      searchPattern: string,
-      timeout = 15000
-    ): Promise<boolean> {
-      try {
-        await api.docker.waitForLog({
-          searchString: searchPattern,
-          containerName: "storage-hub-sh-fisherman-1",
-          timeout
-        });
-        return true;
-      } catch (error) {
-        console.warn(`Failed to find fisherman log pattern "${searchPattern}": ${error}`);
-        return false;
-      }
-    }
-
-    // Helper function to wait for delete_file extrinsic in transaction pool (future implementation)
-    async function waitForDeleteFileExtrinsic(
-      api: EnrichedBspApi,
-      _fileKey: string,
-      timeout = 10000
-    ): Promise<boolean> {
-      const startTime = Date.now();
-
-      while (Date.now() - startTime < timeout) {
-        try {
-          const pendingTxs = await api.rpc.author.pendingExtrinsics();
-          const deleteFileTx = pendingTxs.find(tx =>
-            tx.method.method === "deleteFile" &&
-            tx.method.section === "fileSystem"
-          );
-
-          if (deleteFileTx) {
-            return true;
-          }
-        } catch (error) {
-          console.warn("Error checking pending extrinsics:", error);
-        }
-
-        await sleep(500);
-      }
-
-      return false;
-    }
 
     // Helper function to verify fisherman preparation logs
     async function verifyFishermanPreparationLogs(
@@ -141,12 +94,12 @@ describeMspNet(
       );
       assert(processingFound, "Should find fisherman processing log");
 
-      // Wait for parameter preparation log
-      const parametersReady = await waitForFishermanProcessing(
+      // Wait for extrinsic submission log
+      const submittingExtrinsic = await waitForFishermanProcessing(
         api,
-        "All parameters ready for delete_file extrinsic"
+        "Submitting delete_file extrinsic"
       );
-      assert(parametersReady, "Should find parameters ready log");
+      assert(submittingExtrinsic, "Should find extrinsic submission log");
 
       // Check for additional expected patterns
       for (const pattern of expectedPatterns) {
@@ -166,7 +119,7 @@ describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const { fileKey } =
+      const { fileKey, bucketId, location, fingerprint, fileSize } =
         await createBucketAndSendNewStorageRequest(
           userApi,
           source,
@@ -200,7 +153,7 @@ describeMspNet(
         bspAccount: bspAddress
       });
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
       await waitForFileIndexed(sql, fileKey);
       await waitForMspFileAssociation(sql, fileKey);
       await waitForBspFileAssociation(sql, fileKey);
@@ -222,10 +175,13 @@ describeMspNet(
       // Submit the file deletion request
       const deletionRequestResult = await userApi.block.seal({
         calls: [
-          userApi.tx.fileSystem.requestFileDeletion(
-            shUser.address,
+          userApi.tx.fileSystem.requestDeleteFile(
             fileOperationIntention,
-            userSignature
+            userSignature,
+            bucketId,
+            location,
+            fileSize,
+            fingerprint
           )
         ],
         signer: shUser
@@ -238,7 +194,7 @@ describeMspNet(
         deletionRequestResult.events
       );
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       // Verify fisherman processes the FileDeletionRequested event
       await verifyFishermanPreparationLogs(userApi, fileKey, [
@@ -247,9 +203,24 @@ describeMspNet(
         "Provider ID:"
       ]);
 
-      // TODO: Once PR #444 is merged, verify delete_file extrinsics are submitted
-      // const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, fileKey);
-      // assert(deleteFileFound, "Should find delete_file extrinsic in transaction pool");
+      // Verify delete_file extrinsics are submitted
+      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi);
+      assert(deleteFileFound, "Should find delete_file extrinsic in transaction pool");
+
+      // Verify extrinsic is present in transaction pool
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        timeout: 15000
+      });
+
+      // Seal block to process the extrinsic
+      const deletionResult = await userApi.block.seal();
+
+      // Verify deletion completion events
+      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
     });
 
     it("processes StorageRequestRejected event when MSP doesn't accept in time", async () => {
@@ -286,7 +257,7 @@ describeMspNet(
         .asRuntimeConfig.asStorageRequestTtl.toNumber();
       await userApi.block.skipTo(currentBlockNumber + storageRequestTtl);
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       // Wait for StorageRequestRejected event to be processed by fisherman
       const rejectedProcessingFound = await waitForFishermanProcessing(
@@ -341,7 +312,7 @@ describeMspNet(
         revokeStorageRequestResult.events
       );
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       // Wait for fisherman to process the revocation
       const revokedProcessingFound = await waitForFishermanProcessing(
@@ -372,7 +343,7 @@ describeMspNet(
       const valueProps = await userApi.call.storageProvidersApi.queryValuePropositionsForMsp(mspId);
       const valuePropId = valueProps[0].id;
 
-      const { fileKey } =
+      const { fileKey, bucketId, location, fingerprint, fileSize } =
         await createBucketAndSendNewStorageRequest(
           userApi,
           source,
@@ -405,7 +376,7 @@ describeMspNet(
         bspAccount: bspAddress
       });
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
       await waitForFileIndexed(sql, fileKey);
       await waitForMspFileAssociation(sql, fileKey);
       await waitForBspFileAssociation(sql, fileKey);
@@ -426,10 +397,13 @@ describeMspNet(
 
       const deletionRequestResult = await userApi.block.seal({
         calls: [
-          userApi.tx.fileSystem.requestFileDeletion(
-            shUser.address,
+          userApi.tx.fileSystem.requestDeleteFile(
             fileOperationIntention,
-            userSignature
+            userSignature,
+            bucketId,
+            location,
+            fileSize,
+            fingerprint
           )
         ],
         signer: shUser
@@ -442,20 +416,21 @@ describeMspNet(
         deletionRequestResult.events
       );
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi, false);
 
-      // Verify fisherman processes deletion for both BSP and MSP (bucket target)
-      await verifyFishermanPreparationLogs(userApi, fileKey, [
-        "Processing deletion for file key",
-        "BspId(",  // Should process BSP target
-        "BucketId(",  // Should process bucket/MSP target
-        "File deletion parameters prepared:",
-        "Provider ID: BackupStorageProvider",
-        "Provider ID: MainStorageProvider"
-      ]);
+      // Verify TWO delete_file extrinsics are submitted (one for BSP and one for MSP)
+      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2);
+      assert(
+        deleteFileFound,
+        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
+      );
 
-      // TODO: Once implementation is complete, verify TWO delete_file extrinsics are submitted
-      // One for BSP and one for MSP
+      // Seal block to process the extrinsics
+      const deletionResult = await userApi.block.seal();
+
+      // Verify both deletion completion events
+      assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
+      assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
     });
 
     it("handles StorageRequestRejected event processing", async () => {
@@ -490,7 +465,7 @@ describeMspNet(
       await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-msp-1" });
       await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       // Note: StorageRequestRejected events are harder to trigger in integration tests
       // This test serves as a placeholder for when such scenarios can be reliably created
