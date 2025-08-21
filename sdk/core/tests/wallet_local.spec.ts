@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { LocalWallet } from '../src/wallet/local.js';
 import { WalletError } from '../src/wallet/errors.js';
-import { verifyMessage } from 'ethers';
+import { verifyMessage, Transaction, getBytes, parseUnits } from 'ethers';
 
 describe('LocalWallet', () => {
     // NOTE: You can compute the private key, public key and address using https://iancoleman.io/bip39/
@@ -91,11 +91,6 @@ describe('LocalWallet', () => {
         it('should sign a transaction and verify the from address', async () => {
 
             const wallet = LocalWallet.fromPrivateKey(TEST_PRIVATE_KEY_12);
-
-            // use ethers v6 public API (Transaction.unsignedSerialized)
-            // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-            // @ts-ignore - dynamic import to avoid ESM typing issues in vitest
-            const { Transaction, getBytes, parseUnits } = await import('ethers');
 
             const unsignedTx = {
                 to: TEST_ADDRESS_24,
