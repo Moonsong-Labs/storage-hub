@@ -7,11 +7,12 @@ import {
   waitFor,
   sleep
 } from "../../../util";
+import type { H256 } from "@polkadot/types/interfaces";
 
 describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi, it }) => {
   let bspApi: EnrichedBspApi;
   let userApi: EnrichedBspApi;
-  let fileKey: string;
+  let fileKey: H256;
   let containerName: string | undefined;
   let httpPort: number | undefined;
   let ftpPort: number | undefined;
@@ -107,7 +108,9 @@ describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi,
     );
 
     // Store the fileKey for use in tests
-    fileKey = bspConfirmRes_fileKeys[0].toString();
+    // bspConfirmRes_fileKeys[0] is a tuple [H256, ShpFileMetadataFileMetadata]
+    // We need just the H256 part (first element)
+    fileKey = bspConfirmRes_fileKeys[0][0];
 
     // Give some time for everything to settle
     await sleep(1000);
