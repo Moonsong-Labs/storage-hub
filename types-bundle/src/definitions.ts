@@ -16,6 +16,6 @@ export const storageHubDefinitions: OverrideBundleDefinition = {
 
 export const types: OverrideBundleType = {
   spec: {
-    "sh-runtime-parachain": storageHubDefinitions
+    "storage-hub-runtime": storageHubDefinitions
   }
 };

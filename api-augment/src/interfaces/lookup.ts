@@ -61,7 +61,7 @@ export default {
     }
   },
   /**
-   * Lookup20: frame_system::EventRecord<sh_runtime_parachain::RuntimeEvent, primitive_types::H256>
+   * Lookup20: frame_system::EventRecord<storage_hub_runtime::RuntimeEvent, primitive_types::H256>
    **/
   FrameSystemEventRecord: {
     phase: "FrameSystemPhase",
@@ -2228,24 +2228,24 @@ export default {
   PalletParametersEvent: {
     _enum: {
       Updated: {
-        key: "ShRuntimeParachainConfigsRuntimeParamsRuntimeParametersKey",
-        oldValue: "Option<ShRuntimeParachainConfigsRuntimeParamsRuntimeParametersValue>",
-        newValue: "Option<ShRuntimeParachainConfigsRuntimeParamsRuntimeParametersValue>"
+        key: "StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey",
+        oldValue: "Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>",
+        newValue: "Option<StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue>"
       }
     }
   },
   /**
-   * Lookup196: sh_runtime_parachain::configs::runtime_params::RuntimeParametersKey
+   * Lookup196: storage_hub_runtime::configs::runtime_params::RuntimeParametersKey
    **/
-  ShRuntimeParachainConfigsRuntimeParamsRuntimeParametersKey: {
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersKey: {
     _enum: {
-      RuntimeConfig: "ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey"
+      RuntimeConfig: "StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey"
     }
   },
   /**
-   * Lookup197: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::ParametersKey
+   * Lookup197: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersKey
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: {
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersKey: {
     _enum: [
       "SlashAmountPerMaxFileSize",
       "StakeToChallengePeriod",
@@ -2280,144 +2280,144 @@ export default {
     ]
   },
   /**
-   * Lookup198: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize
+   * Lookup198: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SlashAmountPerMaxFileSize
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize: "Null",
   /**
-   * Lookup199: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod
+   * Lookup199: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StakeToChallengePeriod
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod: "Null",
   /**
-   * Lookup200: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod
+   * Lookup200: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::CheckpointChallengePeriod
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod: "Null",
   /**
-   * Lookup201: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MinChallengePeriod
+   * Lookup201: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinChallengePeriod
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod: "Null",
   /**
-   * Lookup202: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage
+   * Lookup202: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationLowerThresholdPercentage
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage:
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage:
     "Null",
   /**
-   * Lookup203: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage
+   * Lookup203: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SystemUtilisationUpperThresholdPercentage
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage:
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage:
     "Null",
   /**
-   * Lookup204: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MostlyStablePrice
+   * Lookup204: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MostlyStablePrice
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice: "Null",
   /**
-   * Lookup205: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MaxPrice
+   * Lookup205: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaxPrice
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice: "Null",
   /**
-   * Lookup206: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MinPrice
+   * Lookup206: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinPrice
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice: "Null",
   /**
-   * Lookup207: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::UpperExponentFactor
+   * Lookup207: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UpperExponentFactor
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor: "Null",
   /**
-   * Lookup208: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::LowerExponentFactor
+   * Lookup208: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::LowerExponentFactor
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor: "Null",
   /**
-   * Lookup209: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate
+   * Lookup209: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ZeroSizeBucketFixedRate
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate: "Null",
   /**
-   * Lookup210: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::IdealUtilisationRate
+   * Lookup210: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::IdealUtilisationRate
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate: "Null",
   /**
-   * Lookup211: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::DecayRate
+   * Lookup211: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::DecayRate
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate: "Null",
   /**
-   * Lookup212: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut
+   * Lookup212: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinimumTreasuryCut
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut: "Null",
   /**
-   * Lookup213: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut
+   * Lookup213: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaximumTreasuryCut
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut: "Null",
   /**
-   * Lookup214: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::BspStopStoringFilePenalty
+   * Lookup214: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::BspStopStoringFilePenalty
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty: "Null",
   /**
-   * Lookup215: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::ProviderTopUpTtl
+   * Lookup215: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ProviderTopUpTtl
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl: "Null",
   /**
-   * Lookup216: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::BasicReplicationTarget
+   * Lookup216: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::BasicReplicationTarget
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget: "Null",
   /**
-   * Lookup217: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::StandardReplicationTarget
+   * Lookup217: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StandardReplicationTarget
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget: "Null",
   /**
-   * Lookup218: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::HighSecurityReplicationTarget
+   * Lookup218: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::HighSecurityReplicationTarget
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget:
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget:
     "Null",
   /**
-   * Lookup219: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::SuperHighSecurityReplicationTarget
+   * Lookup219: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::SuperHighSecurityReplicationTarget
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget:
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget:
     "Null",
   /**
-   * Lookup220: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget
+   * Lookup220: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UltraHighSecurityReplicationTarget
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget:
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget:
     "Null",
   /**
-   * Lookup221: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MaxReplicationTarget
+   * Lookup221: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MaxReplicationTarget
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget: "Null",
   /**
-   * Lookup222: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold
+   * Lookup222: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::TickRangeToMaximumThreshold
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold:
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold:
     "Null",
   /**
-   * Lookup223: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::StorageRequestTtl
+   * Lookup223: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StorageRequestTtl
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl: "Null",
   /**
-   * Lookup224: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring
+   * Lookup224: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinWaitForStopStoring
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring: "Null",
   /**
-   * Lookup225: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::MinSeedPeriod
+   * Lookup225: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::MinSeedPeriod
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod: "Null",
   /**
-   * Lookup226: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::StakeToSeedPeriod
+   * Lookup226: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::StakeToSeedPeriod
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod: "Null",
   /**
-   * Lookup227: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::UpfrontTicksToPay
+   * Lookup227: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::UpfrontTicksToPay
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay: "Null",
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay: "Null",
   /**
-   * Lookup229: sh_runtime_parachain::configs::runtime_params::RuntimeParametersValue
+   * Lookup229: storage_hub_runtime::configs::runtime_params::RuntimeParametersValue
    **/
-  ShRuntimeParachainConfigsRuntimeParamsRuntimeParametersValue: {
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParametersValue: {
     _enum: {
       RuntimeConfig:
-        "ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue"
+        "StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue"
     }
   },
   /**
-   * Lookup230: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::ParametersValue
+   * Lookup230: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::ParametersValue
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: {
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParametersValue: {
     _enum: {
       SlashAmountPerMaxFileSize: "u128",
       StakeToChallengePeriod: "u128",
@@ -2797,9 +2797,9 @@ export default {
     amount: "u128"
   },
   /**
-   * Lookup305: sh_runtime_parachain::RuntimeHoldReason
+   * Lookup305: storage_hub_runtime::RuntimeHoldReason
    **/
-  ShRuntimeParachainRuntimeHoldReason: {
+  StorageHubRuntimeRuntimeHoldReason: {
     _enum: {
       __Unused0: "Null",
       __Unused1: "Null",
@@ -3017,16 +3017,16 @@ export default {
         _alias: {
           keys_: "keys"
         },
-        keys_: "ShRuntimeParachainSessionKeys",
+        keys_: "StorageHubRuntimeSessionKeys",
         proof: "Bytes"
       },
       purge_keys: "Null"
     }
   },
   /**
-   * Lookup323: sh_runtime_parachain::SessionKeys
+   * Lookup323: storage_hub_runtime::SessionKeys
    **/
-  ShRuntimeParachainSessionKeys: {
+  StorageHubRuntimeSessionKeys: {
     aura: "SpConsensusAuraSr25519AppSr25519Public"
   },
   /**
@@ -4313,83 +4313,83 @@ export default {
   PalletParametersCall: {
     _enum: {
       set_parameter: {
-        keyValue: "ShRuntimeParachainConfigsRuntimeParamsRuntimeParameters"
+        keyValue: "StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters"
       }
     }
   },
   /**
-   * Lookup411: sh_runtime_parachain::configs::runtime_params::RuntimeParameters
+   * Lookup411: storage_hub_runtime::configs::runtime_params::RuntimeParameters
    **/
-  ShRuntimeParachainConfigsRuntimeParamsRuntimeParameters: {
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters: {
     _enum: {
-      RuntimeConfig: "ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters"
+      RuntimeConfig: "StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters"
     }
   },
   /**
-   * Lookup412: sh_runtime_parachain::configs::runtime_params::dynamic_params::runtime_config::Parameters
+   * Lookup412: storage_hub_runtime::configs::runtime_params::dynamic_params::runtime_config::Parameters
    **/
-  ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters: {
+  StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigParameters: {
     _enum: {
       SlashAmountPerMaxFileSize:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize,Option<u128>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSlashAmountPerMaxFileSize,Option<u128>)",
       StakeToChallengePeriod:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod,Option<u128>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToChallengePeriod,Option<u128>)",
       CheckpointChallengePeriod:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigCheckpointChallengePeriod,Option<u32>)",
       MinChallengePeriod:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinChallengePeriod,Option<u32>)",
       SystemUtilisationLowerThresholdPercentage:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage,Option<Perbill>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationLowerThresholdPercentage,Option<Perbill>)",
       SystemUtilisationUpperThresholdPercentage:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage,Option<Perbill>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSystemUtilisationUpperThresholdPercentage,Option<Perbill>)",
       MostlyStablePrice:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice,Option<u128>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMostlyStablePrice,Option<u128>)",
       MaxPrice:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice,Option<u128>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxPrice,Option<u128>)",
       MinPrice:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice,Option<u128>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinPrice,Option<u128>)",
       UpperExponentFactor:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpperExponentFactor,Option<u32>)",
       LowerExponentFactor:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigLowerExponentFactor,Option<u32>)",
       ZeroSizeBucketFixedRate:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate,Option<u128>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigZeroSizeBucketFixedRate,Option<u128>)",
       IdealUtilisationRate:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate,Option<Perbill>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigIdealUtilisationRate,Option<Perbill>)",
       DecayRate:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate,Option<Perbill>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigDecayRate,Option<Perbill>)",
       MinimumTreasuryCut:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut,Option<Perbill>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinimumTreasuryCut,Option<Perbill>)",
       MaximumTreasuryCut:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut,Option<Perbill>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaximumTreasuryCut,Option<Perbill>)",
       BspStopStoringFilePenalty:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty,Option<u128>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBspStopStoringFilePenalty,Option<u128>)",
       ProviderTopUpTtl:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigProviderTopUpTtl,Option<u32>)",
       BasicReplicationTarget:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigBasicReplicationTarget,Option<u32>)",
       StandardReplicationTarget:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStandardReplicationTarget,Option<u32>)",
       HighSecurityReplicationTarget:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigHighSecurityReplicationTarget,Option<u32>)",
       SuperHighSecurityReplicationTarget:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigSuperHighSecurityReplicationTarget,Option<u32>)",
       UltraHighSecurityReplicationTarget:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUltraHighSecurityReplicationTarget,Option<u32>)",
       MaxReplicationTarget:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMaxReplicationTarget,Option<u32>)",
       TickRangeToMaximumThreshold:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigTickRangeToMaximumThreshold,Option<u32>)",
       StorageRequestTtl:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStorageRequestTtl,Option<u32>)",
       MinWaitForStopStoring:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinWaitForStopStoring,Option<u32>)",
       MinSeedPeriod:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod,Option<u32>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigMinSeedPeriod,Option<u32>)",
       StakeToSeedPeriod:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod,Option<u128>)",
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigStakeToSeedPeriod,Option<u128>)",
       UpfrontTicksToPay:
-        "(ShRuntimeParachainConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay,Option<u32>)"
+        "(StorageHubRuntimeConfigsRuntimeParamsDynamicParamsRuntimeConfigUpfrontTicksToPay,Option<u32>)"
     }
   },
   /**
@@ -5162,7 +5162,7 @@ export default {
     _enum: ["Disabled", "Enabled"]
   },
   /**
-   * Lookup543: sh_runtime_parachain::Runtime
+   * Lookup543: storage_hub_runtime::Runtime
    **/
-  ShRuntimeParachainRuntime: "Null"
+  StorageHubRuntimeRuntime: "Null"
 };
