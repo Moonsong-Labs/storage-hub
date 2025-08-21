@@ -24,8 +24,7 @@ pub fn create_app(services: Services) -> Router {
         .allow_headers([CONTENT_TYPE])
         .allow_credentials(false);
 
-    router
-        .layer(cors)
+    router.layer(cors)
 }
 
 #[cfg(all(test, feature = "mocks"))]
