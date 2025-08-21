@@ -20,7 +20,6 @@ pub fn routes(services: Services) -> Router {
         )
         .route_layer(DefaultBodyLimit::disable());
 
-
     Router::new()
         // TODO(SCAFFOLDING): These are example endpoints for demonstration purposes only.
         .route("/health", get(handlers::health_check_detailed))
