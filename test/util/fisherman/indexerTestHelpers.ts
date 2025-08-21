@@ -3,10 +3,7 @@ import { waitFor } from "../index";
 import { hexToBuffer } from "../indexerHelpers";
 import type { ApiPromise } from "@polkadot/api";
 
-export const waitForIndexing = async (
-  api: EnrichedBspApi,
-  sealBlock: boolean = true
-): Promise<void> => {
+export const waitForIndexing = async (api: EnrichedBspApi, sealBlock = true): Promise<void> => {
   if (sealBlock) {
     await api.block.seal();
   }

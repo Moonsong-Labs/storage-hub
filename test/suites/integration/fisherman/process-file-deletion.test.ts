@@ -5,7 +5,6 @@ import {
   type SqlClient,
   shUser,
   bspKey,
-  sleep,
   waitFor,
   assertEventPresent
 } from "../../../util";
@@ -15,7 +14,7 @@ import {
   waitForMspFileAssociation,
   waitForBspFileAssociation
 } from "../../../util/indexerHelpers";
-import { waitForIndexing as waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import {
   waitForDeleteFileExtrinsic,
   waitForFishermanProcessing
