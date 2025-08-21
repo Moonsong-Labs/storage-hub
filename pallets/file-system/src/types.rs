@@ -555,7 +555,9 @@ pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;
 pub type TickNumber<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber;
 
-/// Ephemeral metadata for incomplete storage requests that need provider-by-provider file removal.
+/// Ephemeral metadata for incomplete storage requests.
+/// This is used to track which providers still need to remove their files.
+/// Once all providers have removed their files, the entry is  cleaned up.
 #[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
 #[scale_info(skip_type_params(T))]
 pub struct IncompleteStorageRequestMetadata<T: Config> {

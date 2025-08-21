@@ -527,7 +527,7 @@ pub mod pallet {
     pub type PendingMoveBucketRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, MoveBucketRequestMetadata<T>>;
 
-    /// Incomplete storage requests that need provider-by-provider file removal.
+    /// Incomplete storage requests with pending provider file removal.
     ///
     /// This mapping tracks storage requests that have been expired or rejected but still have
     /// confirmed providers storing files. Each entry tracks which providers still need to remove
