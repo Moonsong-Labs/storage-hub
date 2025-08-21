@@ -166,39 +166,9 @@ struct ActorEventBusArgs {
 impl Parse for ActorEventBusArgs {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         // Parse the actor ID from the attribute
-        let actor = input.parse::<LitStr>()?;
+        let lit_str = input.parse::<LitStr>()?;
 
-        // Allow an optional trailing comma for convenience
-        if input.peek(Token![,]) {
-            let _comma: Token![,] = input.parse()?;
-            // Historically, an optional `generics(...)` parameter existed. We now
-            // infer generics from the annotated type. To provide a smoother
-            // transition, we accept but ignore any legacy `generics(...)` token
-            // stream if present, otherwise return an error for any other keys.
-            if !input.is_empty() {
-                let key: Ident = input.parse()?;
-                if key == Ident::new("generics", key.span()) {
-                    let _paren_content;
-                    let _ = syn::parenthesized!(_paren_content in input);
-                    // Ignore contents intentionally
-                } else {
-                    return Err(syn::Error::new(
-                        key.span(),
-                        format!(
-                            "Unknown parameter: {}. `generics(...)` is no longer needed; define generics on the type itself.",
-                            key
-                        ),
-                    ));
-                }
-
-                // Consume an optional trailing comma after the legacy generics
-                if input.peek(Token![,]) {
-                    let _ = <Token![,]>::parse(input);
-                }
-            }
-        }
-
-        Ok(ActorEventBusArgs { actor })
+        Ok(ActorEventBusArgs { actor: lit_str })
     }
 }
 
@@ -521,21 +491,65 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
-    // Generate field declarations for each event bus
-    let event_bus_fields = events.iter().map(|event_info| {
-        let field_name = format!("{}_event_bus", to_snake_case(&event_info.name));
-        let field_name_ident = Ident::new(&field_name, Span::call_site());
-        let event_type = Ident::new(&event_info.name, Span::call_site());
+    // Parse generics and where-clauses for all events upfront; error out if parsing fails
+    let parsed_events: Vec<(
+        String,
+        Ident,
+        proc_macro2::TokenStream,
+        proc_macro2::TokenStream,
+    )> = {
+        let mut v = Vec::new();
+        for event_info in events.iter() {
+            let name_str = event_info.name.clone();
+            let name_ident = Ident::new(&event_info.name, Span::call_site());
 
-        // Parse the generics string back to tokens if not empty
-        let event_generics = if event_info.generics.is_empty() {
-            quote! {}
-        } else {
-            match syn::parse_str::<proc_macro2::TokenStream>(&event_info.generics) {
-                Ok(tokens) => tokens,
-                Err(_) => quote! {}, // Fallback to no generics if parsing fails
-            }
-        };
+            let generics_tokens = if event_info.generics.is_empty() {
+                quote! {}
+            } else {
+                match syn::parse_str::<proc_macro2::TokenStream>(&event_info.generics) {
+                    Ok(tokens) => tokens,
+                    Err(err) => {
+                        return syn::Error::new(
+                            Span::call_site(),
+                            format!(
+                                "Failed to parse generics for event '{}': \"{}\". Error: {}",
+                                name_str, event_info.generics, err
+                            ),
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                }
+            };
+
+            let where_tokens = if event_info.where_clause.is_empty() {
+                quote! {}
+            } else {
+                match syn::parse_str::<proc_macro2::TokenStream>(&event_info.where_clause) {
+                    Ok(tokens) => tokens,
+                    Err(err) => {
+                        return syn::Error::new(
+                            Span::call_site(),
+                            format!(
+                                "Failed to parse where clause for event '{}': \"{}\". Error: {}",
+                                name_str, event_info.where_clause, err
+                            ),
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                }
+            };
+
+            v.push((name_str, name_ident, generics_tokens, where_tokens));
+        }
+        v
+    };
+
+    // Generate field declarations for each event bus
+    let event_bus_fields = parsed_events.iter().map(|(name_str, event_type, event_generics, _)| {
+        let field_name = format!("{}_event_bus", to_snake_case(name_str));
+        let field_name_ident = Ident::new(&field_name, Span::call_site());
 
         quote! {
             #field_name_ident: ::shc_actors_framework::event_bus::EventBus<#event_type #event_generics>
@@ -543,43 +557,25 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
     });
 
     // Generate initialization for each event bus in new()
-    let event_bus_inits = events.iter().map(|event_info| {
-        let field_name = format!("{}_event_bus", to_snake_case(&event_info.name));
-        let field_name_ident = Ident::new(&field_name, Span::call_site());
+    let event_bus_inits =
+        parsed_events
+            .iter()
+            .map(|(name_str, _event_type, _event_generics, _)| {
+                let field_name = format!("{}_event_bus", to_snake_case(name_str));
+                let field_name_ident = Ident::new(&field_name, Span::call_site());
 
-        quote! {
-            #field_name_ident: ::shc_actors_framework::event_bus::EventBus::new()
-        }
-    });
+                quote! {
+                    #field_name_ident: ::shc_actors_framework::event_bus::EventBus::new()
+                }
+            });
 
     // Generate ProvidesEventBus implementations for each event type
-    let provides_event_bus_impls = events.iter().map(|event_info| {
-        let event_type = Ident::new(&event_info.name, Span::call_site());
-        let field_name = format!("{}_event_bus", to_snake_case(&event_info.name));
+    let provides_event_bus_impls = parsed_events.iter().map(|(name_str, event_type, event_generics, event_where_clause)| {
+        let field_name = format!("{}_event_bus", to_snake_case(name_str));
         let field_name_ident = Ident::new(&field_name, Span::call_site());
 
-        // Parse the generics string back to tokens if not empty
-        let event_generics = if event_info.generics.is_empty() {
-            quote! {}
-        } else {
-            match syn::parse_str::<proc_macro2::TokenStream>(&event_info.generics) {
-                Ok(tokens) => tokens,
-                Err(_) => quote! {}, // Fallback to no generics if parsing fails
-            }
-        };
-
-        // Parse the where clause string back to tokens if not empty
-        let where_clause = if event_info.where_clause.is_empty() {
-            quote! {}
-        } else {
-            match syn::parse_str::<proc_macro2::TokenStream>(&event_info.where_clause) {
-                Ok(tokens) => tokens,
-                Err(_) => quote! {}, // Fallback to no where clause if parsing fails
-            }
-        };
-
         quote! {
-            impl #impl_generics ::shc_actors_framework::event_bus::ProvidesEventBus<#event_type #event_generics> for #provider_name #ty_generics #where_clause {
+            impl #impl_generics ::shc_actors_framework::event_bus::ProvidesEventBus<#event_type #event_generics> for #provider_name #ty_generics #event_where_clause {
                 fn event_bus(&self) -> &::shc_actors_framework::event_bus::EventBus<#event_type #event_generics> {
                     &self.#field_name_ident
                 }
@@ -588,7 +584,7 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
     });
 
     // Generate the final expanded code
-    // Only derive Default if there are no generics (backwards compatibility)
+    // Only derive Default if there are no generics
     let derives = if provider_generics_all.params.is_empty()
         && provider_generics_all.where_clause.is_none()
     {
