@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { LocalWallet } from '../src/wallet/local.js';
+import { WalletError } from '../src/wallet/errors.js';
 import { verifyMessage } from 'ethers';
 
 describe('LocalWallet', () => {
@@ -16,7 +17,7 @@ describe('LocalWallet', () => {
 
     describe('Creation', () => {
         it('should create a wallet from a private key', async () => {
-            const wallet = LocalWallet.fromPrivateKey(TEST_PRIVATE_KEY);
+            const wallet = LocalWallet.fromPrivateKey(TEST_PRIVATE_KEY_12);
             expect(wallet).toBeInstanceOf(LocalWallet);
             expect(await wallet.getAddress()).toBe(TEST_ADDRESS_12);
         });
@@ -42,25 +43,43 @@ describe('LocalWallet', () => {
     });
 
     describe('Failure Cases', () => {
-        it('should throw an error for a private key with invalid length (short)', () => {
+        it('should throw WalletError InvalidPrivateKey for a private key with invalid length (short)', () => {
+            expect.assertions(2);
             const shortKey = '0x1234';
-            expect(() => LocalWallet.fromPrivateKey(shortKey)).toThrow();
+            try {
+                LocalWallet.fromPrivateKey(shortKey);
+            } catch (e) {
+                expect(e).toBeInstanceOf(WalletError);
+                expect((e as WalletError).code).toBe('InvalidPrivateKey');
+            }
         });
 
-        it('should throw an error for a private key with invalid length (long)', () => {
-            const longKey = TEST_PRIVATE_KEY + 'ff';
-            expect(() => LocalWallet.fromPrivateKey(longKey)).toThrow();
+        it('should throw WalletError InvalidPrivateKey for a private key with invalid length (long)', () => {
+            expect.assertions(2);
+            const longKey = TEST_PRIVATE_KEY_12 + 'ff';
+            try {
+                LocalWallet.fromPrivateKey(longKey);
+            } catch (e) {
+                expect(e).toBeInstanceOf(WalletError);
+                expect((e as WalletError).code).toBe('InvalidPrivateKey');
+            }
         });
 
-        it('should throw an error for an invalid mnemonic', () => {
+        it('should throw WalletError InvalidMnemonic for an invalid mnemonic', () => {
+            expect.assertions(2);
             const invalidMnemonic = 'not a valid mnemonic phrase';
-            expect(() => LocalWallet.fromMnemonic(invalidMnemonic)).toThrow();
+            try {
+                LocalWallet.fromMnemonic(invalidMnemonic);
+            } catch (e) {
+                expect(e).toBeInstanceOf(WalletError);
+                expect((e as WalletError).code).toBe('InvalidMnemonic');
+            }
         });
     });
 
     describe('Signing', () => {
         it('should sign a message and verify it', async () => {
-            const wallet = LocalWallet.fromPrivateKey(TEST_PRIVATE_KEY);
+            const wallet = LocalWallet.fromPrivateKey(TEST_PRIVATE_KEY_12);
             const message = 'Hello StorageHub';
             const signature = await wallet.signMessage(message);
 
@@ -71,7 +90,7 @@ describe('LocalWallet', () => {
 
         it('should sign a transaction and verify the from address', async () => {
 
-            const wallet = LocalWallet.fromPrivateKey(TEST_PRIVATE_KEY);
+            const wallet = LocalWallet.fromPrivateKey(TEST_PRIVATE_KEY_12);
 
             // use ethers v6 public API (Transaction.unsignedSerialized)
             // eslint-disable-next-line @typescript-eslint/ban-ts-comment

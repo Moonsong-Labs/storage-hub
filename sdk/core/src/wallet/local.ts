@@ -6,6 +6,7 @@ import {
   type TransactionRequest,
 } from 'ethers';
 import { WalletBase } from './base.js';
+import { WalletError } from './errors.js';
 
 /**
  * A local, in-memory wallet implementation.
@@ -29,7 +30,15 @@ export class LocalWallet extends WalletBase {
    * @returns A new `LocalWallet` that can sign on behalf of the keyʼs address.
    */
   public static fromPrivateKey(privateKey: string, provider?: Provider): LocalWallet {
-    return new LocalWallet(new EthersWallet(privateKey, provider), provider);
+    // Validate early to provide a stable error type regardless of ethers internals
+    const isHex = /^0x[0-9a-fA-F]{64}$/.test(privateKey);
+    if (!isHex) throw new WalletError('InvalidPrivateKey');
+
+    try {
+      return new LocalWallet(new EthersWallet(privateKey, provider), provider);
+    } catch {
+      throw new WalletError('InvalidPrivateKey');
+    }
   }
 
   /**
@@ -40,8 +49,12 @@ export class LocalWallet extends WalletBase {
    *          mnemonic.
    */
   public static fromMnemonic(mnemonic: string, provider?: Provider): LocalWallet {
-    const wallet = EthersWallet.fromPhrase(mnemonic);
-    return new LocalWallet(new EthersWallet(wallet.privateKey, provider), provider);
+    try {
+      const wallet = EthersWallet.fromPhrase(mnemonic);
+      return new LocalWallet(new EthersWallet(wallet.privateKey, provider), provider);
+    } catch (err) {
+      throw new WalletError('InvalidMnemonic');
+    }
   }
 
   /**
