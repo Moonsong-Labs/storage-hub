@@ -962,12 +962,12 @@ pub mod pallet {
         InvalidProviderID,
         /// Invalid signed operation provided.
         InvalidSignedOperation,
-        /// Storage request is not in rejected state.
-        StorageRequestNotRejected,
         /// File key computed from metadata doesn't match the provided file key.
         FileKeyMismatch,
         /// Storage request metadata is corrupted or inconsistent.
         CorruptedStorageRequest,
+        /// Incomplete storage request not found.
+        IncompleteStorageRequestNotFound,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately

@@ -12470,7 +12470,6 @@ mod delete_file_for_incomplete_storage_request_tests {
 
                 // Storage request is not rejected and it has 1 confirmed storage provider
                 let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
-                assert!(!storage_request.rejected, "Storage request should not be marked as rejected");
                 assert_eq!(storage_request.bsps_confirmed, 1);
 
                 // BSP is in StorageRequestBsps
@@ -12695,7 +12694,6 @@ mod delete_file_for_incomplete_storage_request_tests {
 
                 // Verify storage request has 1 confirmed BSP
                 let storage_request = StorageRequests::<Test>::get(&file_key2).unwrap();
-                assert!(!storage_request.rejected);
                 assert_eq!(storage_request.bsps_confirmed, 1);
 
                 // Verify BSP is in StorageRequestBsps for file2
@@ -12713,6 +12711,64 @@ mod delete_file_for_incomplete_storage_request_tests {
 
                 // Trigger storage request expiration
                 trigger_storage_request_expiration();
+
+                // Verify all Storage request related data was removed from the storage (from file1)
+                assert!(
+                    StorageRequests::<Test>::get(&file_key1).is_none(),
+                    "Storage request should be removed"
+                );
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key1)
+                        .is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+                let final_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key1).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
+                );
+
+                assert!(
+                    StorageRequests::<Test>::get(&file_key2).is_none(),
+                    "Storage request should be removed"
+                );
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key2)
+                        .is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+                let final_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key2).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
+                );
+
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key1).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key1).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key2).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key2).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
 
                 // Verify second storage request was marked as rejected
                 System::assert_has_event(
@@ -12734,6 +12790,12 @@ mod delete_file_for_incomplete_storage_request_tests {
                     bsp_id,
                     forest_proof_delete,
                 ));
+
+                // Verify incomplete storage request was removed as bsp was the only provider storing the file
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key2).is_none(),
+                    "Incomplete storage request should be removed"
+                );
 
                 // Verify deletion events
                 System::assert_has_event(
@@ -12775,27 +12837,6 @@ mod delete_file_for_incomplete_storage_request_tests {
                     amount_provided_file,
                     "Payment stream should be updated to reflect remaining file"
                 );
-
-                // 1. Storage request for file2 should be completely removed
-                assert!(
-                    StorageRequests::<Test>::get(&file_key2).is_none(),
-                    "Storage request for file2 should be completely removed"
-                );
-
-                // 2. Storage request for file2 should be removed from bucket associations
-                assert!(
-                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key2)
-                        .is_none(),
-                    "Storage request for file2 should be removed from bucket associations"
-                );
-
-                // 3. All BSPs should be removed from file2's storage request associations
-                let final_bsps_file2: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key2).collect();
-                assert!(
-                    final_bsps_file2.is_empty(),
-                    "No BSPs should remain associated with file2's storage request after deletion"
-                );
             });
         }
 
@@ -12816,7 +12857,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(bsp_sign_up(bsp1_signed.clone(), size * 2));
                 let bsp1_id = Providers::get_provider_id(&bsp1_account).unwrap();
 
-                // Setup second BSP  
+                // Setup second BSP
                 let bsp2_signed = RuntimeOrigin::signed(bsp2_account.clone());
                 assert_ok!(bsp_sign_up(bsp2_signed.clone(), size * 2));
                 let bsp2_id = Providers::get_provider_id(&bsp2_account).unwrap();
@@ -12824,7 +12865,11 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // Issue storage request
                 assert_ok!(FileSystem::issue_storage_request(
                     RuntimeOrigin::signed(owner.clone()),
-                    bucket_id, location.clone(), fingerprint, size, msp_id,
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
                     PeerIds::<Test>::try_from(vec![]).unwrap(),
                     ReplicationTarget::Basic,
                 ));
@@ -12836,17 +12881,23 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // Both BSPs confirm storing the file
                 let file_key_with_proof = FileKeyWithProof {
                     file_key,
-                    proof: CompactProof { encoded_nodes: vec![file_key.as_ref().to_vec()] },
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
                 };
-                let forest_proof = CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] };
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
 
                 assert_ok!(FileSystem::bsp_confirm_storing(
-                    bsp1_signed, forest_proof.clone(),
+                    bsp1_signed,
+                    forest_proof.clone(),
                     BoundedVec::try_from(vec![file_key_with_proof.clone()]).unwrap(),
                 ));
 
                 assert_ok!(FileSystem::bsp_confirm_storing(
-                    bsp2_signed, forest_proof,
+                    bsp2_signed,
+                    forest_proof,
                     BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
                 ));
 
@@ -12856,27 +12907,84 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_eq!(bsp1_capacity, size);
                 assert_eq!(bsp2_capacity, size);
 
-                let payment_stream_bsp1 = PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp1_id, &owner);
-                let payment_stream_bsp2 = PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp2_id, &owner);
+                let payment_stream_bsp1 =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp1_id, &owner);
+                let payment_stream_bsp2 =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp2_id, &owner);
                 assert!(payment_stream_bsp1.is_ok());
                 assert!(payment_stream_bsp2.is_ok());
-                assert_eq!(payment_stream_bsp1.unwrap().amount_provided, UnitsProvidedFor::<Test>::from(size));
-                assert_eq!(payment_stream_bsp2.unwrap().amount_provided, UnitsProvidedFor::<Test>::from(size));
+                assert_eq!(
+                    payment_stream_bsp1.unwrap().amount_provided,
+                    UnitsProvidedFor::<Test>::from(size)
+                );
+                assert_eq!(
+                    payment_stream_bsp2.unwrap().amount_provided,
+                    UnitsProvidedFor::<Test>::from(size)
+                );
 
                 // Storage request has 2 confirmed BSPs
                 let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
-                assert!(!storage_request.rejected, "Storage request should not be marked as rejected");
-                assert_eq!(storage_request.bsps_confirmed, 2, "Storage request should have 2 confirmed BSPs");
+                assert_eq!(
+                    storage_request.bsps_confirmed, 2,
+                    "Storage request should have 2 confirmed BSPs"
+                );
 
                 // Both BSPs are in StorageRequestBsps
-                let initial_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
-                assert_eq!(initial_bsps.len(), 2, "Should have 2 BSPs associated with storage request initially");
+                let initial_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert_eq!(
+                    initial_bsps.len(),
+                    2,
+                    "Should have 2 BSPs associated with storage request initially"
+                );
                 let bsp_ids: Vec<_> = initial_bsps.iter().map(|(bsp_id, _)| *bsp_id).collect();
-                assert!(bsp_ids.contains(&bsp1_id), "BSP1 should be associated with storage request");
-                assert!(bsp_ids.contains(&bsp2_id), "BSP2 should be associated with storage request");
+                assert!(
+                    bsp_ids.contains(&bsp1_id),
+                    "BSP1 should be associated with storage request"
+                );
+                assert!(
+                    bsp_ids.contains(&bsp2_id),
+                    "BSP2 should be associated with storage request"
+                );
+
+                // Verify incomplete storage request for this file_key does not exist
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should not exist"
+                );
 
                 // Trigger storage request expiration
                 trigger_storage_request_expiration();
+
+                // Verify all Storage request related data was removed from the storage
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be removed"
+                );
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key)
+                        .is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+                let final_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
+                );
+
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp2_id, bsp1_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
 
                 // Storage request was marked as rejected
                 System::assert_has_event(
@@ -12886,10 +12994,6 @@ mod delete_file_for_incomplete_storage_request_tests {
                     }
                     .into(),
                 );
-
-                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
-                assert!(storage_request.rejected, "Storage request should be marked as rejected");
-                assert_eq!(storage_request.bsps_confirmed, 2, "BSP count should still be 2 before deletions");
 
                 // First BSP deletion
                 let forest_proof_delete1 = CompactProof {
@@ -12914,22 +13018,26 @@ mod delete_file_for_incomplete_storage_request_tests {
 
                 // Verify first BSP capacity is reduced and payment stream removed
                 let bsp1_capacity_after_delete = Providers::get_used_capacity(&bsp1_id);
-                assert_eq!(bsp1_capacity_after_delete, 0, "BSP1 should have no capacity after deletion");
+                assert_eq!(
+                    bsp1_capacity_after_delete, 0,
+                    "BSP1 should have no capacity after deletion"
+                );
 
-                let payment_stream_bsp1_after = PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp1_id, &owner);
-                assert!(payment_stream_bsp1_after.is_err(), "Payment stream for BSP1 should be removed");
+                let payment_stream_bsp1_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp1_id, &owner);
+                assert!(
+                    payment_stream_bsp1_after.is_err(),
+                    "Payment stream for BSP1 should be removed"
+                );
 
-                // Verify storage request still exists with 1 confirmed BSP
-                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
-                assert_eq!(storage_request.bsps_confirmed, 1, "Storage request should have 1 confirmed BSP after first deletion");
-
-                // Verify only 1 BSP remains in StorageRequestBsps (BSP2)
-                let bsps_after_first_deletion: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
-                assert_eq!(bsps_after_first_deletion.len(), 1, "Should have 1 BSP associated after first deletion");
-                assert_eq!(bsps_after_first_deletion[0].0, bsp2_id, "BSP2 should remain after BSP1 deletion");
-
-                // Verify storage request is still in bucket associations
-                assert!(file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_some(), "Storage request should still be in bucket associations");
+                // Verify incomplete storage request still exists with 1 confirmed BSP
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp2_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
 
                 // Second BSP deletion - this should trigger full cleanup
                 let forest_proof_delete2 = CompactProof {
@@ -12954,28 +13062,22 @@ mod delete_file_for_incomplete_storage_request_tests {
 
                 // Verify second BSP capacity is reduced and payment stream removed
                 let bsp2_capacity_after_delete = Providers::get_used_capacity(&bsp2_id);
-                assert_eq!(bsp2_capacity_after_delete, 0, "BSP2 should have no capacity after deletion");
-
-                let payment_stream_bsp2_after = PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp2_id, &owner);
-                assert!(payment_stream_bsp2_after.is_err(), "Payment stream for BSP2 should be removed");
-
-                // 1. Storage request should be completely removed due to full cleanup
-                assert!(
-                    StorageRequests::<Test>::get(&file_key).is_none(),
-                    "Storage request should be completely removed due to full cleanup"
+                assert_eq!(
+                    bsp2_capacity_after_delete, 0,
+                    "BSP2 should have no capacity after deletion"
                 );
 
-                // 2. Storage request should be removed from bucket associations
+                let payment_stream_bsp2_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp2_id, &owner);
                 assert!(
-                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_none(),
-                    "Storage request should be removed from bucket associations due to full cleanup"
+                    payment_stream_bsp2_after.is_err(),
+                    "Payment stream for BSP2 should be removed"
                 );
 
-                // 3. All BSPs should be removed from storage request associations  
-                let remaining_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                // Verify incomplete storage request was removed as bsp was the only provider storing the file
                 assert!(
-                    remaining_bsps.is_empty(),
-                    "No BSPs should remain associated with the storage request"
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should be removed"
                 );
             });
         }
@@ -13027,7 +13129,6 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // Storage request should still show 0 confirmed BSPs
                 let request_before_expiry = StorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(request_before_expiry.bsps_confirmed, 0, "No BSPs should be confirmed before expiry");
-                assert!(!request_before_expiry.rejected, "Storage request should not be rejected before expiry");
 
                 // Trigger storage request expiration: as no provider confirmed storing,
                 // the storage request should be rejected and cleaned up.
@@ -13050,6 +13151,9 @@ mod delete_file_for_incomplete_storage_request_tests {
                     "File key should be removed from bucket storage requests after cleanup"
                 );
 
+                // Verify incomplete storage request for this file_key does not exist
+                assert!(IncompleteStorageRequests::<Test>::get(&file_key).is_none(), "Incomplete storage request should not exist");
+
                 // Verify the StorageRequestRejected event was emitted
                 System::assert_has_event(
                     Event::StorageRequestRejected {
@@ -13062,6 +13166,8 @@ mod delete_file_for_incomplete_storage_request_tests {
     }
 
     mod failure {
+        use crate::{types::IncompleteStorageRequestMetadata, IncompleteStorageRequests};
+
         use super::*;
 
         #[test]
@@ -13084,7 +13190,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                         bsp_id,
                         forest_proof,
                     ),
-                    Error::<Test>::StorageRequestNotFound
+                    Error::<Test>::IncompleteStorageRequestNotFound
                 );
             });
         }
@@ -13117,6 +13223,12 @@ mod delete_file_for_incomplete_storage_request_tests {
                     ReplicationTarget::Basic,
                 ));
 
+                // Verify storage request exists
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_some(),
+                    "Storage request should exist"
+                );
+
                 // BSP volunteers but do not confirm storing
                 assert_ok!(FileSystem::bsp_volunteer(bsp_signed, file_key));
 
@@ -13141,7 +13253,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                         bsp_id,
                         forest_proof,
                     ),
-                    Error::<Test>::StorageRequestNotRejected
+                    Error::<Test>::IncompleteStorageRequestNotFound
                 );
             });
         }
@@ -13200,12 +13312,23 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // Trigger storage request expiration
                 trigger_storage_request_expiration();
 
-                // Verify storage request was marked as rejected
-                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
+                // Verify storage request was deleted
                 assert!(
-                    storage_request.rejected,
-                    "Storage request should be marked as rejected"
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be deleted"
                 );
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp1_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
 
                 // Try to delete from BSP2
                 let forest_proof_delete = CompactProof {
@@ -13222,18 +13345,18 @@ mod delete_file_for_incomplete_storage_request_tests {
                     Error::<Test>::ProviderNotStoringFile
                 );
 
-                // Verify BSP associations unchanged after failed attempt
-                let bsps_after_failed_attempt: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
-                assert_eq!(
-                    bsps_after_failed_attempt.len(),
-                    1,
-                    "Should still have 1 BSP after failed deletion attempt"
+                // Verify incomplete storage request was not impacted
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
                 );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(
-                    bsps_after_failed_attempt[0].0, bsp1_id,
-                    "BSP1 should still be associated"
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp1_id]
                 );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
             });
         }
 
@@ -13298,21 +13421,21 @@ mod delete_file_for_incomplete_storage_request_tests {
                         non_existent_provider_id, // Non-existent provider
                         forest_proof_delete,
                     ),
-                    Error::<Test>::InvalidProviderID
+                    Error::<Test>::ProviderNotStoringFile
                 );
 
-                // Verify real BSP still associated and state unchanged
-                let bsps_after_failed_attempt: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
-                assert_eq!(
-                    bsps_after_failed_attempt.len(),
-                    1,
-                    "Real BSP should still be associated"
+                // Verify incomplete storage request was not impacted
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
                 );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
                 assert_eq!(
-                    bsps_after_failed_attempt[0].0, bsp_id,
-                    "Real BSP ID should be unchanged"
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
                 );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
             });
         }
 
@@ -13377,6 +13500,24 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // Trigger storage request expiration
                 trigger_storage_request_expiration();
 
+                // Verify storage request was deleted
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be deleted"
+                );
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp2_id, bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
                 // First deletion succeeds
                 let forest_proof_delete = CompactProof {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
@@ -13389,11 +13530,18 @@ mod delete_file_for_incomplete_storage_request_tests {
                     forest_proof_delete.clone(),
                 ));
 
-                // Verify storage request still exists (another BSP still stores the file)
+                // Verify incomplete storage request was updated
                 assert!(
-                    StorageRequests::<Test>::get(&file_key).is_some(),
-                    "Storage request should still exist after deleting only one BSP"
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
                 );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp2_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
 
                 // Try to delete again - should fail because this BSP no longer stores the file
                 assert_noop!(
@@ -13404,19 +13552,6 @@ mod delete_file_for_incomplete_storage_request_tests {
                         forest_proof_delete,
                     ),
                     Error::<Test>::ProviderNotStoringFile
-                );
-
-                // Verify BSP1 removed and BSP2 remains associated
-                let remaining_bsps: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
-                assert_eq!(
-                    remaining_bsps.len(),
-                    1,
-                    "Exactly one BSP should remain associated"
-                );
-                assert_eq!(
-                    remaining_bsps[0].0, bsp2_id,
-                    "Remaining BSP should be the second BSP"
                 );
             });
         }
@@ -13469,6 +13604,19 @@ mod delete_file_for_incomplete_storage_request_tests {
                 // Trigger storage request expiration
                 trigger_storage_request_expiration();
 
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
                 // Try to delete with invalid forest proof
                 let invalid_forest_proof = CompactProof {
                     encoded_nodes: vec![H256::from_low_u64_be(99999).as_ref().to_vec()],
@@ -13484,15 +13632,18 @@ mod delete_file_for_incomplete_storage_request_tests {
                     Error::<Test>::ExpectedInclusionProof
                 );
 
-                // Verify BSP still associated after failed deletion
-                let bsps_after_failed: Vec<_> =
-                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
-                assert_eq!(
-                    bsps_after_failed.len(),
-                    1,
-                    "BSP should still be associated after failed deletion"
+                // Verify incomplete storage request was not impacted
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
                 );
-                assert_eq!(bsps_after_failed[0].0, bsp_id, "BSP ID should be unchanged");
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
             });
         }
 
@@ -13503,8 +13654,15 @@ mod delete_file_for_incomplete_storage_request_tests {
                 let msp = Keyring::Charlie.to_account_id();
 
                 // Setup MSP and bucket
-                let (bucket_id, _correct_file_key, location, size, fingerprint, _msp_id, _value_prop_id) =
-                    setup_file_in_msp_bucket(&owner, &msp);
+                let (
+                    bucket_id,
+                    _correct_file_key,
+                    location,
+                    size,
+                    fingerprint,
+                    _msp_id,
+                    _value_prop_id,
+                ) = setup_file_in_msp_bucket(&owner, &msp);
 
                 // Setup BSP
                 let bsp_account = Keyring::Bob.to_account_id();
@@ -13512,33 +13670,26 @@ mod delete_file_for_incomplete_storage_request_tests {
                 assert_ok!(bsp_sign_up(bsp_signed, size * 2));
                 let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
 
-                // Insert a fake storage request under a wrong file_key 
+                // Insert a fake incomplete storage request under a wrong file_key
                 let wrong_file_key = H256::from_low_u64_be(99999);
-                let peer_ids: PeerIds<Test> = PeerIds::<Test>::try_from(vec![]).unwrap();
 
-                StorageRequests::<Test>::insert(
+                IncompleteStorageRequests::<Test>::insert(
                     wrong_file_key,
-                    StorageRequestMetadata {
-                        requested_at: <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick(),
-                        expires_at: 100,
+                    IncompleteStorageRequestMetadata {
                         owner: owner.clone(),
                         bucket_id,
                         location: location.clone(),
                         fingerprint,
                         size,
-                        msp: None,
-                        user_peer_ids: peer_ids,
-                        bsps_required: <Test as Config>::StandardReplicationTarget::get(),
-                        bsps_confirmed: 0,
-                        bsps_volunteered: 0,
-                        deposit_paid: 0,
-                        rejected: true,
-                        revoked: false,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_msp_removal: None,
                     },
                 );
 
-                // Forest proof uses the wrong key 
-                let forest_proof = CompactProof { encoded_nodes: vec![wrong_file_key.as_ref().to_vec()] };
+                // Forest proof uses the wrong key
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![wrong_file_key.as_ref().to_vec()],
+                };
 
                 assert_noop!(
                     FileSystem::delete_file_for_incomplete_storage_request(

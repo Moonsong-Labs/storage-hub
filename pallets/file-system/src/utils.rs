@@ -1312,7 +1312,7 @@ where
         // If there is no entry for the file key, return an error.
         let mut incomplete_storage_request_metadata =
             IncompleteStorageRequests::<T>::get(&file_key)
-                .ok_or(Error::<T>::StorageRequestNotFound)?;
+                .ok_or(Error::<T>::IncompleteStorageRequestNotFound)?;
 
         // Verify file key integrity
         let computed_file_key = Self::compute_file_key(
