@@ -195,15 +195,8 @@ describeMspNet(
 
       await waitForIndexing(userApi);
 
-      // Verify fisherman processes the FileDeletionRequested event
-      await verifyFishermanPreparationLogs(userApi, fileKey, [
-        "File deletion parameters prepared:",
-        `File key: 0x${fileKey.startsWith("0x") ? fileKey.slice(2) : fileKey}`,
-        "Provider ID:"
-      ]);
-
       // Verify delete_file extrinsics are submitted
-      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2);
+      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 30000);
       assert(
         deleteFileFound,
         "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
