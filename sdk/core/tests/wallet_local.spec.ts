@@ -89,7 +89,6 @@ describe('LocalWallet', () => {
         });
 
         it('should sign a transaction and verify the from address', async () => {
-
             const wallet = LocalWallet.fromPrivateKey(TEST_PRIVATE_KEY_12);
 
             const unsignedTx = {
