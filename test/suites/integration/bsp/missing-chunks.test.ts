@@ -37,7 +37,7 @@ describeBspNet(
       // Example of how to assert on a log message
       await bspApi.assert.log({
         searchString: "💤 Idle",
-        containerName: "docker-sh-bsp-1"
+        containerName: "storage-hub-sh-bsp-1"
       });
 
       // TODO Add an assert that shows this process timing out or being handled in a specific way

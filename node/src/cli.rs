@@ -7,9 +7,11 @@ use crate::command::ProviderOptions;
 
 use shc_client::builder::{
     BlockchainServiceOptions, BspChargeFeesOptions, BspMoveBucketOptions, BspSubmitProofOptions,
-    BspUploadFileOptions, MspChargeFeesOptions, MspMoveBucketOptions,
+    BspUploadFileOptions, FishermanOptions, IndexerOptions, MspChargeFeesOptions,
+    MspMoveBucketOptions,
 };
 use shc_indexer_service::IndexerMode;
+use shc_rpc::RpcConfig;
 
 /// Sub-commands supported by the collator.
 #[derive(Debug, clap::Subcommand)]
@@ -177,13 +179,44 @@ pub struct ProviderConfigurations {
     #[clap(long, default_value = "10")]
     pub max_blocks_behind_to_catch_up_root_changes: Option<u32>,
 
-    /// MSP charging fees period (in blocks).
-    /// Setting it to 600 with a block every 6 seconds will charge user every hour.
-    #[clap(long, required_if_eq_all([
-        ("provider", "true"),
-        ("provider_type", "msp"),
-    ]))]
-    pub msp_charging_period: Option<u32>,
+    // ============== Provider RPC options ==============
+    // ============== Remote file upload/download options ==============
+    /// Maximum file size in bytes (default: 10GB)
+    #[clap(
+        long,
+        value_name = "BYTES",
+        help_heading = "RPC - Remote File Options",
+        default_value = "10737418240"
+    )]
+    pub max_file_size: Option<u64>,
+
+    /// Connection timeout in seconds (default: 30)
+    #[clap(long, value_name = "SECONDS", default_value = "30")]
+    pub connection_timeout: Option<u64>,
+
+    /// Read timeout in seconds (default: 300)
+    #[clap(long, value_name = "SECONDS", default_value = "300")]
+    pub read_timeout: Option<u64>,
+
+    /// Whether to follow redirects (default: true)
+    #[clap(long, value_name = "BOOLEAN", default_value = "true")]
+    pub follow_redirects: Option<bool>,
+
+    /// Maximum number of redirects (default: 10)
+    #[clap(long, value_name = "COUNT", default_value = "10")]
+    pub max_redirects: Option<u64>,
+
+    /// User agent string (default: "StorageHub-Client/1.0")
+    #[clap(long, value_name = "STRING", default_value = "StorageHub-Client/1.0")]
+    pub user_agent: Option<String>,
+
+    /// Chunk size in bytes. This is different from the FILE_CHUNK_SIZE constant in the runtime, as it only affects file upload/download. (default: 8KB)
+    #[clap(long, value_name = "BYTES", default_value = "8192")]
+    pub chunk_size: Option<u64>,
+
+    /// Number of `chunk_size` chunks to buffer during upload/download. (default: 512)
+    #[clap(long, value_name = "COUNT", default_value = "512")]
+    pub chunks_buffer: Option<u64>,
 
     // ============== MSP Charge Fees task options ==============
     /// Enable and configure MSP Charge Fees task.
@@ -201,6 +234,14 @@ pub struct ProviderConfigurations {
         ])
     )]
     pub msp_charge_fees_min_debt: Option<u64>,
+
+    /// MSP charging fees period (in blocks).
+    /// Setting it to 600 with a block every 6 seconds will charge user every hour.
+    #[clap(long, required_if_eq_all([
+        ("provider", "true"),
+        ("provider_type", "msp"),
+    ]))]
+    pub msp_charging_period: Option<u32>,
 
     // ============== MSP Move Bucket task options ==============
     /// Enable and configure MSP Move Bucket task.
@@ -314,6 +355,37 @@ pub struct ProviderConfigurations {
 
 impl ProviderConfigurations {
     pub fn provider_options(&self) -> ProviderOptions {
+        // Configure RPC options for Provider
+        let mut rpc_config = RpcConfig::default();
+        if let Some(max_file_size) = self.max_file_size {
+            rpc_config.remote_file.max_file_size = max_file_size;
+        }
+        if let Some(connection_timeout) = self.connection_timeout {
+            rpc_config.remote_file.connection_timeout = connection_timeout;
+        }
+        if let Some(read_timeout) = self.read_timeout {
+            rpc_config.remote_file.read_timeout = read_timeout;
+        }
+        if let Some(follow_redirects) = self.follow_redirects {
+            rpc_config.remote_file.follow_redirects = follow_redirects;
+        }
+        if let Some(max_redirects) = self.max_redirects {
+            rpc_config.remote_file.max_redirects = max_redirects;
+        }
+        if let Some(user_agent) = self.user_agent.clone() {
+            rpc_config.remote_file.user_agent = user_agent;
+        }
+        if let Some(chunk_size) = self.chunk_size {
+            if chunk_size > 0 {
+                rpc_config.remote_file.chunk_size = chunk_size as usize;
+            }
+        }
+        if let Some(chunks_buffer) = self.chunks_buffer {
+            if chunks_buffer > 0 {
+                rpc_config.remote_file.chunks_buffer = chunks_buffer as usize;
+            }
+        }
+
         // Get provider type to conditionally apply options
         let provider_type = self
             .provider_type
@@ -409,6 +481,7 @@ impl ProviderConfigurations {
             storage_path: self.storage_path.clone(),
             max_storage_capacity: self.max_storage_capacity,
             jump_capacity: self.jump_capacity,
+            rpc_config: rpc_config,
             msp_charging_period: self.msp_charging_period,
             msp_charge_fees,
             msp_move_bucket,
@@ -424,26 +497,77 @@ impl ProviderConfigurations {
 
 #[derive(Debug, Parser, Clone)]
 pub struct IndexerConfigurations {
-    /// Whether to enable the indexer.
-    ///
-    /// By default, the indexer is disabled.
-    /// If enabled, a Postgres database must be set up (see the indexer README for details).
-    #[arg(long, default_value = "false")]
+    /// Enable the indexer service.
+    #[clap(long)]
     pub indexer: bool,
 
     /// The mode in which the indexer runs.
     ///
     /// - `full`: Indexes all blockchain data
     /// - `lite`: Indexes only essential data for storage operations
+    /// - `fishing`: Indexes only essential data for operating as a fisherman
     #[arg(long, value_parser = clap::value_parser!(IndexerMode), default_value = "full")]
     pub indexer_mode: IndexerMode,
 
     /// Postgres database URL.
     ///
-    /// If not provided, the indexer will use the `DATABASE_URL` environment variable. If the
+    /// If not provided, the indexer will use the `INDEXER_DATABASE_URL` environment variable. If the
     /// environment variable is not set, the node will abort.
-    #[arg(long)]
-    pub database_url: Option<String>,
+    #[clap(
+        long("indexer-database-url"),
+        env = "INDEXER_DATABASE_URL",
+        required_if_eq("indexer", "true")
+    )]
+    pub indexer_database_url: Option<String>,
+}
+
+impl IndexerConfigurations {
+    pub fn indexer_options(&self) -> Option<IndexerOptions> {
+        if self.indexer {
+            Some(IndexerOptions {
+                indexer_mode: self.indexer_mode,
+                database_url: self
+                    .indexer_database_url
+                    .clone()
+                    .expect("Indexer database URL is required"),
+            })
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Parser, Clone)]
+pub struct FishermanConfigurations {
+    /// Enable the fisherman service.
+    #[clap(long)]
+    pub fisherman: bool,
+
+    /// Postgres database URL for the fisherman service.
+    ///
+    /// If not provided, the fisherman will use the `FISHERMAN_DATABASE_URL` environment variable.
+    /// If the environment variable is not set, the node will abort.
+    #[clap(
+        long("fisherman-database-url"),
+        env = "FISHERMAN_DATABASE_URL",
+        required_if_eq("fisherman", "true")
+    )]
+    pub fisherman_database_url: Option<String>,
+}
+
+impl FishermanConfigurations {
+    pub fn fisherman_options(&self) -> Option<FishermanOptions> {
+        if self.fisherman {
+            Some(FishermanOptions {
+                database_url: self
+                    .fisherman_database_url
+                    .clone()
+                    .expect("Fisherman database URL is required"),
+            })
+        } else {
+            None
+        }
+    }
 }
 
 /// Block authoring scheme to be used by the dev service.
@@ -519,11 +643,11 @@ pub struct Cli {
 
     /// Provider configurations file path (allow to specify the provider configuration in a file instead of the cli)
     #[clap(long, conflicts_with_all = [
-        "provider", "provider_type", "max_storage_capacity", "jump_capacity", 
+        "provider", "provider_type", "max_storage_capacity", "jump_capacity",
         "storage_layer", "storage_path", "extrinsic_retry_timeout", "sync_mode_min_blocks_behind",
         "check_for_pending_proofs_period", "max_blocks_behind_to_catch_up_root_changes",
         "msp_charging_period", "msp_charge_fees_task", "msp_charge_fees_min_debt",
-        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip", 
+        "msp_move_bucket_task", "msp_move_bucket_max_try_count", "msp_move_bucket_max_tip",
         "bsp_upload_file_task", "bsp_upload_file_max_try_count", "bsp_upload_file_max_tip",
         "bsp_move_bucket_task", "bsp_move_bucket_grace_period",
         "bsp_charge_fees_task", "bsp_charge_fees_min_debt",
@@ -534,6 +658,10 @@ pub struct Cli {
     /// Indexer configurations
     #[command(flatten)]
     pub indexer_config: IndexerConfigurations,
+
+    /// Fisherman configurations
+    #[command(flatten)]
+    pub fisherman_config: FishermanConfigurations,
 }
 
 #[derive(Debug, Parser)]

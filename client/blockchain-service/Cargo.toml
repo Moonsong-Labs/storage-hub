@@ -31,7 +31,6 @@ thiserror = { workspace = true }
 # Substrate
 frame-support = { workspace = true }
 frame-system = { workspace = true }
-frame-metadata-hash-extension = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 sc-client-api = { workspace = true }
 sc-service = { workspace = true }
@@ -51,7 +50,6 @@ polkadot-primitives = { workspace = true }
 
 # Cumulus
 cumulus-primitives-core = { workspace = true }
-cumulus-primitives-storage-weight-reclaim = { workspace = true }
 
 # Local
 storage-hub-runtime = { workspace = true }

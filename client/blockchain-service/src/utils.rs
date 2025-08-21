@@ -5,9 +5,34 @@ use std::{cmp::max, sync::Arc, vec};
 
 use codec::{Decode, Encode};
 use cumulus_primitives_core::BlockT;
+use pallet_proofs_dealer_runtime_api::{
+    GetChallengePeriodError, GetProofSubmissionRecordError, ProofsDealerApi,
+};
+use pallet_storage_providers_runtime_api::{
+    QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
+};
 use polkadot_runtime_common::BlockHashCount;
 use sc_client_api::{BlockBackend, BlockImportNotification, HeaderBackend};
 use sc_network::Multiaddr;
+use shc_actors_framework::actor::Actor;
+use shc_common::{
+    blockchain_utils::{
+        convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
+        get_provider_id_from_keystore, GetProviderIdError,
+    },
+    traits::StorageEnableRuntime,
+    types::{
+        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, ParachainClient,
+        ProofsDealerProviderId, StorageProviderId, TrieAddMutation, TrieMutation,
+        TrieRemoveMutation, BCSV_KEY_TYPE,
+    },
+};
+use shc_common::{
+    traits::{ExtensionOperations, KeyTypeOperations},
+    types::Tip,
+};
+use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shp_file_metadata::FileMetadata;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_core::{Blake2Hasher, Hasher, H256};
@@ -15,31 +40,10 @@ use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
     traits::Zero,
-    AccountId32, SaturatedConversion,
+    SaturatedConversion,
 };
+use storage_hub_runtime::RuntimeEvent;
 use substrate_frame_rpc_system::AccountNonceApi;
-
-use pallet_proofs_dealer_runtime_api::{
-    GetChallengePeriodError, GetProofSubmissionRecordError, ProofsDealerApi,
-};
-use pallet_storage_providers_runtime_api::{
-    QueryEarliestChangeCapacityBlockError, StorageProvidersApi,
-};
-use shc_actors_framework::actor::Actor;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_common::{
-    blockchain_utils::{
-        convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
-        get_provider_id_from_keystore, GetProviderIdError,
-    },
-    types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, ParachainClient, ProofsDealerProviderId,
-        StorageProviderId, TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
-    },
-};
-use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
-use shp_file_metadata::FileMetadata;
-use storage_hub_runtime::{RuntimeEvent, SignedExtra, UncheckedExtrinsic};
 
 use crate::{
     events::{
@@ -49,16 +53,15 @@ use crate::{
     handler::LOG_TARGET,
     types::{
         BspHandler, Extrinsic, ManagedProvider, MinimalBlockInfo, MspHandler,
-        NewBlockNotificationKind, SendExtrinsicOptions, Tip,
+        NewBlockNotificationKind, SendExtrinsicOptions,
     },
     BlockchainService,
 };
 
-impl<FSH, RuntimeApi> BlockchainService<FSH, RuntimeApi>
+impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
     FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     /// Notify tasks waiting for a block number.
     pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber) {
@@ -356,8 +359,8 @@ where
         }
     }
 
-    /// Get the current account nonce on-chain.
-    pub(crate) fn account_nonce(&mut self, block_hash: &H256) -> u32 {
+    /// Get the current account nonce on-chain for a generic signature type.
+    pub(crate) fn account_nonce(&self, block_hash: &H256) -> u32 {
         let pub_key = Self::caller_pub_key(self.keystore.clone());
         self.client
             .runtime_api()
@@ -381,7 +384,7 @@ where
     /// different Provider IDs, this function will panic. In other words, this node doesn't support
     /// managing multiple Providers at once.
     pub(crate) fn sync_provider_id(&mut self, block_hash: &H256) {
-        let provider_id = match get_provider_id_from_keystore(
+        let provider_id = match get_provider_id_from_keystore::<Runtime>(
             &self.client,
             &self.keystore,
             block_hash,
@@ -453,7 +456,7 @@ where
     /// checking that the on-chain nonce is not lower.
     pub(crate) async fn send_extrinsic(
         &mut self,
-        call: impl Into<storage_hub_runtime::RuntimeCall>,
+        call: impl Into<Runtime::Call>,
         options: &SendExtrinsicOptions,
     ) -> Result<RpcExtrinsicOutput> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
@@ -513,14 +516,19 @@ where
         })
     }
 
-    /// Construct an extrinsic that can be applied to the runtime.
+    /// Construct an extrinsic that can be applied to the runtime using a generic signature type.
     pub fn construct_extrinsic(
         &self,
-        client: Arc<ParachainClient<RuntimeApi>>,
-        function: impl Into<storage_hub_runtime::RuntimeCall>,
+        client: Arc<ParachainClient<Runtime::RuntimeApi>>,
+        function: impl Into<Runtime::Call>,
         nonce: u32,
         tip: Tip,
-    ) -> UncheckedExtrinsic {
+    ) -> generic::UncheckedExtrinsic<
+        Runtime::Address,
+        Runtime::Call,
+        Runtime::Signature,
+        Runtime::Extension,
+    > {
         let function = function.into();
         let current_block_hash = client.info().best_hash;
         let current_block = client.info().best_number.saturated_into();
@@ -532,69 +540,48 @@ where
             .checked_next_power_of_two()
             .map(|c| c / 2)
             .unwrap_or(2) as u64;
-        let extra: SignedExtra = (
-            frame_system::CheckNonZeroSender::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckSpecVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckTxVersion::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckGenesis::<storage_hub_runtime::Runtime>::new(),
-            frame_system::CheckEra::<storage_hub_runtime::Runtime>::from(generic::Era::mortal(
-                period,
-                current_block,
-            )),
-            frame_system::CheckNonce::<storage_hub_runtime::Runtime>::from(nonce),
-            frame_system::CheckWeight::<storage_hub_runtime::Runtime>::new(),
-            tip,
-            cumulus_primitives_storage_weight_reclaim::StorageWeightReclaim::<
-                storage_hub_runtime::Runtime,
-            >::new(),
-            frame_metadata_hash_extension::CheckMetadataHash::new(false),
+
+        let minimal_extra =
+            MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
+        let extra: Runtime::Extension = Runtime::Extension::from_minimal_extension(minimal_extra);
+        let implicit = <Runtime::Extension as ExtensionOperations<Runtime::Call>>::implicit(
+            genesis_block,
+            current_block_hash,
         );
 
-        let raw_payload = SignedPayload::from_raw(
-            function.clone(),
-            extra.clone(),
-            (
-                (),
-                storage_hub_runtime::VERSION.spec_version,
-                storage_hub_runtime::VERSION.transaction_version,
-                genesis_block,
-                current_block_hash,
-                (),
-                (),
-                (),
-                (),
-                None,
-            ),
-        );
+        let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
         let caller_pub_key = Self::caller_pub_key(self.keystore.clone());
 
         // Sign the payload.
         let signature = raw_payload
-            .using_encoded(|e| self.keystore.sr25519_sign(BCSV_KEY_TYPE, &caller_pub_key, e))
-            .expect("The payload is always valid and should be possible to sign; qed")
-            .expect("They key type and public key are valid because we just extracted them from the keystore; qed");
+            .using_encoded(|e| {
+                Runtime::Signature::sign(&self.keystore, BCSV_KEY_TYPE, &caller_pub_key, e)
+            })
+            .expect("The payload is always valid and should be possible to sign; qed");
 
         // Construct the extrinsic.
-        UncheckedExtrinsic::new_signed(
-            function.clone(),
-            storage_hub_runtime::Address::Id(<sp_core::sr25519::Public as Into<
-                storage_hub_runtime::AccountId,
-            >>::into(caller_pub_key)),
-            polkadot_primitives::Signature::Sr25519(signature),
-            extra.clone(),
+        generic::UncheckedExtrinsic::new_signed(
+            function,
+            Runtime::Signature::public_to_address(&caller_pub_key),
+            signature,
+            extra,
         )
     }
 
-    // Getting signer public key.
-    pub fn caller_pub_key(keystore: KeystorePtr) -> sp_core::sr25519::Public {
-        let caller_pub_key = keystore.sr25519_public_keys(BCSV_KEY_TYPE).pop().expect(
-            format!(
-                "There should be at least one sr25519 key in the keystore with key type '{:?}' ; qed",
-                BCSV_KEY_TYPE
-            )
-            .as_str(),
-        );
+    // Generic function to get signer public key for any signature type
+    pub fn caller_pub_key(
+        keystore: KeystorePtr,
+    ) -> <Runtime::Signature as KeyTypeOperations>::Public {
+        let caller_pub_key = Runtime::Signature::public_keys(&keystore, BCSV_KEY_TYPE)
+            .pop()
+            .expect(
+                format!(
+                    "There should be at least one key in the keystore with key type '{:?}' ; qed",
+                    BCSV_KEY_TYPE
+                )
+                .as_str(),
+            );
         caller_pub_key
     }
 
@@ -630,7 +617,7 @@ where
             })?;
 
         // Get the events from storage.
-        let events_in_block = get_events_at_block(&self.client, &block_hash)?;
+        let events_in_block = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
         // Filter the events for the extrinsic.
         // Each event record is composed of the `phase`, `event` and `topics` fields.
@@ -843,7 +830,7 @@ where
         }
 
         // Process the events in the block, specifically those that are related to the Forest root changes.
-        match get_events_at_block(&self.client, &block.hash) {
+        match get_events_at_block::<Runtime>(&self.client, &block.hash) {
             Ok(events) => {
                 for ev in events {
                     if let Some(managed_provider) = &self.maybe_managed_provider {
@@ -1142,7 +1129,7 @@ where
                 multiaddresses,
                 owner,
                 size,
-            }) if owner == AccountId32::from(Self::caller_pub_key(self.keystore.clone())) => {
+            }) if owner == Self::caller_pub_key(self.keystore.clone()).into() => {
                 // This event should only be of any use if a node is run by as a user.
                 if self.maybe_managed_provider.is_none() {
                     log::info!(

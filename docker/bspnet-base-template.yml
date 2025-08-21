@@ -1,7 +1,7 @@
 services:
   sh-bsp:
     image: storage-hub:local
-    container_name: docker-sh-bsp-1
+    container_name: storage-hub-sh-bsp-1
     platform: linux/amd64
     ports:
       - "9666:9944"
@@ -29,7 +29,7 @@ services:
   sh-user:
     image: storage-hub:local
     platform: linux/amd64
-    container_name: docker-sh-user-1
+    container_name: storage-hub-sh-user-1
     ports:
       - "9888:9944"
       - "30444:30444"

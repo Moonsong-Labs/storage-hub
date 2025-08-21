@@ -62,12 +62,12 @@ jobs:
   build_image:
     needs: [setup]
     if: needs.setup.outputs.node_changed == 'true'
-    name: "Build node image"
+    name: 'Build node image'
     runs-on: ubuntu-latest
     env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-      CARGO_INCREMENTAL: "0"
+      SCCACHE_GHA_ENABLED: 'true'
+      RUSTC_WRAPPER: 'sccache'
+      CARGO_INCREMENTAL: '0'
     steps:
       - uses: actions/checkout@v4
       - name: Run sccache-cache
@@ -171,7 +171,7 @@ jobs:
   network_test:
     needs: [build_image, setup]
     if: always()
-    name: "Run Para & Relay Network Test"
+    name: 'Run Para & Relay Network Test'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -212,7 +212,7 @@ jobs:
   zombie_test:
     needs: [build_image, setup]
     if: always()
-    name: "Run Zombienet Tests"
+    name: 'Run Zombienet Tests'
     timeout-minutes: 30
     runs-on: ubuntu-latest
     steps:
@@ -248,7 +248,7 @@ jobs:
     needs: [build_image, setup]
     timeout-minutes: 30
     if: always()
-    name: "Run Dev Node Tests"
+    name: 'Run Dev Node Tests'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -298,7 +298,7 @@ jobs:
   full_net:
     needs: [build_image, setup]
     if: always()
-    name: "Run FullNet Tests"
+    name: 'Run FullNet Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -391,7 +391,7 @@ jobs:
   bsp_net:
     needs: [build_image, setup]
     if: always()
-    name: "Run BSPNet Tests"
+    name: 'Run BSPNet Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -481,7 +481,7 @@ jobs:
   user_net:
     needs: [build_image, setup]
     if: always()
-    name: "Run User Tests"
+    name: 'Run User Tests'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -521,7 +521,7 @@ jobs:
       - uses: taiki-e/install-action@v2
         with:
           tool: diesel_cli
-      - name: Run FullNet Tests
+      - name: Run User Tests
         id: run_tests
         run: |
           cd test
@@ -550,10 +550,98 @@ jobs:
             docker logs $container > "test-logs/${container}.log" 2>&1
           done
 
-          SP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "user-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+          SP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
 
           if [ ! -z "$SP_LOGS_DIR" ]; then
-            echo "Found logs directory: $BSP_LOGS_DIR"
+            echo "Found logs directory: $SP_LOGS_DIR"
+            cp -r $SP_LOGS_DIR/* test-logs/ || true
+          else
+            echo "No bsp-logs directory found in /tmp"
+          fi
+
+          echo "Collected log files:"
+          ls -la test-logs/
+
+      - name: Upload logs as artifact
+        if: failure() && steps.run_tests.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: user-test-logs-shard-${{ matrix.shard }}
+          path: test-logs/
+          retention-days: 5
+          if-no-files-found: warn
+
+  fisherman_test:
+    needs: [build_image, setup]
+    if: always()
+    name: 'Run Fisherman Tests'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/workflow-templates/setup-pnpm
+        with:
+          node_version: 23
+      - run: mkdir -p target/release/
+      - name: Get Node Binary if changed
+        if: needs.setup.outputs.node_changed == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: node
+          path: target/release/
+      - name: Get Latest Node Binary if not changed
+        if: needs.setup.outputs.node_changed == 'false'
+        run: |
+          docker pull moonsonglabs/storage-hub:latest
+          docker create --name temp_storage_hub moonsonglabs/storage-hub:latest
+          docker cp temp_storage_hub:/usr/local/bin/storage-hub-node target/release/storage-hub-node
+          docker rm temp_storage_hub
+      - name: Build Local Docker Image
+        run: |
+          chmod +x target/release/storage-hub-node
+          chmod -R 777 docker/dev-keystores
+          cd test
+          pnpm install
+          pnpm docker:build
+      - name: Run Typegen
+        run: |
+          cd test
+          pnpm typegen
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: diesel_cli
+      - name: Run Fisherman Tests
+        id: run_tests
+        run: |
+          cd test
+          pnpm i
+          node --import tsx                        \
+              --test                               \
+              --test-reporter=@reporters/github    \
+              --test-reporter-destination=stdout   \
+              --test-reporter=spec                 \
+              --test-reporter-destination=stdout   \
+              --test-concurrency=1                 \
+              ./suites/integration/fisherman/**.test.ts
+
+      - name: Collect Docker Logs on Failure
+        if: failure() && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::group::Docker Container Status"
+          docker ps -a
+          echo "::endgroup::"
+
+          mkdir -p test-logs
+
+          for container in $(docker ps -a --filter "ancestor=moonsonglabs/storage-hub" --format "{{.Names}}"); do
+            echo "Collecting logs from $container"
+            docker logs $container > "test-logs/${container}.log" 2>&1
+          done
+
+          SP_LOGS_DIR=$(find /tmp -maxdepth 1 -type d -name "bsp-logs-*" -printf '%T@ %p\n' | sort -n | tail -1 | cut -f2- -d" ")
+
+          if [ ! -z "$SP_LOGS_DIR" ]; then
+            echo "Found logs directory: $SP_LOGS_DIR"
             cp -r $SP_LOGS_DIR/* test-logs/ || true
           else
             echo "No sp-logs directory found in /tmp"
@@ -566,7 +654,7 @@ jobs:
         if: failure() && steps.run_tests.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
-          name: sp-test-logs-shard-${{ matrix.shard }}
+          name: fisherman-test-logs
           path: test-logs/
           retention-days: 5
           if-no-files-found: warn
@@ -574,7 +662,7 @@ jobs:
   typegen_check:
     needs: [build_image, setup]
     if: always()
-    name: "Check Rust/TS bindings are up to date"
+    name: 'Check Rust/TS bindings are up to date'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

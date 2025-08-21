@@ -11369,7 +11369,7 @@ mod msp_stop_storing_bucket {
     }
 }
 
-mod file_deletion_signature_tests {
+mod request_file_deletion {
     use super::*;
 
     #[test]
@@ -11690,6 +11690,627 @@ mod file_deletion_signature_tests {
     }
 }
 
+mod delete_file_tests {
+    use super::*;
+
+    mod success {
+        use super::*;
+        use pallet_payment_streams::types::UnitsProvidedFor;
+        use shp_traits::{ProofsDealerInterface, TrieRemoveMutation};
+
+        #[test]
+        fn msp_can_delete_file_with_valid_forest_proof() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Log the payment stream value
+                let initial_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+
+                // Calculate expected payment stream rate
+                let initial_bucket_size = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id).unwrap();
+                let value_prop = pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, &value_prop_id).unwrap();
+                let price_per_giga_unit_of_data_per_block = value_prop.price_per_giga_unit_of_data_per_block;
+                let zero_sized_bucket_rate: u128 = <Test as pallet_storage_providers::Config>::ZeroSizeBucketFixedRate::get();
+                // Convert bucket size from bytes to giga-units
+                let initial_bucket_size_in_giga_units = initial_bucket_size / (shp_constants::GIGAUNIT as u64);
+                let expected_initial_payment_stream_rate = (initial_bucket_size_in_giga_units as u128) * price_per_giga_unit_of_data_per_block + zero_sized_bucket_rate;
+
+                assert_eq!(initial_payment_stream_value, Some(expected_initial_payment_stream_rate));
+                // Create signature 
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+
+                // Get the current bucket root before deletion
+                let old_bucket_root = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
+
+                // Create forest proof 
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Precalculate expected new root
+                let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+                    &old_bucket_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                    Some(bucket_id.encode()),
+                ).unwrap();
+
+                assert_ok!(FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    msp_id,
+                    forest_proof,
+                ));
+
+                // Verify MspFileDeletionCompleted event was emitted
+                System::assert_last_event(
+                    Event::MspFileDeletionCompleted {
+                        user: alice.clone(),
+                        file_key,
+                        file_size: size,
+                        bucket_id,
+                        msp_id,
+                        old_root: old_bucket_root,
+                        new_root: expected_new_root,
+                    }
+                    .into(),
+                );
+
+                let payment_stream_value: Option<BalanceOf<Test>> = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                assert_eq!(payment_stream_value, Some(1));
+
+                let used_capacity = <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+                // The only file being stored was removed
+                assert!(used_capacity == 0);
+            });
+        }
+
+        #[test]
+        fn bsp_delete_file_with_valid_forest_proof_payment_stream_finish_if_no_more_files_stored() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let bsp = Keyring::Bob.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Sign up BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), 100));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Create bucket for Alice (BSP test still need valid buckets for ownership checks)
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Increase the data used by the registered bsp, to simulate that it is indeed storing the file
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, size));
+
+                // Create and increase payment stream, to simulate that BSP is indeed storing the file
+                let amount_provided = UnitsProvidedFor::<Test>::from(size);
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    alice.clone(),
+                    amount_provided,
+                ));
+
+                // Check initial capacity and payment stream state before deletion
+                let initial_capacity_used = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    initial_capacity_used, size,
+                    "BSP should have capacity used equal to file size"
+                );
+
+                // Verify payment stream exists before deletion
+                let payment_stream =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &alice);
+                assert!(
+                    payment_stream.is_ok(),
+                    "Payment stream should exist before deletion"
+                );
+                assert_eq!(
+                    payment_stream.unwrap().amount_provided,
+                    amount_provided,
+                    "Payment stream should have correct amount provided"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Get current BSP root before deletion
+                let old_bsp_root = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+
+                // Precalculate expected new root
+                let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+                    &old_bsp_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                    Some(bsp_id.encode()),
+                ).unwrap();
+
+                assert_ok!(FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    bsp_id,
+                    forest_proof,
+                ));
+
+                // Verify BSP event
+                System::assert_last_event(
+                    Event::BspFileDeletionCompleted {
+                        user: alice.clone(),
+                        file_key,
+                        file_size: size,
+                        bsp_id,
+                        old_root: old_bsp_root,
+                        new_root: expected_new_root,
+                    }
+                    .into(),
+                );
+
+                // Check capacity and payment stream state after deletion
+                let final_capacity_used = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    final_capacity_used,
+                    initial_capacity_used - size,
+                    "BSP capacity should have decreased by file size after deletion"
+                );
+
+                // Verify payment stream was removed after deletion
+                let payment_stream_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &alice);
+                assert!(
+                    payment_stream_after.is_err(),
+                    "Payment stream should be removed after file deletion"
+                );
+            });
+        }
+
+        #[test]
+        fn bsp_delete_file_with_two_files_stored_payment_stream_updated_not_deleted() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let bsp = Keyring::Bob.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Sign up BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), 200));
+                let bsp_id = Providers::get_provider_id(&bsp).unwrap();
+
+                // Create bucket for Alice (BSP test still need valid buckets for ownership checks)
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Simulate storing 2 files
+                assert_ok!(Providers::increase_capacity_used(&bsp_id, 2 * size));
+
+                // Create and increase payment stream twice, to simulate that BSP is storing 2 files
+                let amount_provided_per_file = UnitsProvidedFor::<Test>::from(size);
+                let amount_provided = 2 * amount_provided_per_file;
+
+                assert_ok!(PaymentStreams::create_dynamic_rate_payment_stream(
+                    frame_system::RawOrigin::Root.into(),
+                    bsp_id,
+                    alice.clone(),
+                    amount_provided,
+                ));
+
+                // Check initial capacity and payment stream state before deletion
+                let initial_capacity_used = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    initial_capacity_used,
+                    size * 2,
+                    "BSP should have capacity used equal to 2 times file size"
+                );
+
+                // Verify payment stream exists before deletion with correct total amount
+                let payment_stream =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &alice);
+                assert!(
+                    payment_stream.is_ok(),
+                    "Payment stream should exist before deletion"
+                );
+                assert_eq!(
+                    payment_stream.unwrap().amount_provided,
+                    amount_provided,
+                    "Payment stream should have correct total amount provided for 2 files"
+                );
+
+                // Create signature and proof
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Get current BSP root before deletion
+                let old_bsp_root = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+
+                // Precalculate expected new root
+                let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+                    &old_bsp_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                    Some(bsp_id.encode()),
+                ).unwrap();
+
+                assert_ok!(FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    bsp_id,
+                    forest_proof,
+                ));
+
+                // Verify BSP event
+                System::assert_last_event(
+                    Event::BspFileDeletionCompleted {
+                        user: alice.clone(),
+                        file_key,
+                        file_size: size,
+                        bsp_id,
+                        old_root: old_bsp_root,
+                        new_root: expected_new_root,
+                    }
+                    .into(),
+                );
+
+                // Check capacity and payment stream state after deletion
+                let final_capacity_used = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    final_capacity_used,
+                    initial_capacity_used - size,
+                    "BSP capacity should have decreased by one file size after deletion"
+                );
+
+                // Verify payment stream still exists but is updated (decreased by one file amount)
+                let payment_stream_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &alice);
+                assert!(
+                    payment_stream_after.is_ok(),
+                    "Payment stream should still exist after deleting one of two files"
+                );
+                assert_eq!(
+                    payment_stream_after.unwrap().amount_provided,
+                    amount_provided_per_file,
+                    "Payment stream should be updated to reflect remaining file amount"
+                );
+            });
+        }
+
+        #[test]
+        fn delete_file_works_with_any_caller() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                let initial_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                // Calculate expected payment stream rate
+                let initial_bucket_size = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_bucket_size(&bucket_id).unwrap();
+                let value_prop = pallet_storage_providers::MainStorageProviderIdsToValuePropositions::<Test>::get(&msp_id, &value_prop_id).unwrap();
+                let price_per_giga_unit_of_data_per_block = value_prop.price_per_giga_unit_of_data_per_block;
+                let zero_sized_bucket_rate: u128 = <Test as pallet_storage_providers::Config>::ZeroSizeBucketFixedRate::get();
+                // Convert bucket size from bytes to giga-units
+                let initial_bucket_size_in_giga_units = initial_bucket_size / (shp_constants::GIGAUNIT as u64);
+                let expected_initial_payment_stream_rate = (initial_bucket_size_in_giga_units as u128) * price_per_giga_unit_of_data_per_block + zero_sized_bucket_rate;
+                assert_eq!(initial_payment_stream_value, Some(expected_initial_payment_stream_rate));
+                // Alice signs the deletion message
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+
+                // But Bob (fisherman) calls the extrinsic
+                let bob = Keyring::Bob.to_account_id();
+
+                // Get the current bucket root before deletion
+                let old_bucket_root = <<Test as crate::Config>::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id).unwrap();
+
+                // Create forest proof
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Precalculate expected new root
+                let expected_new_root = <<Test as crate::Config>::ProofDealer as ProofsDealerInterface>::generic_apply_delta(
+                    &old_bucket_root,
+                    &[(file_key, TrieRemoveMutation::default().into())],
+                    &forest_proof,
+                    Some(bucket_id.encode()),
+                ).unwrap();
+
+                assert_ok!(FileSystem::delete_file(
+                    RuntimeOrigin::signed(bob),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    msp_id,
+                    forest_proof,
+                ));
+
+                // Verify event shows Alice as the user
+                System::assert_last_event(
+                    Event::MspFileDeletionCompleted {
+                        user: alice.clone(),
+                        file_key,
+                        file_size: size,
+                        bucket_id,
+                        msp_id,
+                        old_root: old_bucket_root,
+                        new_root: expected_new_root,
+                    }
+                    .into(),
+                );
+
+                let payment_stream_value: Option<BalanceOf<Test>> = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                assert_eq!(payment_stream_value, Some(1));
+
+                let used_capacity = <Providers as ReadStorageProvidersInterface>::get_used_capacity(&msp_id);
+                // The only file being stored was removed
+                assert!(used_capacity == 0);
+            });
+        }
+    }
+
+    mod failure {
+        use super::*;
+
+        #[test]
+        fn delete_file_fails_with_invalid_signature() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Wrong signer (Bob instead of Alice)
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Bob, file_key);
+
+                // Create forest proof
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(alice.clone()),
+                        alice.clone(),
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        msp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::InvalidSignature
+                );
+            });
+        }
+
+        #[test]
+        fn delete_file_fails_with_invalid_forest_proof() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Alice signs the deletion message
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+
+                // But Bob (fisherman) calls the extrinsic
+                let bob = Keyring::Bob.to_account_id();
+
+                // Create invalid forest proof
+                let invalid_forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(bob),
+                        alice.clone(),
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        msp_id,
+                        invalid_forest_proof,
+                    ),
+                    Error::<Test>::ExpectedInclusionProof
+                );
+            });
+        }
+
+        #[test]
+        fn delete_file_fails_for_insolvent_user() {
+            new_test_ext().execute_with(|| {
+                // Setup with Eve (insolvent user) - reusing existing pattern
+                let eve = Keyring::Eve.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Create bucket while Eve is solvent
+                let _guard = set_eve_insolvent(false);
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&eve, &msp);
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Eve, file_key);
+                drop(_guard);
+
+                // Make Eve insolvent
+                let _guard = set_eve_insolvent(true);
+
+                // Create forest proof
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(eve.clone()),
+                        eve.clone(),
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        msp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::OperationNotAllowedWithInsolventUser
+                );
+            });
+        }
+
+        #[test]
+        fn delete_file_fails_when_not_bucket_owner() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let bob = Keyring::Bob.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Alice owns the bucket and file
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Bob tries to delete Alice's file (wrong owner)
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Bob, file_key);
+
+                // Create forest proof
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(bob.clone()),
+                        bob.clone(), // Wrong file_owner
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        msp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::NotBucketOwner
+                );
+            });
+        }
+
+        #[test]
+        fn delete_file_fails_with_invalid_provider() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, _, _) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+
+                // Use non-existent provider ID
+                let invalid_provider_id = H256::from_low_u64_be(99999);
+
+                // Create forest proof
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(alice.clone()),
+                        alice.clone(),
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        invalid_provider_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::InvalidProviderID
+                );
+            });
+        }
+
+        #[test]
+        fn delete_file_fails_with_file_key_mismatch() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+
+                // Create a different file key for the signed message
+                let wrong_file_key = H256::from_low_u64_be(12345);
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, wrong_file_key);
+
+                // Create forest proof
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(alice.clone()),
+                        alice.clone(),
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        msp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::InvalidFileKeyMetadata
+                );
+            });
+        }
+    }
+}
+
 /// Helper function that registers an account as a Backup Storage Provider
 fn bsp_sign_up(
     bsp_signed: RuntimeOrigin,
@@ -11849,4 +12470,74 @@ fn calculate_upfront_amount_to_pay(
 				.saturating_mul(<Test as crate::Config>::StorageDataUnitToBalance::convert(size))
 				.checked_div(shp_constants::GIGAUNIT.into())
 				.unwrap_or_default()
+}
+
+/// Setup file stored in MSP bucket
+fn setup_file_in_msp_bucket(
+    owner: &sp_runtime::AccountId32,
+    msp_account: &sp_runtime::AccountId32,
+) -> (
+    BucketIdFor<Test>,
+    crate::types::MerkleHash<Test>,
+    FileLocation<Test>,
+    StorageDataUnit<Test>,
+    crate::types::Fingerprint<Test>,
+    ProviderIdFor<Test>,
+    ValuePropId<Test>,
+) {
+    let (msp_id, value_prop_id) = add_msp_to_provider_storage(msp_account);
+    let bucket_name = BucketNameFor::<Test>::try_from("test-bucket".as_bytes().to_vec()).unwrap();
+    let (bucket_id, _) = create_bucket(owner, bucket_name, msp_id, value_prop_id, false);
+
+    // Standard file metadata (reusing existing patterns)
+    let location = FileLocation::<Test>::try_from(b"test".to_vec()).unwrap();
+    // We need giga units to see significant changes in payment streams
+    let size = 4 * (shp_constants::GIGAUNIT as u64);
+    let fingerprint = BlakeTwo256::hash(&b"test_content".to_vec());
+    let file_key = FileSystem::compute_file_key(
+        owner.clone(),
+        bucket_id,
+        location.clone(),
+        size,
+        fingerprint,
+    )
+    .unwrap();
+
+    // Increase bucket size to simulate it storing the file
+    assert_ok!(
+        <<Test as crate::Config>::Providers as MutateBucketsInterface>::increase_bucket_size(
+            &bucket_id, size
+        )
+    );
+
+    // Increase the used capacity of the MSP
+    assert_ok!(<<Test as crate::Config>::Providers as MutateStorageProvidersInterface>::increase_capacity_used(&msp_id, size));
+
+    (
+        bucket_id,
+        file_key,
+        location,
+        size,
+        fingerprint,
+        msp_id,
+        value_prop_id,
+    )
+}
+
+/// Create deletion intention and signature
+fn create_file_deletion_signature(
+    file_owner: &sp_keyring::sr25519::Keyring,
+    file_key: crate::types::MerkleHash<Test>,
+) -> (FileOperationIntention<Test>, MultiSignature) {
+    let signed_delete_intention = FileOperationIntention::<Test> {
+        file_key,
+        operation: FileOperation::Delete,
+    };
+
+    let signed_delete_intention_encoded = signed_delete_intention.encode();
+    let pair = file_owner.pair();
+    let signature_bytes = pair.sign(&signed_delete_intention_encoded);
+    let signature = MultiSignature::Sr25519(signature_bytes);
+
+    (signed_delete_intention, signature)
 }

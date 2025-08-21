@@ -13,7 +13,7 @@ use sc_consensus_manual_seal::{
 };
 use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
-use shc_common::traits::StorageEnableApiCollection;
+use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntime};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
 use sp_api::ProvideRuntimeApi;
@@ -32,14 +32,14 @@ pub struct FullDeps<C, P, FL, FS> {
     pub client: Arc<C>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
-    /// File Storage instance.
+    /// RPC configuration.
     pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
 }
 
 /// Instantiate all RPC extensions.
-pub fn create_full<C, P, FL, FSH>(
+pub fn create_full<C, P, FL, FSH, Runtime>(
     deps: FullDeps<C, P, FL, FSH>,
 ) -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -47,7 +47,8 @@ where
         + HeaderBackend<Block>
         + HeaderMetadata<Block, Error = BlockChainError>,
     C: Send + Sync + 'static,
-    C::Api: StorageEnableApiCollection,
+    C::Api: StorageEnableApiCollection<Runtime>,
+    Runtime: StorageEnableRuntime,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
     FSH: ForestStorageHandler + Send + Sync + 'static,

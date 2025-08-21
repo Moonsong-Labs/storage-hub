@@ -177,12 +177,35 @@ impl BspFile {
     ) -> Result<(), diesel::result::Error> {
         diesel::insert_into(bsp_file::table)
             .values((bsp_file::bsp_id.eq(bsp_id), bsp_file::file_id.eq(file_id)))
+            .on_conflict_do_nothing()
             .execute(conn)
             .await?;
         Ok(())
     }
 
     pub async fn delete<'a>(
+        conn: &mut DbConnection<'a>,
+        file_key: impl AsRef<[u8]>,
+    ) -> Result<(), diesel::result::Error> {
+        use crate::schema::file;
+
+        // Delete all BSP-file associations for the given file key
+        let file_key = file_key.as_ref().to_vec();
+        diesel::delete(bsp_file::table)
+            .filter(
+                bsp_file::file_id.eq_any(
+                    file::table
+                        .filter(file::file_key.eq(file_key))
+                        .select(file::id),
+                ),
+            )
+            .execute(conn)
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn delete_for_bsp<'a>(
         conn: &mut DbConnection<'a>,
         file_key: impl AsRef<[u8]>,
         onchain_bsp_id: String,

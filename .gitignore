@@ -35,6 +35,9 @@ cspell.json
 # Don't commit your config file
 config.toml
 
+# Environment configuration files
+.envrc
+
 
 # IDE
 .DS_Store
@@ -45,3 +48,4 @@ config.toml
 .worktrees/
 .cursorindexingignore
 .specstory/
+.claude/

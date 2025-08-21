@@ -4,6 +4,7 @@ pub mod bsp_download_file;
 pub mod bsp_move_bucket;
 pub mod bsp_submit_proof;
 pub mod bsp_upload_file;
+pub mod fisherman_process_file_deletion;
 pub mod mock_bsp_volunteer;
 pub mod mock_sp_react_to_event;
 pub mod msp_charge_fees;

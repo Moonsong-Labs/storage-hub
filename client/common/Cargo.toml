@@ -19,6 +19,7 @@ anyhow = { workspace = true }
 bincode = { workspace = true }
 codec = { workspace = true }
 rocksdb = { workspace = true }
+scale-info = { workspace = true }
 serde = { workspace = true, default-features = true }
 trie-db = { workspace = true }
 lazy-static = { workspace = true }
@@ -26,9 +27,10 @@ log = { workspace = true }
 thiserror = { workspace = true }
 
 # Substrate
-frame-system = { workspace = true }
 frame-benchmarking = { workspace = true }
+frame-metadata-hash-extension = { workspace = true }
 frame-support = { workspace = true }
+frame-system = { workspace = true }
 pallet-transaction-payment-rpc = { workspace = true }
 sc-client-api = { workspace = true }
 sc-executor = { workspace = true }
@@ -51,6 +53,10 @@ polkadot-primitives = { workspace = true }
 # Cumulus
 cumulus-client-service = { workspace = true }
 cumulus-primitives-core = { workspace = true }
+cumulus-primitives-storage-weight-reclaim = { workspace = true }
+
+# Frontier
+fp-account = { workspace = true }
 
 # Local
 storage-hub-runtime = { workspace = true }
@@ -70,6 +76,7 @@ pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
 pallet-storage-providers-runtime-api = { workspace = true }
+pallet-transaction-payment = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -81,7 +88,8 @@ std = [
 	"frame-benchmarking/std",
 	"frame-support/std",
 	"frame-system/std",
-	"sp-api/std",
+	"fp-account/std",
+	"sc-executor/std",
 	"sp-core/std",
 	"sp-trie/std",
 	"sp-io/std",
@@ -104,7 +112,7 @@ std = [
 	"pallet-proofs-dealer/std",
 	"pallet-proofs-dealer-runtime-api/std",
 	"pallet-storage-providers/std",
-	"pallet-storage-providers-runtime-api/std",
+	"pallet-transaction-payment/std",
 ]
 runtime-benchmarks = [
 	"frame-benchmarking/runtime-benchmarks",
@@ -113,5 +121,6 @@ runtime-benchmarks = [
 	"pallet-payment-streams/runtime-benchmarks",
 	"pallet-proofs-dealer/runtime-benchmarks",
 	"pallet-storage-providers/runtime-benchmarks",
+	"pallet-transaction-payment/runtime-benchmarks",
 	"sp-runtime/runtime-benchmarks",
 ]

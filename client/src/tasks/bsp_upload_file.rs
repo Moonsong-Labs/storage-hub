@@ -6,6 +6,7 @@ use std::{
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
+use pallet_file_system_runtime_api::QueryBspConfirmChunksToProveForFileError;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
 use sp_core::H256;
@@ -18,7 +19,7 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
     types::{
@@ -72,27 +73,25 @@ impl Default for BspUploadFileConfig {
 /// - [`ProcessConfirmStoringRequest`] event: The third part of the flow. It is triggered by the
 ///   runtime when the BSP should construct a proof for the new file(s) and submit a confirm storing
 ///   extrinsic, waiting for it to be successfully included in a block.
-pub struct BspUploadFileTask<NT, RuntimeApi>
+pub struct BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
     file_key_cleanup: Option<H256>,
     /// Configuration for this task
     config: BspUploadFileConfig,
 }
 
-impl<NT, RuntimeApi> Clone for BspUploadFileTask<NT, RuntimeApi>
+impl<NT, Runtime> Clone for BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> BspUploadFileTask<NT, RuntimeApi> {
+    fn clone(&self) -> BspUploadFileTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             file_key_cleanup: self.file_key_cleanup,
@@ -101,14 +100,13 @@ where
     }
 }
 
-impl<NT, RuntimeApi> BspUploadFileTask<NT, RuntimeApi>
+impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             file_key_cleanup: None,
@@ -124,12 +122,11 @@ where
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<NT, RuntimeApi> EventHandler<NewStorageRequest> for BspUploadFileTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<NewStorageRequest> for BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
         info!(
@@ -154,12 +151,11 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<NT, RuntimeApi> EventHandler<RemoteUploadRequest> for BspUploadFileTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<RemoteUploadRequest> for BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
@@ -223,13 +219,11 @@ where
 ///
 /// This event is triggered by the runtime when it decides it is the right time to submit a confirm
 /// storing extrinsic (and update the local forest root).
-impl<NT, RuntimeApi> EventHandler<ProcessConfirmStoringRequest>
-    for BspUploadFileTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType + 'static,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
         info!(
@@ -287,20 +281,35 @@ where
                     confirm_storing_requests_with_chunks_to_prove
                         .push((confirm_storing_request, chunks_to_prove));
                 }
-                Err(e) => {
-                    let mut confirm_storing_request = confirm_storing_request.clone();
-                    confirm_storing_request.increment_try_count();
-                    if confirm_storing_request.try_count > self.config.max_try_count {
-                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key, e);
-                    } else {
-                        error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, self.config.max_try_count);
-                        self.storage_hub_handler
-                            .blockchain
-                            .queue_confirm_bsp_request(confirm_storing_request)
-                            .await?;
+                Err(e) => match e {
+                    QueryBspConfirmChunksToProveForFileError::StorageRequestNotFound => {
+                        trace!(target: LOG_TARGET, "Skipping {:?} for stale storage request not found in chain state.", confirm_storing_request.file_key);
+                        continue;
                     }
-                }
+                    QueryBspConfirmChunksToProveForFileError::ConfirmChunks(internal_err) => {
+                        trace!(target: LOG_TARGET, "Skipping {:?}. Runtime could not return data due to some corrupted state: {:?}", confirm_storing_request.file_key, internal_err);
+                        continue;
+                    }
+                    _ => {
+                        let mut confirm_storing_request = confirm_storing_request.clone();
+                        confirm_storing_request.increment_try_count();
+                        if confirm_storing_request.try_count > self.config.max_try_count {
+                            error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nMax try count exceeded! Dropping request!", confirm_storing_request.file_key, e);
+                        } else {
+                            error!(target: LOG_TARGET, "Failed to query chunks to prove for file {:?}: {:?}\nEnqueuing file key again! (retry {}/{})", confirm_storing_request.file_key, e, confirm_storing_request.try_count, self.config.max_try_count);
+                            self.storage_hub_handler
+                                .blockchain
+                                .queue_confirm_bsp_request(confirm_storing_request)
+                                .await?;
+                        }
+                    }
+                },
             }
+        }
+
+        if confirm_storing_requests_with_chunks_to_prove.iter().count() == 0 {
+            trace!(target: LOG_TARGET, "Skipping ConfirmStoringRequest: No keys to confirm after querying chunks to prove.");
+            return Ok(());
         }
 
         // Generate the proof for the files and get metadatas.
@@ -411,12 +420,11 @@ where
     }
 }
 
-impl<NT, RuntimeApi> BspUploadFileTask<NT, RuntimeApi>
+impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
     NT: ShNodeType,
     NT::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
         &mut self,
@@ -660,7 +668,7 @@ where
             .storage_hub_handler
             .blockchain
             .send_extrinsic(
-                call.clone(),
+                call.clone().into(),
                 SendExtrinsicOptions::new(Duration::from_secs(
                     self.storage_hub_handler
                         .provider_config
@@ -692,7 +700,7 @@ where
                 .storage_hub_handler
                 .blockchain
                 .send_extrinsic(
-                    call,
+                    call.into(),
                     SendExtrinsicOptions::new(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config

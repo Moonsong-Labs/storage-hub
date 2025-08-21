@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Workspace dependencies
+# External dependencies
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 axum = { workspace = true }
@@ -20,11 +20,9 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 toml = { workspace = true }
-
-# External dependencies
 tower-http = { workspace = true }
 
-# Local dependencies
+# Workspace dependencies
 shc-indexer-db = { path = "../../client/indexer-db" }
 
 [dev-dependencies]

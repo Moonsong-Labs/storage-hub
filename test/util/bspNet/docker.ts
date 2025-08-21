@@ -1,6 +1,7 @@
 import Docker from "dockerode";
 import { execSync } from "node:child_process";
 import path from "node:path";
+import net from "node:net";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
 import * as NodeBspNet from "./node";
@@ -9,8 +10,267 @@ import assert from "node:assert";
 import { PassThrough, type Readable } from "node:stream";
 import { sleep } from "../timer";
 
+export const addCopypartyContainer = async (options?: {
+  name?: string;
+}) => {
+  const docker = new Docker();
+  const containerName = options?.name || "storage-hub-sh-copyparty";
+  const imageName = "copyparty/min:latest";
+
+  // Remove any existing container with same name
+  try {
+    const oldContainer = docker.getContainer(containerName);
+    await oldContainer.remove({ force: true });
+  } catch (e) {
+    // Container doesn't exist, that's fine
+  }
+
+  // Check if image exists, pull if it doesn't
+  try {
+    await docker.getImage(imageName).inspect();
+  } catch (e) {
+    // Image doesn't exist, pull it
+    console.log(`Pulling ${imageName}...`);
+    const stream = await docker.pull(imageName);
+    await new Promise<void>((resolve, reject) => {
+      docker.modem.followProgress(stream, (err: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  const container = await docker.createContainer({
+    Image: "copyparty/min:latest",
+    name: containerName,
+    Labels: {
+      "com.docker.compose.project": "storage-hub",
+      "com.docker.compose.service": containerName,
+      "com.docker.compose.container-number": "1",
+      "com.docker.compose.oneoff": "False"
+    },
+    Cmd: [
+      "--ftp",
+      "3921", // Enable FTP on port 3921
+      "-v",
+      "/res:res:r", // Read-only access to resources at /res path
+      "-v",
+      "/uploads:uploads:rw" // Read-write for uploads at /uploads path
+    ],
+    NetworkingConfig: {
+      EndpointsConfig: {
+        "storage-hub_default": {}
+      }
+    },
+    ExposedPorts: {
+      "3923/tcp": {},
+      "3921/tcp": {}
+    },
+    HostConfig: {
+      PortBindings: {
+        "3923/tcp": [{ HostPort: "0" }], // Random available port
+        "3921/tcp": [{ HostPort: "0" }] // Random available port
+      },
+      Binds: [`${process.cwd()}/../docker/resource:/res:ro`]
+    }
+  });
+
+  await container.start();
+
+  // Get container info
+  const containerInfo = await container.inspect();
+  const containerIp = containerInfo.NetworkSettings.Networks["storage-hub_default"]?.IPAddress;
+
+  // Also get the mapped ports
+  const httpHostPort = containerInfo.NetworkSettings.Ports["3923/tcp"]?.[0]?.HostPort || "3923";
+  const ftpHostPort = containerInfo.NetworkSettings.Ports["3921/tcp"]?.[0]?.HostPort || "3921";
+
+  // Wait for server to be ready by checking both HTTP and FTP endpoints
+  const waitForServer = async (maxRetries = 50, delayMs = 300): Promise<void> => {
+    let httpReady = false;
+    let ftpReady = false;
+
+    const checkHttp = async (): Promise<boolean> => {
+      try {
+        const response = await fetch(`http://localhost:${httpHostPort}/`);
+        if (response.ok || response.status === 403) {
+          console.log(`Copyparty HTTP server ready on http://localhost:${httpHostPort}`);
+          return true;
+        }
+      } catch (e) {
+        // HTTP not ready yet
+      }
+      return false;
+    };
+
+    const checkFtp = async (): Promise<boolean> => {
+      return new Promise<boolean>((resolve) => {
+        let resolved = false;
+        const client: net.Socket = net.createConnection(
+          { port: Number(ftpHostPort), host: "localhost" },
+          () => {
+            // Wait for FTP 220 greeting
+            client.once("data", (data) => {
+              if (!resolved) {
+                const response = data.toString();
+                if (response.includes("220")) {
+                  // Got 220 greeting, now verify files are accessible by sending LIST command
+                  client.write("USER anonymous\r\n");
+
+                  client.once("data", (loginResponse) => {
+                    if (loginResponse.toString().includes("331")) {
+                      // Need password
+                      client.write("PASS \r\n");
+
+                      client.once("data", (passResponse) => {
+                        if (passResponse.toString().includes("230")) {
+                          // Logged in, try to list /res directory to verify mount is ready
+                          client.write("CWD /res\r\n");
+
+                          client.once("data", (cwdResponse) => {
+                            if (!resolved) {
+                              resolved = true;
+                              clearTimeout(timeoutId);
+                              if (cwdResponse.toString().includes("250")) {
+                                // Successfully changed to /res directory, files are accessible
+                                console.log(
+                                  `Copyparty FTP server ready with files accessible on ftp://localhost:${ftpHostPort}`
+                                );
+                                client.write("QUIT\r\n");
+                                client.end();
+                                resolve(true);
+                              } else {
+                                // Could not access /res, files not ready yet
+                                client.destroy();
+                                resolve(false);
+                              }
+                            }
+                          });
+                        } else {
+                          // Login failed
+                          if (!resolved) {
+                            resolved = true;
+                            clearTimeout(timeoutId);
+                            client.destroy();
+                            resolve(false);
+                          }
+                        }
+                      });
+                    } else if (loginResponse.toString().includes("230")) {
+                      // Already logged in (no password needed)
+                      client.write("CWD /res\r\n");
+
+                      client.once("data", (cwdResponse) => {
+                        if (!resolved) {
+                          resolved = true;
+                          clearTimeout(timeoutId);
+                          if (cwdResponse.toString().includes("250")) {
+                            console.log(
+                              `Copyparty FTP server ready with files accessible on ftp://localhost:${ftpHostPort}`
+                            );
+                            client.write("QUIT\r\n");
+                            client.end();
+                            resolve(true);
+                          } else {
+                            client.destroy();
+                            resolve(false);
+                          }
+                        }
+                      });
+                    } else {
+                      // Unexpected response
+                      if (!resolved) {
+                        resolved = true;
+                        clearTimeout(timeoutId);
+                        client.destroy();
+                        resolve(false);
+                      }
+                    }
+                  });
+                } else {
+                  // Got data but not a 220 greeting, server not ready
+                  if (!resolved) {
+                    resolved = true;
+                    clearTimeout(timeoutId);
+                    client.destroy();
+                    resolve(false);
+                  }
+                }
+              }
+            });
+          }
+        );
+
+        const timeoutId = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            client.destroy();
+            resolve(false);
+          }
+        }, 250);
+
+        client.on("error", () => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutId);
+            resolve(false);
+          }
+        });
+
+        client.on("close", () => {
+          if (!resolved) {
+            resolved = true;
+            clearTimeout(timeoutId);
+            resolve(false);
+          }
+        });
+      });
+    };
+
+    // Poll with iterations and delay between checks
+    for (let i = 0; i < maxRetries; i++) {
+      // Check both endpoints concurrently
+      const results: [boolean, boolean] = await Promise.all([
+        httpReady ? Promise.resolve(true) : checkHttp(),
+        ftpReady ? Promise.resolve(true) : checkFtp()
+      ]);
+
+      httpReady = results[0];
+      ftpReady = results[1];
+
+      if (httpReady && ftpReady) {
+        return;
+      }
+
+      // Wait before next iteration (except on the last iteration)
+      if (i < maxRetries - 1) {
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+
+    throw new Error(
+      `Copyparty server failed to start after ${maxRetries} attempts (HTTP: ${httpReady}, FTP: ${ftpReady})`
+    );
+  };
+
+  await waitForServer();
+
+  return {
+    container,
+    containerName,
+    containerIp,
+    httpPort: 3923,
+    ftpPort: 3921,
+    httpHostPort: Number.parseInt(httpHostPort),
+    ftpHostPort: Number.parseInt(ftpHostPort)
+  };
+};
+
 export const checkBspForFile = async (filePath: string) => {
-  const containerId = "docker-sh-bsp-1";
+  const containerId = "storage-hub-sh-bsp-1";
   const loc = path.join("/storage", filePath);
 
   for (let i = 0; i < 100; i++) {
@@ -26,7 +286,7 @@ export const checkBspForFile = async (filePath: string) => {
 };
 
 export const checkFileChecksum = async (filePath: string) => {
-  const containerId = "docker-sh-bsp-1";
+  const containerId = "storage-hub-sh-bsp-1";
   const loc = path.join("/storage", filePath);
   const output = execSync(`docker exec ${containerId} sha256sum ${loc}`);
   return output.toString().split(" ")[0];
@@ -78,12 +338,13 @@ const addContainer = async (
     })
   ).flatMap(({ Command }) => Command).length;
 
-  const p2pPort = 30350 + containerCount;
+  // Use allContainersCount for p2p port to avoid conflicts between BSPs and MSPs
+  const p2pPort = 30350 + allContainersCount;
   const rpcPort = 9888 + allContainersCount * 7;
-  const containerName = options?.name || `docker-sh-${providerType}-${containerCount + 1}`;
+  const containerName = options?.name || `storage-hub-sh-${providerType}-${containerCount + 1}`;
 
   // Get bootnode from docker args
-  const { Args } = await docker.getContainer("docker-sh-user-1").inspect();
+  const { Args } = await docker.getContainer("storage-hub-sh-user-1").inspect();
   const bootNodeArg = Args.find((arg) => arg.includes("--bootnodes="));
 
   assert(bootNodeArg, "No bootnode found in docker args");
@@ -95,9 +356,15 @@ const addContainer = async (
     Image: DOCKER_IMAGE,
     name: containerName,
     platform: "linux/amd64",
+    Labels: {
+      "com.docker.compose.project": "storage-hub",
+      "com.docker.compose.service": containerName,
+      "com.docker.compose.container-number": (containerCount + 1).toString(),
+      "com.docker.compose.oneoff": "False"
+    },
     NetworkingConfig: {
       EndpointsConfig: {
-        docker_default: {}
+        "storage-hub_default": {}
       }
     },
     HostConfig: {
@@ -308,6 +575,79 @@ export const waitForLog = async (options: {
             reject(
               new Error(
                 `Timeout of ${options.timeout}ms exceeded while waiting for log ${options.searchString}`
+              )
+            );
+          }, options.timeout);
+        }
+      }
+    );
+  });
+};
+
+export const waitForAnyLog = async (options: {
+  searchStrings: string[];
+  containerName: string;
+  timeout?: number;
+  tail?: number;
+}): Promise<{ log: string; matchedString: string }> => {
+  return new Promise((resolve, reject) => {
+    const docker = new Docker();
+    const container = docker.getContainer(options.containerName);
+
+    container.logs(
+      { follow: true, stdout: true, stderr: true, tail: options.tail, timestamps: false },
+      (err, stream) => {
+        if (err) {
+          return reject(err);
+        }
+
+        if (stream === undefined) {
+          return reject(new Error("No stream returned."));
+        }
+
+        const stdout = new PassThrough();
+        const stderr = new PassThrough();
+
+        docker.modem.demuxStream(stream, stdout, stderr);
+
+        let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+
+        const cleanup = () => {
+          (stream as Readable).destroy();
+          stdout.destroy();
+          stderr.destroy();
+          if (timeoutHandle) {
+            clearTimeout(timeoutHandle);
+          }
+        };
+
+        const onData = (chunk: Buffer) => {
+          const log = chunk.toString("utf8");
+
+          // Check if any of the search strings match
+          for (const searchString of options.searchStrings) {
+            if (log.includes(searchString)) {
+              cleanup();
+              resolve({ log, matchedString: searchString });
+              return;
+            }
+          }
+        };
+
+        stdout.on("data", onData);
+        stderr.on("data", onData);
+
+        stream.on("error", (err) => {
+          cleanup();
+          reject(err);
+        });
+
+        if (options.timeout) {
+          timeoutHandle = setTimeout(() => {
+            cleanup();
+            reject(
+              new Error(
+                `Timeout of ${options.timeout}ms exceeded while waiting for any of these logs: ${options.searchStrings.join(", ")}`
               )
             );
           }, options.timeout);

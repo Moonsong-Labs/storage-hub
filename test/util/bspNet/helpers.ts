@@ -38,8 +38,8 @@ export const getContainerIp = async (containerName: string, verbose = false): Pr
   // TODO: Replace with dockerode
   execSync("docker ps -a", { stdio: "inherit" });
   try {
-    execSync("docker logs docker-sh-bsp-1", { stdio: "inherit" });
-    execSync("docker logs docker-sh-user-1", { stdio: "inherit" });
+    execSync("docker logs storage-hub-sh-bsp-1", { stdio: "inherit" });
+    execSync("docker logs storage-hub-sh-user-1", { stdio: "inherit" });
   } catch (e) {
     console.log(e);
   }
@@ -114,7 +114,8 @@ export const cleardownTest = async (cleardownOptions: {
     const relevantContainers = remainingContainers.filter(
       (container) =>
         container.Image === DOCKER_IMAGE ||
-        container.Names.some((name) => name.includes("toxiproxy"))
+        container.Names.some((name) => name.includes("toxiproxy")) ||
+        container.Names.some((name) => name.includes("storage-hub-sh-copyparty"))
     );
 
     if (relevantContainers.length > 0) {

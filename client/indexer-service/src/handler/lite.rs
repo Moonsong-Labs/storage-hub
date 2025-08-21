@@ -6,7 +6,7 @@
 
 use anyhow::Result;
 use log::trace;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_indexer_db::DbConnection;
 use storage_hub_runtime::{Hash as H256, RuntimeEvent};
 
@@ -21,11 +21,7 @@ use pallet_storage_providers;
 
 const LOG_TARGET: &str = "indexer-service::lite_handlers";
 
-impl<RuntimeApi> IndexerService<RuntimeApi>
-where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-{
+impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     pub(super) async fn index_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
@@ -114,6 +110,8 @@ where
             pallet_file_system::Event::FailedToReleaseStorageRequestCreationDeposit { .. } => true,
             pallet_file_system::Event::FailedToTransferDepositFundsToBsp { .. } => true,
             pallet_file_system::Event::FileDeletionRequested { .. } => true,
+            pallet_file_system::Event::MspFileDeletionCompleted { .. } => true,
+            pallet_file_system::Event::BspFileDeletionCompleted { .. } => true,
             pallet_file_system::Event::__Ignore(_, _) => true,
         };
 

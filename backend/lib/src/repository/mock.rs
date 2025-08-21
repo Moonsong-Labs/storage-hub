@@ -226,6 +226,7 @@ impl IndexerOpsMut for MockRepository {
             fingerprint: new_file.fingerprint,
             size: new_file.size,
             step: new_file.step,
+            deletion_status: None,
             created_at: now,
             updated_at: now,
         };
