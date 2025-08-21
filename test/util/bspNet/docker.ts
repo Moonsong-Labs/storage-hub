@@ -1,13 +1,13 @@
-import assert from "node:assert";
+import Docker from "dockerode";
 import { execSync } from "node:child_process";
 import path from "node:path";
-import { PassThrough, type Readable } from "node:stream";
-import Docker from "dockerode";
 import { DOCKER_IMAGE } from "../constants";
 import { sendCustomRpc } from "../rpc";
-import { sleep } from "../timer";
 import * as NodeBspNet from "./node";
 import { BspNetTestApi } from "./test-api";
+import assert from "node:assert";
+import { PassThrough, type Readable } from "node:stream";
+import { sleep } from "../timer";
 
 export const checkBspForFile = async (filePath: string) => {
   const containerId = "storage-hub-sh-bsp-1";
@@ -149,7 +149,7 @@ const addContainer = async (
   const chainName = api.consts.system.version.specName.toString();
 
   assert(
-    chainName === "sh-runtime-parachain",
+    chainName === "storage-hub-runtime",
     `Error connecting to ${providerType.toUpperCase()} via api ${containerName}`
   );
 

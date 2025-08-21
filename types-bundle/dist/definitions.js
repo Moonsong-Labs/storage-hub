@@ -13,7 +13,7 @@ export const storageHubDefinitions = {
 };
 export const types = {
   spec: {
-    "sh-runtime-parachain": storageHubDefinitions
+    "storage-hub-runtime": storageHubDefinitions
   }
 };
 //# sourceMappingURL=definitions.js.map

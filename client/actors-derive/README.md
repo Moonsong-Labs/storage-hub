@@ -35,7 +35,6 @@ pub struct NewChallengeSeed {
 ```
 
 This will:
-
 - Implement `EventBusMessage` for the struct
 - Register the event with the specified actor ID (`blockchain_service` in this example)
 
@@ -51,7 +50,6 @@ pub struct BlockchainServiceEventBusProvider;
 ```
 
 This will generate:
-
 - A struct with appropriate event bus fields for all registered events
 - Implementation of the `Default` trait
 - Implementation of the `ProvidesEventBus` trait for each event type
@@ -225,12 +223,12 @@ pub enum FileTransferServiceCommand {
         file_key_proof: FileKeyProof,
         bucket_id: Option<BucketId>,
     },
-
+    
     UploadResponse {
         request_id: UploadRequestId,
         file_complete: bool,
     },
-
+    
     // Other commands...
 }
 ```
@@ -306,7 +304,7 @@ Here's an example from the StorageHub codebase:
 pub enum BlockchainServiceCommand {
     #[command(success_type = SubmittedTransaction)]
     SendExtrinsic {
-        call: sh_runtime_parachain::RuntimeCall,
+        call: storage_hub_runtime::RuntimeCall,
         options: SendExtrinsicOptions,
     },
     #[command(success_type = Extrinsic)]

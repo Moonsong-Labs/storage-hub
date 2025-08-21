@@ -35,13 +35,13 @@ import type {
   PalletNftsPreSignedMint,
   PalletNftsPriceWithDirection,
   PalletProofsDealerProof,
-  ShRuntimeParachainConfigsRuntimeParamsRuntimeParameters,
-  ShRuntimeParachainSessionKeys,
   SpRuntimeMultiSignature,
   SpTrieStorageProofCompactProof,
   SpWeightsWeightV2Weight,
   StagingXcmExecutorAssetTransferTransferType,
   StagingXcmV5Location,
+  StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters,
+  StorageHubRuntimeSessionKeys,
   XcmV3WeightLimit,
   XcmVersionedAssetId,
   XcmVersionedAssets,
@@ -1963,12 +1963,12 @@ declare module "@polkadot/api-base/types/submittable" {
       setParameter: AugmentedSubmittable<
         (
           keyValue:
-            | ShRuntimeParachainConfigsRuntimeParamsRuntimeParameters
+            | StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters
             | { RuntimeConfig: any }
             | string
             | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [ShRuntimeParachainConfigsRuntimeParamsRuntimeParameters]
+        [StorageHubRuntimeConfigsRuntimeParamsRuntimeParameters]
       >;
       /**
        * Generic tx
@@ -3306,10 +3306,10 @@ declare module "@polkadot/api-base/types/submittable" {
        **/
       setKeys: AugmentedSubmittable<
         (
-          keys: ShRuntimeParachainSessionKeys | { aura?: any } | string | Uint8Array,
+          keys: StorageHubRuntimeSessionKeys | { aura?: any } | string | Uint8Array,
           proof: Bytes | string | Uint8Array
         ) => SubmittableExtrinsic<ApiType>,
-        [ShRuntimeParachainSessionKeys, Bytes]
+        [StorageHubRuntimeSessionKeys, Bytes]
       >;
       /**
        * Generic tx
