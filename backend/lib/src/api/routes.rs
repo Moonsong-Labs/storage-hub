@@ -1,6 +1,7 @@
 //! Route definitions for StorageHub API
 
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{get, post, put},
     Router,
 };
@@ -10,6 +11,16 @@ use crate::services::Services;
 
 /// Creates the router with all API routes
 pub fn routes(services: Services) -> Router {
+    // we use a separate router for the upload path
+    // so we can disable the request body limit
+    let file_upload = Router::new()
+        .route(
+            "/buckets/:bucket_id/:file_key/upload",
+            put(msp_handlers::upload_file),
+        )
+        .route_layer(DefaultBodyLimit::disable());
+
+
     Router::new()
         // TODO(SCAFFOLDING): These are example endpoints for demonstration purposes only.
         .route("/health", get(handlers::health_check_detailed))
@@ -39,10 +50,7 @@ pub fn routes(services: Services) -> Router {
             "/buckets/:bucket_id/:file_key/info",
             get(msp_handlers::get_file_info),
         )
-        .route(
-            "/buckets/:bucket_id/:file_key/upload",
-            put(msp_handlers::upload_file),
-        )
+        .merge(file_upload)
         .route(
             "/buckets/:bucket_id/:file_key/distribute",
             post(msp_handlers::distribute_file),
