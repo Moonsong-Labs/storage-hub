@@ -21,9 +21,9 @@ use shc_common::{
     },
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, ParachainClient,
-        ProofsDealerProviderId, StorageEnableEvents, StorageProviderId, TrieAddMutation,
-        TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
+        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
+        ParachainClient, ProofsDealerProviderId, StorageEnableEvents, StorageProviderId,
+        TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -221,13 +221,10 @@ where
     ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::NewBestBlock`].
     /// 3. The block is the new best block, and its parent is NOT the previous best block (i.e. it's a reorg).
     ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::Reorg`].
-    pub(crate) fn register_best_block_and_check_reorg<Block>(
+    pub(crate) fn register_best_block_and_check_reorg(
         &mut self,
-        block_import_notification: &BlockImportNotification<Block>,
-    ) -> NewBlockNotificationKind<Block, Runtime>
-    where
-        Block: BlockT<Hash = Runtime::Hash>,
-    {
+        block_import_notification: &BlockImportNotification<OpaqueBlock>,
+    ) -> NewBlockNotificationKind<Runtime> {
         let last_best_block = self.best_block;
         let new_block_info: MinimalBlockInfo<Runtime> = block_import_notification.into();
 

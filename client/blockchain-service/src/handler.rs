@@ -12,10 +12,7 @@ use shc_common::traits::StorageEnableRuntime;
 use sp_api::{ApiError, ProvideRuntimeApi};
 use sp_blockchain::TreeRoute;
 use sp_keystore::KeystorePtr;
-use sp_runtime::{
-    traits::{Block as BlockT, Header},
-    SaturatedConversion, Saturating,
-};
+use sp_runtime::{traits::Header, SaturatedConversion, Saturating};
 
 use pallet_file_system_runtime_api::{
     FileSystemApi, IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -35,7 +32,7 @@ use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::{
     blockchain_utils::{convert_raw_multiaddresses_to_multiaddr, get_events_at_block},
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{AccountId, BlockNumber, ParachainClient, TickNumber},
+    types::{AccountId, BlockNumber, OpaqueBlock, ParachainClient, TickNumber},
 };
 use shc_forest_manager::traits::ForestStorageHandler;
 
@@ -166,14 +163,13 @@ where
 }
 
 /// Merged event loop message for the BlockchainService actor.
-enum MergedEventLoopMessage<Block, Runtime>
+enum MergedEventLoopMessage<Runtime>
 where
-    Block: BlockT,
     Runtime: StorageEnableRuntime,
 {
     Command(BlockchainServiceCommand<Runtime>),
-    BlockImportNotification(BlockImportNotification<Block>),
-    FinalityNotification(FinalityNotification<Block>),
+    BlockImportNotification(BlockImportNotification<OpaqueBlock>),
+    FinalityNotification(FinalityNotification<OpaqueBlock>),
 }
 
 /// Implement the ActorEventLoop trait for the BlockchainServiceEventLoop.
@@ -206,13 +202,13 @@ where
         // Merging notification streams with command stream.
         let mut merged_stream = stream::select_all(vec![
             self.receiver
-                .map(MergedEventLoopMessage::<_, Runtime>::Command)
+                .map(MergedEventLoopMessage::<Runtime>::Command)
                 .boxed(),
             block_import_notification_stream
-                .map(MergedEventLoopMessage::<_, Runtime>::BlockImportNotification)
+                .map(|n| MergedEventLoopMessage::<Runtime>::BlockImportNotification(n))
                 .boxed(),
             finality_notification_stream
-                .map(MergedEventLoopMessage::<_, Runtime>::FinalityNotification)
+                .map(|n| MergedEventLoopMessage::<Runtime>::FinalityNotification(n))
                 .boxed(),
         ]);
 
@@ -1197,12 +1193,10 @@ where
         }
     }
 
-    async fn handle_block_import_notification<Block>(
+    async fn handle_block_import_notification(
         &mut self,
-        notification: BlockImportNotification<Block>,
-    ) where
-        Block: BlockT<Hash = Runtime::Hash>,
-    {
+        notification: BlockImportNotification<OpaqueBlock>,
+    ) {
         // If the node is running in maintenance mode, we don't process block imports.
         if self.maintenance_mode {
             trace!(target: LOG_TARGET, "🔒 Maintenance mode is enabled. Skipping processing of block import notification: {:?}", notification);
@@ -1243,10 +1237,7 @@ where
         // Check if we just came out of syncing mode.
         // We use saturating_sub because in a reorg, there is a potential scenario where the last
         // block processed is higher than the current block number.
-        let sync_mode_min_blocks_behind = self
-            .config
-            .sync_mode_min_blocks_behind
-            .saturated_into::<u128>();
+        let sync_mode_min_blocks_behind = self.config.sync_mode_min_blocks_behind;
         if block_number.saturating_sub(last_block_processed.number) > sync_mode_min_blocks_behind {
             self.handle_initial_sync(notification).await;
         }
@@ -1274,10 +1265,7 @@ where
     }
 
     /// Handle the situation after the node comes out of syncing mode (i.e. hasn't processed many of the last blocks).
-    async fn handle_initial_sync<Block>(&mut self, notification: BlockImportNotification<Block>)
-    where
-        Block: BlockT<Hash = Runtime::Hash>,
-    {
+    async fn handle_initial_sync(&mut self, notification: BlockImportNotification<OpaqueBlock>) {
         let block_hash = notification.hash;
         let block_number = *notification.header.number();
 
@@ -1360,14 +1348,12 @@ where
         }
     }
 
-    async fn process_block_import<Block>(
+    async fn process_block_import(
         &mut self,
         block_hash: &Runtime::Hash,
         block_number: &BlockNumber<Runtime>,
-        tree_route: TreeRoute<Block>,
-    ) where
-        Block: BlockT<Hash = Runtime::Hash>,
-    {
+        tree_route: TreeRoute<OpaqueBlock>,
+    ) {
         trace!(target: LOG_TARGET, "📠 Processing block import #{}: {}", block_number, block_hash);
 
         // Provider-specific code to run on every block import.
@@ -1459,12 +1445,10 @@ where
     }
 
     /// Handle a finality notification.
-    async fn handle_finality_notification<Block>(
+    async fn handle_finality_notification(
         &mut self,
-        notification: FinalityNotification<Block>,
-    ) where
-        Block: BlockT<Hash = Runtime::Hash>,
-    {
+        notification: FinalityNotification<OpaqueBlock>,
+    ) {
         let block_hash = notification.hash;
         let block_number = *notification.header.number();
 

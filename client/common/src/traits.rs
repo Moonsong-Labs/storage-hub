@@ -15,7 +15,8 @@ use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
 use sp_rpc::number::NumberOrHex;
 use sp_runtime::traits::{
-    Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension, Verify,
+    Block as BlockT, Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension,
+    Verify,
 };
 
 use crate::types::*;
@@ -211,6 +212,7 @@ pub trait StorageEnableRuntime:
         Hash = shp_types::Hash,
         AccountId: for<'a> TryFrom<&'a [u8]> + AsRef<[u8]>,
         RuntimeEvent: Into<StorageEnableEvents<Self>>,
+        Block: BlockT<Hash = shp_types::Hash>,
     >
         + pallet_storage_providers::Config<
             MerklePatriciaRoot = shp_types::Hash,

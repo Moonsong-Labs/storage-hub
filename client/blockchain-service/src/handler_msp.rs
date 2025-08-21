@@ -5,7 +5,7 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_runtime::{traits::Block as BlockT, SaturatedConversion};
+use sp_runtime::traits::Block as BlockT;
 
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
@@ -278,7 +278,7 @@ where
     /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
     pub(crate) fn msp_assign_forest_root_write_lock(&mut self) {
         let client_best_hash: Runtime::Hash = self.client.info().best_hash;
-        let client_best_number: u128 = self.client.info().best_number.saturated_into();
+        let client_best_number: BlockNumber<Runtime> = self.client.info().best_number.into();
 
         // Skip if the latest processed block doesn't match the current best block
         if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number

@@ -14,14 +14,14 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
-        MainStorageProviderId, MerkleTrieHash, ProofsDealerProviderId, RandomnessOutput,
-        RejectedStorageRequestReason, StorageDataUnit, StorageHubEventsVec,
+        MainStorageProviderId, MerkleTrieHash, OpaqueBlock, ProofsDealerProviderId,
+        RandomnessOutput, RejectedStorageRequestReason, StorageDataUnit, StorageHubEventsVec,
         StorageProofsMerkleTrieLayout, StorageProviderId,
     },
 };
 use sp_blockchain::{HashAndNumber, TreeRoute};
 use sp_runtime::{
-    traits::{Block as BlockT, Header, Zero},
+    traits::{Header, Zero},
     DispatchError, SaturatedConversion,
 };
 
@@ -441,57 +441,45 @@ pub enum WatchTransactionError {
 /// and detect reorgs.
 #[derive(Debug, Clone, Encode, Decode, Copy)]
 pub struct MinimalBlockInfo<Runtime: StorageEnableRuntime> {
-    pub number: u128,
+    pub number: BlockNumber<Runtime>,
     pub hash: Runtime::Hash,
 }
 
-impl<Block, Runtime: StorageEnableRuntime> From<&BlockImportNotification<Block>>
+impl<Runtime: StorageEnableRuntime> From<&BlockImportNotification<OpaqueBlock>>
     for MinimalBlockInfo<Runtime>
-where
-    Block: BlockT<Hash = Runtime::Hash>,
 {
-    fn from(notification: &BlockImportNotification<Block>) -> Self {
+    fn from(notification: &BlockImportNotification<OpaqueBlock>) -> Self {
         Self {
-            number: (*notification.header.number()).saturated_into::<u128>(),
+            number: (*notification.header.number()).into(),
             hash: notification.hash,
         }
     }
 }
 
-impl<Block, Runtime: StorageEnableRuntime> From<BlockImportNotification<Block>>
+impl<Runtime: StorageEnableRuntime> From<BlockImportNotification<OpaqueBlock>>
     for MinimalBlockInfo<Runtime>
-where
-    Block: BlockT<Hash = Runtime::Hash>,
 {
-    fn from(notification: BlockImportNotification<Block>) -> Self {
+    fn from(notification: BlockImportNotification<OpaqueBlock>) -> Self {
         Self {
-            number: (*notification.header.number()).saturated_into::<u128>(),
+            number: (*notification.header.number()).into(),
             hash: notification.hash,
         }
     }
 }
 
-impl<Block, Runtime: StorageEnableRuntime> Into<HashAndNumber<Block>> for MinimalBlockInfo<Runtime>
-where
-    Block: BlockT<Hash = Runtime::Hash>,
-{
-    fn into(self) -> HashAndNumber<Block> {
+impl<Runtime: StorageEnableRuntime> Into<HashAndNumber<OpaqueBlock>> for MinimalBlockInfo<Runtime> {
+    fn into(self) -> HashAndNumber<OpaqueBlock> {
         HashAndNumber {
-            number: self
-                .number
-                .saturated_into::<<<Block as BlockT>::Header as Header>::Number>(),
+            number: self.number.saturated_into(),
             hash: self.hash,
         }
     }
 }
 
-impl<Block, Runtime: StorageEnableRuntime> From<HashAndNumber<Block>> for MinimalBlockInfo<Runtime>
-where
-    Block: BlockT<Hash = Runtime::Hash>,
-{
-    fn from(hash_and_number: HashAndNumber<Block>) -> Self {
+impl<Runtime: StorageEnableRuntime> From<HashAndNumber<OpaqueBlock>> for MinimalBlockInfo<Runtime> {
+    fn from(hash_and_number: HashAndNumber<OpaqueBlock>) -> Self {
         Self {
-            number: hash_and_number.number.saturated_into::<u128>(),
+            number: hash_and_number.number.into(),
             hash: hash_and_number.hash,
         }
     }
@@ -508,10 +496,7 @@ impl<Runtime: StorageEnableRuntime> Default for MinimalBlockInfo<Runtime> {
 
 /// When a new block is imported, the block is checked to see if it is one of the members
 /// of this enum.
-pub enum NewBlockNotificationKind<Block, Runtime: StorageEnableRuntime>
-where
-    Block: BlockT<Hash = Runtime::Hash>,
-{
+pub enum NewBlockNotificationKind<Runtime: StorageEnableRuntime> {
     /// The block is a new best block, built on top of the previous best block.
     ///
     /// - `last_best_block_processed`: The last best block that was processed by this node.
@@ -527,7 +512,7 @@ where
     NewBestBlock {
         last_best_block_processed: MinimalBlockInfo<Runtime>,
         new_best_block: MinimalBlockInfo<Runtime>,
-        tree_route: TreeRoute<Block>,
+        tree_route: TreeRoute<OpaqueBlock>,
     },
     /// The block belongs to a fork that is not currently the best fork.
     NewNonBestBlock(MinimalBlockInfo<Runtime>),
@@ -540,7 +525,7 @@ where
     Reorg {
         old_best_block: MinimalBlockInfo<Runtime>,
         new_best_block: MinimalBlockInfo<Runtime>,
-        tree_route: TreeRoute<Block>,
+        tree_route: TreeRoute<OpaqueBlock>,
     },
 }
 
