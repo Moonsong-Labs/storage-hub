@@ -1,7 +1,7 @@
 [workspace.package]
 authors = ["Moonsong Labs"]
 edition = "2021"
-repository = "https://github.com/Moonsong-Labs/storage-hub-runtime.git"
+repository = "https://github.com/Moonsong-Labs/storage-hub.git"
 license = "GPL-3.0-only"
 homepage = "https://moonsonglabs.com/"
 
@@ -268,7 +268,7 @@ shp-treasury-funding = { path = "primitives/treasury-funding", default-features 
 shp-types = { path = "primitives/types", default-features = false }
 
 # Local - StorageHub Runtime
-storage-hub-runtime = { path = "runtime/parachain", default-features = false }
+sh-runtime-parachain = { path = "runtime/parachain", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
