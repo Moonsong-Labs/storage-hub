@@ -1365,12 +1365,6 @@ where
             IncompleteStorageRequests::<T>::insert(&file_key, incomplete_storage_request_metadata);
         }
 
-        // Emit event
-        Self::deposit_event(Event::FileDeletedFromIncompleteStorageRequest {
-            file_key,
-            provider_id,
-        });
-
         Ok(())
     }
 

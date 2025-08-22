@@ -1528,9 +1528,9 @@ pub mod pallet {
 
         /// Delete a file from an incomplete (rejected, expired or revoked) storage request.
         ///
-        /// This extrinsic allows fisherman nodes to delete files from providers when the storage request
-        /// has been marked as rejected or revoked. It validates that the storage request exists, is rejected or revoked,
-        /// the provider actually stores the file, and verifies the file key matches the metadata.
+        /// This extrinsic allows fisherman nodes to delete files from providers when an IncompleteStorageRequestMetadata for the given file_key
+        /// exist in the IncompleteStorageRequests mapping. It validates that the IncompleteStorageRequestMetadata exists,
+        /// that the provider has the file in its Merkle Patricia Forest, and verifies the file key matches the metadata.
         #[pallet::call_index(18)]
         #[pallet::weight(Weight::zero())]
         pub fn delete_file_for_incomplete_storage_request(
@@ -1547,6 +1547,12 @@ pub mod pallet {
                 provider_id,
                 forest_proof,
             )?;
+
+            // Emit event
+            Self::deposit_event(Event::FileDeletedFromIncompleteStorageRequest {
+                file_key,
+                provider_id,
+            });
 
             Ok(())
         }
