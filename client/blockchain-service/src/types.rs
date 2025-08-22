@@ -8,7 +8,6 @@ use std::{
 };
 
 use codec::{Decode, Encode};
-use cumulus_primitives_core::BlockT;
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
 use shc_common::{
@@ -480,7 +479,7 @@ impl<Runtime: StorageEnableRuntime> Into<HashAndNumber<OpaqueBlock>> for Minimal
 impl<Runtime: StorageEnableRuntime> From<HashAndNumber<OpaqueBlock>> for MinimalBlockInfo<Runtime> {
     fn from(hash_and_number: HashAndNumber<OpaqueBlock>) -> Self {
         Self {
-            number: hash_and_number.number.saturated_into::<u128>(),
+            number: hash_and_number.number.into(),
             hash: hash_and_number.hash,
         }
     }
