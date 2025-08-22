@@ -1,5 +1,7 @@
 import assert, { strictEqual } from "node:assert";
-import { describeBspNet, type EnrichedBspApi, addCopypartyContainer } from "../../../util";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, addCopypartyContainer, describeBspNet } from "../../../util";
 
 describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
@@ -56,12 +58,13 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/adolphus.jpg";
     const bucketId = await createBucketAndGetId("bucket-0");
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex,
       bucketId
     );
 
@@ -79,12 +82,13 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/one-chunk-file";
     const bucketId = await createBucketAndGetId("bucket-5");
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex,
       bucketId
     );
 
@@ -104,14 +108,9 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/empty-file";
     const bucketId = await createBucketAndGetId("bucket-1");
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     await assert.rejects(
-      () =>
-        userApi.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          bucketId
-        ),
+      () => userApi.rpc.storagehubclient.loadFileInStorage(source, destination, ownerHex, bucketId),
       /-32603: Internal error: FileIsEmpty/,
       "Should reject with FileIsEmpty error"
     );
@@ -123,12 +122,13 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const bucketId = await createBucketAndGetId("bucket-10");
 
     // First upload should succeed
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex,
       bucketId
     );
 
@@ -141,14 +141,10 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     );
 
     // Second upload with same destination should fail
+    const ownerHex2 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     await assert.rejects(
       () =>
-        userApi.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          bucketId
-        ),
+        userApi.rpc.storagehubclient.loadFileInStorage(source, destination, ownerHex2, bucketId),
       /-32603: Internal error: FileAlreadyExists/,
       "Should reject with FileAlreadyExists error"
     );
@@ -159,14 +155,9 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/inexistent-file";
     const bucketId = await createBucketAndGetId("bucket-11");
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     await assert.rejects(
-      () =>
-        userApi.rpc.storagehubclient.loadFileInStorage(
-          source,
-          destination,
-          userApi.shConsts.NODE_INFOS.user.AddressId,
-          bucketId
-        ),
+      () => userApi.rpc.storagehubclient.loadFileInStorage(source, destination, ownerHex, bucketId),
       /-32603: Internal error: File not found/,
       "Should reject with 'File not found' error"
     );
@@ -182,12 +173,13 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/adolphus-http.jpg";
     const bucketId = await createBucketAndGetId("bucket-http-remote");
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex,
       bucketId
     );
 
@@ -208,12 +200,13 @@ describeBspNet("User: Load File Into Storage", ({ before, createUserApi, it }) =
     const destination = "test/smile-ftp.jpg";
     const bucketId = await createBucketAndGetId("bucket-ftp-remote");
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex,
       bucketId
     );
 

@@ -1,12 +1,11 @@
 use log::{debug, error, info, trace, warn};
-use std::collections::BTreeMap;
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_core::H256;
+use sp_runtime::traits::Block as BlockT;
 
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
@@ -14,10 +13,12 @@ use shc_actors_framework::actor::Actor;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     typed_store::{CFDequeAPI, ProvidesTypedDbSingleAccess},
-    types::{BlockHash, BlockNumber, Fingerprint, ProviderId, StorageRequestMetadata},
+    types::{
+        BlockHash, BlockNumber, Fingerprint, ProviderId, StorageEnableEvents,
+        StorageRequestMetadata,
+    },
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use storage_hub_runtime::RuntimeEvent;
 
 use crate::{
     events::{
@@ -43,20 +44,20 @@ const MAX_BATCH_MSP_RESPOND_STORE_REQUESTS: u32 = 100;
 
 impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Handles the initial sync of a MSP, after coming out of syncing mode.
     ///
     /// Steps:
     /// TODO
-    pub(crate) fn msp_initial_sync(&self, block_hash: H256, msp_id: ProviderId) {
+    pub(crate) fn msp_initial_sync(&self, block_hash: Runtime::Hash, msp_id: ProviderId<Runtime>) {
         // TODO: Send events to check that this node has a Forest Storage for each Bucket this MSP manages.
         // TODO: Catch up to Forest root writes in the Bucket's Forests.
 
         info!(target: LOG_TARGET, "Checking for storage requests for this MSP");
 
-        let storage_requests: BTreeMap<H256, StorageRequestMetadata> = match self
+        let storage_requests: BTreeMap<Runtime::Hash, StorageRequestMetadata<Runtime>> = match self
             .client
             .runtime_api()
             .pending_storage_requests_by_msp(block_hash, msp_id)
@@ -81,7 +82,7 @@ where
                 file_key: file_key.into(),
                 bucket_id: sr.bucket_id,
                 location: sr.location,
-                fingerprint: Fingerprint::from(sr.fingerprint.as_bytes()),
+                fingerprint: Fingerprint::from(sr.fingerprint.as_ref()),
                 size: sr.size,
                 user_peer_ids: sr.user_peer_ids,
                 expires_at: sr.expires_at,
@@ -95,17 +96,21 @@ where
     /// 1. Catch up to Forest root changes in the Forests of the Buckets this MSP manages.
     pub(crate) async fn msp_init_block_processing<Block>(
         &self,
-        _block_hash: &H256,
-        _block_number: &BlockNumber,
+        _block_hash: &Runtime::Hash,
+        _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         self.forest_root_changes_catchup(&tree_route).await;
     }
 
     /// Processes new block imported events that are only relevant for an MSP.
-    pub(crate) fn msp_process_block_import_events(&self, _block_hash: &H256, event: RuntimeEvent) {
+    pub(crate) fn msp_process_block_import_events(
+        &self,
+        _block_hash: &Runtime::Hash,
+        event: StorageEnableEvents<Runtime>,
+    ) {
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
             _ => {
@@ -115,7 +120,7 @@ where
         };
 
         match event {
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
                 bucket_id,
                 old_msp_id: _,
                 new_msp_id,
@@ -132,7 +137,7 @@ where
                     });
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::FileDeletionRequest {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::FileDeletionRequest {
                 user,
                 file_key,
                 file_size,
@@ -145,7 +150,7 @@ where
                     self.emit(FileDeletionRequest {
                         user,
                         file_key: file_key.into(),
-                        file_size: file_size.into(),
+                        file_size,
                         bucket_id,
                         msp_id,
                         proof_of_inclusion,
@@ -158,7 +163,11 @@ where
     }
 
     /// Processes finality events that are only relevant for an MSP.
-    pub(crate) fn msp_process_finality_events(&self, _block_hash: &H256, event: RuntimeEvent) {
+    pub(crate) fn msp_process_finality_events(
+        &self,
+        _block_hash: &Runtime::Hash,
+        event: StorageEnableEvents<Runtime>,
+    ) {
         let managed_msp_id = match &self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &msp_handler.msp_id,
             _ => {
@@ -168,11 +177,13 @@ where
         };
 
         match event {
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MspStoppedStoringBucket {
-                msp_id,
-                owner,
-                bucket_id,
-            }) => {
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::MspStoppedStoringBucket {
+                    msp_id,
+                    owner,
+                    bucket_id,
+                },
+            ) => {
                 if msp_id == *managed_msp_id {
                     self.emit(FinalisedMspStoppedStoringBucket {
                         msp_id,
@@ -181,7 +192,7 @@ where
                     })
                 }
             }
-            RuntimeEvent::FileSystem(
+            StorageEnableEvents::FileSystem(
                 pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
                     msp_id,
                     user,
@@ -196,14 +207,14 @@ where
                     self.emit(FinalisedProofSubmittedForPendingFileDeletionRequest {
                         user,
                         file_key: file_key.into(),
-                        file_size: file_size.into(),
+                        file_size: file_size,
                         bucket_id,
                         msp_id,
                         proof_of_inclusion,
                     });
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketRequested {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketRequested {
                 who: _,
                 bucket_id,
                 new_msp_id,
@@ -217,7 +228,7 @@ where
                     });
                 }
             }
-            RuntimeEvent::FileSystem(
+            StorageEnableEvents::FileSystem(
                 pallet_file_system::Event::MspStopStoringBucketInsolventUser {
                     msp_id,
                     owner: _,
@@ -228,7 +239,7 @@ where
                     self.emit(FinalisedMspStopStoringBucketInsolventUser { msp_id, bucket_id })
                 }
             }
-            RuntimeEvent::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::MoveBucketAccepted {
                 bucket_id,
                 old_msp_id,
                 new_msp_id,
@@ -266,8 +277,8 @@ where
     ///
     /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
     pub(crate) fn msp_assign_forest_root_write_lock(&mut self) {
-        let client_best_hash = self.client.info().best_hash;
-        let client_best_number = self.client.info().best_number;
+        let client_best_hash: Runtime::Hash = self.client.info().best_hash;
+        let client_best_number: BlockNumber<Runtime> = self.client.info().best_number.into();
 
         // Skip if the latest processed block doesn't match the current best block
         if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
@@ -312,13 +323,21 @@ where
 
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf)
+                    .access_value(&OngoingProcessFileDeletionRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .delete();
                 state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .delete();
                 state_store_context
-                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .access_value(
+                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
+                            phantom: Default::default(),
+                        },
+                    )
                     .delete();
                 state_store_context.commit();
             }
@@ -326,7 +345,7 @@ where
 
         // At this point we know that the lock is released and we can start processing new requests.
         let state_store_context = self.persistent_state.open_rw_context_with_overlay();
-        let mut next_event_data: Option<ForestWriteLockTaskData> = None;
+        let mut next_event_data: Option<ForestWriteLockTaskData<Runtime>> = None;
 
         if self.maybe_managed_provider.is_none() {
             // If there's no Provider being managed, there's no point in checking for pending requests.
@@ -392,7 +411,7 @@ where
         // If we have no pending storage requests to respond to, we can also check for pending stop storing for insolvent user requests.
         if next_event_data.is_none() {
             if let Some(request) = state_store_context
-                .pending_stop_storing_for_insolvent_user_request_deque()
+                .pending_stop_storing_for_insolvent_user_request_deque::<Runtime>()
                 .pop_front()
             {
                 next_event_data = Some(
@@ -413,7 +432,7 @@ where
     pub(crate) async fn msp_process_forest_root_changing_events(
         &self,
         block_hash: &BlockHash,
-        event: RuntimeEvent,
+        event: StorageEnableEvents<Runtime>,
         revert: bool,
     ) {
         let managed_msp_id = match &self.maybe_managed_provider {
@@ -439,7 +458,7 @@ where
                     });
 
         match event {
-            RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
+            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::MutationsApplied {
                 mutations,
                 old_root,
                 new_root,
@@ -517,7 +536,7 @@ where
         }
     }
 
-    fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData>) {
+    fn msp_emit_forest_write_event(&mut self, data: impl Into<ForestWriteLockTaskData<Runtime>>) {
         // Get the MSP's Forest root write lock.
         let forest_root_write_lock = match &mut self.maybe_managed_provider {
             Some(ManagedProvider::Msp(msp_handler)) => &mut msp_handler.forest_root_write_lock,
@@ -538,21 +557,29 @@ where
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .write(data);
                 state_store_context.commit();
             }
             ForestWriteLockTaskData::FileDeletionRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessFileDeletionRequestCf)
+                    .access_value(&OngoingProcessFileDeletionRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .write(data);
                 state_store_context.commit();
             }
             ForestWriteLockTaskData::StopStoringForInsolventUserRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessStopStoringForInsolventUserRequestCf)
+                    .access_value(
+                        &OngoingProcessStopStoringForInsolventUserRequestCf::<Runtime> {
+                            phantom: Default::default(),
+                        },
+                    )
                     .write(data);
                 state_store_context.commit();
             }

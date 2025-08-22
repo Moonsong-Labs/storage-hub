@@ -7,9 +7,8 @@
 
 use anyhow::Result;
 use log::trace;
-use shc_common::traits::StorageEnableRuntime;
+use shc_common::{traits::StorageEnableRuntime, types::StorageEnableEvents};
 use shc_indexer_db::DbConnection;
-use storage_hub_runtime::{Hash as H256, RuntimeEvent};
 
 use super::IndexerService;
 
@@ -25,11 +24,11 @@ where
     pub(super) async fn index_event_fishing<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &RuntimeEvent,
-        block_hash: H256,
+        event: &StorageEnableEvents<Runtime>,
+        block_hash: Runtime::Hash,
     ) -> Result<(), diesel::result::Error> {
         match event {
-            RuntimeEvent::FileSystem(fs_event) => match fs_event {
+            StorageEnableEvents::FileSystem(fs_event) => match fs_event {
                 pallet_file_system::Event::NewStorageRequest { .. } => {
                     trace!(target: LOG_TARGET, "Indexing NewStorageRequest event");
                     self.index_file_system_event(conn, fs_event).await?
@@ -132,7 +131,7 @@ where
                     trace!(target: LOG_TARGET, "Ignoring non-essential FileSystem event in fishing mode");
                 }
             },
-            RuntimeEvent::Providers(provider_event) => match provider_event {
+            StorageEnableEvents::StorageProviders(provider_event) => match provider_event {
                 pallet_storage_providers::Event::BspSignUpSuccess { .. }
                 | pallet_storage_providers::Event::BspSignOffSuccess { .. }
                 | pallet_storage_providers::Event::BspDeleted { .. } => {
@@ -176,23 +175,14 @@ where
                 }
             },
             // Explicitly list all other runtime events to ensure compilation errors on new events
-            RuntimeEvent::System(_) => {}
-            RuntimeEvent::ParachainSystem(_) => {}
-            RuntimeEvent::Balances(_) => {}
-            RuntimeEvent::TransactionPayment(_) => {}
-            RuntimeEvent::Sudo(_) => {}
-            RuntimeEvent::CollatorSelection(_) => {}
-            RuntimeEvent::Session(_) => {}
-            RuntimeEvent::XcmpQueue(_) => {}
-            RuntimeEvent::PolkadotXcm(_) => {}
-            RuntimeEvent::CumulusXcm(_) => {}
-            RuntimeEvent::MessageQueue(_) => {}
-            RuntimeEvent::Nfts(_) => {}
-            RuntimeEvent::Parameters(_) => {}
-            RuntimeEvent::BucketNfts(_) => {}
-            RuntimeEvent::PaymentStreams(_) => {}
-            RuntimeEvent::ProofsDealer(_) => {}
-            RuntimeEvent::Randomness(_) => {}
+            StorageEnableEvents::BucketNfts(_) => {}
+            StorageEnableEvents::PaymentStreams(_) => {}
+            StorageEnableEvents::ProofsDealer(_) => {}
+            StorageEnableEvents::Randomness(_) => {}
+            StorageEnableEvents::System(_) => {}
+            StorageEnableEvents::Balances(_) => {}
+            StorageEnableEvents::TransactionPayment(_) => {}
+            StorageEnableEvents::Other(_) => {}
         }
         Ok(())
     }

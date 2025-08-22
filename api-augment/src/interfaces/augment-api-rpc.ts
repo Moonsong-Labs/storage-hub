@@ -67,7 +67,6 @@ import type { FeeDetails, RuntimeDispatchInfoV1 } from "@polkadot/types/interfac
 import type { RpcMethods } from "@polkadot/types/interfaces/rpc";
 import type {
   AccountId,
-  AccountId32,
   BlockNumber,
   H160,
   H256,
@@ -1157,7 +1156,7 @@ declare module "@polkadot/rpc-core/types/jsonrpc" {
         (
           file_path: Text | string,
           location: Text | string,
-          owner: AccountId32 | string | Uint8Array,
+          owner_account_id_hex: Text | string,
           bucket_id: H256 | string | Uint8Array
         ) => Observable<LoadFileInStorageResult>
       >;

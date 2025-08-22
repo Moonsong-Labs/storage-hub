@@ -25,8 +25,8 @@ use sp_consensus_aura::Slot;
 use sp_core::H256;
 
 // Local Runtime Types
-use storage_hub_runtime::opaque::Block;
-use storage_hub_runtime::{apis::RuntimeApi, opaque::Hash, Runtime};
+use shp_opaque::{Block, Hash};
+use storage_hub_runtime::{apis::RuntimeApi, Runtime};
 
 // Cumulus Imports
 use cumulus_client_collator::service::CollatorService;
@@ -329,14 +329,18 @@ async fn init_sh_builder<R, S>(
 ) -> Result<
     Option<(
         StorageHubBuilder<R, S, Runtime>,
-        StorageHubClientRpcConfig<<(R, S) as ShNodeType>::FL, <(R, S) as ShNodeType>::FSH>,
+        StorageHubClientRpcConfig<
+            <(R, S) as ShNodeType<Runtime>>::FL,
+            <(R, S) as ShNodeType<Runtime>>::FSH,
+            Runtime,
+        >,
     )>,
     sc_service::Error,
 >
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
     let maybe_indexer_db_pool =
@@ -432,7 +436,7 @@ async fn finish_sh_builder_and_run_tasks<R, S>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
 {
@@ -487,7 +491,7 @@ async fn start_dev_impl<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
@@ -667,7 +671,7 @@ where
                 command_sink: command_sink.clone(),
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -899,7 +903,7 @@ async fn start_dev_in_maintenance_mode<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: sc_network::NetworkBackend<OpaqueBlock, BlockHash>,
@@ -996,7 +1000,7 @@ where
                 command_sink: Some(command_sink.clone()),
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1073,7 +1077,7 @@ async fn start_node_impl<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
@@ -1207,7 +1211,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 
@@ -1335,7 +1339,7 @@ async fn start_node_in_maintenance_mode<R, S, Network>(
 where
     R: ShRole,
     S: ShStorageLayer,
-    (R, S): ShNodeType,
+    (R, S): ShNodeType<Runtime>,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder + Buildable<(R, S), Runtime>,
     StorageHubHandler<(R, S), Runtime>: RunnableTasks,
     Network: NetworkBackend<OpaqueBlock, BlockHash>,
@@ -1427,7 +1431,7 @@ where
                 command_sink: None,
             };
 
-            crate::rpc::create_full::<_, _, _, _, Runtime>(deps).map_err(Into::into)
+            crate::rpc::create_full::<_, _, _, Runtime>(deps).map_err(Into::into)
         })
     };
 

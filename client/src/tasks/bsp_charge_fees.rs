@@ -11,10 +11,12 @@ use shc_blockchain_service::{
     },
     types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
-use shc_common::traits::StorageEnableRuntime;
-use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
+use shc_common::{
+    consts::CURRENT_FOREST_KEY, traits::StorageEnableRuntime, types::MaxUsersToCharge,
+};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use sp_core::{Get, H256};
+use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
     handler::StorageHubHandler,
@@ -68,8 +70,8 @@ impl Default for BspChargeFeesConfig {
 /// the file deletion flow until no more files from that user are stored.
 pub struct BspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -79,8 +81,8 @@ where
 
 impl<NT, Runtime> Clone for BspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspChargeFeesTask<NT, Runtime> {
@@ -91,13 +93,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<LastChargeableInfoUpdated> for BspChargeFeesTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<LastChargeableInfoUpdated<Runtime>>
+    for BspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: LastChargeableInfoUpdated) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: LastChargeableInfoUpdated<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
 
         // Retrieves users with debt over the min_debt threshold from config
@@ -105,7 +111,7 @@ where
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(event.provider_id, self.config.min_debt as u128)
+            .query_users_with_debt(event.provider_id, self.config.min_debt.saturated_into())
             .await
             .map_err(|e| {
                 anyhow!(
@@ -117,18 +123,18 @@ where
         // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
         // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
         // Logs an error in case of failure and continues.
-        let user_chunk_size = <MaxUsersToCharge as Get<u32>>::get();
+        let user_chunk_size = <MaxUsersToCharge<Runtime> as Get<u32>>::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
-            let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                pallet_payment_streams::Call::charge_multiple_users_payment_streams {
+            let call: Runtime::Call =
+                pallet_payment_streams::Call::<Runtime>::charge_multiple_users_payment_streams {
                     user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),
-                },
-            );
+                }
+                .into();
 
             let charging_result = self
                 .storage_hub_handler
                 .blockchain
-                .send_extrinsic(call.into(), Default::default())
+                .send_extrinsic(call, Default::default())
                 .await;
 
             match charging_result {
@@ -145,13 +151,13 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<UserWithoutFunds> for BspChargeFeesTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<UserWithoutFunds<Runtime>> for BspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: UserWithoutFunds) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing UserWithoutFunds for user {:?}",
@@ -193,13 +199,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<SpStopStoringInsolventUser> for BspChargeFeesTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<SpStopStoringInsolventUser<Runtime>>
+    for BspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: SpStopStoringInsolventUser) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: SpStopStoringInsolventUser<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing SpStopStoringForInsolventUser for user {:?}",
@@ -245,16 +255,16 @@ where
 ///
 /// This event is triggered whenever a Forest write-lock can be acquired to process a `StopStoringForInsolventUserRequest`
 /// after receiving either a `UserWithoutFunds` or `SpStopStoringInsolventUser` event.
-impl<NT, Runtime> EventHandler<ProcessStopStoringForInsolventUserRequest>
+impl<NT, Runtime> EventHandler<ProcessStopStoringForInsolventUserRequest<Runtime>>
     for BspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
-        event: ProcessStopStoringForInsolventUserRequest,
+        event: ProcessStopStoringForInsolventUserRequest<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -312,24 +322,24 @@ where
                 .proof;
 
             // Build the extrinsic to stop storing for an insolvent user.
-            let stop_storing_for_insolvent_user_call = storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::stop_storing_for_insolvent_user {
+            let stop_storing_for_insolvent_user_call: Runtime::Call =
+                pallet_file_system::Call::<Runtime>::stop_storing_for_insolvent_user {
                     file_key: *file_key,
                     bucket_id,
                     location,
                     owner,
                     fingerprint,
-                    size,
+                    size: size.saturated_into(),
                     inclusion_forest_proof,
-                },
-            );
+                }
+                .into();
 
             // Send the confirmation transaction and wait for it to be included in the block and
             // continue only if it is successful.
             self.storage_hub_handler
                 .blockchain
                 .send_extrinsic(
-                    stop_storing_for_insolvent_user_call.into(),
+                    stop_storing_for_insolvent_user_call,
                     SendExtrinsicOptions::new(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
@@ -343,16 +353,16 @@ where
 
             // If that was the last file of the user then charge the user for the debt they have.
             if user_files.len() == 1 {
-                let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                    pallet_payment_streams::Call::charge_payment_streams {
+                let call: Runtime::Call =
+                    pallet_payment_streams::Call::<Runtime>::charge_payment_streams {
                         user_account: insolvent_user,
-                    },
-                );
+                    }
+                    .into();
 
                 let charging_result = self
                     .storage_hub_handler
                     .blockchain
-                    .send_extrinsic(call.into(), Default::default())
+                    .send_extrinsic(call, Default::default())
                     .await;
 
                 match charging_result {
@@ -376,8 +386,8 @@ where
 
 impl<NT, Runtime> BspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {

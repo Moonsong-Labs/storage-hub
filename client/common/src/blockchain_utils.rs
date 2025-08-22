@@ -19,9 +19,6 @@ use crate::{
 };
 
 lazy_static! {
-    // Would be cool to be able to do this...
-    // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
-
     // Static and lazily initialised `events_storage_key`
     static ref EVENTS_STORAGE_KEY: Vec<u8> = {
         let key = [
@@ -47,13 +44,13 @@ pub enum EventsRetrievalError {
 pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
     client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
     block_hash: &H256,
-) -> Result<StorageHubEventsVec, EventsRetrievalError> {
+) -> Result<StorageHubEventsVec<Runtime>, EventsRetrievalError> {
     // Get the events storage.
     let raw_storage_opt = client.storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?;
 
     // Decode the events storage.
     raw_storage_opt
-        .map(|raw_storage| StorageHubEventsVec::decode(&mut raw_storage.0.as_slice()))
+        .map(|raw_storage| StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()))
         .transpose()?
         .ok_or(EventsRetrievalError::StorageNotFound)
 }
@@ -61,7 +58,12 @@ pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
 /// Attempt to convert BoundedVec of BoundedVecs of bytes.
 ///
 /// Returns a list of [`Multiaddr`] objects that have successfully been parsed from the raw bytes.
-pub fn convert_raw_multiaddresses_to_multiaddr(multiaddresses: Multiaddresses) -> Vec<Multiaddr> {
+pub fn convert_raw_multiaddresses_to_multiaddr<Runtime>(
+    multiaddresses: Multiaddresses<Runtime>,
+) -> Vec<Multiaddr>
+where
+    Runtime: StorageEnableRuntime,
+{
     let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
     for raw_multiaddr in multiaddresses.into_iter() {
         if let Some(multiaddress) = convert_raw_multiaddress_to_multiaddr(&raw_multiaddr) {
@@ -109,7 +111,7 @@ pub fn get_provider_id_from_keystore<Runtime>(
     client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
     keystore: &sp_keystore::KeystorePtr,
     block_hash: &H256,
-) -> Result<Option<StorageProviderId>, GetProviderIdError>
+) -> Result<Option<StorageProviderId<Runtime>>, GetProviderIdError>
 where
     Runtime: StorageEnableRuntime,
 {

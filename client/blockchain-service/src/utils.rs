@@ -4,7 +4,6 @@ use serde_json::Number;
 use std::{cmp::max, sync::Arc, vec};
 
 use codec::{Decode, Encode};
-use cumulus_primitives_core::BlockT;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
@@ -20,29 +19,24 @@ use shc_common::{
         convert_raw_multiaddresses_to_multiaddr, get_events_at_block,
         get_provider_id_from_keystore, GetProviderIdError,
     },
-    traits::StorageEnableRuntime,
+    traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, ParachainClient,
-        ProofsDealerProviderId, StorageProviderId, TrieAddMutation, TrieMutation,
-        TrieRemoveMutation, BCSV_KEY_TYPE,
+        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
+        ParachainClient, ProofsDealerProviderId, StorageEnableEvents, StorageProviderId,
+        TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
-};
-use shc_common::{
-    traits::{ExtensionOperations, KeyTypeOperations},
-    types::Tip,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_file_metadata::FileMetadata;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::{HashAndNumber, TreeRoute};
-use sp_core::{Blake2Hasher, Hasher, H256};
+use sp_core::{Blake2Hasher, Hasher, U256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
-    traits::Zero,
+    traits::{Block as BlockT, CheckedSub, One, Saturating, Zero},
     SaturatedConversion,
 };
-use storage_hub_runtime::RuntimeEvent;
 use substrate_frame_rpc_system::AccountNonceApi;
 
 use crate::{
@@ -60,11 +54,11 @@ use crate::{
 
 impl<FSH, Runtime> BlockchainService<FSH, Runtime>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     /// Notify tasks waiting for a block number.
-    pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber) {
+    pub(crate) fn notify_import_block_number(&mut self, block_number: &BlockNumber<Runtime>) {
         let mut keys_to_remove = Vec::new();
 
         for (block_number, waiters) in self
@@ -88,7 +82,7 @@ where
     }
 
     /// Notify tasks waiting for a tick number.
-    pub(crate) fn notify_tick_number(&mut self, block_hash: &H256) {
+    pub(crate) fn notify_tick_number(&mut self, block_hash: &Runtime::Hash) {
         // Get the current tick number.
         let tick_number = match self.client.runtime_api().get_current_tick(*block_hash) {
             Ok(current_tick) => current_tick,
@@ -124,7 +118,7 @@ where
     ///
     /// Begins another batch process of pending capacity requests if there are any and if
     /// we are past the block at which the capacity can be increased.
-    pub(crate) async fn notify_capacity_manager(&mut self, block_number: &BlockNumber) {
+    pub(crate) async fn notify_capacity_manager(&mut self, block_number: &BlockNumber<Runtime>) {
         if self.capacity_manager.is_none() {
             return;
         };
@@ -158,7 +152,9 @@ where
                         .events
                         .iter()
                         .find_map(|event| {
-                            if let RuntimeEvent::System(system_event) = &event.event {
+                            if let StorageEnableEvents::System(system_event) =
+                                &event.event.clone().into()
+                            {
                                 match system_event {
                                     frame_system::Event::ExtrinsicSuccess { dispatch_info: _ } => {
                                         Some(Ok(()))
@@ -211,7 +207,7 @@ where
         };
 
         // We can send the transaction 1 block before the earliest block to change capacity since it will be included in the next block.
-        if *block_number >= earliest_block.saturating_sub(1) {
+        if *block_number >= earliest_block.saturating_sub(One::one()) {
             if let Err(e) = self.process_capacity_requests(*block_number).await {
                 error!(target: LOG_TARGET, "[notify_capacity_manager] Failed to process capacity requests: {:?}", e);
             }
@@ -225,15 +221,12 @@ where
     ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::NewBestBlock`].
     /// 3. The block is the new best block, and its parent is NOT the previous best block (i.e. it's a reorg).
     ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::Reorg`].
-    pub(crate) fn register_best_block_and_check_reorg<Block>(
+    pub(crate) fn register_best_block_and_check_reorg(
         &mut self,
-        block_import_notification: &BlockImportNotification<Block>,
-    ) -> NewBlockNotificationKind<Block>
-    where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
-    {
+        block_import_notification: &BlockImportNotification<OpaqueBlock>,
+    ) -> NewBlockNotificationKind<Runtime> {
         let last_best_block = self.best_block;
-        let new_block_info: MinimalBlockInfo = block_import_notification.into();
+        let new_block_info: MinimalBlockInfo<Runtime> = block_import_notification.into();
 
         // If the new block is NOT the new best, this is a block from a non-best fork branch.
         if !block_import_notification.is_new_best {
@@ -257,13 +250,15 @@ where
             let mut last_block_added = new_block_info;
             loop {
                 // Check if we are at the genesis block.
-                if last_block_added.number == BlockNumber::zero() {
+                if last_block_added.number == Zero::zero() {
                     trace!(target: LOG_TARGET, "Reached genesis block while building tree route for new best block");
                     break;
                 }
 
                 // Check if the route reached the maximum number of blocks to catch up on.
-                if route.len() == self.config.max_blocks_behind_to_catch_up_root_changes as usize {
+                // The cast is safe because it is reasonable to assume the route length is less than u32::MAX.
+                let route_length = BlockNumber::<Runtime>::from(route.len() as u32);
+                if route_length == self.config.max_blocks_behind_to_catch_up_root_changes {
                     trace!(target: LOG_TARGET, "Reached maximum blocks to catch up on while building tree route for new best block");
                     break;
                 }
@@ -291,8 +286,8 @@ where
                         break;
                     }
                 };
-                let parent_block_info = MinimalBlockInfo {
-                    number: parent_block.block.header.number,
+                let parent_block_info: MinimalBlockInfo<Runtime> = MinimalBlockInfo {
+                    number: parent_block.block.header.number.into(),
                     hash: parent_block.block.hash(),
                 };
 
@@ -360,7 +355,7 @@ where
     }
 
     /// Get the current account nonce on-chain for a generic signature type.
-    pub(crate) fn account_nonce(&self, block_hash: &H256) -> u32 {
+    pub(crate) fn account_nonce(&self, block_hash: &Runtime::Hash) -> u32 {
         let pub_key = Self::caller_pub_key(self.keystore.clone());
         self.client
             .runtime_api()
@@ -371,7 +366,7 @@ where
     /// Checks if the account nonce on-chain is higher than the nonce in the [`BlockchainService`].
     ///
     /// If the nonce is higher, the `nonce_counter` is updated in the [`BlockchainService`].
-    pub(crate) fn sync_nonce(&mut self, block_hash: &H256) {
+    pub(crate) fn sync_nonce(&mut self, block_hash: &Runtime::Hash) {
         let latest_nonce = self.account_nonce(block_hash);
         if latest_nonce > self.nonce_counter {
             self.nonce_counter = latest_nonce
@@ -383,7 +378,7 @@ where
     /// IMPORTANT! If there is more than one [`BCSV_KEY_TYPE`] key in this node's keystore, linked to
     /// different Provider IDs, this function will panic. In other words, this node doesn't support
     /// managing multiple Providers at once.
-    pub(crate) fn sync_provider_id(&mut self, block_hash: &H256) {
+    pub(crate) fn sync_provider_id(&mut self, block_hash: &Runtime::Hash) {
         let provider_id = match get_provider_id_from_keystore::<Runtime>(
             &self.client,
             &self.keystore,
@@ -458,7 +453,7 @@ where
         &mut self,
         call: impl Into<Runtime::Call>,
         options: &SendExtrinsicOptions,
-    ) -> Result<RpcExtrinsicOutput> {
+    ) -> Result<RpcExtrinsicOutput<Runtime>> {
         debug!(target: LOG_TARGET, "Sending extrinsic to the runtime");
 
         let block_hash = self.client.info().best_hash;
@@ -522,7 +517,7 @@ where
         client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         function: impl Into<Runtime::Call>,
         nonce: u32,
-        tip: Tip,
+        tip: u128,
     ) -> generic::UncheckedExtrinsic<
         Runtime::Address,
         Runtime::Call,
@@ -544,10 +539,11 @@ where
         let minimal_extra =
             MinimalExtension::new(generic::Era::mortal(period, current_block), nonce, tip);
         let extra: Runtime::Extension = Runtime::Extension::from_minimal_extension(minimal_extra);
-        let implicit = <Runtime::Extension as ExtensionOperations<Runtime::Call>>::implicit(
-            genesis_block,
-            current_block_hash,
-        );
+        let implicit =
+            <Runtime::Extension as ExtensionOperations<Runtime::Call, Runtime>>::implicit(
+                genesis_block,
+                current_block_hash,
+            );
 
         let raw_payload = SignedPayload::from_raw(function.clone(), extra.clone(), implicit);
 
@@ -588,9 +584,9 @@ where
     /// Get an extrinsic from a block.
     pub(crate) async fn get_extrinsic_from_block(
         &self,
-        block_hash: H256,
-        extrinsic_hash: H256,
-    ) -> Result<Extrinsic> {
+        block_hash: Runtime::Hash,
+        extrinsic_hash: Runtime::Hash,
+    ) -> Result<Extrinsic<Runtime>> {
         // Get the block.
         let maybe_block = self.client.block(block_hash).map_err(|e| {
             error!(target: LOG_TARGET, "Failed to get block. Error: {:?}", e);
@@ -679,9 +675,9 @@ where
     /// and if so, return true.
     pub(crate) fn should_provider_submit_proof(
         &self,
-        block_hash: &H256,
-        provider_id: &ProofsDealerProviderId,
-        current_tick: &BlockNumber,
+        block_hash: &Runtime::Hash,
+        provider_id: &ProofsDealerProviderId<Runtime>,
+        current_tick: &BlockNumber<Runtime>,
     ) -> bool {
         // Get the last tick for which the BSP submitted a proof.
         let last_tick_provided = match self
@@ -738,7 +734,7 @@ where
         };
 
         // Check if the current tick is a tick this provider should submit a proof for.
-        let current_tick_minus_last_submission = match current_tick.checked_sub(last_tick_provided)
+        let current_tick_minus_last_submission = match current_tick.checked_sub(&last_tick_provided)
         {
             Some(tick) => tick,
             None => {
@@ -747,7 +743,7 @@ where
             }
         };
 
-        (current_tick_minus_last_submission % provider_challenge_period) == 0
+        (current_tick_minus_last_submission % provider_challenge_period) == Zero::zero()
     }
 
     /// Applies Forest root changes found in a [`TreeRoute`].
@@ -759,7 +755,7 @@ where
     /// some blocks in [`TreeRoute::route`] are "retracted" blocks and some are "enacted" blocks.
     pub(crate) async fn forest_root_changes_catchup<Block>(&self, tree_route: &TreeRoute<Block>)
     where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         // Retracted blocks, i.e. the blocks from the `TreeRoute` that are reverted in the reorg.
         for block in tree_route.retracted() {
@@ -777,8 +773,8 @@ where
     /// Gets the next tick for which a Provider (BSP) should submit a proof.
     pub(crate) fn get_next_challenge_tick_for_provider(
         &self,
-        provider_id: &ProofsDealerProviderId,
-    ) -> Result<BlockNumber, GetProofSubmissionRecordError> {
+        provider_id: &ProofsDealerProviderId<Runtime>,
+    ) -> Result<BlockNumber<Runtime>, GetProofSubmissionRecordError> {
         // Get the current block hash.
         let current_block_hash = self.client.info().best_hash;
 
@@ -797,9 +793,10 @@ where
     }
 
     /// Checks if `block_number` is one where this Blockchain Service should emit a `NotifyPeriod` event.
-    pub(crate) fn check_for_notify(&self, block_number: &BlockNumber) {
+    pub(crate) fn check_for_notify(&self, block_number: &BlockNumber<Runtime>) {
         if let Some(np) = self.notify_period {
-            if block_number % np == 0 {
+            let block_number: U256 = (*block_number).into();
+            if block_number % np == Zero::zero() {
                 self.emit(NotifyPeriod {});
             }
         }
@@ -821,7 +818,7 @@ where
     /// 2. [`pallet_proofs_dealer::Event::MutationsApplied`]: for mutations applied to the Buckets of an MSP.
     async fn apply_forest_root_changes<Block>(&self, block: &HashAndNumber<Block>, revert: bool)
     where
-        Block: cumulus_primitives_core::BlockT<Hash = H256>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         if revert {
             trace!(target: LOG_TARGET, "Reverting Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);
@@ -837,7 +834,7 @@ where
                         match managed_provider {
                             ManagedProvider::Bsp(_) => {
                                 self.bsp_process_forest_root_changing_events(
-                                    ev.event.clone(),
+                                    ev.event.clone().into(),
                                     revert,
                                 )
                                 .await;
@@ -845,7 +842,7 @@ where
                             ManagedProvider::Msp(_) => {
                                 self.msp_process_forest_root_changing_events(
                                     &block.hash,
-                                    ev.event.clone(),
+                                    ev.event.clone().into(),
                                     revert,
                                 )
                                 .await;
@@ -873,10 +870,10 @@ where
     pub(crate) async fn apply_forest_mutations_and_verify_root(
         &self,
         forest_key: Vec<u8>,
-        mutations: &[(H256, TrieMutation)],
+        mutations: &[(Runtime::Hash, TrieMutation)],
         revert: bool,
-        old_root: ForestRoot,
-        new_root: ForestRoot,
+        old_root: ForestRoot<Runtime>,
+        new_root: ForestRoot<Runtime>,
     ) -> Result<()> {
         debug!(target: LOG_TARGET, "Applying Forest mutations to Forest key [{:?}], reverting: {}, old root: {:?}, new root: {:?}", forest_key, revert, old_root, new_root);
 
@@ -949,7 +946,7 @@ where
     async fn apply_forest_mutation(
         &self,
         forest_key: Vec<u8>,
-        file_key: &H256,
+        file_key: &Runtime::Hash,
         mutation: &TrieMutation,
     ) -> Result<()> {
         let fs = self
@@ -1025,10 +1022,13 @@ where
         Ok(reverted_mutation)
     }
 
-    pub(crate) fn process_common_block_import_events(&mut self, event: RuntimeEvent) {
+    pub(crate) fn process_common_block_import_events(
+        &mut self,
+        event: StorageEnableEvents<Runtime>,
+    ) {
         match event {
             // New storage request event coming from pallet-file-system.
-            RuntimeEvent::FileSystem(pallet_file_system::Event::NewStorageRequest {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::NewStorageRequest {
                 who,
                 file_key,
                 bucket_id,
@@ -1045,18 +1045,18 @@ where
                 fingerprint: fingerprint.as_ref().into(),
                 size,
                 user_peer_ids: peer_ids,
-                expires_at,
+                expires_at: expires_at,
             }),
             // A provider has been marked as slashable.
-            RuntimeEvent::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
+            StorageEnableEvents::ProofsDealer(pallet_proofs_dealer::Event::SlashableProvider {
                 provider,
                 next_challenge_deadline,
             }) => self.emit(SlashableProvider {
                 provider,
-                next_challenge_deadline,
+                next_challenge_deadline: next_challenge_deadline.saturated_into(),
             }),
             // The last chargeable info of a provider has been updated
-            RuntimeEvent::PaymentStreams(
+            StorageEnableEvents::PaymentStreams(
                 pallet_payment_streams::Event::LastChargeableInfoUpdated {
                     provider_id,
                     last_chargeable_tick,
@@ -1072,27 +1072,29 @@ where
                     };
                     if provider_id == *managed_provider_id {
                         self.emit(LastChargeableInfoUpdated {
-                            provider_id: provider_id,
-                            last_chargeable_tick: last_chargeable_tick,
-                            last_chargeable_price_index: last_chargeable_price_index,
+                            provider_id,
+                            last_chargeable_tick,
+                            last_chargeable_price_index,
                         })
                     }
                 }
             }
             // A user has been flagged as without funds in the runtime
-            RuntimeEvent::PaymentStreams(pallet_payment_streams::Event::UserWithoutFunds {
-                who,
-            }) => {
+            StorageEnableEvents::PaymentStreams(
+                pallet_payment_streams::Event::UserWithoutFunds { who },
+            ) => {
                 self.emit(UserWithoutFunds { who });
             }
             // A file was correctly deleted from a user without funds
-            RuntimeEvent::FileSystem(pallet_file_system::Event::SpStopStoringInsolventUser {
-                sp_id,
-                file_key,
-                owner,
-                location,
-                new_root,
-            }) => {
+            StorageEnableEvents::FileSystem(
+                pallet_file_system::Event::SpStopStoringInsolventUser {
+                    sp_id,
+                    file_key,
+                    owner,
+                    location,
+                    new_root,
+                },
+            ) => {
                 if let Some(managed_provider_id) = &self.maybe_managed_provider {
                     // We only emit the event if the Provider ID is the one that this node is managing.
                     // It's irrelevant if the Provider ID is a MSP or a BSP.
@@ -1115,13 +1117,13 @@ where
         }
     }
 
-    pub(crate) fn process_common_finality_events(&self, _event: RuntimeEvent) {
+    pub(crate) fn process_common_finality_events(&self, _event: StorageEnableEvents<Runtime>) {
         {}
     }
 
-    pub(crate) fn process_test_user_events(&self, event: RuntimeEvent) {
+    pub(crate) fn process_test_user_events(&self, event: StorageEnableEvents<Runtime>) {
         match event {
-            RuntimeEvent::FileSystem(pallet_file_system::Event::AcceptedBspVolunteer {
+            StorageEnableEvents::FileSystem(pallet_file_system::Event::AcceptedBspVolunteer {
                 bsp_id,
                 bucket_id,
                 location,
@@ -1142,7 +1144,7 @@ where
                     let fingerprint: Fingerprint = fingerprint.as_bytes().into();
 
                     let multiaddress_vec: Vec<Multiaddr> =
-                        convert_raw_multiaddresses_to_multiaddr(multiaddresses);
+                        convert_raw_multiaddresses_to_multiaddr::<Runtime>(multiaddresses);
 
                     self.emit(AcceptedBspVolunteer {
                         bsp_id,
@@ -1161,9 +1163,9 @@ where
 }
 
 /// The output of an RPC extrinsic.
-pub struct RpcExtrinsicOutput {
+pub struct RpcExtrinsicOutput<Runtime: StorageEnableRuntime> {
     /// Hash of the extrinsic.
-    pub hash: H256,
+    pub hash: Runtime::Hash,
     /// The nonce of the extrinsic.
     pub nonce: u32,
     /// The output string of the extrinsic if any.
@@ -1172,7 +1174,7 @@ pub struct RpcExtrinsicOutput {
     pub receiver: tokio::sync::mpsc::Receiver<String>,
 }
 
-impl std::fmt::Debug for RpcExtrinsicOutput {
+impl<Runtime: StorageEnableRuntime> std::fmt::Debug for RpcExtrinsicOutput<Runtime> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,

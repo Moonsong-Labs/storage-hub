@@ -89,6 +89,9 @@ importers:
       eslint-config-prettier:
         specifier: ^10.1.5
         version: 10.1.5(eslint@9.31.0)
+      eslint-plugin-simple-import-sort:
+        specifier: ^12.1.1
+        version: 12.1.1(eslint@9.31.0)
       lint-staged:
         specifier: ^16.1.2
         version: 16.1.2
@@ -2024,6 +2027,11 @@ packages:
     hasBin: true
     peerDependencies:
       eslint: '>=7.0.0'
+
+  eslint-plugin-simple-import-sort@12.1.1:
+    resolution: {integrity: sha512-6nuzu4xwQtE3332Uz0to+TxDQYRLTKRESSc2hefVT48Zc8JthmN23Gx9lnYhu0FtkRSL1oxny3kJ2aveVhmOVA==}
+    peerDependencies:
+      eslint: '>=5.0.0'
 
   eslint-scope@8.4.0:
     resolution: {integrity: sha512-sNXOfKCn74rt8RICKMvJS7XKV/Xk9kA7DyJr8mJik3S7Cwgy3qlkkmyS2uQB3jiJg6VNdZd/pDBJu0nvG2NlTg==}
@@ -5399,6 +5407,10 @@ snapshots:
   escape-string-regexp@4.0.0: {}
 
   eslint-config-prettier@10.1.5(eslint@9.31.0):
+    dependencies:
+      eslint: 9.31.0
+
+  eslint-plugin-simple-import-sort@12.1.1(eslint@9.31.0):
     dependencies:
       eslint: 9.31.0
 

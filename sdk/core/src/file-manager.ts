@@ -1,7 +1,7 @@
-import { FileTrie, FileMetadata } from '@storagehub/wasm';
+import { CHUNK_SIZE } from './constants';
 import { TypeRegistry } from '@polkadot/types';
 import type { AccountId, H256 } from '@polkadot/types/interfaces';
-import { CHUNK_SIZE } from './constants';
+import { FileMetadata, FileTrie } from '@storagehub/wasm';
 
 export class FileManager {
   constructor(private readonly file: { size: number; stream: () => ReadableStream<Uint8Array> }) {}

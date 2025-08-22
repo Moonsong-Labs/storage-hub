@@ -15,8 +15,12 @@ use codec::Decode;
 use sc_network::PeerId;
 use sp_core::H256;
 
-use shc_common::types::{
-    BucketId, FileKeyProof, FileMetadata, Fingerprint, HashT, Proven, StorageProofsMerkleTrieLayout,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        BucketId, FileKeyProof, FileMetadata, Fingerprint, HashT, Proven,
+        StorageProofsMerkleTrieLayout,
+    },
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
@@ -109,15 +113,15 @@ impl BucketLockInfo {
 
 /// Possible errors that can occur during bucket download
 #[derive(Error, Debug)]
-pub enum BucketDownloadError {
+pub enum BucketDownloadError<Runtime: StorageEnableRuntime> {
     #[error("Bucket {0:?} is already being downloaded by another task")]
-    AlreadyBeingDownloaded(BucketId),
+    AlreadyBeingDownloaded(BucketId<Runtime>),
 
     #[error("Failed to download bucket: {0}")]
     DownloadFailed(anyhow::Error),
 }
 
-impl From<anyhow::Error> for BucketDownloadError {
+impl<Runtime: StorageEnableRuntime> From<anyhow::Error> for BucketDownloadError<Runtime> {
     fn from(error: anyhow::Error) -> Self {
         BucketDownloadError::DownloadFailed(error)
     }
@@ -147,7 +151,7 @@ impl From<anyhow::Error> for BucketDownloadError {
 ///    - Per-bucket locks prevent multiple tasks from downloading the same bucket
 ///    - Lock status tracked to avoid premature cleanup
 ///    - Locks automatically expire after downloads complete
-pub struct FileDownloadManager {
+pub struct FileDownloadManager<Runtime: StorageEnableRuntime> {
     /// Configuration for download limits
     pub limits: FileDownloadLimits,
     /// Semaphore for controlling file-level parallelism
@@ -155,14 +159,14 @@ pub struct FileDownloadManager {
     /// Semaphore for controlling bucket-level parallelism
     bucket_semaphore: Arc<Semaphore>,
     /// Per-bucket locks with status info to prevent concurrent downloads of the same bucket
-    bucket_locks: Arc<RwLock<HashMap<BucketId, BucketLockInfo>>>,
+    bucket_locks: Arc<RwLock<HashMap<BucketId<Runtime>, BucketLockInfo>>>,
     /// BSP peer manager for tracking and selecting peers
     peer_manager: Arc<BspPeerManager>,
     /// Download state store for persistence
-    download_state_store: Arc<DownloadStateStore>,
+    download_state_store: Arc<DownloadStateStore<Runtime>>,
 }
 
-impl FileDownloadManager {
+impl<Runtime: StorageEnableRuntime> FileDownloadManager<Runtime> {
     /// Create a new FileDownloadManager with default limits
     ///
     /// # Arguments
@@ -200,7 +204,7 @@ impl FileDownloadManager {
     }
 
     /// Returns a reference to the download state store
-    pub fn download_state_store(&self) -> Arc<DownloadStateStore> {
+    pub fn download_state_store(&self) -> Arc<DownloadStateStore<Runtime>> {
         self.download_state_store.clone()
     }
 
@@ -386,12 +390,12 @@ impl FileDownloadManager {
         file_key: H256,
         file_metadata: &FileMetadata,
         chunk_batch: &HashSet<ChunkId>,
-        bucket: &BucketId,
+        bucket: &BucketId<Runtime>,
         file_transfer: &FT,
         file_storage: &mut FS,
     ) -> Result<bool>
     where
-        FT: FileTransferServiceCommandInterface
+        FT: FileTransferServiceCommandInterface<Runtime>
             + FileTransferServiceCommandInterfaceExt
             + Send
             + Sync,
@@ -465,12 +469,12 @@ impl FileDownloadManager {
     pub async fn download_file<FS, FT>(
         &self,
         file_metadata: FileMetadata,
-        bucket: BucketId,
+        bucket: BucketId<Runtime>,
         file_transfer: FT,
         file_storage: Arc<RwLock<FS>>,
     ) -> Result<()>
     where
-        FT: FileTransferServiceCommandInterface
+        FT: FileTransferServiceCommandInterface<Runtime>
             + FileTransferServiceCommandInterfaceExt
             + Send
             + Sync
@@ -661,14 +665,14 @@ impl FileDownloadManager {
     }
 
     /// Mark a bucket download as started
-    pub fn mark_bucket_download_started(&self, bucket_id: &BucketId) {
+    pub fn mark_bucket_download_started(&self, bucket_id: &BucketId<Runtime>) {
         let context = self.download_state_store.open_rw_context();
         context.mark_bucket_download_started(bucket_id);
         context.commit();
     }
 
     /// Mark a bucket lock as inactive
-    async fn mark_bucket_inactive(&self, bucket_id: &BucketId) {
+    async fn mark_bucket_inactive(&self, bucket_id: &BucketId<Runtime>) {
         let mut locks = self.bucket_locks.write().await;
         if let Some(lock_info) = locks.get_mut(bucket_id) {
             // Mark that the bucket is no longer actively downloading
@@ -677,7 +681,7 @@ impl FileDownloadManager {
     }
 
     /// Check if a bucket download is in progress
-    pub fn is_bucket_download_in_progress(&self, bucket_id: &BucketId) -> bool {
+    pub fn is_bucket_download_in_progress(&self, bucket_id: &BucketId<Runtime>) -> bool {
         let context = self.download_state_store.open_rw_context();
         let result = context.is_bucket_download_in_progress(bucket_id);
         result
@@ -688,13 +692,13 @@ impl FileDownloadManager {
     /// if the bucket is already being downloaded
     pub async fn try_lock_and_download_bucket<FS, FT>(
         &self,
-        bucket_id: BucketId,
+        bucket_id: BucketId<Runtime>,
         file_metadatas: Vec<FileMetadata>,
         file_transfer: FT,
         file_storage: Arc<RwLock<FS>>,
-    ) -> Result<(), BucketDownloadError>
+    ) -> Result<(), BucketDownloadError<Runtime>>
     where
-        FT: FileTransferServiceCommandInterface
+        FT: FileTransferServiceCommandInterface<Runtime>
             + FileTransferServiceCommandInterfaceExt
             + Send
             + Sync
@@ -823,7 +827,7 @@ impl FileDownloadManager {
     }
 }
 
-impl Clone for FileDownloadManager {
+impl<Runtime: StorageEnableRuntime> Clone for FileDownloadManager<Runtime> {
     fn clone(&self) -> Self {
         Self {
             limits: self.limits.clone(),

@@ -10,16 +10,19 @@ use std::{
 use codec::{Decode, Encode};
 use frame_system::DispatchEventInfo;
 use sc_client_api::BlockImportNotification;
-use shc_common::types::{
-    BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
-    MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput, RejectedStorageRequestReason,
-    StorageData, StorageHubEventsVec, StorageProofsMerkleTrieLayout, StorageProviderId, Tip,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
+        MainStorageProviderId, MerkleTrieHash, OpaqueBlock, ProofsDealerProviderId,
+        RandomnessOutput, RejectedStorageRequestReason, StorageDataUnit, StorageHubEventsVec,
+        StorageProofsMerkleTrieLayout, StorageProviderId,
+    },
 };
 use sp_blockchain::{HashAndNumber, TreeRoute};
-use sp_core::H256;
 use sp_runtime::{
-    traits::{Header, NumberFor},
-    AccountId32, DispatchError, SaturatedConversion,
+    traits::{Header, Zero},
+    DispatchError, SaturatedConversion,
 };
 
 use crate::{events, handler::LOG_TARGET};
@@ -28,21 +31,21 @@ use crate::{events, handler::LOG_TARGET};
 ///
 /// This struct is used as an item in the `pending_submit_proof_requests` queue.
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct SubmitProofRequest {
-    pub provider_id: ProofsDealerProviderId,
-    pub tick: BlockNumber,
-    pub seed: RandomnessOutput,
-    pub forest_challenges: Vec<H256>,
-    pub checkpoint_challenges: Vec<CustomChallenge>,
+pub struct SubmitProofRequest<Runtime: StorageEnableRuntime> {
+    pub provider_id: ProofsDealerProviderId<Runtime>,
+    pub tick: BlockNumber<Runtime>,
+    pub seed: RandomnessOutput<Runtime>,
+    pub forest_challenges: Vec<MerkleTrieHash<Runtime>>,
+    pub checkpoint_challenges: Vec<CustomChallenge<Runtime>>,
 }
 
-impl SubmitProofRequest {
+impl<Runtime: StorageEnableRuntime> SubmitProofRequest<Runtime> {
     pub fn new(
-        provider_id: ProofsDealerProviderId,
-        tick: BlockNumber,
-        seed: RandomnessOutput,
-        forest_challenges: Vec<H256>,
-        checkpoint_challenges: Vec<CustomChallenge>,
+        provider_id: ProofsDealerProviderId<Runtime>,
+        tick: BlockNumber<Runtime>,
+        seed: RandomnessOutput<Runtime>,
+        forest_challenges: Vec<MerkleTrieHash<Runtime>>,
+        checkpoint_challenges: Vec<CustomChallenge<Runtime>>,
     ) -> Self {
         Self {
             provider_id,
@@ -54,13 +57,13 @@ impl SubmitProofRequest {
     }
 }
 
-impl Ord for SubmitProofRequest {
+impl<Runtime: StorageEnableRuntime> Ord for SubmitProofRequest<Runtime> {
     fn cmp(&self, other: &Self) -> Ordering {
         self.tick.cmp(&other.tick)
     }
 }
 
-impl PartialOrd for SubmitProofRequest {
+impl<Runtime: StorageEnableRuntime> PartialOrd for SubmitProofRequest<Runtime> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
@@ -68,22 +71,22 @@ impl PartialOrd for SubmitProofRequest {
 
 // Two `SubmitProofRequest`s are considered equal if they have the same `tick` and `provider_id`.
 // This helps to identify and remove duplicate requests from the queue.
-impl PartialEq for SubmitProofRequest {
+impl<Runtime: StorageEnableRuntime> PartialEq for SubmitProofRequest<Runtime> {
     fn eq(&self, other: &Self) -> bool {
         self.tick == other.tick && self.provider_id == other.provider_id
     }
 }
 
-impl Eq for SubmitProofRequest {}
+impl<Runtime: StorageEnableRuntime> Eq for SubmitProofRequest<Runtime> {}
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct ConfirmStoringRequest {
-    pub file_key: H256,
+pub struct ConfirmStoringRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
     pub try_count: u32,
 }
 
-impl ConfirmStoringRequest {
-    pub fn new(file_key: H256) -> Self {
+impl<Runtime: StorageEnableRuntime> ConfirmStoringRequest<Runtime> {
+    pub fn new(file_key: MerkleTrieHash<Runtime>) -> Self {
         Self {
             file_key,
             try_count: 0,
@@ -102,14 +105,14 @@ pub enum MspRespondStorageRequest {
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct RespondStorageRequest {
-    pub file_key: H256,
+pub struct RespondStorageRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
     pub response: MspRespondStorageRequest,
     pub try_count: u32,
 }
 
-impl RespondStorageRequest {
-    pub fn new(file_key: H256, response: MspRespondStorageRequest) -> Self {
+impl<Runtime: StorageEnableRuntime> RespondStorageRequest<Runtime> {
+    pub fn new(file_key: MerkleTrieHash<Runtime>, response: MspRespondStorageRequest) -> Self {
         Self {
             file_key,
             response,
@@ -127,12 +130,12 @@ impl RespondStorageRequest {
 ///
 /// This struct is used as an item in the `pending_stop_storing_for_insolvent_user_requests` queue.
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct StopStoringForInsolventUserRequest {
-    pub user: AccountId32,
+pub struct StopStoringForInsolventUserRequest<Runtime: StorageEnableRuntime> {
+    pub user: Runtime::AccountId,
 }
 
-impl StopStoringForInsolventUserRequest {
-    pub fn new(user: AccountId32) -> Self {
+impl<Runtime: StorageEnableRuntime> StopStoringForInsolventUserRequest<Runtime> {
+    pub fn new(user: Runtime::AccountId) -> Self {
         Self { user }
     }
 }
@@ -141,23 +144,23 @@ impl StopStoringForInsolventUserRequest {
 ///
 /// This struct is used as an item in the `pending_file_deletion_requests` queue.
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct FileDeletionRequest {
-    pub user: AccountId32,
-    pub file_key: H256,
-    pub file_size: StorageData,
-    pub bucket_id: BucketId,
-    pub msp_id: ProofsDealerProviderId,
+pub struct FileDeletionRequest<Runtime: StorageEnableRuntime> {
+    pub user: Runtime::AccountId,
+    pub file_key: MerkleTrieHash<Runtime>,
+    pub file_size: StorageDataUnit<Runtime>,
+    pub bucket_id: BucketId<Runtime>,
+    pub msp_id: ProofsDealerProviderId<Runtime>,
     pub proof_of_inclusion: bool,
     pub try_count: u32,
 }
 
-impl FileDeletionRequest {
+impl<Runtime: StorageEnableRuntime> FileDeletionRequest<Runtime> {
     pub fn new(
-        user: AccountId32,
-        file_key: H256,
-        file_size: StorageData,
-        bucket_id: BucketId,
-        msp_id: ProofsDealerProviderId,
+        user: Runtime::AccountId,
+        file_key: MerkleTrieHash<Runtime>,
+        file_size: StorageDataUnit<Runtime>,
+        bucket_id: BucketId<Runtime>,
+        msp_id: ProofsDealerProviderId<Runtime>,
         proof_of_inclusion: bool,
     ) -> Self {
         Self {
@@ -176,8 +179,10 @@ impl FileDeletionRequest {
     }
 }
 
-impl From<events::FileDeletionRequest> for FileDeletionRequest {
-    fn from(event: events::FileDeletionRequest) -> Self {
+impl<Runtime: StorageEnableRuntime> From<events::FileDeletionRequest<Runtime>>
+    for FileDeletionRequest<Runtime>
+{
+    fn from(event: events::FileDeletionRequest<Runtime>) -> Self {
         Self::new(
             event.user,
             event.file_key.into(),
@@ -193,13 +198,13 @@ impl From<events::FileDeletionRequest> for FileDeletionRequest {
 ///
 /// This struct represents an extrinsic in the blockchain.
 #[derive(Debug, Clone)]
-pub struct Extrinsic {
+pub struct Extrinsic<Runtime: StorageEnableRuntime> {
     /// Extrinsic hash.
-    pub hash: H256,
+    pub hash: Runtime::Hash,
     /// Block hash.
-    pub block_hash: H256,
+    pub block_hash: Runtime::Hash,
     /// Events vector.
-    pub events: StorageHubEventsVec,
+    pub events: StorageHubEventsVec<Runtime>,
 }
 
 /// ExtrinsicResult enum.
@@ -224,16 +229,13 @@ pub enum ExtrinsicResult {
     },
 }
 
-/// Type alias for the extrinsic hash.
-pub type ExtrinsicHash = H256;
-
 /// Options for [`send_extrinsic`](crate::BlockchainService::send_extrinsic).
 ///
 /// You can safely use [`SendExtrinsicOptions::default`] to create a new instance of `SendExtrinsicOptions`.
 #[derive(Debug)]
 pub struct SendExtrinsicOptions {
     /// Tip to add to the transaction to incentivize the collator to include the transaction in a block.
-    tip: Tip,
+    tip: u128,
     /// Optionally override the nonce to use when sending the transaction.
     nonce: Option<u32>,
     /// Maximum time to wait for a response before assuming the extrinsic submission has failed.
@@ -243,14 +245,14 @@ pub struct SendExtrinsicOptions {
 impl SendExtrinsicOptions {
     pub fn new(timeout: Duration) -> Self {
         Self {
-            tip: Tip::from(0),
+            tip: 0u128,
             nonce: None,
             timeout,
         }
     }
 
     pub fn with_tip(mut self, tip: u128) -> Self {
-        self.tip = Tip::from(tip);
+        self.tip = tip;
         self
     }
 
@@ -259,8 +261,8 @@ impl SendExtrinsicOptions {
         self
     }
 
-    pub fn tip(&self) -> Tip {
-        self.tip.clone()
+    pub fn tip(&self) -> u128 {
+        self.tip
     }
 
     pub fn nonce(&self) -> Option<u32> {
@@ -275,7 +277,7 @@ impl SendExtrinsicOptions {
 impl Default for SendExtrinsicOptions {
     fn default() -> Self {
         Self {
-            tip: Tip::from(0),
+            tip: 0u128,
             nonce: None,
             timeout: Duration::from_secs(60),
         }
@@ -299,7 +301,7 @@ pub struct RetryStrategy {
     pub max_retries: u32,
     /// Maximum tip to be paid for the extrinsic submission. The progression follows an exponential
     /// backoff strategy.
-    pub max_tip: f64,
+    pub max_tip: u128,
     /// Base multiplier for the tip calculation. This is the base of the geometric progression.
     /// A higher value will make tips grow faster.
     pub base_multiplier: f64,
@@ -318,7 +320,7 @@ pub struct RetryStrategy {
 
 impl RetryStrategy {
     /// Creates a new `RetryStrategy` instance.
-    pub fn new(max_retries: u32, max_tip: f64, base_multiplier: f64) -> Self {
+    pub fn new(max_retries: u32, max_tip: u128, base_multiplier: f64) -> Self {
         Self {
             max_retries,
             max_tip,
@@ -337,7 +339,7 @@ impl RetryStrategy {
     ///
     /// As the number of times the extrinsic is retried increases, the tip will increase
     /// exponentially, up to this maximum tip.
-    pub fn with_max_tip(mut self, max_tip: f64) -> Self {
+    pub fn with_max_tip(mut self, max_tip: u128) -> Self {
         self.max_tip = max_tip;
         self
     }
@@ -392,7 +394,7 @@ impl RetryStrategy {
     /// The formula for the tip is:
     /// [`Self::max_tip`] * (([`Self::base_multiplier`] ^ (retry_count / [`Self::max_retries`]) - 1) /
     /// ([`Self::base_multiplier`] - 1)).
-    pub fn compute_tip(&self, retry_count: u32) -> f64 {
+    pub fn compute_tip(&self, retry_count: u32) -> u128 {
         // Ensure the retry_count is within the bounds of max_retries
         let retry_count = min(retry_count, self.max_retries);
 
@@ -404,7 +406,8 @@ impl RetryStrategy {
             / (self.base_multiplier - 1.0);
 
         // Final tip formula for each retry, scaled to max_tip
-        self.max_tip * factor
+        let tip = self.max_tip as f64 * factor;
+        tip as u128
     }
 }
 
@@ -412,7 +415,7 @@ impl Default for RetryStrategy {
     fn default() -> Self {
         Self {
             max_retries: 5,
-            max_tip: 0.0,
+            max_tip: 0,
             base_multiplier: 2.0,
             should_retry: None,
         }
@@ -436,55 +439,45 @@ pub enum WatchTransactionError {
 
 /// Minimum block information needed to register what is the current best block
 /// and detect reorgs.
-#[derive(Debug, Clone, Encode, Decode, Default, Copy)]
-pub struct MinimalBlockInfo {
-    pub number: BlockNumber,
-    pub hash: H256,
+#[derive(Debug, Clone, Encode, Decode, Copy)]
+pub struct MinimalBlockInfo<Runtime: StorageEnableRuntime> {
+    pub number: BlockNumber<Runtime>,
+    pub hash: Runtime::Hash,
 }
 
-impl<Block> From<&BlockImportNotification<Block>> for MinimalBlockInfo
-where
-    Block: cumulus_primitives_core::BlockT<Hash = H256>,
+impl<Runtime: StorageEnableRuntime> From<&BlockImportNotification<OpaqueBlock>>
+    for MinimalBlockInfo<Runtime>
 {
-    fn from(notification: &BlockImportNotification<Block>) -> Self {
+    fn from(notification: &BlockImportNotification<OpaqueBlock>) -> Self {
         Self {
-            number: (*notification.header.number()).saturated_into(),
+            number: (*notification.header.number()).into(),
             hash: notification.hash,
         }
     }
 }
 
-impl<Block> From<BlockImportNotification<Block>> for MinimalBlockInfo
-where
-    Block: cumulus_primitives_core::BlockT<Hash = H256>,
+impl<Runtime: StorageEnableRuntime> From<BlockImportNotification<OpaqueBlock>>
+    for MinimalBlockInfo<Runtime>
 {
-    fn from(notification: BlockImportNotification<Block>) -> Self {
+    fn from(notification: BlockImportNotification<OpaqueBlock>) -> Self {
         Self {
-            number: (*notification.header.number()).saturated_into(),
+            number: (*notification.header.number()).into(),
             hash: notification.hash,
         }
     }
 }
 
-impl<Block> Into<HashAndNumber<Block>> for MinimalBlockInfo
-where
-    Block: cumulus_primitives_core::BlockT<Hash = H256>,
-    NumberFor<Block>: From<BlockNumber>,
-{
-    fn into(self) -> HashAndNumber<Block> {
+impl<Runtime: StorageEnableRuntime> Into<HashAndNumber<OpaqueBlock>> for MinimalBlockInfo<Runtime> {
+    fn into(self) -> HashAndNumber<OpaqueBlock> {
         HashAndNumber {
+            number: self.number.saturated_into(),
             hash: self.hash,
-            number: self.number.into(),
         }
     }
 }
 
-impl<Block> From<HashAndNumber<Block>> for MinimalBlockInfo
-where
-    Block: cumulus_primitives_core::BlockT<Hash = H256>,
-    NumberFor<Block>: Into<BlockNumber>,
-{
-    fn from(hash_and_number: HashAndNumber<Block>) -> Self {
+impl<Runtime: StorageEnableRuntime> From<HashAndNumber<OpaqueBlock>> for MinimalBlockInfo<Runtime> {
+    fn from(hash_and_number: HashAndNumber<OpaqueBlock>) -> Self {
         Self {
             number: hash_and_number.number.into(),
             hash: hash_and_number.hash,
@@ -492,12 +485,18 @@ where
     }
 }
 
+impl<Runtime: StorageEnableRuntime> Default for MinimalBlockInfo<Runtime> {
+    fn default() -> Self {
+        Self {
+            number: Zero::zero(),
+            hash: Default::default(),
+        }
+    }
+}
+
 /// When a new block is imported, the block is checked to see if it is one of the members
 /// of this enum.
-pub enum NewBlockNotificationKind<Block>
-where
-    Block: cumulus_primitives_core::BlockT<Hash = H256>,
-{
+pub enum NewBlockNotificationKind<Runtime: StorageEnableRuntime> {
     /// The block is a new best block, built on top of the previous best block.
     ///
     /// - `last_best_block_processed`: The last best block that was processed by this node.
@@ -511,12 +510,12 @@ where
     ///   will be trimmed to include the first `BlockchainServiceConfig::max_blocks_behind_to_catch_up_root_changes`
     ///   before the `new_best_block`.
     NewBestBlock {
-        last_best_block_processed: MinimalBlockInfo,
-        new_best_block: MinimalBlockInfo,
-        tree_route: TreeRoute<Block>,
+        last_best_block_processed: MinimalBlockInfo<Runtime>,
+        new_best_block: MinimalBlockInfo<Runtime>,
+        tree_route: TreeRoute<OpaqueBlock>,
     },
     /// The block belongs to a fork that is not currently the best fork.
-    NewNonBestBlock(MinimalBlockInfo),
+    NewNonBestBlock(MinimalBlockInfo<Runtime>),
     /// This block causes a reorg, i.e. it is the new best block, but the previous best block
     /// is not the parent of this one.
     ///
@@ -524,32 +523,32 @@ where
     /// The [`TreeRoute`] between the two (both included) is also provided, where `old_best_block`
     /// is the first element in the `tree_route`, and `new_best_block` is the last element.
     Reorg {
-        old_best_block: MinimalBlockInfo,
-        new_best_block: MinimalBlockInfo,
-        tree_route: TreeRoute<Block>,
+        old_best_block: MinimalBlockInfo<Runtime>,
+        new_best_block: MinimalBlockInfo<Runtime>,
+        tree_route: TreeRoute<OpaqueBlock>,
     },
 }
 
 /// The information needed to register a Forest Storage snapshot.
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Eq)]
-pub struct ForestStorageSnapshotInfo {
+pub struct ForestStorageSnapshotInfo<Runtime: StorageEnableRuntime> {
     /// The block number at which the Forest Storage snapshot was taken.
     ///
     /// i.e. the block number at which the Forest Storage changed from this snapshot
     /// version due to adding or removing files.
-    pub block_number: BlockNumber,
+    pub block_number: BlockNumber<Runtime>,
     /// The Forest Storage snapshot hash.
     ///
     /// This is to uniquely identify the Forest Storage snapshot, as there could be
     /// snapshots at the same block number, but in different forks.
-    pub block_hash: H256,
+    pub block_hash: Runtime::Hash,
     /// The Forest Storage root when the snapshot was taken.
     ///
     /// This is used to identify the Forest Storage snapshot and retrieve it.
     pub forest_root: HasherOutT<StorageProofsMerkleTrieLayout>,
 }
 
-impl PartialOrd for ForestStorageSnapshotInfo {
+impl<Runtime: StorageEnableRuntime> PartialOrd for ForestStorageSnapshotInfo<Runtime> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
@@ -558,7 +557,7 @@ impl PartialOrd for ForestStorageSnapshotInfo {
 /// Implements the `Ord` trait for `ForestStorageSnapshotInfo`.
 ///
 /// This allows for a BTreeSet to be used to store Forest Storage snapshots.
-impl Ord for ForestStorageSnapshotInfo {
+impl<Runtime: StorageEnableRuntime> Ord for ForestStorageSnapshotInfo<Runtime> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // Block number ordering is the first criteria.
         match self.block_number.cmp(&other.block_number) {
@@ -589,12 +588,12 @@ impl Ord for ForestStorageSnapshotInfo {
 ///
 /// This struct implements all the needed logic to manage BSP specific functionality.
 #[derive(Debug)]
-pub struct BspHandler {
+pub struct BspHandler<Runtime: StorageEnableRuntime> {
     /// The BSP ID.
-    pub(crate) bsp_id: BackupStorageProviderId,
+    pub(crate) bsp_id: BackupStorageProviderId<Runtime>,
     /// Pending submit proof requests. Note: this is not kept in the persistent state because of
     /// various edge cases when restarting the node.
-    pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest>,
+    pub(crate) pending_submit_proof_requests: BTreeSet<SubmitProofRequest<Runtime>>,
     /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
     ///
     /// This is a oneshot channel instead of a regular mutex because we want to "lock" in 1
@@ -606,11 +605,11 @@ pub struct BspHandler {
     /// A BSP can have multiple Forest Storage snapshots.
     /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
     #[allow(dead_code)]
-    pub(crate) forest_root_snapshots: BTreeSet<ForestStorageSnapshotInfo>,
+    pub(crate) forest_root_snapshots: BTreeSet<ForestStorageSnapshotInfo<Runtime>>,
 }
 
-impl BspHandler {
-    pub fn new(bsp_id: BackupStorageProviderId) -> Self {
+impl<Runtime: StorageEnableRuntime> BspHandler<Runtime> {
+    pub fn new(bsp_id: BackupStorageProviderId<Runtime>) -> Self {
         Self {
             bsp_id,
             pending_submit_proof_requests: BTreeSet::new(),
@@ -623,9 +622,9 @@ impl BspHandler {
 ///
 /// This struct implements all the needed logic to manage MSP specific functionality.
 #[derive(Debug)]
-pub struct MspHandler {
+pub struct MspHandler<Runtime: StorageEnableRuntime> {
     /// The MSP ID.
-    pub(crate) msp_id: MainStorageProviderId,
+    pub(crate) msp_id: MainStorageProviderId<Runtime>,
     /// TODO: CHANGE THIS INTO MULTIPLE LOCKS, ONE FOR EACH BUCKET.
     ///
     /// A lock to prevent multiple tasks from writing to the runtime Forest root (send transactions) at the same time.
@@ -640,11 +639,12 @@ pub struct MspHandler {
     /// Each Bucket can have multiple Forest Storage snapshots.
     /// TODO: Remove this `allow(dead_code)` once we have implemented the Forest Storage snapshots.
     #[allow(dead_code)]
-    pub(crate) forest_root_snapshots: BTreeMap<BucketId, BTreeSet<ForestStorageSnapshotInfo>>,
+    pub(crate) forest_root_snapshots:
+        BTreeMap<BucketId<Runtime>, BTreeSet<ForestStorageSnapshotInfo<Runtime>>>,
 }
 
-impl MspHandler {
-    pub fn new(msp_id: MainStorageProviderId) -> Self {
+impl<Runtime: StorageEnableRuntime> MspHandler<Runtime> {
+    pub fn new(msp_id: MainStorageProviderId<Runtime>) -> Self {
         Self {
             msp_id,
             forest_root_write_lock: None,
@@ -657,13 +657,13 @@ impl MspHandler {
 ///
 /// The enum variants hold the handler for the managed provider (see [`BspHandler`] and [`MspHandler`]).
 #[derive(Debug)]
-pub enum ManagedProvider {
-    Bsp(BspHandler),
-    Msp(MspHandler),
+pub enum ManagedProvider<Runtime: StorageEnableRuntime> {
+    Bsp(BspHandler<Runtime>),
+    Msp(MspHandler<Runtime>),
 }
 
-impl ManagedProvider {
-    pub fn new(provider_id: StorageProviderId) -> Self {
+impl<Runtime: StorageEnableRuntime> ManagedProvider<Runtime> {
+    pub fn new(provider_id: StorageProviderId<Runtime>) -> Self {
         match provider_id {
             StorageProviderId::BackupStorageProvider(bsp_id) => Self::Bsp(BspHandler::new(bsp_id)),
             StorageProviderId::MainStorageProvider(msp_id) => Self::Msp(MspHandler::new(msp_id)),

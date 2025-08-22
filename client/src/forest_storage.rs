@@ -1,8 +1,8 @@
-use std::{collections::HashMap, fmt::Debug, hash::Hash, sync::Arc};
+use std::{collections::HashMap, fmt::Debug, hash::Hash, marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use log::error;
-use shc_common::types::StorageProofsMerkleTrieLayout;
+use shc_common::{traits::StorageEnableRuntime, types::StorageProofsMerkleTrieLayout};
 use shc_forest_manager::{
     in_memory::InMemoryForestStorage,
     rocksdb::{self, RocksDBForestStorage},
@@ -14,37 +14,50 @@ const LOG_TARGET: &str = "forest-storage-handler";
 
 /// Forest storage handler that manages a single forest storage instance.
 #[derive(Debug)]
-pub struct ForestStorageSingle<FS>
+pub struct ForestStorageSingle<FS, Runtime>
 where
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync,
+    Runtime: StorageEnableRuntime,
 {
     storage_path: Option<String>,
     fs_instance: Arc<RwLock<FS>>,
+    _runtime: PhantomData<Runtime>,
 }
 
-impl<FS> Clone for ForestStorageSingle<FS>
+impl<FS, Runtime> Clone for ForestStorageSingle<FS, Runtime>
 where
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync,
+    Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> Self {
         Self {
             storage_path: self.storage_path.clone(),
             fs_instance: self.fs_instance.clone(),
+            _runtime: PhantomData,
         }
     }
 }
 
-impl ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>> {
+impl<Runtime> ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
+where
+    Runtime: StorageEnableRuntime,
+{
     pub fn new() -> Self {
         Self {
             storage_path: None,
             fs_instance: Arc::new(RwLock::new(InMemoryForestStorage::new())),
+            _runtime: PhantomData,
         }
     }
 }
 
-impl
-    ForestStorageSingle<RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>>
+impl<Runtime>
+    ForestStorageSingle<
+        RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+        Runtime,
+    >
+where
+    Runtime: StorageEnableRuntime,
 {
     #[allow(dead_code)]
     pub fn new(storage_path: String) -> Self {
@@ -56,6 +69,7 @@ impl
         Self {
             storage_path: Some(storage_path),
             fs_instance: Arc::new(RwLock::new(fs)),
+            _runtime: PhantomData,
         }
     }
 }
@@ -70,8 +84,10 @@ impl From<Vec<u8>> for NoKey {
 }
 
 #[async_trait]
-impl ForestStorageHandler
-    for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
+impl<Runtime> ForestStorageHandler<Runtime>
+    for ForestStorageSingle<InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
+where
+    Runtime: StorageEnableRuntime,
 {
     type Key = NoKey;
     type FS = InMemoryForestStorage<StorageProofsMerkleTrieLayout>;
@@ -81,8 +97,7 @@ impl ForestStorageHandler
     }
 
     async fn create(&mut self, _key: &Self::Key) -> Arc<RwLock<Self::FS>> {
-        let fs: InMemoryForestStorage<sp_trie::LayoutV1<polkadot_primitives::BlakeTwo256>> =
-            InMemoryForestStorage::new();
+        let fs: InMemoryForestStorage<StorageProofsMerkleTrieLayout> = InMemoryForestStorage::new();
 
         let fs = Arc::new(RwLock::new(fs));
         self.fs_instance = fs.clone();
@@ -101,10 +116,13 @@ impl ForestStorageHandler
 }
 
 #[async_trait]
-impl ForestStorageHandler
+impl<Runtime> ForestStorageHandler<Runtime>
     for ForestStorageSingle<
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+        Runtime,
     >
+where
+    Runtime: StorageEnableRuntime,
 {
     type Key = NoKey;
     type FS = RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;
@@ -143,61 +161,72 @@ impl ForestStorageHandler
 ///
 /// The name caching comes from the fact that it maintains a list of existing forest storage instances.
 #[derive(Debug)]
-pub struct ForestStorageCaching<K, FS>
+pub struct ForestStorageCaching<K, FS, Runtime>
 where
     K: Eq + Hash + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync,
+    Runtime: StorageEnableRuntime,
 {
     storage_path: Option<String>,
     fs_instances: Arc<RwLock<HashMap<K, Arc<RwLock<FS>>>>>,
+    _runtime: PhantomData<Runtime>,
 }
 
-impl<K, FS> Clone for ForestStorageCaching<K, FS>
+impl<K, FS, Runtime> Clone for ForestStorageCaching<K, FS, Runtime>
 where
     K: Eq + Hash + Send + Sync,
-    FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync,
+    FS: ForestStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync,
+    Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> Self {
         Self {
             storage_path: self.storage_path.clone(),
             fs_instances: self.fs_instances.clone(),
+            _runtime: PhantomData,
         }
     }
 }
 
-impl<K> ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
+impl<K, Runtime>
+    ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
 where
     K: Eq + Hash + Send + Sync,
+    Runtime: StorageEnableRuntime,
 {
     pub fn new() -> Self {
         Self {
             storage_path: None,
             fs_instances: Arc::new(RwLock::new(HashMap::new())),
+            _runtime: PhantomData,
         }
     }
 }
 
-impl<K>
+impl<K, Runtime>
     ForestStorageCaching<
         K,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+        Runtime,
     >
 where
     K: Eq + Hash + Send + Sync,
+    Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_path: String) -> Self {
         Self {
             storage_path: Some(storage_path),
             fs_instances: Arc::new(RwLock::new(HashMap::new())),
+            _runtime: PhantomData,
         }
     }
 }
 
 #[async_trait]
-impl<K> ForestStorageHandler
-    for ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>>
+impl<K, Runtime> ForestStorageHandler<Runtime>
+    for ForestStorageCaching<K, InMemoryForestStorage<StorageProofsMerkleTrieLayout>, Runtime>
 where
     K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
 {
     type Key = K;
     type FS = InMemoryForestStorage<StorageProofsMerkleTrieLayout>;
@@ -254,13 +283,15 @@ where
 }
 
 #[async_trait]
-impl<K> ForestStorageHandler
+impl<K, Runtime> ForestStorageHandler<Runtime>
     for ForestStorageCaching<
         K,
         RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>,
+        Runtime,
     >
 where
     K: Eq + Hash + From<Vec<u8>> + Clone + Debug + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
 {
     type Key = K;
     type FS = RocksDBForestStorage<StorageProofsMerkleTrieLayout, kvdb_rocksdb::Database>;

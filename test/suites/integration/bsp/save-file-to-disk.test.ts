@@ -1,11 +1,13 @@
 import assert, { strictEqual } from "node:assert";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  describeBspNet,
-  shUser,
   type EnrichedBspApi,
   addCopypartyContainer,
-  waitFor,
-  sleep
+  describeBspNet,
+  shUser,
+  sleep,
+  waitFor
 } from "../../../util";
 
 describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi, it }) => {
@@ -39,12 +41,13 @@ describeBspNet("BSP: Save File To Disk", ({ before, createBspApi, createUserApi,
       throw new Error("Event doesn't match Type");
     }
 
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex,
       newBucketEventDataBlob.bucketId
     );
 
