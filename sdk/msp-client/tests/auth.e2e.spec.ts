@@ -9,7 +9,7 @@ describe('MspClient.auth (e2e)', () => {
 
         const testMnemonic = "test test test test test test test test test test test junk";
         const localWallet = LocalWallet.fromMnemonic(testMnemonic);
-        const address = localWallet.address;
+        const address = await localWallet.getAddress();
         const chainId = Number(process.env.MSP_CHAIN_ID ?? 1);
 
         console.log(`Using local wallet address: ${address}`);
