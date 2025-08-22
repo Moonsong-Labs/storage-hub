@@ -13,6 +13,8 @@ import {
 import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 import type { H256 } from "@polkadot/types/interfaces";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
 
 /**
  * FISHERMAN FILE DELETION FLOW - BASIC HAPPY PATH
@@ -111,12 +113,13 @@ describeMspNet(
       bucketId = newBucketEventData.bucketId;
 
       // Load file
+      const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
       const {
         file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
+        ownerHex,
         bucketId
       );
 
@@ -165,12 +168,13 @@ describeMspNet(
       const destination = "test/bsp-stored-file.txt";
 
       // Load file for BSP storage
+      const ownerHexBsp = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
       const {
         file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source,
         destination,
-        userApi.shConsts.NODE_INFOS.user.AddressId,
+        ownerHexBsp,
         bucketId
       );
 

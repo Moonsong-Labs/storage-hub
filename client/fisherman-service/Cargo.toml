@@ -20,7 +20,7 @@ shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
 shc-common = { workspace = true }
 shc-indexer-db = { workspace = true }
-storage-hub-runtime = { workspace = true }
+shp-types = { workspace = true }
 
 sp-api = { workspace = true }
 sp-core = { workspace = true }

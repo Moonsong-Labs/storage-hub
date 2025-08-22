@@ -8,16 +8,15 @@ use shc_blockchain_service::commands::BlockchainServiceCommandInterface;
 use shc_blockchain_service::types::SendExtrinsicOptions;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{
-    Fingerprint, ForestProof as CommonForestProof, StorageData, StorageProofsMerkleTrieLayout,
-    StorageProviderId,
+    Fingerprint, ForestProof as CommonForestProof, OffchainSignature,
+    StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 use shc_fisherman_service::events::{ProcessFileDeletionRequest, ProcessIncompleteStorageRequest};
 use shc_fisherman_service::{FileKeyOperation, FishermanService, FishermanServiceCommand};
 use shc_forest_manager::in_memory::InMemoryForestStorage;
 use shc_forest_manager::traits::ForestStorage;
-use sp_core::crypto::AccountId32;
 use sp_core::H256;
-use sp_runtime::MultiSignature;
+use sp_runtime::traits::SaturatedConversion;
 use std::time::Duration;
 
 use crate::{
@@ -26,21 +25,21 @@ use crate::{
 };
 
 /// Data structure holding common file deletion information retrieved from database
-struct FileDeletionData {
+struct FileDeletionData<Runtime: StorageEnableRuntime> {
     file_metadata: shc_common::types::FileMetadata,
     bsp_ids: Vec<shc_indexer_db::OnchainBspId>,
-    bucket_target: shc_fisherman_service::events::FileDeletionTarget,
+    bucket_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
     file_account: Vec<u8>,
 }
 
 /// Fetch common file deletion data from indexer database
 async fn fetch_file_deletion_data<NT, Runtime>(
     storage_hub_handler: &StorageHubHandler<NT, Runtime>,
-    file_key: &H256,
-) -> anyhow::Result<FileDeletionData>
+    file_key: &shp_types::Hash,
+) -> anyhow::Result<FileDeletionData<Runtime>>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     // Get indexer connection
@@ -96,8 +95,8 @@ const LOG_TARGET_INCOMPLETE: &str = "fisherman-process-incomplete-storage-task";
 
 pub struct FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -106,8 +105,8 @@ where
 
 impl<NT, Runtime> Clone for FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> FishermanProcessFileDeletionTask<NT, Runtime> {
@@ -120,8 +119,8 @@ where
 
 impl<NT, Runtime> FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -139,8 +138,8 @@ where
 
 pub struct FishermanProcessIncompleteStorageTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -149,8 +148,8 @@ where
 
 impl<NT, Runtime> Clone for FishermanProcessIncompleteStorageTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> FishermanProcessIncompleteStorageTask<NT, Runtime> {
@@ -163,8 +162,8 @@ where
 
 impl<NT, Runtime> FishermanProcessIncompleteStorageTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -180,14 +179,17 @@ where
     }
 }
 
-impl<NT, Runtime> EventHandler<ProcessFileDeletionRequest>
+impl<NT, Runtime> EventHandler<ProcessFileDeletionRequest<Runtime>>
     for FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessFileDeletionRequest) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: ProcessFileDeletionRequest<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing file deletion request for signed intention file key: {:?}",
@@ -260,8 +262,8 @@ where
 impl<NT, Runtime> EventHandler<ProcessIncompleteStorageRequest>
     for FishermanProcessIncompleteStorageTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, event: ProcessIncompleteStorageRequest) -> anyhow::Result<()> {
@@ -330,14 +332,14 @@ where
 
 impl<NT, Runtime> FishermanProcessIncompleteStorageTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn process_deletion_for_target_incomplete(
         &self,
-        file_key: &H256,
-        deletion_target: shc_fisherman_service::events::FileDeletionTarget,
+        file_key: &shp_types::Hash,
+        deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
         file_metadata: &shc_common::types::FileMetadata,
         file_account: &[u8],
     ) -> anyhow::Result<()> {
@@ -375,16 +377,16 @@ where
 
 impl<NT, Runtime> FishermanProcessFileDeletionTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn process_deletion_for_target(
         &self,
-        event: &ProcessFileDeletionRequest,
-        file_key: &H256,
-        signature: &MultiSignature,
-        deletion_target: shc_fisherman_service::events::FileDeletionTarget,
+        event: &ProcessFileDeletionRequest<Runtime>,
+        file_key: &shp_types::Hash,
+        signature: &OffchainSignature<Runtime>,
+        deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
         file_metadata: &shc_common::types::FileMetadata,
         file_account: &[u8],
     ) -> anyhow::Result<()> {
@@ -420,23 +422,22 @@ where
         );
 
         // Build the delete_file extrinsic call
-        let call =
-            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::delete_file {
-                file_owner: file_owner.clone(),
-                signed_intention: event.signed_file_operation_intention.clone(),
-                signature: signature.clone(),
-                bucket_id,
-                location: location
-                    .try_into()
-                    .map_err(|_| anyhow!("Location too long"))?,
-                size,
-                fingerprint: H256::from_slice(fingerprint.as_ref()),
-                provider_id: match provider_id {
-                    StorageProviderId::BackupStorageProvider(id) => id,
-                    StorageProviderId::MainStorageProvider(id) => id,
-                },
-                forest_proof: forest_proof.proof,
-            });
+        let call = pallet_file_system::Call::<Runtime>::delete_file {
+            file_owner: file_owner.clone(),
+            signed_intention: event.signed_file_operation_intention.clone(),
+            signature: signature.clone(),
+            bucket_id,
+            location: location
+                .try_into()
+                .map_err(|_| anyhow!("Location too long"))?,
+            size,
+            fingerprint: H256::from_slice(fingerprint.as_ref()),
+            provider_id: match provider_id {
+                StorageProviderId::BackupStorageProvider(id) => id,
+                StorageProviderId::MainStorageProvider(id) => id,
+            },
+            forest_proof: forest_proof.proof,
+        };
 
         // Submit the extrinsic
         self.storage_hub_handler
@@ -468,28 +469,28 @@ where
 async fn process_deletion_common<NT, Runtime>(
     storage_hub_handler: &StorageHubHandler<NT, Runtime>,
     fisherman_service: &ActorHandle<FishermanService<Runtime>>,
-    file_key: &H256,
-    deletion_target: shc_fisherman_service::events::FileDeletionTarget,
+    file_key: &shp_types::Hash,
+    deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
     file_metadata: &shc_common::types::FileMetadata,
     file_account: &[u8],
 ) -> anyhow::Result<(
-    AccountId32,
+    <Runtime as frame_system::Config>::AccountId,
     H256,
     Vec<u8>,
-    StorageData,
+    <Runtime as pallet_storage_providers::Config>::StorageDataUnit,
     Fingerprint,
-    StorageProviderId,
+    StorageProviderId<Runtime>,
     CommonForestProof<StorageProofsMerkleTrieLayout>,
 )>
 where
-    NT: ShNodeType,
-    NT::FSH: FishermanForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: FishermanForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     // Extract file details
     let bucket_id = H256::from_slice(file_metadata.bucket_id());
     let location = file_metadata.location().to_vec();
-    let size = file_metadata.file_size();
+    let size = file_metadata.file_size().saturated_into();
     let fingerprint = file_metadata.fingerprint();
 
     // Determine provider ID from deletion target
@@ -510,7 +511,6 @@ where
 
     // Generate forest proof using two-phase ephemeral trie construction
     let forest_proof = {
-        // Phase 1: Get finalized block number
         let finalized_block = storage_hub_handler
             .blockchain
             .get_best_block_info()
@@ -520,11 +520,10 @@ where
 
         info!(
             target: LOG_TARGET,
-            "Phase 1: Building ephemeral trie from finalized data at block {}",
+            "Building ephemeral trie from finalized data at block {}",
             finalized_block
         );
 
-        // Get indexer connection
         let indexer_db_pool = storage_hub_handler
             .indexer_db_pool
             .as_ref()
@@ -558,7 +557,6 @@ where
         };
 
         // Fetch all files and convert to FileMetadata
-        // TODO: Optimize this N+1 query pattern - use JOIN operations for bulk fetching
         let mut file_metadatas = Vec::new();
         for key in &all_file_keys {
             let file = shc_indexer_db::models::File::get_by_file_key(&mut conn, key)
@@ -588,20 +586,21 @@ where
         let mut ephemeral_forest = InMemoryForestStorage::<StorageProofsMerkleTrieLayout>::new();
 
         // Insert all file keys from finalized data
-        ephemeral_forest
-            .insert_files_metadata(&file_metadatas)
-            .map_err(|e| anyhow!("Failed to insert file keys into ephemeral trie: {:?}", e))?;
+        <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<
+            StorageProofsMerkleTrieLayout,
+            Runtime,
+        >>::insert_files_metadata(&mut ephemeral_forest, &file_metadatas)
+        .map_err(|e| anyhow!("Failed to insert file keys into ephemeral trie: {:?}", e))?;
 
         info!(
             target: LOG_TARGET,
-            "Phase 1 complete. Ephemeral trie built with root: {:?}",
-            ephemeral_forest.root()
+            "Ephemeral trie built with root: {:?}",
+            <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<StorageProofsMerkleTrieLayout, Runtime>>::root(&ephemeral_forest)
         );
 
-        // Phase 2: Apply catch-up mechanism
         info!(
             target: LOG_TARGET,
-            "Phase 2: Applying catch-up from block {} to best block",
+            "Applying catch-up from block {} to best block",
             finalized_block
         );
 
@@ -633,33 +632,38 @@ where
         for change in file_key_changes {
             match change.operation {
                 FileKeyOperation::Add(metadata) => {
-                    ephemeral_forest
-                        .insert_files_metadata(&[metadata])
-                        .map_err(|e| {
-                            anyhow!("Failed to insert file key during catch-up: {:?}", e)
-                        })?;
+                    <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<
+                        StorageProofsMerkleTrieLayout,
+                        Runtime,
+                    >>::insert_files_metadata(
+                        &mut ephemeral_forest, &[metadata]
+                    )
+                    .map_err(|e| anyhow!("Failed to insert file key during catch-up: {:?}", e))?;
                 }
                 FileKeyOperation::Remove => {
                     // Remove the file key from the trie
                     let file_key = H256::from_slice(&change.file_key);
-                    ephemeral_forest
-                        .delete_file_key(&file_key.into())
-                        .map_err(|e| {
-                            anyhow!("Failed to remove file key during catch-up: {:?}", e)
-                        })?;
+                    <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<
+                        StorageProofsMerkleTrieLayout,
+                        Runtime,
+                    >>::delete_file_key(&mut ephemeral_forest, &file_key.into())
+                    .map_err(|e| anyhow!("Failed to remove file key during catch-up: {:?}", e))?;
                 }
             }
         }
 
         info!(
             target: LOG_TARGET,
-            "Phase 2 complete. Updated ephemeral trie root: {:?}",
-            ephemeral_forest.root()
+            "Updated ephemeral trie root: {:?}",
+            <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<StorageProofsMerkleTrieLayout, Runtime>>::root(&ephemeral_forest)
         );
 
         // Generate proof for the specific file key being deleted
-        let forest_proof_result = ephemeral_forest
-            .generate_proof(vec![(*file_key).into()])
+        let forest_proof_result =
+            <InMemoryForestStorage<StorageProofsMerkleTrieLayout> as ForestStorage<
+                StorageProofsMerkleTrieLayout,
+                Runtime,
+            >>::generate_proof(&ephemeral_forest, vec![(*file_key).into()])
             .map_err(|e| anyhow!("Failed to generate forest proof: {:?}", e))?;
 
         forest_proof_result
@@ -672,7 +676,8 @@ where
             file_account.len()
         ));
     }
-    let file_owner = AccountId32::new(file_account.try_into().expect("Length already validated"));
+    let file_owner = <Runtime as frame_system::Config>::AccountId::try_from(file_account)
+        .map_err(|_| anyhow!("Failed to convert file account to AccountId"))?;
 
     // Log all parameters
     info!(

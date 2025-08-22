@@ -13,8 +13,8 @@ export const rpcDefinitions = {
           type: "String"
         },
         {
-          name: "owner",
-          type: "AccountId32"
+          name: "owner_account_id_hex",
+          type: "String"
         },
         {
           name: "bucket_id",

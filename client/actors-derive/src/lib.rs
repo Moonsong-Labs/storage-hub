@@ -154,9 +154,9 @@ impl Parse for ActorEventArgs {
 /// ```
 ///
 /// The string parameter is the actor ID that this event bus provider will handle.
-/// The macro will automatically find all event types that were registered with this actor ID
-/// using the `#[actor(actor = "...")]` attribute and generate the appropriate
-/// fields and implementations.
+///
+/// Generics are now inferred from the annotated type's own type parameters,
+/// similar to the `actor_command` macro.
 struct ActorEventBusArgs {
     /// The actor ID string (e.g., "blockchain_service") for which this provider will handle events.
     /// All events registered with this ID will be included in the generated code.
@@ -291,18 +291,37 @@ impl Parse for SubscribeActorEventArgs {
     }
 }
 
+/// Information about an event type including its generics
+#[derive(Clone)]
+struct EventTypeInfo {
+    name: String,
+    generics: String,     // The type generics as string (e.g., "<Runtime>")
+    where_clause: String, // The where clause as string if any
+}
+
 /// A registry to store and generate code for actor event types
 #[derive(Default)]
 struct ActorRegistry {
-    actors: std::collections::HashMap<String, Vec<String>>,
+    actors: std::collections::HashMap<String, Vec<EventTypeInfo>>,
 }
 
 impl ActorRegistry {
-    fn register_event(&mut self, actor_id: &str, event_type: &str) {
+    fn register_event_with_generics(
+        &mut self,
+        actor_id: &str,
+        event_type: &str,
+        generics: String,
+        where_clause: String,
+    ) {
+        let event_info = EventTypeInfo {
+            name: event_type.to_string(),
+            generics,
+            where_clause,
+        };
         self.actors
             .entry(actor_id.to_string())
             .or_default()
-            .push(event_type.to_string());
+            .push(event_info);
     }
 }
 
@@ -403,12 +422,20 @@ pub fn derive_actor_event(input: TokenStream) -> TokenStream {
         }
     };
 
-    // Register this event with the actor
-    get_registry().register_event(&actor_id, &name.to_string());
+    // Generate the implementation of EventBusMessage with proper generic support
+    let generics = &input.generics;
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    // Generate the implementation of EventBusMessage
+    // Register this event with the actor, including generic information
+    get_registry().register_event_with_generics(
+        &actor_id,
+        &name.to_string(),
+        ty_generics.to_token_stream().to_string(),
+        where_clause.to_token_stream().to_string(),
+    );
+
     let expanded = quote! {
-        impl ::shc_actors_framework::event_bus::EventBusMessage for #name {}
+        impl #impl_generics ::shc_actors_framework::event_bus::EventBusMessage for #name #ty_generics #where_clause {}
     };
 
     TokenStream::from(expanded)
@@ -446,6 +473,10 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let provider_name = &input.ident;
 
+    // Use the generics defined on the annotated type itself
+    let provider_generics_all = input.generics.clone();
+    let (impl_generics, ty_generics, where_clause) = provider_generics_all.split_for_impl();
+
     // Get all events registered for this actor
     let registry = get_registry();
     let events = match registry.actors.get(&actor_id) {
@@ -460,36 +491,92 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
         }
     };
 
+    // Parse generics and where-clauses for all events upfront; error out if parsing fails
+    let parsed_events: Vec<(
+        String,
+        Ident,
+        proc_macro2::TokenStream,
+        proc_macro2::TokenStream,
+    )> = {
+        let mut v = Vec::new();
+        for event_info in events.iter() {
+            let name_str = event_info.name.clone();
+            let name_ident = Ident::new(&event_info.name, Span::call_site());
+
+            let generics_tokens = if event_info.generics.is_empty() {
+                quote! {}
+            } else {
+                match syn::parse_str::<proc_macro2::TokenStream>(&event_info.generics) {
+                    Ok(tokens) => tokens,
+                    Err(err) => {
+                        return syn::Error::new(
+                            Span::call_site(),
+                            format!(
+                                "Failed to parse generics for event '{}': \"{}\". Error: {}",
+                                name_str, event_info.generics, err
+                            ),
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                }
+            };
+
+            let where_tokens = if event_info.where_clause.is_empty() {
+                quote! {}
+            } else {
+                match syn::parse_str::<proc_macro2::TokenStream>(&event_info.where_clause) {
+                    Ok(tokens) => tokens,
+                    Err(err) => {
+                        return syn::Error::new(
+                            Span::call_site(),
+                            format!(
+                                "Failed to parse where clause for event '{}': \"{}\". Error: {}",
+                                name_str, event_info.where_clause, err
+                            ),
+                        )
+                        .to_compile_error()
+                        .into();
+                    }
+                }
+            };
+
+            v.push((name_str, name_ident, generics_tokens, where_tokens));
+        }
+        v
+    };
+
     // Generate field declarations for each event bus
-    let event_bus_fields = events.iter().map(|event| {
-        let field_name = format!("{}_event_bus", to_snake_case(event));
+    let event_bus_fields = parsed_events.iter().map(|(name_str, event_type, event_generics, _)| {
+        let field_name = format!("{}_event_bus", to_snake_case(name_str));
         let field_name_ident = Ident::new(&field_name, Span::call_site());
-        let event_type = Ident::new(event, Span::call_site());
 
         quote! {
-            #field_name_ident: ::shc_actors_framework::event_bus::EventBus<#event_type>
+            #field_name_ident: ::shc_actors_framework::event_bus::EventBus<#event_type #event_generics>
         }
     });
 
     // Generate initialization for each event bus in new()
-    let event_bus_inits = events.iter().map(|event| {
-        let field_name = format!("{}_event_bus", to_snake_case(event));
-        let field_name_ident = Ident::new(&field_name, Span::call_site());
+    let event_bus_inits =
+        parsed_events
+            .iter()
+            .map(|(name_str, _event_type, _event_generics, _)| {
+                let field_name = format!("{}_event_bus", to_snake_case(name_str));
+                let field_name_ident = Ident::new(&field_name, Span::call_site());
 
-        quote! {
-            #field_name_ident: ::shc_actors_framework::event_bus::EventBus::new()
-        }
-    });
+                quote! {
+                    #field_name_ident: ::shc_actors_framework::event_bus::EventBus::new()
+                }
+            });
 
     // Generate ProvidesEventBus implementations for each event type
-    let provides_event_bus_impls = events.iter().map(|event| {
-        let event_type = Ident::new(event, Span::call_site());
-        let field_name = format!("{}_event_bus", to_snake_case(event));
+    let provides_event_bus_impls = parsed_events.iter().map(|(name_str, event_type, event_generics, event_where_clause)| {
+        let field_name = format!("{}_event_bus", to_snake_case(name_str));
         let field_name_ident = Ident::new(&field_name, Span::call_site());
 
         quote! {
-            impl ::shc_actors_framework::event_bus::ProvidesEventBus<#event_type> for #provider_name {
-                fn event_bus(&self) -> &::shc_actors_framework::event_bus::EventBus<#event_type> {
+            impl #impl_generics ::shc_actors_framework::event_bus::ProvidesEventBus<#event_type #event_generics> for #provider_name #ty_generics #event_where_clause {
+                fn event_bus(&self) -> &::shc_actors_framework::event_bus::EventBus<#event_type #event_generics> {
                     &self.#field_name_ident
                 }
             }
@@ -497,13 +584,22 @@ pub fn ActorEventBus(args: TokenStream, input: TokenStream) -> TokenStream {
     });
 
     // Generate the final expanded code
+    // Only derive Default if there are no generics
+    let derives = if provider_generics_all.params.is_empty()
+        && provider_generics_all.where_clause.is_none()
+    {
+        quote! { #[derive(Clone, Default)] }
+    } else {
+        quote! { #[derive(Clone)] }
+    };
+
     let expanded = quote! {
-        #[derive(Clone, Default)]
-        pub struct #provider_name {
+        #derives
+        pub struct #provider_name #provider_generics_all {
             #(#event_bus_fields),*
         }
 
-        impl #provider_name {
+        impl #impl_generics #provider_name #ty_generics #where_clause {
             pub fn new() -> Self {
                 Self {
                     #(#event_bus_inits),*
@@ -561,11 +657,6 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     let task_spawner = args.task_spawner;
     let service = args.service;
 
-    // Generate a unique variable name based on the event type
-    let type_str = event_type.to_token_stream().to_string();
-    let var_name = format!("{}_event_bus_listener", to_snake_case(&type_str));
-    let var_ident = syn::Ident::new(&var_name, Span::call_site());
-
     // Determine if the event is critical
     let critical = args.critical.map_or(false, |lit| lit.value);
     let critical_lit = syn::LitBool::new(critical, Span::call_site());
@@ -573,21 +664,21 @@ pub fn subscribe_actor_event(input: TokenStream) -> TokenStream {
     // If a task instance is provided, use it
     // Otherwise, create a new task using the task type and context
     let result = if let Some(task) = args.task_instance {
-        quote! {
-            let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
+        quote! {{
+            let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
                 #task.subscribe_to(#task_spawner, #service, #critical_lit);
-            #var_ident.start();
-        }
+            event_bus_listener.start();
+        }}
     } else {
         let task_type = args.task_type;
 
         if let Some(context) = args.context {
-            quote! {
+            quote! {{
                 let task = #task_type::new(#context.clone());
-                let #var_ident: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
+                let event_bus_listener: ::shc_actors_framework::event_bus::EventBusListener<#event_type, _> =
                     task.subscribe_to(#task_spawner, #service, #critical_lit);
-                #var_ident.start();
-            }
+                event_bus_listener.start();
+            }}
         } else {
             // This shouldn't happen due to validation in the Parse implementation
             syn::Error::new(
@@ -1317,7 +1408,7 @@ fn generate_method_impl(
 ///
 /// ```ignore
 /// #[actor_command(
-///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static>,
+///     service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, Runtime: StorageEnableRuntime>,
 ///     default_mode = "ImmediateResponse",
 ///     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 /// )]
@@ -1328,19 +1419,16 @@ fn generate_method_impl(
 /// {
 ///     #[command(success_type = SubmittedTransaction)]
 ///     SendExtrinsic {
-///         call: storage_hub_runtime::RuntimeCall,
+///         call: Runtime::Call,
 ///         options: SendExtrinsicOptions,
 ///     },
-///     
-///     #[command(success_type = Extrinsic)]
+///     #[command(success_type = Extrinsic<Runtime>)]
 ///     GetExtrinsicFromBlock {
-///         block_hash: H256,
-///         extrinsic_hash: H256,
+///         block_hash: Runtime::Hash,
+///         extrinsic_hash: Runtime::Hash,
 ///     },
-///     
-///     #[command(mode = "AsyncResponse", inner_channel_type = tokio::sync::oneshot::Receiver)]
-///     WaitForBlock {
-///         block_number: BlockNumber,
+///     UnwatchExtrinsic {
+///         subscription_id: Number,
 ///     },
 /// }
 /// ```

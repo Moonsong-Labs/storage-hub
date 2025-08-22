@@ -9,7 +9,7 @@ use frame_system::pallet_prelude::BlockNumberFor;
 use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
-use sp_runtime::{traits::CheckedAdd, DispatchError};
+use sp_runtime::{traits::CheckedAdd, DispatchError, SaturatedConversion};
 use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
@@ -90,7 +90,7 @@ impl<T: Config> StorageRequestMetadata<T> {
             self.owner.encode(),
             self.bucket_id.as_ref().to_vec(),
             self.location.to_vec(),
-            self.size.into() as u64,
+            self.size.saturated_into(),
             self.fingerprint.as_ref().into(),
         )
         .map_err(|_| Error::<T>::FailedToCreateFileMetadata.into())
@@ -548,3 +548,6 @@ pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;
 /// Alias for the `TickNumber` used in the ProofsDealer pallet.
 pub type TickNumber<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber;
+
+/// Alias for the `OffchainSignature` type used in the FileSystem pallet.
+pub type OffchainSignatureFor<T> = <T as crate::Config>::OffchainSignature;

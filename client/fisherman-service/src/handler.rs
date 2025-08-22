@@ -1,12 +1,12 @@
 use futures::stream::{self, StreamExt};
 use log::{debug, error, info, warn};
-use sc_client_api::{BlockchainEvents, HeaderBackend};
-use shc_common::types::FileOperation;
+use sc_client_api::{BlockImportNotification, BlockchainEvents, HeaderBackend};
+use shc_common::types::{FileOperation, OpaqueBlock, StorageEnableEvents};
 use shc_common::{
     blockchain_utils::{get_events_at_block, EventsRetrievalError},
     traits::StorageEnableRuntime,
 };
-use sp_runtime::traits::Header;
+use sp_runtime::traits::{Header, One, SaturatedConversion, Saturating};
 use std::{collections::HashMap, sync::Arc};
 use thiserror::Error;
 
@@ -38,13 +38,13 @@ pub struct FileKeyChange {
 
 /// Commands that can be sent to the FishermanService actor
 #[derive(Debug)]
-pub enum FishermanServiceCommand {
+pub enum FishermanServiceCommand<Runtime: StorageEnableRuntime> {
     /// Get file key changes since a specific block for a given provider
     GetFileKeyChangesSinceBlock {
         /// The starting block (exclusive) - changes will be tracked from this block + 1
-        from_block: BlockNumber,
+        from_block: BlockNumber<Runtime>,
         /// The provider to track changes for (BSP ID or Bucket ID)
-        provider: crate::events::FileDeletionTarget,
+        provider: crate::FileDeletionTarget<Runtime>,
         /// Response channel for the file key changes
         response_tx:
             tokio::sync::oneshot::Sender<Result<Vec<FileKeyChange>, FishermanServiceError>>,
@@ -71,9 +71,9 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     /// Substrate client for blockchain interaction
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// Last processed block number to avoid reprocessing
-    last_processed_block: Option<BlockNumber>,
+    last_processed_block: Option<BlockNumber<Runtime>>,
     /// Event bus provider for emitting fisherman events
-    event_bus_provider: FishermanServiceEventBusProvider,
+    event_bus_provider: FishermanServiceEventBusProvider<Runtime>,
 }
 
 impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
@@ -82,14 +82,14 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         Self {
             client,
             last_processed_block: None,
-            event_bus_provider: FishermanServiceEventBusProvider::new(),
+            event_bus_provider: FishermanServiceEventBusProvider::<Runtime>::new(),
         }
     }
 
     /// Monitor new blocks for file deletion request events
     pub async fn monitor_block(
         &mut self,
-        block_number: BlockNumber,
+        block_number: BlockNumber<Runtime>,
         block_hash: H256,
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
@@ -97,7 +97,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         let events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
 
         for event_record in events.iter() {
-            let event: Result<storage_hub_runtime::RuntimeEvent, _> =
+            let event: Result<StorageEnableEvents<Runtime>, _> =
                 event_record.event.clone().try_into();
             let event = match event {
                 Ok(e) => e,
@@ -111,7 +111,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                 }
             };
             match event {
-                storage_hub_runtime::RuntimeEvent::FileSystem(
+                StorageEnableEvents::FileSystem(
                     pallet_file_system::Event::FileDeletionRequested {
                         signed_delete_intention,
                         signature,
@@ -130,7 +130,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
                     self.emit(event);
                 }
-                storage_hub_runtime::RuntimeEvent::FileSystem(
+                StorageEnableEvents::FileSystem(
                     pallet_file_system::Event::StorageRequestExpired { file_key },
                 ) => {
                     info!(
@@ -139,11 +139,13 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         file_key
                     );
 
-                    let event = crate::events::ProcessIncompleteStorageRequest { file_key };
+                    let event = crate::events::ProcessIncompleteStorageRequest {
+                        file_key: file_key.into(),
+                    };
 
                     self.emit(event);
                 }
-                storage_hub_runtime::RuntimeEvent::FileSystem(
+                StorageEnableEvents::FileSystem(
                     pallet_file_system::Event::StorageRequestRevoked { file_key },
                 ) => {
                     info!(
@@ -152,11 +154,13 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         file_key
                     );
 
-                    let event = crate::events::ProcessIncompleteStorageRequest { file_key };
+                    let event = crate::events::ProcessIncompleteStorageRequest {
+                        file_key: file_key.into(),
+                    };
 
                     self.emit(event);
                 }
-                storage_hub_runtime::RuntimeEvent::FileSystem(
+                StorageEnableEvents::FileSystem(
                     pallet_file_system::Event::StorageRequestRejected { file_key, .. },
                 ) => {
                     info!(
@@ -165,7 +169,9 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         file_key
                     );
 
-                    let event = crate::events::ProcessIncompleteStorageRequest { file_key };
+                    let event = crate::events::ProcessIncompleteStorageRequest {
+                        file_key: file_key.into(),
+                    };
 
                     self.emit(event);
                 }
@@ -180,12 +186,12 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
     /// Get file key changes between two blocks for a specific provider
     pub async fn get_file_key_changes_since_block(
         &self,
-        from_block: BlockNumber,
-        provider: crate::events::FileDeletionTarget,
+        from_block: BlockNumber<Runtime>,
+        provider: crate::FileDeletionTarget<Runtime>,
     ) -> Result<Vec<FileKeyChange>, FishermanServiceError> {
         // Get the current best block
         let best_block_info = self.client.info();
-        let best_block_number = best_block_info.best_number;
+        let best_block_number: BlockNumber<Runtime> = best_block_info.best_number.into();
 
         debug!(
             target: LOG_TARGET,
@@ -197,11 +203,13 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         let mut file_key_states: HashMap<Vec<u8>, FileKeyOperation> = HashMap::new();
 
         // Process blocks from from_block + 1 to best_block
-        for block_num in (from_block + 1)..=best_block_number {
+        let mut block_num = from_block.saturating_add(One::one());
+        while block_num <= best_block_number {
+            let num: u32 = (block_num.into()).as_u64().saturated_into();
             // Get block hash
             let block_hash = self
                 .client
-                .hash(block_num.into())
+                .hash(num)
                 .map_err(|e| FishermanServiceError::Client(e.to_string()))?
                 .ok_or_else(|| {
                     FishermanServiceError::Client(format!("Block {} not found", block_num))
@@ -212,7 +220,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
             // Process events for file key changes
             for event_record in events.iter() {
-                let event: Result<storage_hub_runtime::RuntimeEvent, _> =
+                let event: Result<StorageEnableEvents<Runtime>, _> =
                     event_record.event.clone().try_into();
                 let event = match event {
                     Ok(e) => e,
@@ -221,7 +229,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
                 match event {
                     // Track BSP confirmations
-                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                    StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::BspConfirmedStoring {
                             bsp_id,
                             confirmed_file_keys,
@@ -254,7 +262,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         }
                     }
                     // Track BSP stop storing
-                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                    StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::BspConfirmStoppedStoring {
                             bsp_id,
                             file_key,
@@ -269,7 +277,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         }
                     }
                     // Track successful proof submissions for pending deletions
-                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                    StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::ProofSubmittedForPendingFileDeletionRequest {
                             file_key,
                             ..
@@ -280,7 +288,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                             .insert(file_key.as_ref().to_vec(), FileKeyOperation::Remove);
                     }
                     // Track MSP accepted storage requests
-                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                    StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::MspAcceptedStorageRequest {
                             file_key,
                             file_metadata,
@@ -313,7 +321,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                         }
                     }
                     // Track insolvent user file removals
-                    storage_hub_runtime::RuntimeEvent::FileSystem(
+                    StorageEnableEvents::FileSystem(
                         pallet_file_system::Event::SpStopStoringInsolventUser {
                             sp_id,
                             file_key,
@@ -341,6 +349,9 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
                     _ => {}
                 }
             }
+
+            // Increment block number for next iteration
+            block_num = block_num.saturating_add(One::one());
         }
 
         // Convert HashMap to Vec<FileKeyChange>
@@ -367,9 +378,9 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 
 /// Implement the Actor trait for FishermanService
 impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
-    type Message = FishermanServiceCommand;
+    type Message = FishermanServiceCommand<Runtime>;
     type EventLoop = FishermanServiceEventLoop<Runtime>;
-    type EventBusProvider = FishermanServiceEventBusProvider;
+    type EventBusProvider = FishermanServiceEventBusProvider<Runtime>;
 
     fn handle_message(
         &mut self,
@@ -410,12 +421,9 @@ impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
 }
 
 /// Messages that can be received in the event loop
-enum MergedEventLoopMessage<Block>
-where
-    Block: sp_runtime::traits::Block,
-{
-    Command(FishermanServiceCommand),
-    BlockImportNotification(sc_client_api::BlockImportNotification<Block>),
+enum MergedEventLoopMessage<Runtime: StorageEnableRuntime> {
+    Command(FishermanServiceCommand<Runtime>),
+    BlockImportNotification(BlockImportNotification<OpaqueBlock>),
 }
 
 /// Event loop for the FishermanService actor
@@ -425,7 +433,7 @@ where
 /// starting [`ProcessFileDeletionRequest`] tasks.
 pub struct FishermanServiceEventLoop<Runtime: StorageEnableRuntime> {
     service: FishermanService<Runtime>,
-    receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand>,
+    receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand<Runtime>>,
 }
 
 impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
@@ -433,7 +441,7 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
 {
     fn new(
         actor: FishermanService<Runtime>,
-        receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand>,
+        receiver: sc_utils::mpsc::TracingUnboundedReceiver<FishermanServiceCommand<Runtime>>,
     ) -> Self {
         Self {
             service: actor,
@@ -467,7 +475,11 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
 
                             // TODO: Only monitor block if it is the new best block
 
-                            if let Err(e) = self.service.monitor_block(block_number, block_hash).await {
+                            if let Err(e) = self
+                                .service
+                                .monitor_block(block_number.into(), block_hash)
+                                .await
+                            {
                                 error!(target: LOG_TARGET, "Failed to monitor block: {:?}", e);
                             }
                         }

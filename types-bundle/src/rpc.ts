@@ -15,8 +15,8 @@ export const rpcDefinitions: Record<string, Record<string, DefinitionRpc | Defin
           type: "String"
         },
         {
-          name: "owner",
-          type: "AccountId32"
+          name: "owner_account_id_hex",
+          type: "String"
         },
         {
           name: "bucket_id",

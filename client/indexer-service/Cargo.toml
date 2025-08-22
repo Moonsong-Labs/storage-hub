@@ -15,18 +15,19 @@ publish = false
 workspace = true
 
 [dependencies]
-tokio = { workspace = true }
 anyhow = { workspace = true }
 array-bytes = { workspace = true }
-lazy-static = { workspace = true }
-log = { workspace = true }
-futures = { workspace = true }
-serde_json = { workspace = true }
+bigdecimal = { workspace = true }
 codec = { workspace = true }
-serde = { workspace = true, default-features = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
+futures = { workspace = true }
+lazy-static = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true, default-features = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true }
 
 # Substrate
 frame-support = { workspace = true }
@@ -53,7 +54,6 @@ cumulus-primitives-core = { workspace = true }
 cumulus-primitives-storage-weight-reclaim = { workspace = true }
 
 # Local
-storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-common = { workspace = true }
 shc-indexer-db = { workspace = true }

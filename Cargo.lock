@@ -14476,7 +14476,6 @@ dependencies = [
  "anyhow",
  "array-bytes",
  "async-trait",
- "cumulus-primitives-core 0.17.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "frame-support 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "frame-system 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "futures",
@@ -14514,7 +14513,6 @@ dependencies = [
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-keystore 0.41.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
- "storage-hub-runtime",
  "substrate-frame-rpc-system",
  "thiserror 1.0.69",
  "tokio",
@@ -14574,11 +14572,11 @@ dependencies = [
  "shp-constants",
  "shp-file-metadata",
  "shp-traits",
+ "shp-types",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-keystore 0.41.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
- "storage-hub-runtime",
  "substrate-build-script-utils",
  "thiserror 1.0.69",
  "tokio",
@@ -14589,6 +14587,7 @@ name = "shc-common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bigdecimal",
  "bincode",
  "cumulus-client-service",
  "cumulus-primitives-core 0.17.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -14600,12 +14599,16 @@ dependencies = [
  "frame-system 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "lazy_static",
  "log",
+ "pallet-balances 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "pallet-bucket-nfts",
  "pallet-file-system",
  "pallet-file-system-runtime-api",
+ "pallet-nfts",
  "pallet-payment-streams",
  "pallet-payment-streams-runtime-api",
  "pallet-proofs-dealer",
  "pallet-proofs-dealer-runtime-api",
+ "pallet-randomness",
  "pallet-storage-providers",
  "pallet-storage-providers-runtime-api",
  "pallet-transaction-payment 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -14625,16 +14628,17 @@ dependencies = [
  "shp-forest-verifier",
  "shp-opaque",
  "shp-traits",
+ "shp-types",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-block-builder 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-blockchain",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-io 39.0.1 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-keystore 0.41.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-rpc",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
- "storage-hub-runtime",
  "substrate-frame-rpc-system",
  "tempfile",
  "thiserror 1.0.69",
@@ -14709,10 +14713,10 @@ dependencies = [
  "shc-actors-framework",
  "shc-common",
  "shc-indexer-db",
+ "shp-types",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
- "storage-hub-runtime",
  "thiserror 1.0.69",
  "tokio",
 ]
@@ -14738,6 +14742,7 @@ dependencies = [
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-state-machine 0.44.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "storage-hub-runtime",
  "thiserror 1.0.69",
  "tokio",
  "trie-db 0.29.1",
@@ -14769,6 +14774,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "array-bytes",
+ "bigdecimal",
  "cumulus-primitives-core 0.17.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "cumulus-primitives-storage-weight-reclaim",
  "diesel",
@@ -14807,7 +14813,6 @@ dependencies = [
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-keystore 0.41.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
- "storage-hub-runtime",
  "substrate-frame-rpc-system",
  "thiserror 1.0.69",
  "tokio",
@@ -14822,6 +14827,7 @@ dependencies = [
  "bytes",
  "futures",
  "futures-util",
+ "hex",
  "jsonrpsee 0.24.9",
  "log",
  "mime_guess",
@@ -14836,6 +14842,9 @@ dependencies = [
  "shc-common",
  "shc-file-manager",
  "shc-forest-manager",
+ "shp-constants",
+ "shp-traits",
+ "shp-types",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-blockchain",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -14938,14 +14947,8 @@ dependencies = [
 name = "shp-opaque"
 version = "0.1.0"
 dependencies = [
- "frame-support 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "parachains-common",
- "parity-scale-codec",
- "scale-info",
- "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
- "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
- "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
 ]
 
 [[package]]
@@ -14960,6 +14963,27 @@ dependencies = [
  "sp-keystore 0.41.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-std 14.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+]
+
+[[package]]
+name = "shp-storage-enable-types"
+version = "0.1.0"
+dependencies = [
+ "frame-system 39.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "pallet-balances 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "pallet-file-system",
+ "pallet-payment-streams",
+ "pallet-proofs-dealer",
+ "pallet-storage-providers",
+ "shp-constants",
+ "shp-file-key-verifier",
+ "shp-file-metadata",
+ "shp-forest-verifier",
+ "shp-opaque",
+ "shp-traits",
+ "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
 ]
 
 [[package]]
@@ -14984,6 +15008,15 @@ dependencies = [
  "shp-traits",
  "sp-arithmetic 26.0.0",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+]
+
+[[package]]
+name = "shp-types"
+version = "0.1.0"
+dependencies = [
+ "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-runtime 40.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
 ]
 
 [[package]]
@@ -17088,7 +17121,9 @@ dependencies = [
  "shp-constants",
  "shp-file-key-verifier",
  "shp-file-metadata",
+ "shp-opaque",
  "shp-traits",
+ "shp-types",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-block-builder 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-blockchain",
@@ -17166,13 +17201,16 @@ dependencies = [
  "polkadot-runtime-common 18.1.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "scale-info",
  "serde_json",
+ "shc-common",
  "shp-constants",
  "shp-data-price-updater",
  "shp-file-key-verifier",
  "shp-file-metadata",
  "shp-forest-verifier",
+ "shp-opaque",
  "shp-traits",
  "shp-treasury-funding",
+ "shp-types",
  "smallvec",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-block-builder 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",

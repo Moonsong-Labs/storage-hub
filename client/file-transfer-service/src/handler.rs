@@ -40,9 +40,12 @@ use sc_network_types::PeerId;
 use sc_tracing::tracing::{debug, error, info, warn};
 
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
-use shc_common::types::{
-    BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
-    BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        BucketId, DownloadRequestId, FileKey, FileKeyProof, UploadRequestId,
+        BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE, FILE_CHUNK_SIZE,
+    },
 };
 use shp_file_metadata::ChunkId;
 
@@ -61,13 +64,13 @@ const LOG_TARGET: &str = "file-transfer-service";
 const BUCKET_MOVE_RETRY_INTERVAL_SECONDS: u64 = 3 * 60 * 60; // 3 hours
 
 #[derive(Eq)]
-pub struct BucketIdWithExpiration {
-    bucket_id: BucketId,
+pub struct BucketIdWithExpiration<Runtime: StorageEnableRuntime> {
+    bucket_id: BucketId<Runtime>,
     expiration: chrono::DateTime<chrono::Utc>,
 }
 
-impl BucketIdWithExpiration {
-    pub fn new(bucket_id: BucketId, grace_period_seconds: u64) -> Self {
+impl<Runtime: StorageEnableRuntime> BucketIdWithExpiration<Runtime> {
+    pub fn new(bucket_id: BucketId<Runtime>, grace_period_seconds: u64) -> Self {
         let expiration = chrono::Utc::now()
             + chrono::Duration::seconds(grace_period_seconds.try_into().unwrap_or(0));
         Self {
@@ -77,26 +80,26 @@ impl BucketIdWithExpiration {
     }
 }
 
-impl PartialEq for BucketIdWithExpiration {
+impl<Runtime: StorageEnableRuntime> PartialEq for BucketIdWithExpiration<Runtime> {
     fn eq(&self, other: &Self) -> bool {
         self.expiration.eq(&other.expiration) && self.bucket_id.eq(&other.bucket_id)
     }
 }
 
-impl PartialOrd for BucketIdWithExpiration {
+impl<Runtime: StorageEnableRuntime> PartialOrd for BucketIdWithExpiration<Runtime> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl Ord for BucketIdWithExpiration {
+impl<Runtime: StorageEnableRuntime> Ord for BucketIdWithExpiration<Runtime> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // Order by expiration
         self.expiration.cmp(&other.expiration)
     }
 }
 
-pub struct FileTransferService {
+pub struct FileTransferService<Runtime: StorageEnableRuntime> {
     /// Protocol name used by substrate network for the file transfer service.
     protocol_name: ProtocolName,
     /// Receiver for incoming requests.
@@ -108,14 +111,14 @@ pub struct FileTransferService {
     /// Registry of peers by file key, used for cleanup.
     peers_by_file: HashMap<FileKey, Vec<PeerId>>,
     /// Registry of (peer, bucket id) pairs for which we accept requests.
-    peer_bucket_allow_list: HashSet<(PeerId, BucketId)>,
+    peer_bucket_allow_list: HashSet<(PeerId, BucketId<Runtime>)>,
     /// Registry of peers by bucket id, used for cleanup.
-    peers_by_bucket: HashMap<BucketId, Vec<PeerId>>,
+    peers_by_bucket: HashMap<BucketId<Runtime>, Vec<PeerId>>,
     /// Mapping from bucket id to the grace period time.
-    bucket_allow_list_grace_period_time: BTreeSet<BucketIdWithExpiration>,
+    bucket_allow_list_grace_period_time: BTreeSet<BucketIdWithExpiration<Runtime>>,
     /// The event bus provider for the file transfer service.
     /// Part of the actor framework, allows for emitting events.
-    event_bus_provider: FileTransferServiceEventBusProvider,
+    event_bus_provider: FileTransferServiceEventBusProvider<Runtime>,
     /// Mapping from RequestId to a download pending response channel
     download_pending_responses:
         HashMap<DownloadRequestId, futures::channel::oneshot::Sender<OutgoingResponse>>,
@@ -130,10 +133,10 @@ pub struct FileTransferService {
     last_bucket_move_retry: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-impl Actor for FileTransferService {
-    type Message = FileTransferServiceCommand;
-    type EventLoop = FileTransferServiceEventLoop;
-    type EventBusProvider = FileTransferServiceEventBusProvider;
+impl<Runtime: StorageEnableRuntime> Actor for FileTransferService<Runtime> {
+    type Message = FileTransferServiceCommand<Runtime>;
+    type EventLoop = FileTransferServiceEventLoop<Runtime>;
+    type EventBusProvider = FileTransferServiceEventBusProvider<Runtime>;
 
     fn handle_message(
         &mut self,
@@ -462,23 +465,25 @@ impl Actor for FileTransferService {
 }
 
 /// Event loop for the FileTransferService actor.
-pub struct FileTransferServiceEventLoop {
-    receiver: sc_utils::mpsc::TracingUnboundedReceiver<FileTransferServiceCommand>,
-    actor: FileTransferService,
+pub struct FileTransferServiceEventLoop<Runtime: StorageEnableRuntime> {
+    receiver: sc_utils::mpsc::TracingUnboundedReceiver<FileTransferServiceCommand<Runtime>>,
+    actor: FileTransferService<Runtime>,
 }
 
-enum MergedEventLoopMessage {
-    Command(FileTransferServiceCommand),
+enum MergedEventLoopMessage<Runtime: StorageEnableRuntime> {
+    Command(FileTransferServiceCommand<Runtime>),
     Request(IncomingRequest),
     Tick,
 }
 
 /// Since this actor is a network service, it needs to handle both incoming network events and
 /// messages from other actors, hence the need for a custom `ActorEventLoop`.
-impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
+impl<Runtime: StorageEnableRuntime> ActorEventLoop<FileTransferService<Runtime>>
+    for FileTransferServiceEventLoop<Runtime>
+{
     fn new(
-        actor: FileTransferService,
-        receiver: sc_utils::mpsc::TracingUnboundedReceiver<FileTransferServiceCommand>,
+        actor: FileTransferService<Runtime>,
+        receiver: sc_utils::mpsc::TracingUnboundedReceiver<FileTransferServiceCommand<Runtime>>,
     ) -> Self {
         Self { actor, receiver }
     }
@@ -537,7 +542,7 @@ impl ActorEventLoop<FileTransferService> for FileTransferServiceEventLoop {
     }
 }
 
-impl FileTransferService {
+impl<Runtime: StorageEnableRuntime> FileTransferService<Runtime> {
     /// Create a new [`FileTransferService`].
     pub fn new(
         protocol_name: ProtocolName,
@@ -617,7 +622,8 @@ impl FileTransferService {
                 };
 
                 let bucket_id = match &r.bucket_id {
-                    Some(bucket_id) => match BucketId::decode(&mut bucket_id.as_slice()) {
+                    Some(bucket_id) => match BucketId::<Runtime>::decode(&mut bucket_id.as_slice())
+                    {
                         Ok(bucket_id) => Some(bucket_id),
                         Err(e) => {
                             error!(
@@ -683,7 +689,9 @@ impl FileTransferService {
                 };
 
                 let bucket_id = match r.bucket_id {
-                    Some(ref bucket_id) => BucketId::decode(&mut bucket_id.as_slice()).ok(),
+                    Some(ref bucket_id) => {
+                        BucketId::<Runtime>::decode(&mut bucket_id.as_slice()).ok()
+                    }
                     None => None,
                 };
 
@@ -728,7 +736,12 @@ impl FileTransferService {
         };
     }
 
-    fn is_allowed(&self, peer: PeerId, file_key: FileKey, bucket_id: Option<BucketId>) -> bool {
+    fn is_allowed(
+        &self,
+        peer: PeerId,
+        file_key: FileKey,
+        bucket_id: Option<BucketId<Runtime>>,
+    ) -> bool {
         if self.peer_file_allow_list.contains(&(peer, file_key)) {
             return true;
         }
@@ -758,7 +771,7 @@ impl FileTransferService {
         }
     }
 
-    fn unregister_bucket(&mut self, bucket_id: BucketId) -> Result<(), RequestError> {
+    fn unregister_bucket(&mut self, bucket_id: BucketId<Runtime>) -> Result<(), RequestError> {
         let result = match self.peers_by_bucket.get(&bucket_id) {
             Some(peers) => {
                 for peer_id in peers {

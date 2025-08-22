@@ -24,18 +24,18 @@ pub use self::handler::BlockchainService;
 
 pub async fn spawn_blockchain_service<FSH, Runtime>(
     task_spawner: &TaskSpawner,
-    config: BlockchainServiceConfig,
+    config: BlockchainServiceConfig<Runtime>,
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     keystore: KeystorePtr,
     rpc_handlers: Arc<RpcHandlers>,
     forest_storage_handler: FSH,
     rocksdb_root_path: impl Into<PathBuf>,
     notify_period: Option<u32>,
-    capacity_config: Option<CapacityConfig>,
+    capacity_config: Option<CapacityConfig<Runtime>>,
     maintenance_mode: bool,
 ) -> ActorHandle<BlockchainService<FSH, Runtime>>
 where
-    FSH: shc_forest_manager::traits::ForestStorageHandler + Clone + Send + Sync + 'static,
+    FSH: shc_forest_manager::traits::ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
     Runtime: StorageEnableRuntime,
 {
     let task_spawner = task_spawner
