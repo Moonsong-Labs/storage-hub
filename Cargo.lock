@@ -17622,9 +17622,9 @@ dependencies = [
  "parity-scale-codec",
  "shp-constants",
  "shp-file-metadata",
- "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-core 35.0.0",
  "sp-runtime-interface 29.0.0",
- "sp-trie 38.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "sp-trie 38.0.0",
  "wasm-bindgen",
 ]
 

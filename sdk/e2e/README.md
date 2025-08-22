@@ -89,4 +89,3 @@ docker run --rm -it -p 3000:3000 storagehub-e2e
 - Connect approved
 - Message signed via SDK; signature logged
 - Transaction request initiated via SDK and rejected; rejection logged
-

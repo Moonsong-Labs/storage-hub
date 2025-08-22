@@ -7,7 +7,6 @@
  * signing arbitrary messages.
  */
 import type { TransactionRequest } from 'ethers';
-
 export abstract class WalletBase {
   /**
    * Return the public address for the currently selected account.

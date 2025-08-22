@@ -1,6 +1,7 @@
 use wasm_bindgen::prelude::*;
 
 use parity_scale_codec::Encode;
+use shp_constants::FILE_CHUNK_SIZE;
 use shp_file_metadata::{Chunk, ChunkId, ChunkWithId};
 use sp_core::{hashing::blake2_256, Hasher};
 use sp_trie::{LayoutV1, MemoryDB, TrieDBMutBuilder, TrieMut};
