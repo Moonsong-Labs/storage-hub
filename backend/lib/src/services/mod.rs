@@ -2,11 +2,14 @@
 
 use std::sync::Arc;
 
-use crate::data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 #[cfg(all(test, feature = "mocks"))]
 use crate::data::{
     rpc::{AnyRpcConnection, MockConnection},
     storage::{BoxedStorageWrapper, InMemoryStorage},
+};
+use crate::{
+    data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
+    repository::MockRepository,
 };
 
 // TODO(SCAFFOLDING): Counter module is for demonstration only
@@ -61,7 +64,8 @@ impl Services {
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
 
         // Create mock database client
-        let postgres = Arc::new(DBClient::test());
+        let repo = MockRepository::new();
+        let postgres = Arc::new(DBClient::new(Arc::new(repo)));
 
         // Create mock RPC client
         let mock_conn = MockConnection::new();

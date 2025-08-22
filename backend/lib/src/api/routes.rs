@@ -5,8 +5,7 @@ use axum::{
     Router,
 };
 
-use super::handlers;
-use crate::services::Services;
+use crate::{handlers, services::Services};
 
 /// Creates the router with all API routes
 pub fn routes(services: Services) -> Router {

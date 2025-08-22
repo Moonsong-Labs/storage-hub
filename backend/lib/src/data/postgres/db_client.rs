@@ -185,15 +185,6 @@ impl DBClient {
     }
 }
 
-#[cfg(all(test, feature = "mocks"))]
-impl DBClient {
-    /// Create a test database client with mock repository
-    pub fn test() -> Self {
-        let mock_repo = MockRepository::new();
-        Self::new(Arc::new(mock_repo))
-    }
-}
-
 // Test-only mutable operations
 #[cfg(test)]
 impl DBClient {

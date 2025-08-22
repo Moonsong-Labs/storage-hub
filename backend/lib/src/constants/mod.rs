@@ -6,6 +6,9 @@ pub mod test;
 
 /// Default server configuration
 pub mod server {
+    /// Default HTTP listening host
+    pub const DEFAULT_HOST: &str = "127.0.0.1";
+
     /// Default HTTP server port
     pub const DEFAULT_PORT: u16 = 8080;
 }

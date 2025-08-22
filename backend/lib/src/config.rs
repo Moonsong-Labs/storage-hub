@@ -4,7 +4,7 @@ use crate::constants::{
     api::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
     database::DEFAULT_DATABASE_URL,
     rpc::{DEFAULT_MAX_CONCURRENT_REQUESTS, DEFAULT_RPC_URL, DEFAULT_TIMEOUT_SECS},
-    server::DEFAULT_PORT,
+    server::{DEFAULT_HOST, DEFAULT_PORT},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,10 +48,8 @@ pub struct DatabaseConfig {
 
 impl Default for Config {
     fn default() -> Self {
-        // these are just some sane defaults, most likely we will
-        // have them overridden
         Self {
-            host: "127.0.0.1".to_string(),
+            host: DEFAULT_HOST.to_string(),
             port: DEFAULT_PORT,
             api: ApiConfig {
                 default_page_size: DEFAULT_PAGE_SIZE,

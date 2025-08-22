@@ -6,8 +6,6 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-#[cfg(feature = "mocks")]
-use sh_msp_backend_lib::data::rpc::MockConnection;
 use sh_msp_backend_lib::{
     api::create_app,
     config::Config,
@@ -19,6 +17,8 @@ use sh_msp_backend_lib::{
     repository::Repository,
     services::Services,
 };
+#[cfg(feature = "mocks")]
+use sh_msp_backend_lib::{data::rpc::MockConnection, repository::MockRepository};
 use tracing::{debug, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -115,8 +115,6 @@ async fn create_postgres_client(config: &Config) -> Result<Arc<DBClient>> {
     {
         if config.database.mock_mode {
             info!("Using mock repository (mock_mode enabled)");
-
-            use sh_msp_backend_lib::repository::MockRepository;
 
             let mock_repo = MockRepository::new();
             let client = DBClient::new(Arc::new(mock_repo));
