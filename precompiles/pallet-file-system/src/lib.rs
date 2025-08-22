@@ -8,7 +8,8 @@ use frame_support::dispatch::{GetDispatchInfo, PostDispatchInfo};
 use pallet_evm::AddressMapping;
 use pallet_file_system::{
     types::{
-        FileOperation, FileOperationIntention, MaxNumberOfPeerIds, MaxPeerIdSize, ReplicationTarget,
+        BucketNameFor, FileLocation, FileOperation, FileOperationIntention, Fingerprint,
+        MerkleHash, PeerIds, ProviderIdFor, ReplicationTarget, StorageDataUnit, ValuePropId,
     },
     Call as FileSystemCall,
 };
@@ -171,12 +172,12 @@ where
     <Runtime as pallet_evm::Config>::AddressMapping: AddressMapping<Runtime::AccountId>,
     <Runtime::RuntimeCall as Dispatchable>::RuntimeOrigin: From<Option<Runtime::AccountId>>,
     // Runtime types (we should update this bounds with the correct types once the EVM-compatible SH runtime is ready):
-    <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadProvidersInterface>::ProviderId: From<H256> + Into<H256>,
-    <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadStorageProvidersInterface>::ValuePropId: From<H256> + Into<H256>,
-    <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadStorageProvidersInterface>::StorageDataUnit: From<u64>,
-    <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadProvidersInterface>::MerkleHash: From<H256> + Into<H256>,
+    ProviderIdFor<Runtime>: From<H256> + Into<H256>,
+    ValuePropId<Runtime>: From<H256> + Into<H256>,
+    StorageDataUnit<Runtime>: From<u64>,
+    MerkleHash<Runtime>: From<H256> + Into<H256>,
 	<<Runtime as pallet_file_system::Config>::Nfts as frame_support::traits::nonfungibles_v2::Inspect<AccountId20>>::CollectionId: Into<U256>,
-    <Runtime as pallet_file_system::Config>::Fingerprint: From<H256> + Into<H256>,
+    Fingerprint<Runtime>: From<H256> + Into<H256>,
     <Runtime as pallet_file_system::Config>::OffchainSignature: From<EthereumSignature>,
 
 
@@ -195,7 +196,7 @@ where
         handle.record_cost(RuntimeHelper::<Runtime>::db_write_gas_cost())?;
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
-        let name: BoundedVec<u8, <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::BucketNameLimit> =
+        let name: BucketNameFor<Runtime> =
             BoundedVec::try_from(name.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Bucket name too long"))?;
         let value_prop_id = value_prop_id.into();
 
@@ -373,14 +374,14 @@ where
 
         let origin = Runtime::AddressMapping::into_account_id(handle.context().caller);
         let bucket_id_runtime = bucket_id.clone().into();
-        let location: BoundedVec<u8, <Runtime as pallet_file_system::Config>::MaxFilePathSize> =
+        let location: FileLocation<Runtime> =
             BoundedVec::try_from(location.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Location path too long"))?;
         let fingerprint = fingerprint.into();
         let size = size.into();
         let msp_id = msp_id.into();
 
         // Convert peer_ids
-        let peer_ids: Result<BoundedVec<BoundedVec<u8, MaxPeerIdSize<Runtime>>, MaxNumberOfPeerIds<Runtime>>, _> = peer_ids
+        let peer_ids: Result<PeerIds<Runtime>, _> = peer_ids
             .into_iter()
             .map(|peer_id| BoundedVec::try_from(peer_id.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Peer ID too long")))
             .collect::<Result<Vec<_>, _>>()?
@@ -490,7 +491,7 @@ where
 
         let signature_bytes: Vec<u8> = signature.into();
         let bucket_id = bucket_id.into();
-        let location: BoundedVec<u8, <Runtime as pallet_file_system::Config>::MaxFilePathSize> =
+        let location: FileLocation<Runtime> =
             BoundedVec::try_from(location.as_bytes().to_vec()).map_err(|_| RevertReason::custom("Location path too long"))?;
         let size = size.into();
         let fingerprint = fingerprint.into();
@@ -564,7 +565,7 @@ where
 
         let owner_account = Runtime::AddressMapping::into_account_id(owner.0);
         let name_vec = name.as_bytes().to_vec();
-        let name_bounded: BoundedVec<u8, <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::BucketNameLimit> =
+        let name_bounded: BucketNameFor<Runtime> =
             BoundedVec::try_from(name_vec).map_err(|_| RevertReason::custom("Bucket name too long"))?;
 
         let bucket_id = <<Runtime as pallet_file_system::Config>::Providers as shp_traits::ReadBucketsInterface>::derive_bucket_id(

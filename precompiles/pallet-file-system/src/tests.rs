@@ -10,7 +10,7 @@ use crate::{
 use fp_account::AccountId20 as AccountId;
 use frame_support::assert_ok;
 use pallet_evm::Call as EvmCall;
-use pallet_file_system::{PendingMoveBucketRequests, StorageRequests};
+use pallet_file_system::{types::BucketNameFor, PendingMoveBucketRequests, StorageRequests};
 use pallet_storage_providers::{pallet::Buckets, types::ValueProposition};
 use precompile_utils::{prelude::Address, testing::*};
 use shp_traits::ReadBucketsInterface;
@@ -197,7 +197,7 @@ mod unit_tests {
                     let dave_value_prop_id = charlie_value_prop_id;
 
                     // Create a bucket with Charlie as its MSP
-                    let bucket_name: BoundedVec<u8, _> =
+                    let bucket_name: BucketNameFor<Test> =
                         b"move-test-bucket".to_vec().try_into().unwrap();
                     assert_ok!(pallet_file_system::Pallet::<Test>::create_bucket(
                         RuntimeOrigin::signed(alice.clone()),
