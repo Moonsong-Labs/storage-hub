@@ -315,7 +315,7 @@ declare module "@polkadot/api-base/types/storage" {
       > &
         QueryableStorageEntry<ApiType, [H256, H256]>;
       /**
-       * Incomplete storage requests that need provider-by-provider file removal.
+       * Incomplete storage requests with pending provider file removal.
        *
        * This mapping tracks storage requests that have been expired or rejected but still have
        * confirmed providers storing files. Each entry tracks which providers still need to remove
