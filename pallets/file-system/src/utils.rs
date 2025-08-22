@@ -1324,17 +1324,14 @@ where
 
         ensure!(computed_file_key == file_key, Error::<T>::FileKeyMismatch);
 
-        // Validate provider is in pending removal lists
-        let provider_found = incomplete_storage_request_metadata.pending_msp_removal
-            == Some(provider_id)
-            || incomplete_storage_request_metadata
-                .pending_bsp_removals
-                .contains(&provider_id);
-
-        ensure!(provider_found, Error::<T>::ProviderNotStoringFile);
-
         // Perform deletion based on provider type
         if <T::Providers as ReadStorageProvidersInterface>::is_msp(&provider_id) {
+            // Check that the provider_id is the msp that is storing the file in the incomplete storage request metadata
+            ensure!(
+                incomplete_storage_request_metadata.pending_msp_removal == Some(provider_id),
+                Error::<T>::ProviderNotStoringFile
+            );
+
             Self::delete_file_from_msp(
                 incomplete_storage_request_metadata.owner.clone(),
                 file_key,
@@ -1344,6 +1341,14 @@ where
                 forest_proof,
             )?;
         } else if <T::Providers as ReadStorageProvidersInterface>::is_bsp(&provider_id) {
+            // Check that the provider_id is in the pending removal lists
+            ensure!(
+                incomplete_storage_request_metadata
+                    .pending_bsp_removals
+                    .contains(&provider_id),
+                Error::<T>::ProviderNotStoringFile
+            );
+
             Self::delete_file_from_bsp(
                 incomplete_storage_request_metadata.owner.clone(),
                 file_key,
@@ -2730,6 +2735,15 @@ where
         provider_id: ProviderIdFor<T>,
         forest_proof: ForestProof<T>,
     ) -> DispatchResult {
+        // Ensure that the provider_id is the owner of the bucket
+        ensure!(
+            <T::Providers as ReadBucketsInterface>::is_bucket_stored_by_msp(
+                &provider_id,
+                &bucket_id
+            ),
+            Error::<T>::MspNotStoringBucket
+        );
+
         // Get current bucket root
         let old_bucket_root = <T::Providers as ReadBucketsInterface>::get_root_bucket(&bucket_id)
             .ok_or(Error::<T>::BucketNotFound)?;

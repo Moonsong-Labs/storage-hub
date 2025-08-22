@@ -12328,6 +12328,59 @@ mod delete_file_tests {
                 );
             });
         }
+
+        #[test]
+        fn delete_file_fails_when_msp_not_storing_bucket() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp_storing_file = Keyring::Charlie.to_account_id();
+                let msp_not_storing_file = Keyring::Dave.to_account_id();
+
+                // Set up MSP that will store the file
+                let (
+                    bucket_id,
+                    file_key,
+                    location,
+                    size,
+                    fingerprint,
+                    _msp_storing_file_id,
+                    _value_prop_id,
+                ) = setup_file_in_msp_bucket(&alice, &msp_storing_file);
+
+                // Set up MSP that does NOT store the file
+                let (msp_not_storing_file_id, _dave_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_not_storing_file);
+
+                // Alice signs the deletion message (valid signature)
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+
+                // Create valid forest proof for the file stored by MSP
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Fisherman node attempts exploiting the system by sending:
+                // - Valid proof from MSP that stores the file
+                // - But specifies MSP that does NOT store the file
+                // This should fail with MspNotStoringBucket error
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(alice.clone()),
+                        alice.clone(),
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        msp_not_storing_file_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::MspNotStoringBucket
+                );
+            });
+        }
     }
 }
 
@@ -13351,7 +13404,7 @@ mod delete_file_for_incomplete_storage_request_tests {
                         non_existent_provider_id, // Non-existent provider
                         forest_proof_delete,
                     ),
-                    Error::<Test>::ProviderNotStoringFile
+                    Error::<Test>::InvalidProviderID
                 );
 
                 // Verify incomplete storage request was not impacted
