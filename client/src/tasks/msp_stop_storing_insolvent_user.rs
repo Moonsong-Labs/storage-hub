@@ -10,7 +10,7 @@ use shc_blockchain_service::{
     events::{FinalisedMspStopStoringBucketInsolventUser, UserWithoutFunds},
     types::SendExtrinsicOptions,
 };
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::StorageProviderId;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
@@ -49,53 +49,49 @@ const MAX_CONCURRENT_STOP_STORING_EXTRINSICS: usize = 20;
 /// - Reacting to [`FinalisedMspStopStoringBucketInsolventUser`] event from the BlockchainService:
 /// 	- Deletes the bucket from the MSP's forest storage.
 /// 	- Deletes all the files that were in the bucket from the MSP's file storage.
-pub struct MspStopStoringInsolventUserTask<NT, RuntimeApi>
+pub struct MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
 }
 
-impl<NT, RuntimeApi> Clone for MspStopStoringInsolventUserTask<NT, RuntimeApi>
+impl<NT, Runtime> Clone for MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> MspStopStoringInsolventUserTask<NT, RuntimeApi> {
+    fn clone(&self) -> MspStopStoringInsolventUserTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
         }
     }
 }
 
-impl<NT, RuntimeApi> MspStopStoringInsolventUserTask<NT, RuntimeApi>
+impl<NT, Runtime> MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<UserWithoutFunds>
-    for MspStopStoringInsolventUserTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<UserWithoutFunds<Runtime>>
+    for MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: UserWithoutFunds) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: UserWithoutFunds<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing UserWithoutFunds for user {:?}. Stopping storing all buckets for the insolvent user.",
@@ -221,17 +217,16 @@ where
 /// This task will:
 /// - Delete the bucket from the MSP's storage.
 /// - Delete all the files in the bucket.
-impl<NT, RuntimeApi> EventHandler<FinalisedMspStopStoringBucketInsolventUser>
-    for MspStopStoringInsolventUserTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<FinalisedMspStopStoringBucketInsolventUser<Runtime>>
+    for MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedMspStopStoringBucketInsolventUser,
+        event: FinalisedMspStopStoringBucketInsolventUser<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -270,22 +265,20 @@ where
     }
 }
 
-impl<NT, RuntimeApi> MspStopStoringInsolventUserTask<NT, RuntimeApi>
+impl<NT, Runtime> MspStopStoringInsolventUserTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     /// Common function to handle submitting an extrinsic to stop storing a bucket that belongs to an insolvent user.
     async fn stop_storing_bucket_for_insolvent_user(&self, bucket_id: &H256) -> anyhow::Result<()> {
         // Build the extrinsic to stop storing the bucket of the insolvent user
-        let stop_storing_bucket_for_insolvent_user_call =
-            storage_hub_runtime::RuntimeCall::FileSystem(
-                pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
-                    bucket_id: *bucket_id,
-                },
-            );
+        let stop_storing_bucket_for_insolvent_user_call: Runtime::Call =
+            pallet_file_system::Call::msp_stop_storing_bucket_for_insolvent_user {
+                bucket_id: *bucket_id,
+            }
+            .into();
 
         // Send the transaction and wait for it to be included in the block.
         if let Err(e) = self

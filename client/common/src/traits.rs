@@ -1,19 +1,25 @@
-use crate::types::*;
-use codec::Encode;
+use std::fmt::{Debug, Display};
+
+use bigdecimal::BigDecimal;
+use codec::{Decode, Encode};
 use pallet_file_system_runtime_api::FileSystemApi as FileSystemRuntimeApi;
 use pallet_payment_streams_runtime_api::PaymentStreamsApi as PaymentStreamsRuntimeApi;
 use pallet_proofs_dealer_runtime_api::ProofsDealerApi as ProofsDealerRuntimeApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi as StorageProvidersRuntimeApi;
-use polkadot_primitives::AccountId;
 use polkadot_primitives::Nonce;
-
 use sc_service::TFullClient;
+use scale_info::StaticTypeInfo;
 use shp_opaque::Block;
 use sp_api::ConstructRuntimeApi;
 use sp_block_builder::BlockBuilder;
-use sp_core::{crypto::KeyTypeId, sr25519, H256};
-use sp_runtime::traits::Dispatchable;
-use sp_runtime::traits::TransactionExtension;
+use sp_core::{crypto::KeyTypeId, H256};
+use sp_rpc::number::NumberOrHex;
+use sp_runtime::traits::{
+    Block as BlockT, Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension,
+    Verify,
+};
+
+use crate::types::*;
 
 /// A trait bundle that ensures a runtime API includes all storage-related capabilities.
 ///
@@ -75,79 +81,91 @@ use sp_runtime::traits::TransactionExtension;
 /// required runtime APIs. This means runtime developers don't need to explicitly
 /// implement this trait - it's automatically available when all component APIs
 /// are implemented.
-pub trait StorageEnableApiCollection:
-    pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-    + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+pub trait StorageEnableApiCollection<Runtime>:
+    pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
+    + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
     + BlockBuilder<Block>
     + ProofsDealerRuntimeApi<
         Block,
-        ProofsDealerProviderId,
-        BlockNumber,
-        ForestLeaf,
-        RandomnessOutput,
-        CustomChallenge,
+        ProofsDealerProviderId<Runtime>,
+        BlockNumber<Runtime>,
+        ForestLeaf<Runtime>,
+        RandomnessOutput<Runtime>,
+        CustomChallenge<Runtime>,
     > + FileSystemRuntimeApi<
         Block,
-        BackupStorageProviderId,
-        MainStorageProviderId,
-        H256,
-        BlockNumber,
+        BackupStorageProviderId<Runtime>,
+        MainStorageProviderId<Runtime>,
+        Runtime::Hash,
+        BlockNumber<Runtime>,
         ChunkId,
-        BucketId,
-        StorageRequestMetadata,
+        BucketId<Runtime>,
+        StorageRequestMetadata<Runtime>,
     > + StorageProvidersRuntimeApi<
         Block,
-        BlockNumber,
-        BackupStorageProviderId,
-        BackupStorageProviderInfo,
-        MainStorageProviderId,
-        AccountId,
-        ProviderId,
-        StorageProviderId,
-        StorageData,
-        Balance,
-        BucketId,
-        Multiaddresses,
-        ValuePropositionWithId,
-    > + PaymentStreamsRuntimeApi<Block, ProviderId, Balance, AccountId>
+        BlockNumber<Runtime>,
+        BackupStorageProviderId<Runtime>,
+        BackupStorageProviderInfo<Runtime>,
+        MainStorageProviderId<Runtime>,
+        AccountId<Runtime>,
+        ProviderId<Runtime>,
+        StorageProviderId<Runtime>,
+        StorageDataUnit<Runtime>,
+        Balance<Runtime>,
+        BucketId<Runtime>,
+        Multiaddresses<Runtime>,
+        ValuePropositionWithId<Runtime>,
+    > + PaymentStreamsRuntimeApi<Block, ProviderId<Runtime>, Balance<Runtime>, AccountId<Runtime>>
+where
+    Runtime: frame_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_file_system::Config
+        + pallet_balances::Config<Balance: MaybeDisplay>,
 {
 }
 
-impl<T> StorageEnableApiCollection for T where
-    T: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-        + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+impl<T, Runtime> StorageEnableApiCollection<Runtime> for T
+where
+    T: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance<Runtime>>
+        + substrate_frame_rpc_system::AccountNonceApi<Block, AccountId<Runtime>, Nonce>
         + BlockBuilder<Block>
         + ProofsDealerRuntimeApi<
             Block,
-            ProofsDealerProviderId,
-            BlockNumber,
-            ForestLeaf,
-            RandomnessOutput,
-            CustomChallenge,
+            ProofsDealerProviderId<Runtime>,
+            BlockNumber<Runtime>,
+            ForestLeaf<Runtime>,
+            RandomnessOutput<Runtime>,
+            CustomChallenge<Runtime>,
         > + FileSystemRuntimeApi<
             Block,
-            BackupStorageProviderId,
-            MainStorageProviderId,
-            H256,
-            BlockNumber,
+            BackupStorageProviderId<Runtime>,
+            MainStorageProviderId<Runtime>,
+            Runtime::Hash,
+            BlockNumber<Runtime>,
             ChunkId,
-            BucketId,
-            StorageRequestMetadata,
+            BucketId<Runtime>,
+            StorageRequestMetadata<Runtime>,
         > + StorageProvidersRuntimeApi<
             Block,
-            BlockNumber,
-            BackupStorageProviderId,
-            BackupStorageProviderInfo,
-            MainStorageProviderId,
-            AccountId,
-            ProviderId,
-            StorageProviderId,
-            StorageData,
-            Balance,
-            BucketId,
-            Multiaddresses,
-            ValuePropositionWithId,
-        > + PaymentStreamsRuntimeApi<Block, ProviderId, Balance, AccountId>
+            BlockNumber<Runtime>,
+            BackupStorageProviderId<Runtime>,
+            BackupStorageProviderInfo<Runtime>,
+            MainStorageProviderId<Runtime>,
+            AccountId<Runtime>,
+            ProviderId<Runtime>,
+            StorageProviderId<Runtime>,
+            StorageDataUnit<Runtime>,
+            Balance<Runtime>,
+            BucketId<Runtime>,
+            Multiaddresses<Runtime>,
+            ValuePropositionWithId<Runtime>,
+        > + PaymentStreamsRuntimeApi<Block, ProviderId<Runtime>, Balance<Runtime>, AccountId<Runtime>>,
+    Runtime: frame_system::Config
+        + pallet_storage_providers::Config
+        + pallet_proofs_dealer::Config
+        + pallet_file_system::Config
+        + pallet_balances::Config<Balance: MaybeDisplay>,
 {
 }
 
@@ -169,48 +187,122 @@ impl<T> StorageEnableRuntimeApi for T where
 {
 }
 
-/// A read-only keystore trait that provides access to public keys without signing capabilities.
+/// The trait that a runtime must implement to be compatible with the StorageHub Client.
 ///
-/// This trait is designed for services that only need to query public keys from the keystore
-/// without the ability to generate signatures. It provides a type-safe way to restrict
-/// keystore access to read-only operations.
+/// This trait describes the concrete associated types and pallet constraints that a
+/// runtime must satisfy for the StorageHub Client to work. It allows the client to
+/// remain generic over runtimes while still relying on a consistent set of capabilities.
 ///
-/// # Purpose
+/// - Fixes the fundamental runtime types used by the client: `Address`, `Call`,
+///   `Signature`, `Extension`, and `RuntimeApi`.
+/// - Requires the presence of specific pallets via trait bounds.
+/// - Requires `RuntimeEvent: Into<StorageEnableEvents<Self>>` so the client can map the
+///   concrete runtime event type into a known set of events.
 ///
-/// The indexer service needs to detect provider IDs by querying sr25519 public keys
-/// from the keystore, but it never needs to sign anything. This trait enforces that
-/// restriction at the type level, making the code more secure and its intentions clearer.
+/// # Associated Types
 ///
-/// # Usage
-///
-/// ```ignore
-/// fn get_provider_id_from_keystore<K: ReadOnlyKeystore>(
-///     keystore: &K,
-///     block_hash: &H256,
-/// ) -> Result<Option<StorageProviderId>, GetProviderIdError> {
-///     let keys = keystore.sr25519_public_keys(BCSV_KEY_TYPE);
-///     // ... process keys
-/// }
-/// ```
-pub trait ReadOnlyKeystore: Send + Sync {
-    /// Returns all sr25519 public keys for the given key type.
-    ///
-    /// This is the only operation the indexer service needs from the keystore.
-    fn sr25519_public_keys(&self, key_type: KeyTypeId) -> Vec<sr25519::Public>;
-}
-
-/// Blanket implementation for any type that implements the full Keystore trait.
-///
-/// This allows existing `KeystorePtr` instances to be used wherever `ReadOnlyKeystore`
-/// is required, maintaining backward compatibility while enforcing read-only access
-/// at the type level.
-impl<T> ReadOnlyKeystore for T
-where
-    T: sp_keystore::Keystore + ?Sized,
+/// - `Address` - The account address format used by the runtime
+/// - `Call` - The dispatchable call type for submitting extrinsics
+/// - `Signature` - The signature type used for signing transactions
+/// - `Extension` - The transaction extension type for additional transaction logic
+/// - `RuntimeApi` - The set of runtime APIs that must be available to the client
+pub trait StorageEnableRuntime:
+    // TODO: Consider removing the restriction that `Hash = H256`.
+    frame_system::Config<
+        Hash = shp_types::Hash,
+        AccountId: for<'a> TryFrom<&'a [u8]> + AsRef<[u8]>,
+        RuntimeEvent: Into<StorageEnableEvents<Self>>,
+        Block: BlockT<Hash = shp_types::Hash>,
+    >
+        + pallet_storage_providers::Config<
+            MerklePatriciaRoot = shp_types::Hash,
+            ValuePropId = shp_types::Hash,
+            ProviderId = shp_types::Hash,
+            BucketNameLimit: Send + Sync,
+            MaxCommitmentSize: Send + Sync,
+            MaxMultiAddressSize: Send + Sync,
+            MaxMultiAddressAmount: Send + Sync,
+            StorageDataUnit: Into<BigDecimal>,
+        >
+        + pallet_proofs_dealer::Config<
+            ProvidersPallet = pallet_storage_providers::Pallet<Self>,
+            MerkleTrieHash = shp_types::Hash,
+            ForestVerifier = ForestVerifier,
+            KeyVerifier = FileKeyVerifier,
+            MaxCustomChallengesPerBlock: Send + Sync,
+        >
+        + pallet_payment_streams::Config<
+            ProvidersPallet = pallet_storage_providers::Pallet<Self>,
+            NativeBalance = pallet_balances::Pallet<Self>,
+            MaxUsersToCharge: Send + Sync,
+        >
+        + pallet_file_system::Config<
+            Providers = pallet_storage_providers::Pallet<Self>,
+            ProofDealer = pallet_proofs_dealer::Pallet<Self>,
+            PaymentStreams = pallet_payment_streams::Pallet<Self>,
+            Nfts = pallet_nfts::Pallet<Self>,
+            Fingerprint = shp_types::Hash,
+            OffchainSignature: Send + Sync,
+            MaxBatchConfirmStorageRequests: Send + Sync,
+            MaxFilePathSize: Send + Sync,
+            MaxNumberOfPeerIds: Send + Sync,
+            MaxPeerIdSize: Send + Sync,
+        >
+        + pallet_transaction_payment::Config
+        + pallet_balances::Config<Balance: Into<BigDecimal> + Into<NumberOrHex> + MaybeDisplay>
+        + pallet_nfts::Config<CollectionId: Send + Sync + Display>
+        + pallet_bucket_nfts::Config
+        + pallet_randomness::Config
+        + Copy
+        + Debug
+        + Send
+        + Sync
+        + 'static
 {
-    fn sr25519_public_keys(&self, key_type: KeyTypeId) -> Vec<sr25519::Public> {
-        sp_keystore::Keystore::sr25519_public_keys(self, key_type)
-    }
+    /// The address format used to identify accounts in the runtime.
+    /// Must support type information, encoding/decoding, and debug formatting.
+    type Address: StaticTypeInfo + Decode + Encode + core::fmt::Debug + Send;
+
+    /// The dispatchable call type representing extrinsics that can be submitted to the runtime.
+    /// Must be a member type that supports encoding/decoding and dispatching.
+    type Call: StaticTypeInfo
+        + Decode
+        + Encode
+        + Member
+        + Dispatchable
+        + From<frame_system::Call<Self>>
+        + From<pallet_storage_providers::Call<Self>>
+        + From<pallet_proofs_dealer::Call<Self>>
+        + From<pallet_payment_streams::Call<Self>>
+        + From<pallet_file_system::Call<Self>>;
+
+    /// The signature type used for signing transactions.
+    /// Must support verification and key operations that produce the associated `Address` type.
+    type Signature: StaticTypeInfo
+        + Decode
+        + Encode
+        + Member
+        + Verify<Signer: IdentifyAccount<AccountId = <Self as frame_system::Config>::AccountId>>
+        + KeyTypeOperations<
+            Address = Self::Address,
+            Public: Into<<Self as frame_system::Config>::AccountId>,
+        >;
+
+    /// The transaction extension type for additional validation and transaction logic.
+    /// Extensions can modify transaction behaviour and must support the runtime's call type.
+    type Extension: StaticTypeInfo
+        + Decode
+        + Encode
+        + TransactionExtension<Self::Call>
+        // TODO: Consider removing the `Hash` constraint.
+        + ExtensionOperations<Self::Call, Self, Hash = H256>
+        + Clone
+        + core::fmt::Debug;
+
+    /// The runtime API type that provides access to all StorageHub-specific runtime functions.
+    /// Must support construction and provide complete access to all required runtime APIs
+    /// including file system, storage providers, proofs dealer, and payment streams functionality.
+    type RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection<Self>>;
 }
 
 /// Trait for abstracting key type operations to support multiple cryptographic schemes.
@@ -242,20 +334,6 @@ where
 ///
 /// # Usage
 ///
-/// ## Generic Extrinsic Construction
-/// ```ignore
-/// pub fn construct_extrinsic<Signature>(&self, function: Call) -> UncheckedExtrinsic
-/// where
-///     Signature: KeyTypeOperations<Address = Address>,
-/// {
-///     let public_key = Self::caller_pub_key::<Signature>(self.keystore.clone());
-///     let signature = Signature::sign(&self.keystore, BCSV_KEY_TYPE, &public_key, &payload)?;
-///     let address = Signature::public_to_address(&public_key);
-///     
-///     generic::UncheckedExtrinsic::new_signed(function, address, signature, extra)
-/// }
-/// ```
-///
 /// ## Getting Public Keys
 /// ```ignore
 /// pub fn caller_pub_key<S: KeyTypeOperations>(keystore: KeystorePtr) -> S::Public {
@@ -269,7 +347,7 @@ pub trait KeyTypeOperations: Sized {
     /// For example:
     /// - `sr25519::Public` for sr25519 signatures
     /// - `ecdsa::Public` for ECDSA signatures
-    type Public;
+    type Public: Debug + Send;
 
     /// The address type used to identify accounts on-chain.
     ///
@@ -355,7 +433,7 @@ pub trait KeyTypeOperations: Sized {
 ///
 /// # Required Traits
 ///
-/// Implementors must also implement `TransactionExtension<Call>` which provides the core
+/// Implementers must also implement `TransactionExtension<Call>` which provides the core
 /// extension functionality including validation and metadata generation.
 ///
 /// # Usage
@@ -382,7 +460,11 @@ pub trait KeyTypeOperations: Sized {
 ///     )
 /// }
 /// ```
-pub trait ExtensionOperations<Call: Encode + Dispatchable>: TransactionExtension<Call> {
+pub trait ExtensionOperations<
+    Call: Encode + Dispatchable,
+    Runtime: pallet_transaction_payment::Config,
+>: TransactionExtension<Call>
+{
     /// The block hash type used by this extension.
     ///
     /// This is typically `H256` for most Substrate chains, but could vary

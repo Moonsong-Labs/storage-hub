@@ -6,9 +6,8 @@
 
 use anyhow::Result;
 use log::trace;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::{traits::StorageEnableRuntime, types::StorageEnableEvents};
 use shc_indexer_db::DbConnection;
-use storage_hub_runtime::{Hash as H256, RuntimeEvent};
 
 use super::IndexerService;
 
@@ -21,55 +20,42 @@ use pallet_storage_providers;
 
 const LOG_TARGET: &str = "indexer-service::lite_handlers";
 
-impl<RuntimeApi> IndexerService<RuntimeApi>
-where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-{
+impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
     pub(super) async fn index_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &RuntimeEvent,
-        block_hash: H256,
+        event: &StorageEnableEvents<Runtime>,
+        block_hash: Runtime::Hash,
     ) -> Result<(), diesel::result::Error> {
         match event {
-            RuntimeEvent::FileSystem(event) => {
+            StorageEnableEvents::FileSystem(event) => {
                 self.index_file_system_event_lite(conn, event).await?
             }
-            RuntimeEvent::Providers(event) => {
+            StorageEnableEvents::StorageProviders(event) => {
                 self.index_providers_event_lite(conn, event, block_hash)
                     .await?
             }
-            RuntimeEvent::BucketNfts(event) => {
+            StorageEnableEvents::BucketNfts(event) => {
                 self.index_bucket_nfts_event_lite(conn, event, block_hash)
                     .await?
             }
-            RuntimeEvent::PaymentStreams(event) => {
+            StorageEnableEvents::PaymentStreams(event) => {
                 self.index_payment_streams_event_lite(conn, event, block_hash)
                     .await?
             }
-            RuntimeEvent::ProofsDealer(event) => {
+            StorageEnableEvents::ProofsDealer(event) => {
                 self.index_proofs_dealer_event_lite(conn, event, block_hash)
                     .await?
             }
-            RuntimeEvent::Randomness(event) => {
+            StorageEnableEvents::Randomness(event) => {
                 self.index_randomness_event_lite(conn, event, block_hash)
                     .await?
             }
             // System pallets - explicitly list all to ensure compilation errors on new events
-            RuntimeEvent::System(_) => {}
-            RuntimeEvent::ParachainSystem(_) => {}
-            RuntimeEvent::Balances(_) => {}
-            RuntimeEvent::TransactionPayment(_) => {}
-            RuntimeEvent::Sudo(_) => {}
-            RuntimeEvent::CollatorSelection(_) => {}
-            RuntimeEvent::Session(_) => {}
-            RuntimeEvent::XcmpQueue(_) => {}
-            RuntimeEvent::PolkadotXcm(_) => {}
-            RuntimeEvent::CumulusXcm(_) => {}
-            RuntimeEvent::MessageQueue(_) => {}
-            RuntimeEvent::Nfts(_) => {}
-            RuntimeEvent::Parameters(_) => {}
+            StorageEnableEvents::System(_) => {}
+            StorageEnableEvents::Balances(_) => {}
+            StorageEnableEvents::TransactionPayment(_) => {}
+            StorageEnableEvents::Other(_) => {}
         }
 
         Ok(())
@@ -78,7 +64,7 @@ where
     pub(crate) async fn index_file_system_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_file_system::Event<storage_hub_runtime::Runtime>,
+        event: &pallet_file_system::Event<Runtime>,
     ) -> Result<(), diesel::result::Error> {
         // In lite mode without MSP filtering, index all events
         let should_index = match event {
@@ -132,8 +118,8 @@ where
     pub(crate) async fn index_providers_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_storage_providers::Event<storage_hub_runtime::Runtime>,
-        block_hash: H256,
+        event: &pallet_storage_providers::Event<Runtime>,
+        block_hash: Runtime::Hash,
     ) -> Result<(), diesel::result::Error> {
         // In lite mode without MSP filtering, index all provider events
         let should_index = match event {
@@ -179,8 +165,8 @@ where
     pub(crate) async fn index_bucket_nfts_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_bucket_nfts::Event<storage_hub_runtime::Runtime>,
-        _block_hash: H256,
+        event: &pallet_bucket_nfts::Event<Runtime>,
+        _block_hash: Runtime::Hash,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
@@ -200,8 +186,8 @@ where
     pub(crate) async fn index_payment_streams_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_payment_streams::Event<storage_hub_runtime::Runtime>,
-        _block_hash: H256,
+        event: &pallet_payment_streams::Event<Runtime>,
+        _block_hash: Runtime::Hash,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
@@ -232,8 +218,8 @@ where
     pub(crate) async fn index_proofs_dealer_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_proofs_dealer::Event<storage_hub_runtime::Runtime>,
-        _block_hash: H256,
+        event: &pallet_proofs_dealer::Event<Runtime>,
+        _block_hash: Runtime::Hash,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic
@@ -261,8 +247,8 @@ where
     pub(crate) async fn index_randomness_event_lite<'a, 'b: 'a>(
         &'b self,
         conn: &mut DbConnection<'a>,
-        event: &pallet_randomness::Event<storage_hub_runtime::Runtime>,
-        _block_hash: H256,
+        event: &pallet_randomness::Event<Runtime>,
+        _block_hash: Runtime::Hash,
     ) -> Result<(), diesel::result::Error> {
         let should_index = match event {
             // All events return true for now - ready for future filtering logic

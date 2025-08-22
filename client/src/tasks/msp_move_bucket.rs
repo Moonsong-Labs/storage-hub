@@ -4,6 +4,7 @@ use std::{sync::Mutex, time::Duration};
 
 use sc_tracing::tracing::*;
 use sp_core::H256;
+use sp_runtime::traits::{CheckedAdd, SaturatedConversion, Zero};
 
 use pallet_file_system::types::BucketMoveRequestResponse;
 use shc_actors_framework::event_bus::EventHandler;
@@ -13,9 +14,12 @@ use shc_blockchain_service::{
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
     types::{RetryStrategy, SendExtrinsicOptions},
 };
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_common::types::{
-    BucketId, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        BucketId, HashT, ProviderId, StorageDataUnit, StorageProofsMerkleTrieLayout,
+        StorageProviderId,
+    },
 };
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -38,42 +42,40 @@ pub struct MspMoveBucketConfig {
     /// Maximum number of times to retry a move bucket request
     pub max_try_count: u32,
     /// Maximum tip amount to use when submitting a move bucket request extrinsic
-    pub max_tip: f64,
+    pub max_tip: u128,
 }
 
 impl Default for MspMoveBucketConfig {
     fn default() -> Self {
         Self {
             max_try_count: 5,
-            max_tip: 500.0,
+            max_tip: 500,
         }
     }
 }
 
 /// Handles requests for MSP (Main Storage Provider) to respond to bucket move requests.
 /// Downloads bucket files from BSPs (Backup Storage Providers).
-pub struct MspRespondMoveBucketTask<NT, RuntimeApi>
+pub struct MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
-    pending_bucket_id: Option<BucketId>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
+    pending_bucket_id: Option<BucketId<Runtime>>,
     file_storage_inserted_file_keys: Vec<H256>,
     /// Configuration for this task
     config: MspMoveBucketConfig,
 }
 
-impl<NT, RuntimeApi> Clone for MspRespondMoveBucketTask<NT, RuntimeApi>
+impl<NT, Runtime> Clone for MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> MspRespondMoveBucketTask<NT, RuntimeApi> {
+    fn clone(&self) -> MspRespondMoveBucketTask<NT, Runtime> {
         MspRespondMoveBucketTask {
             storage_hub_handler: self.storage_hub_handler.clone(),
             pending_bucket_id: self.pending_bucket_id,
@@ -83,14 +85,13 @@ where
     }
 }
 
-impl<NT, RuntimeApi> MspRespondMoveBucketTask<NT, RuntimeApi>
+impl<NT, Runtime> MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             pending_bucket_id: None,
@@ -100,15 +101,17 @@ where
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<MoveBucketRequestedForMsp>
-    for MspRespondMoveBucketTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<MoveBucketRequestedForMsp<Runtime>>
+    for MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketRequestedForMsp) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: MoveBucketRequestedForMsp<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: user requested to move bucket {:?} to us",
@@ -129,15 +132,17 @@ where
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<StartMovedBucketDownload>
-    for MspRespondMoveBucketTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<StartMovedBucketDownload<Runtime>>
+    for MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: StartMovedBucketDownload) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: StartMovedBucketDownload<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "StartMovedBucketDownload: Starting download process for bucket {:?}",
@@ -247,19 +252,18 @@ where
     }
 }
 
-impl<NT, RuntimeApi> MspRespondMoveBucketTask<NT, RuntimeApi>
+impl<NT, Runtime> MspRespondMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     /// Internal implementation of the move bucket request handling.
     /// This function contains the core logic for processing a bucket move request.
     /// If it returns an error, the caller (handle_event) will reject the bucket move request.
     async fn handle_move_bucket_request(
         &mut self,
-        event: MoveBucketRequestedForMsp,
+        event: MoveBucketRequestedForMsp<Runtime>,
     ) -> anyhow::Result<()> {
         let indexer_db_pool = if let Some(indexer_db_pool) =
             self.storage_hub_handler.indexer_db_pool.clone()
@@ -302,9 +306,12 @@ where
             .await;
 
         // Calculate total size to check capacity
-        let total_size: u64 = files
+        let total_size = files
             .iter()
-            .try_fold(0u64, |acc, file| acc.checked_add(file.size as u64))
+            .try_fold(Zero::zero(), |acc: StorageDataUnit<Runtime>, file| {
+                let file_size = (file.size as u64).saturated_into();
+                acc.checked_add(&file_size)
+            })
             .ok_or_else(|| {
                 anyhow!("Total size calculation overflowed u64 - bucket is too large")
             })?;
@@ -413,7 +420,7 @@ where
     /// Returns an error if:
     /// - Failed to send or confirm the rejection extrinsic
     /// Note: Cleanup errors are logged but don't prevent the rejection from being sent
-    async fn reject_bucket_move(&mut self, bucket_id: BucketId) -> anyhow::Result<()> {
+    async fn reject_bucket_move(&mut self, bucket_id: BucketId<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: rejecting move bucket request for bucket {:?}",
@@ -443,12 +450,12 @@ where
                 .await;
         }
 
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::msp_respond_move_bucket_request {
+        let call: Runtime::Call =
+            pallet_file_system::Call::<Runtime>::msp_respond_move_bucket_request {
                 bucket_id,
                 response: BucketMoveRequestResponse::Rejected,
-            },
-        );
+            }
+            .into();
 
         self.storage_hub_handler
             .blockchain
@@ -476,19 +483,18 @@ where
         Ok(())
     }
 
-    async fn accept_bucket_move(&self, bucket_id: BucketId) -> anyhow::Result<()> {
+    async fn accept_bucket_move(&self, bucket_id: BucketId<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MSP: accepting move bucket request for bucket {:?}",
             bucket_id.as_ref(),
         );
 
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::msp_respond_move_bucket_request {
-                bucket_id,
-                response: BucketMoveRequestResponse::Accepted,
-            },
-        );
+        let call: Runtime::Call = pallet_file_system::Call::msp_respond_move_bucket_request {
+            bucket_id,
+            response: BucketMoveRequestResponse::Accepted,
+        }
+        .into();
 
         info!(
             target: LOG_TARGET,
@@ -525,8 +531,8 @@ where
 
     async fn check_and_increase_capacity(
         &self,
-        required_size: u64,
-        own_msp_id: ProviderId,
+        required_size: StorageDataUnit<Runtime>,
+        own_msp_id: ProviderId<Runtime>,
     ) -> anyhow::Result<()> {
         let available_capacity = self
             .storage_hub_handler

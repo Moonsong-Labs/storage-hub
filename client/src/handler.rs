@@ -12,10 +12,11 @@ use shc_actors_framework::{
 use shc_blockchain_service::{
     capacity_manager::CapacityConfig,
     events::{
-        AcceptedBspVolunteer, FinalisedBucketMovedAway, FinalisedMspStopStoringBucketInsolventUser,
-        FinalisedMspStoppedStoringBucket, LastChargeableInfoUpdated, MoveBucketAccepted,
-        MoveBucketExpired, MoveBucketRejected, MoveBucketRequested, MoveBucketRequestedForMsp,
-        MultipleNewChallengeSeeds, NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
+        AcceptedBspVolunteer, FileDeletionRequest, FinalisedBucketMovedAway,
+        FinalisedMspStopStoringBucketInsolventUser, FinalisedMspStoppedStoringBucket,
+        LastChargeableInfoUpdated, MoveBucketAccepted, MoveBucketExpired, MoveBucketRejected,
+        MoveBucketRequested, MoveBucketRequestedForMsp, MultipleNewChallengeSeeds,
+        NewStorageRequest, NotifyPeriod, ProcessConfirmStoringRequest,
         ProcessMspRespondStoringRequest, ProcessStopStoringForInsolventUserRequest,
         ProcessSubmitProofRequest, SlashableProvider, SpStopStoringInsolventUser,
         StartMovedBucketDownload, UserWithoutFunds,
@@ -23,8 +24,7 @@ use shc_blockchain_service::{
     handler::BlockchainServiceConfig,
     BlockchainService,
 };
-use shc_common::consts::CURRENT_FOREST_KEY;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::{consts::CURRENT_FOREST_KEY, traits::StorageEnableRuntime};
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
@@ -41,6 +41,7 @@ use crate::{
         bsp_move_bucket::{BspMoveBucketConfig, BspMoveBucketTask},
         bsp_submit_proof::{BspSubmitProofConfig, BspSubmitProofTask},
         bsp_upload_file::{BspUploadFileConfig, BspUploadFileTask},
+        fisherman_process_file_deletion::FishermanProcessFileDeletionTask,
         msp_charge_fees::{MspChargeFeesConfig, MspChargeFeesTask},
         msp_delete_bucket::MspDeleteBucketTask,
         msp_move_bucket::{MspMoveBucketConfig, MspRespondMoveBucketTask},
@@ -51,14 +52,18 @@ use crate::{
         user_sends_file::UserSendsFileTask,
     },
     types::{
-        BspForestStorageHandlerT, BspProvider, MspForestStorageHandlerT, MspProvider, ShNodeType,
-        ShStorageLayer, UserRole,
+        BspForestStorageHandlerT, BspProvider, FishermanForestStorageHandlerT, FishermanRole,
+        MspForestStorageHandlerT, MspProvider, NoStorageLayer, ShNodeType, ShStorageLayer,
+        UserRole,
     },
 };
 
 /// Configuration parameters for Storage Providers.
 #[derive(Clone, Debug)]
-pub struct ProviderConfig {
+pub struct ProviderConfig<Runtime>
+where
+    Runtime: StorageEnableRuntime,
+{
     /// Configuration for MSP charge fees task.
     pub msp_charge_fees: MspChargeFeesConfig,
     /// Configuration for MSP move bucket task.
@@ -72,43 +77,41 @@ pub struct ProviderConfig {
     /// Configuration for BSP submit proof task.
     pub bsp_submit_proof: BspSubmitProofConfig,
     /// Configuration for blockchain service.
-    pub blockchain_service: BlockchainServiceConfig,
+    pub blockchain_service: BlockchainServiceConfig<Runtime>,
     /// This is only required if running as a storage provider node.
-    pub capacity_config: CapacityConfig,
+    pub capacity_config: CapacityConfig<Runtime>,
 }
 
 /// Represents the handler for the Storage Hub service.
-pub struct StorageHubHandler<NT, RuntimeApi>
+pub struct StorageHubHandler<NT, Runtime>
 where
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     /// The task spawner for spawning asynchronous tasks.
     pub task_spawner: TaskSpawner,
     /// The actor handle for the file transfer service.
-    pub file_transfer: ActorHandle<FileTransferService>,
+    pub file_transfer: ActorHandle<FileTransferService<Runtime>>,
     /// The actor handle for the blockchain service.
-    pub blockchain: ActorHandle<BlockchainService<NT::FSH, RuntimeApi>>,
+    pub blockchain: ActorHandle<BlockchainService<NT::FSH, Runtime>>,
     /// The file storage layer which stores all files in chunks.
     pub file_storage: Arc<RwLock<NT::FL>>,
     /// The forest storage layer which tracks all complete files stored in the file storage layer.
     pub forest_storage_handler: NT::FSH,
     /// The configuration parameters for the provider.
-    pub provider_config: ProviderConfig,
+    pub provider_config: ProviderConfig<Runtime>,
     /// The indexer database pool.
     pub indexer_db_pool: Option<DbPool>,
     /// The BSP peer manager for tracking peer performance.
     pub peer_manager: Arc<BspPeerManager>,
     /// The file download manager for rate-limiting downloads.
-    pub file_download_manager: Arc<FileDownloadManager>,
+    pub file_download_manager: Arc<FileDownloadManager<Runtime>>,
 }
 
-impl<NT, RuntimeApi> Debug for StorageHubHandler<NT, RuntimeApi>
+impl<NT, Runtime> Debug for StorageHubHandler<NT, Runtime>
 where
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("StorageHubHandler")
@@ -117,13 +120,12 @@ where
     }
 }
 
-impl<NT, RuntimeApi> Clone for StorageHubHandler<NT, RuntimeApi>
+impl<NT, Runtime> Clone for StorageHubHandler<NT, Runtime>
 where
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> StorageHubHandler<NT, RuntimeApi> {
+    fn clone(&self) -> StorageHubHandler<NT, Runtime> {
         Self {
             task_spawner: self.task_spawner.clone(),
             file_transfer: self.file_transfer.clone(),
@@ -138,19 +140,18 @@ where
     }
 }
 
-impl<NT, RuntimeApi> StorageHubHandler<NT, RuntimeApi>
+impl<NT, Runtime> StorageHubHandler<NT, Runtime>
 where
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     pub fn new(
         task_spawner: TaskSpawner,
-        file_transfer: ActorHandle<FileTransferService>,
-        blockchain: ActorHandle<BlockchainService<NT::FSH, RuntimeApi>>,
+        file_transfer: ActorHandle<FileTransferService<Runtime>>,
+        blockchain: ActorHandle<BlockchainService<NT::FSH, Runtime>>,
         file_storage: Arc<RwLock<NT::FL>>,
         forest_storage_handler: NT::FSH,
-        provider_config: ProviderConfig,
+        provider_config: ProviderConfig<Runtime>,
         indexer_db_pool: Option<DbPool>,
         peer_manager: Arc<BspPeerManager>,
     ) -> Self {
@@ -186,13 +187,11 @@ pub trait RunnableTasks {
     fn run_tasks(&mut self) -> impl std::future::Future<Output = ()> + Send;
 }
 
-impl<S: ShStorageLayer, RuntimeApi> RunnableTasks
-    for StorageHubHandler<(BspProvider, S), RuntimeApi>
+impl<S: ShStorageLayer, Runtime> RunnableTasks for StorageHubHandler<(BspProvider, S), Runtime>
 where
-    (BspProvider, S): ShNodeType + 'static,
-    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    (BspProvider, S): ShNodeType<Runtime> + 'static,
+    <(BspProvider, S) as ShNodeType<Runtime>>::FSH: BspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     async fn run_tasks(&mut self) {
         self.initialise_bsp().await;
@@ -200,35 +199,43 @@ where
     }
 }
 
-impl<S: ShStorageLayer, RuntimeApi> RunnableTasks
-    for StorageHubHandler<(MspProvider, S), RuntimeApi>
+impl<S: ShStorageLayer, Runtime> RunnableTasks for StorageHubHandler<(MspProvider, S), Runtime>
 where
-    (MspProvider, S): ShNodeType + 'static,
-    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    (MspProvider, S): ShNodeType<Runtime> + 'static,
+    <(MspProvider, S) as ShNodeType<Runtime>>::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     async fn run_tasks(&mut self) {
         self.start_msp_tasks();
     }
 }
 
-impl<S: ShStorageLayer, RuntimeApi> RunnableTasks for StorageHubHandler<(UserRole, S), RuntimeApi>
+impl<S: ShStorageLayer, Runtime> RunnableTasks for StorageHubHandler<(UserRole, S), Runtime>
 where
-    (UserRole, S): ShNodeType + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    (UserRole, S): ShNodeType<Runtime> + 'static,
+    Runtime: StorageEnableRuntime,
 {
     async fn run_tasks(&mut self) {
         self.start_user_tasks();
     }
 }
 
-impl<S, RuntimeApi> StorageHubHandler<(UserRole, S), RuntimeApi>
+impl<Runtime> RunnableTasks for StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime>
 where
-    (UserRole, S): ShNodeType + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    (FishermanRole, NoStorageLayer): ShNodeType<Runtime> + 'static,
+    <(FishermanRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH:
+        FishermanForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
+{
+    async fn run_tasks(&mut self) {
+        self.start_fisherman_tasks();
+    }
+}
+
+impl<S, Runtime> StorageHubHandler<(UserRole, S), Runtime>
+where
+    (UserRole, S): ShNodeType<Runtime> + 'static,
+    Runtime: StorageEnableRuntime,
 {
     fn start_user_tasks(&self) {
         log::info!("Starting User tasks.");
@@ -246,19 +253,18 @@ where
             critical: true,
             [
                 // Override critical for NewStorageRequest to make it non-critical
-                NewStorageRequest => { task: UserSendsFileTask, critical: false },
-                AcceptedBspVolunteer => UserSendsFileTask,
+                NewStorageRequest<Runtime> => { task: UserSendsFileTask, critical: false },
+                AcceptedBspVolunteer<Runtime> => UserSendsFileTask,
             ]
         );
     }
 }
 
-impl<S, RuntimeApi> StorageHubHandler<(MspProvider, S), RuntimeApi>
+impl<S, Runtime> StorageHubHandler<(MspProvider, S), Runtime>
 where
-    (MspProvider, S): ShNodeType + 'static,
-    <(MspProvider, S) as ShNodeType>::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    (MspProvider, S): ShNodeType<Runtime> + 'static,
+    <(MspProvider, S) as ShNodeType<Runtime>>::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     fn start_msp_tasks(&self) {
         log::info!("Starting MSP tasks");
@@ -275,7 +281,7 @@ where
             context: self.clone(),
             critical: false,
             [
-                RemoteUploadRequest => MspUploadFileTask,
+                RemoteUploadRequest<Runtime> => MspUploadFileTask,
                 RetryBucketMoveDownload => MspRetryBucketMoveTask,
             ]
         );
@@ -286,27 +292,27 @@ where
             context: self.clone(),
             critical: true,
             [
-                FinalisedBucketMovedAway => MspDeleteBucketTask,
-                FinalisedMspStoppedStoringBucket => MspDeleteBucketTask,
-                NewStorageRequest => MspUploadFileTask,
-                ProcessMspRespondStoringRequest => MspUploadFileTask,
-                MoveBucketRequestedForMsp => MspRespondMoveBucketTask,
-                StartMovedBucketDownload => MspRespondMoveBucketTask,
+                FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
+                FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
+                NewStorageRequest<Runtime> => MspUploadFileTask,
+                ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
+                MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,
+                StartMovedBucketDownload<Runtime> => MspRespondMoveBucketTask,
                 // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
-                UserWithoutFunds => MspStopStoringInsolventUserTask,
-                FinalisedMspStopStoringBucketInsolventUser => MspStopStoringInsolventUserTask,
+                UserWithoutFunds<Runtime> => MspStopStoringInsolventUserTask,
+                FinalisedMspStopStoringBucketInsolventUser<Runtime> =>
+                    MspStopStoringInsolventUserTask,
                 NotifyPeriod => MspChargeFeesTask,
             ]
         );
     }
 }
 
-impl<S, RuntimeApi> StorageHubHandler<(BspProvider, S), RuntimeApi>
+impl<S, Runtime> StorageHubHandler<(BspProvider, S), Runtime>
 where
-    (BspProvider, S): ShNodeType + 'static,
-    <(BspProvider, S) as ShNodeType>::FSH: BspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    (BspProvider, S): ShNodeType<Runtime> + 'static,
+    <(BspProvider, S) as ShNodeType<Runtime>>::FSH: BspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     async fn initialise_bsp(&mut self) {
         // Create an empty Forest Storage instance.
@@ -336,33 +342,33 @@ where
             context: self.clone(),
             critical: true,
             [
-                NewStorageRequest => BspUploadFileTask,
-                ProcessConfirmStoringRequest => BspUploadFileTask,
+                NewStorageRequest<Runtime> => BspUploadFileTask,
+                ProcessConfirmStoringRequest<Runtime> => BspUploadFileTask,
                 // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
                 // It responds by computing challenges derived from the seeds, taking also into account
                 // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.
                 // BspSubmitProofTask also listens to ProcessSubmitProofRequest events, which are emitted by the
                 // BlockchainService when it is time to actually submit the proof of storage.
                 // Additionally, it handles file deletions as a consequence of inclusion proofs in custom challenges.
-                MultipleNewChallengeSeeds => BspSubmitProofTask,
-                ProcessSubmitProofRequest => BspSubmitProofTask,
+                MultipleNewChallengeSeeds<Runtime> => BspSubmitProofTask,
+                ProcessSubmitProofRequest<Runtime> => BspSubmitProofTask,
                 // Slash your own kin or potentially commit seppuku on your own stake.
                 // Running this is as a BSP is very honourable and shows a great sense of justice.
-                SlashableProvider => SlashProviderTask,
+                SlashableProvider<Runtime> => SlashProviderTask,
                 // Collect debt from users after a BSP proof is accepted.
-                LastChargeableInfoUpdated => BspChargeFeesTask,
-                ProcessStopStoringForInsolventUserRequest => BspChargeFeesTask,
+                LastChargeableInfoUpdated<Runtime> => BspChargeFeesTask,
+                ProcessStopStoringForInsolventUserRequest<Runtime> => BspChargeFeesTask,
                 // Start deletion process for stored files owned by a user that has been declared as without funds and charge
                 // its payment stream afterwards, getting the owed tokens and deleting it.
-                UserWithoutFunds => BspChargeFeesTask,
+                UserWithoutFunds<Runtime> => BspChargeFeesTask,
                 // Continue deletion process for stored files owned by a user that has been declared as without funds.
                 // Once the last file has been deleted, get the owed tokens and delete the payment stream.
-                SpStopStoringInsolventUser => BspChargeFeesTask,
+                SpStopStoringInsolventUser<Runtime> => BspChargeFeesTask,
                 // BspMoveBucketTask handles events for moving buckets to a new MSP.
-                MoveBucketRequested => BspMoveBucketTask,
-                MoveBucketAccepted => BspMoveBucketTask,
-                MoveBucketRejected => BspMoveBucketTask,
-                MoveBucketExpired => BspMoveBucketTask,
+                MoveBucketRequested<Runtime> => BspMoveBucketTask,
+                MoveBucketAccepted<Runtime> => BspMoveBucketTask,
+                MoveBucketRejected<Runtime> => BspMoveBucketTask,
+                MoveBucketExpired<Runtime> => BspMoveBucketTask,
             ]
         );
 
@@ -373,9 +379,34 @@ where
             context: self.clone(),
             critical: false,
             [
-                RemoteDownloadRequest => BspDownloadFileTask,
-                RemoteUploadRequest => BspUploadFileTask,
+                RemoteDownloadRequest<Runtime> => BspDownloadFileTask,
+                RemoteUploadRequest<Runtime> => BspUploadFileTask,
             ]
         );
+    }
+}
+
+impl<Runtime: StorageEnableRuntime> StorageHubHandler<(FishermanRole, NoStorageLayer), Runtime>
+where
+    (FishermanRole, NoStorageLayer): ShNodeType<Runtime> + 'static,
+    <(FishermanRole, NoStorageLayer) as ShNodeType<Runtime>>::FSH:
+        FishermanForestStorageHandlerT<Runtime>,
+{
+    fn start_fisherman_tasks(&self) {
+        log::info!("🎣 Starting Fisherman tasks");
+
+        // Subscribe to FileDeletionRequest events from the BlockchainService
+        // The fisherman monitors and processes file deletion requests
+        subscribe_actor_event_map!(
+            service: &self.blockchain,
+            spawner: &self.task_spawner,
+            context: self.clone(),
+            critical: true,
+            [
+                FileDeletionRequest<Runtime> => FishermanProcessFileDeletionTask,
+            ]
+        );
+
+        log::info!("🎣 Fisherman service started");
     }
 }

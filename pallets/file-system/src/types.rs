@@ -10,7 +10,7 @@ use pallet_nfts::CollectionConfig;
 use scale_info::TypeInfo;
 use shp_file_metadata::FileMetadata;
 use shp_traits::{MutateBucketsInterface, ReadProvidersInterface};
-use sp_runtime::{traits::CheckedAdd, DispatchError};
+use sp_runtime::{traits::CheckedAdd, DispatchError, SaturatedConversion};
 use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
@@ -100,7 +100,7 @@ impl<T: Config> StorageRequestMetadata<T> {
             self.owner.encode(),
             self.bucket_id.as_ref().to_vec(),
             self.location.to_vec(),
-            self.size.into() as u64,
+            self.size.saturated_into(),
             self.fingerprint.as_ref().into(),
         )
         .map_err(|_| Error::<T>::FailedToCreateFileMetadata.into())

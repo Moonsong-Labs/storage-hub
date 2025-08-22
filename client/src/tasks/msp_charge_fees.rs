@@ -2,9 +2,9 @@ use anyhow::anyhow;
 use sc_tracing::tracing::*;
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{commands::BlockchainServiceCommandInterface, events::NotifyPeriod};
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_common::types::{MaxUsersToCharge, StorageProviderId};
+use shc_common::{traits::StorageEnableRuntime, types::StorageProviderId};
 use sp_core::Get;
+use sp_runtime::traits::SaturatedConversion;
 
 use crate::{
     handler::StorageHubHandler,
@@ -28,26 +28,24 @@ impl Default for MspChargeFeesConfig {
     }
 }
 
-pub struct MspChargeFeesTask<NT, RuntimeApi>
+pub struct MspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
     /// Configuration for this task
     config: MspChargeFeesConfig,
 }
 
-impl<NT, RuntimeApi> Clone for MspChargeFeesTask<NT, RuntimeApi>
+impl<NT, Runtime> Clone for MspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    fn clone(&self) -> MspChargeFeesTask<NT, RuntimeApi> {
+    fn clone(&self) -> MspChargeFeesTask<NT, Runtime> {
         Self {
             storage_hub_handler: self.storage_hub_handler.clone(),
             config: self.config.clone(),
@@ -55,14 +53,13 @@ where
     }
 }
 
-impl<NT, RuntimeApi> MspChargeFeesTask<NT, RuntimeApi>
+impl<NT, Runtime> MspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler: storage_hub_handler.clone(),
             config: storage_hub_handler.provider_config.msp_charge_fees.clone(),
@@ -76,12 +73,11 @@ where
 ///
 /// This task will:
 /// - Charge users for the MSP when triggered
-impl<NT, RuntimeApi> EventHandler<NotifyPeriod> for MspChargeFeesTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<NotifyPeriod> for MspChargeFeesTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: MspForestStorageHandlerT,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: MspForestStorageHandlerT<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     async fn handle_event(&mut self, _event: NotifyPeriod) -> anyhow::Result<()> {
         info!(
@@ -113,7 +109,7 @@ where
         let users_with_debt = self
             .storage_hub_handler
             .blockchain
-            .query_users_with_debt(own_msp_id, self.config.min_debt as u128)
+            .query_users_with_debt(own_msp_id, self.config.min_debt.saturated_into())
             .await
             .map_err(|e| {
                 anyhow!(
@@ -125,13 +121,14 @@ where
         // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
         // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
         // Logs an error in case of failure and continues.
-        let user_chunk_size: u32 = MaxUsersToCharge::get();
+        let user_chunk_size: u32 =
+            <Runtime as pallet_payment_streams::Config>::MaxUsersToCharge::get();
         for users_chunk in users_with_debt.chunks(user_chunk_size as usize) {
-            let call = storage_hub_runtime::RuntimeCall::PaymentStreams(
-                pallet_payment_streams::Call::charge_multiple_users_payment_streams {
+            let call: Runtime::Call =
+                pallet_payment_streams::Call::<Runtime>::charge_multiple_users_payment_streams {
                     user_accounts: users_chunk.to_vec().try_into().expect("Chunk size is the same as MaxUsersToCharge, it has to fit in the BoundedVec"),
-                },
-            );
+                }
+            .into();
 
             // TODO: watch for success (we might want to do it for BSP too)
             let charging_result = self

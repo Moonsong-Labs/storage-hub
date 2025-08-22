@@ -3,9 +3,11 @@ use async_trait::async_trait;
 use log::{debug, warn};
 use sc_network::Multiaddr;
 use serde_json::Number;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::{
+    traits::{KeyTypeOperations, StorageEnableRuntime},
+    types::StorageEnableEvents,
+};
 use sp_api::ApiError;
-use sp_core::H256;
 
 use pallet_file_system_runtime_api::{
     IsStorageRequestOpenToVolunteersError, QueryBspConfirmChunksToProveForFileError,
@@ -23,12 +25,11 @@ use pallet_storage_providers_runtime_api::{
 use shc_actors_derive::actor_command;
 use shc_actors_framework::actor::ActorHandle;
 use shc_common::types::{
-    BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf, MainStorageProviderId,
-    ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageHubEventsVec, StorageProviderId,
-    TickNumber,
+    AccountId, Balance, BlockNumber, BucketId, ChunkId, CustomChallenge, ForestLeaf,
+    MainStorageProviderId, ProofsDealerProviderId, ProviderId, RandomnessOutput, StorageDataUnit,
+    StorageHubEventsVec, StorageProviderId, TickNumber,
 };
 use shc_forest_manager::traits::ForestStorageHandler;
-use storage_hub_runtime::{AccountId, Balance, StorageDataUnit};
 
 use crate::{
     capacity_manager::CapacityRequestData,
@@ -45,199 +46,199 @@ const LOG_TARGET: &str = "blockchain-service-interface";
 
 /// Commands that can be sent to the BlockchainService actor.
 #[actor_command(
-    service = BlockchainService<FSH: ForestStorageHandler + Clone + Send + Sync + 'static, RuntimeApi: StorageEnableRuntimeApi<RuntimeApi: StorageEnableApiCollection>>,
+    service = BlockchainService<FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static, Runtime: StorageEnableRuntime>,
     default_mode = "ImmediateResponse",
     default_inner_channel_type = tokio::sync::oneshot::Receiver,
 )]
-pub enum BlockchainServiceCommand {
-    #[command(success_type = SubmittedTransaction)]
+pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
+    #[command(success_type = SubmittedTransaction<Runtime>)]
     SendExtrinsic {
-        call: storage_hub_runtime::RuntimeCall,
+        call: Runtime::Call,
         options: SendExtrinsicOptions,
     },
-    #[command(success_type = Extrinsic)]
+    #[command(success_type = Extrinsic<Runtime>)]
     GetExtrinsicFromBlock {
-        block_hash: H256,
-        extrinsic_hash: H256,
+        block_hash: Runtime::Hash,
+        extrinsic_hash: Runtime::Hash,
     },
     UnwatchExtrinsic {
         subscription_id: Number,
     },
-    #[command(success_type = MinimalBlockInfo)]
+    #[command(success_type = MinimalBlockInfo<Runtime>)]
     GetBestBlockInfo,
     #[command(mode = "AsyncResponse")]
     WaitForBlock {
-        block_number: BlockNumber,
+        block_number: BlockNumber<Runtime>,
     },
     #[command(mode = "AsyncResponse")]
     WaitForNumBlocks {
-        number_of_blocks: BlockNumber,
+        number_of_blocks: BlockNumber<Runtime>,
     },
     #[command(mode = "AsyncResponse", error_type = ApiError)]
     WaitForTick {
-        tick_number: TickNumber,
+        tick_number: TickNumber<Runtime>,
     },
     #[command(success_type = bool, error_type = IsStorageRequestOpenToVolunteersError)]
     IsStorageRequestOpenToVolunteers {
-        file_key: H256,
+        file_key: Runtime::Hash,
     },
-    #[command(success_type = BlockNumber, error_type = QueryFileEarliestVolunteerTickError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = QueryFileEarliestVolunteerTickError)]
     QueryFileEarliestVolunteerTick {
-        bsp_id: ProviderId,
-        file_key: H256,
+        bsp_id: ProviderId<Runtime>,
+        file_key: Runtime::Hash,
     },
-    #[command(success_type = BlockNumber, error_type = QueryEarliestChangeCapacityBlockError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = QueryEarliestChangeCapacityBlockError)]
     QueryEarliestChangeCapacityBlock {
-        bsp_id: ProviderId,
+        bsp_id: ProviderId<Runtime>,
     },
-    #[command(success_type = sp_core::sr25519::Public)]
+    #[command(success_type = <<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public)]
     GetNodePublicKey,
     #[command(success_type = Vec<ChunkId>, error_type = QueryBspConfirmChunksToProveForFileError)]
     QueryBspConfirmChunksToProveForFile {
-        bsp_id: ProofsDealerProviderId,
-        file_key: H256,
+        bsp_id: ProofsDealerProviderId<Runtime>,
+        file_key: Runtime::Hash,
     },
     #[command(success_type = Vec<ChunkId>, error_type = QueryMspConfirmChunksToProveForFileError)]
     QueryMspConfirmChunksToProveForFile {
-        msp_id: ProofsDealerProviderId,
-        file_key: H256,
+        msp_id: ProofsDealerProviderId<Runtime>,
+        file_key: Runtime::Hash,
     },
     #[command(success_type = Vec<Multiaddr>, error_type = QueryProviderMultiaddressesError)]
     QueryProviderMultiaddresses {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
     QueueSubmitProofRequest {
-        request: SubmitProofRequest,
+        request: SubmitProofRequest<Runtime>,
     },
     QueueConfirmBspRequest {
-        request: ConfirmStoringRequest,
+        request: ConfirmStoringRequest<Runtime>,
     },
     QueueMspRespondStorageRequest {
-        request: RespondStorageRequest,
+        request: RespondStorageRequest<Runtime>,
     },
     QueueStopStoringForInsolventUserRequest {
-        request: StopStoringForInsolventUserRequest,
+        request: StopStoringForInsolventUserRequest<Runtime>,
     },
-    #[command(success_type = Vec<ForestLeaf>, error_type = ApiError)]
+    #[command(success_type = Vec<ForestLeaf<Runtime>>, error_type = ApiError)]
     QueryChallengesFromSeed {
-        seed: RandomnessOutput,
-        provider_id: ProofsDealerProviderId,
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
         count: u32,
     },
-    #[command(success_type = Vec<ForestLeaf>, error_type = ApiError)]
+    #[command(success_type = Vec<ForestLeaf<Runtime>>, error_type = ApiError)]
     QueryForestChallengesFromSeed {
-        seed: RandomnessOutput,
-        provider_id: ProofsDealerProviderId,
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
     },
-    #[command(success_type = BlockNumber, error_type = GetProofSubmissionRecordError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = GetProofSubmissionRecordError)]
     QueryLastTickProviderSubmittedProof {
-        provider_id: ProofsDealerProviderId,
+        provider_id: ProofsDealerProviderId<Runtime>,
     },
-    #[command(success_type = BlockNumber, error_type = GetChallengePeriodError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = GetChallengePeriodError)]
     QueryChallengePeriod {
-        provider_id: ProofsDealerProviderId,
+        provider_id: ProofsDealerProviderId<Runtime>,
     },
-    #[command(success_type = BlockNumber, error_type = GetProofSubmissionRecordError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = GetProofSubmissionRecordError)]
     QueryNextChallengeTickForProvider {
-        provider_id: ProofsDealerProviderId,
+        provider_id: ProofsDealerProviderId<Runtime>,
     },
-    #[command(success_type = BlockNumber, error_type = ApiError)]
+    #[command(success_type = BlockNumber<Runtime>, error_type = ApiError)]
     QueryLastCheckpointChallengeTick,
-    #[command(success_type = Vec<CustomChallenge>, error_type = GetCheckpointChallengesError)]
+    #[command(success_type = Vec<CustomChallenge<Runtime>>, error_type = GetCheckpointChallengesError)]
     QueryLastCheckpointChallenges {
-        tick: BlockNumber,
+        tick: BlockNumber<Runtime>,
     },
-    #[command(success_type = H256, error_type = GetBspInfoError)]
+    #[command(success_type = Runtime::Hash, error_type = GetBspInfoError)]
     QueryProviderForestRoot {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = StorageDataUnit, error_type = QueryStorageProviderCapacityError)]
+    #[command(success_type = StorageDataUnit<Runtime>, error_type = QueryStorageProviderCapacityError)]
     QueryStorageProviderCapacity {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = StorageDataUnit, error_type = QueryAvailableStorageCapacityError)]
+    #[command(success_type = StorageDataUnit<Runtime>, error_type = QueryAvailableStorageCapacityError)]
     QueryAvailableStorageCapacity {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = Option<StorageProviderId>)]
+    #[command(success_type = Option<StorageProviderId<Runtime>>)]
     QueryStorageProviderId {
-        maybe_node_pub_key: Option<sp_core::sr25519::Public>,
+        maybe_node_pub_key:
+            Option<<<Runtime as StorageEnableRuntime>::Signature as KeyTypeOperations>::Public>,
     },
-    #[command(success_type = Vec<AccountId>, error_type = GetUsersWithDebtOverThresholdError)]
+    #[command(success_type = Vec<AccountId<Runtime>>, error_type = GetUsersWithDebtOverThresholdError)]
     QueryUsersWithDebt {
-        provider_id: ProviderId,
-        min_debt: Balance,
+        provider_id: ProviderId<Runtime>,
+        min_debt: Balance<Runtime>,
     },
-    #[command(success_type = Option<Balance>)]
+    #[command(success_type = Option<Balance<Runtime>>)]
     QueryWorstCaseScenarioSlashableAmount {
-        provider_id: ProviderId,
+        provider_id: ProviderId<Runtime>,
     },
-    #[command(success_type = Balance)]
+    #[command(success_type = Balance<Runtime>)]
     QuerySlashAmountPerMaxFileSize,
-    #[command(success_type = Option<MainStorageProviderId>, error_type = QueryMspIdOfBucketIdError)]
+    #[command(success_type = Option<MainStorageProviderId<Runtime>>, error_type = QueryMspIdOfBucketIdError)]
     QueryMspIdOfBucketId {
-        bucket_id: BucketId,
+        bucket_id: BucketId<Runtime>,
     },
     ReleaseForestRootWriteLock {
         forest_root_write_tx: tokio::sync::oneshot::Sender<()>,
     },
     QueueFileDeletionRequest {
-        request: FileDeletionRequest,
+        request: FileDeletionRequest<Runtime>,
     },
     #[command(mode = "AsyncResponse")]
     IncreaseCapacity {
-        request: CapacityRequestData,
+        request: CapacityRequestData<Runtime>,
     },
-    #[command(success_type = Vec<BucketId>, error_type = QueryBucketsOfUserStoredByMspError)]
+    #[command(success_type = Vec<BucketId<Runtime>>, error_type = QueryBucketsOfUserStoredByMspError)]
     QueryBucketsOfUserStoredByMsp {
-        msp_id: ProviderId,
-        user: AccountId,
+        msp_id: ProviderId<Runtime>,
+        user: AccountId<Runtime>,
     },
 }
 
 /// Interface for interacting with the BlockchainService actor.
 #[async_trait]
-pub trait BlockchainServiceCommandInterfaceExt: BlockchainServiceCommandInterface {
+pub trait BlockchainServiceCommandInterfaceExt<Runtime: StorageEnableRuntime>:
+    BlockchainServiceCommandInterface<Runtime>
+{
     /// Helper function to check if an extrinsic failed or succeeded in a block.
-    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult>;
+    fn extrinsic_result(extrinsic: Extrinsic<Runtime>) -> Result<ExtrinsicResult>;
 
     /// Helper function to submit an extrinsic with a retry strategy. Returns when the extrinsic is
     /// included in a block or when the retry strategy is exhausted.
     async fn submit_extrinsic_with_retry(
         &self,
-        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        call: impl Into<Runtime::Call> + Send,
         options: SendExtrinsicOptions,
         retry_strategy: RetryStrategy,
         with_events: bool,
-    ) -> Result<Option<StorageHubEventsVec>>;
+    ) -> Result<Option<StorageHubEventsVec<Runtime>>>;
 }
 
 /// Implement the BlockchainServiceInterface for the ActorHandle<BlockchainService>.
 #[async_trait]
-impl<FSH, RuntimeApi> BlockchainServiceCommandInterfaceExt
-    for ActorHandle<BlockchainService<FSH, RuntimeApi>>
+impl<FSH, Runtime> BlockchainServiceCommandInterfaceExt<Runtime>
+    for ActorHandle<BlockchainService<FSH, Runtime>>
 where
-    FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+    Runtime: StorageEnableRuntime,
 {
-    fn extrinsic_result(extrinsic: Extrinsic) -> Result<ExtrinsicResult> {
+    fn extrinsic_result(extrinsic: Extrinsic<Runtime>) -> Result<ExtrinsicResult> {
         for ev in extrinsic.events {
-            match ev.event {
-                storage_hub_runtime::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicFailed {
-                        dispatch_error,
-                        dispatch_info,
-                    },
-                ) => {
+            match ev.event.into() {
+                StorageEnableEvents::System(frame_system::Event::ExtrinsicFailed {
+                    dispatch_error,
+                    dispatch_info,
+                }) => {
                     return Ok(ExtrinsicResult::Failure {
                         dispatch_info,
                         dispatch_error,
                     });
                 }
-                storage_hub_runtime::RuntimeEvent::System(
-                    frame_system::Event::ExtrinsicSuccess { dispatch_info },
-                ) => {
+                StorageEnableEvents::System(frame_system::Event::ExtrinsicSuccess {
+                    dispatch_info,
+                }) => {
                     return Ok(ExtrinsicResult::Success { dispatch_info });
                 }
                 _ => {}
@@ -251,11 +252,11 @@ where
 
     async fn submit_extrinsic_with_retry(
         &self,
-        call: impl Into<storage_hub_runtime::RuntimeCall> + Send,
+        call: impl Into<Runtime::Call> + Send,
         options: SendExtrinsicOptions,
         retry_strategy: RetryStrategy,
         with_events: bool,
-    ) -> Result<Option<StorageHubEventsVec>> {
+    ) -> Result<Option<StorageHubEventsVec<Runtime>>> {
         let call = call.into();
 
         // Execute the extrinsic without any tip or specific nonce the first time around.
@@ -271,7 +272,7 @@ where
 
             let mut transaction = self.send_extrinsic(call.clone(), extrinsic_options).await?;
 
-            let result: Result<Option<StorageHubEventsVec>, _> = if with_events {
+            let result: Result<Option<StorageHubEventsVec<Runtime>>, _> = if with_events {
                 transaction
                     .watch_for_success_with_events(&self)
                     .await

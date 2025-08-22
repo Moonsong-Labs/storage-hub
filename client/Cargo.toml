@@ -39,7 +39,6 @@ pallet-payment-streams-runtime-api = { workspace = true }
 pallet-proofs-dealer = { workspace = true }
 pallet-proofs-dealer-runtime-api = { workspace = true }
 pallet-storage-providers = { workspace = true }
-storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }
 shc-blockchain-service = { workspace = true }
@@ -49,6 +48,7 @@ shc-file-manager = { workspace = true }
 shc-fisherman-service = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-indexer-db = { workspace = true }
+shc-indexer-service = { workspace = true }
 shc-rpc = { workspace = true }
 shp-constants = { workspace = true }
 shp-file-metadata = { workspace = true }

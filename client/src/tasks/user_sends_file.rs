@@ -1,7 +1,7 @@
 use log::{debug, info, warn};
 use sc_network::{PeerId, RequestFailure};
 use sp_core::H256;
-use sp_runtime::AccountId32;
+use sp_runtime::traits::SaturatedConversion;
 use std::collections::HashSet;
 
 use shc_actors_framework::event_bus::EventHandler;
@@ -9,9 +9,11 @@ use shc_blockchain_service::{
     commands::BlockchainServiceCommandInterface,
     events::{AcceptedBspVolunteer, NewStorageRequest},
 };
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
-use shc_common::types::{
-    FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{
+        FileMetadata, HashT, StorageProofsMerkleTrieLayout, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
+    },
 };
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{
@@ -27,20 +29,18 @@ const LOG_TARGET: &str = "user-sends-file-task";
 /// volunteering for that file.
 /// It can serve multiple BSPs volunteering to store each file, since
 /// it reacts to every [`AcceptedBspVolunteer`] from the runtime.
-pub struct UserSendsFileTask<NT, RuntimeApi>
+pub struct UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    storage_hub_handler: StorageHubHandler<NT, RuntimeApi>,
+    storage_hub_handler: StorageHubHandler<NT, Runtime>,
 }
 
-impl<NT, RuntimeApi> Clone for UserSendsFileTask<NT, RuntimeApi>
+impl<NT, Runtime> Clone for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> Self {
         Self {
@@ -49,28 +49,26 @@ where
     }
 }
 
-impl<NT, RuntimeApi> UserSendsFileTask<NT, RuntimeApi>
+impl<NT, Runtime> UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
-    pub fn new(storage_hub_handler: StorageHubHandler<NT, RuntimeApi>) -> Self {
+    pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
         Self {
             storage_hub_handler,
         }
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<NewStorageRequest> for UserSendsFileTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    Runtime: StorageEnableRuntime,
 {
     /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
     /// It generates the file metadata and sends it to the BSPs volunteering to store the file.
-    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
         let node_pub_key = self
             .storage_hub_handler
             .blockchain
@@ -132,11 +130,12 @@ where
             .extract_peer_ids_and_register_known_addresses(multiaddress_vec)
             .await;
 
+        let who = event.who.as_ref().to_vec();
         let file_metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            who,
             event.bucket_id.as_ref().to_vec(),
             event.location.into_inner(),
-            event.size.into(),
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
@@ -155,17 +154,16 @@ where
     }
 }
 
-impl<NT, RuntimeApi> EventHandler<AcceptedBspVolunteer> for UserSendsFileTask<NT, RuntimeApi>
+impl<NT, Runtime> EventHandler<AcceptedBspVolunteer<Runtime>> for UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime> + 'static,
+    Runtime: StorageEnableRuntime,
 {
     /// Reacts to BSPs volunteering (`AcceptedBspVolunteer` from the runtime) to store the user's file,
     /// establishes a connection to each BSPs through the p2p network and sends the file.
     /// At this point we assume that the file is merkleised and already in file storage, and
     /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails.
-    async fn handle_event(&mut self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: AcceptedBspVolunteer<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Handling BSP volunteering to store a file from user [{:?}], with location [{:?}]",
@@ -173,11 +171,12 @@ where
             event.location,
         );
 
+        let owner = event.owner.as_ref().to_vec();
         let file_metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
+            owner,
             event.bucket_id.as_ref().to_vec(),
             event.location.into_inner(),
-            event.size.into(),
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
@@ -204,11 +203,10 @@ where
     }
 }
 
-impl<NT, RuntimeApi> UserSendsFileTask<NT, RuntimeApi>
+impl<NT, Runtime> UserSendsFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+    NT: ShNodeType<Runtime>,
+    Runtime: StorageEnableRuntime,
 {
     async fn send_chunks_to_provider(
         &mut self,
@@ -365,7 +363,7 @@ where
                             // Wait a bit for the MSP to be online
                             self.storage_hub_handler
                                 .blockchain
-                                .wait_for_num_blocks(5)
+                                .wait_for_num_blocks(5u32.into())
                                 .await?;
                         }
                         Err(RequestFailure::Refused)
@@ -488,7 +486,7 @@ where
                             // Wait a bit for the MSP to be online
                             self.storage_hub_handler
                                 .blockchain
-                                .wait_for_num_blocks(5)
+                                .wait_for_num_blocks(5u32.into())
                                 .await?;
                         }
                         Err(RequestFailure::Refused)

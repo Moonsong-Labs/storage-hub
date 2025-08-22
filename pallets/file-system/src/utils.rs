@@ -14,7 +14,7 @@ use num_bigint::BigUint;
 use sp_runtime::{
     traits::{
         Bounded, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Convert, ConvertBack, Hash, One,
-        Saturating, Verify, Zero,
+        SaturatedConversion, Saturating, Verify, Zero,
     },
     ArithmeticError, BoundedBTreeSet, BoundedVec, DispatchError,
 };
@@ -2692,7 +2692,7 @@ where
             owner.encode(),
             bucket_id.as_ref().to_vec(),
             location.clone().to_vec(),
-            size.into(),
+            size.saturated_into(),
             fingerprint.as_ref().into(),
         ) {
             Ok(file_metadata) => Ok(file_metadata.file_key::<FileKeyHasher<T>>()),

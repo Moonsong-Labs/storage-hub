@@ -12,16 +12,13 @@ use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 
 use crate::{
-    traits::{ReadOnlyKeystore, StorageEnableApiCollection, StorageEnableRuntimeApi},
+    traits::{KeyTypeOperations, StorageEnableRuntime},
     types::{
         Multiaddresses, ParachainClient, StorageHubEventsVec, StorageProviderId, BCSV_KEY_TYPE,
     },
 };
 
 lazy_static! {
-    // Would be cool to be able to do this...
-    // let events_storage_key = frame_system::Events::<storage_hub_runtime::Runtime>::hashed_key();
-
     // Static and lazily initialised `events_storage_key`
     static ref EVENTS_STORAGE_KEY: Vec<u8> = {
         let key = [
@@ -44,19 +41,16 @@ pub enum EventsRetrievalError {
 }
 
 /// Get the events storage element for a given block.
-pub fn get_events_at_block<RuntimeApi: StorageEnableRuntimeApi>(
-    client: &Arc<ParachainClient<RuntimeApi>>,
+pub fn get_events_at_block<Runtime: StorageEnableRuntime>(
+    client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
     block_hash: &H256,
-) -> Result<StorageHubEventsVec, EventsRetrievalError>
-where
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-{
+) -> Result<StorageHubEventsVec<Runtime>, EventsRetrievalError> {
     // Get the events storage.
     let raw_storage_opt = client.storage(*block_hash, &StorageKey(EVENTS_STORAGE_KEY.clone()))?;
 
     // Decode the events storage.
     raw_storage_opt
-        .map(|raw_storage| StorageHubEventsVec::decode(&mut raw_storage.0.as_slice()))
+        .map(|raw_storage| StorageHubEventsVec::<Runtime>::decode(&mut raw_storage.0.as_slice()))
         .transpose()?
         .ok_or(EventsRetrievalError::StorageNotFound)
 }
@@ -64,7 +58,12 @@ where
 /// Attempt to convert BoundedVec of BoundedVecs of bytes.
 ///
 /// Returns a list of [`Multiaddr`] objects that have successfully been parsed from the raw bytes.
-pub fn convert_raw_multiaddresses_to_multiaddr(multiaddresses: Multiaddresses) -> Vec<Multiaddr> {
+pub fn convert_raw_multiaddresses_to_multiaddr<Runtime>(
+    multiaddresses: Multiaddresses<Runtime>,
+) -> Vec<Multiaddr>
+where
+    Runtime: StorageEnableRuntime,
+{
     let mut multiaddress_vec: Vec<Multiaddr> = Vec::new();
     for raw_multiaddr in multiaddresses.into_iter() {
         if let Some(multiaddress) = convert_raw_multiaddress_to_multiaddr(&raw_multiaddr) {
@@ -108,19 +107,17 @@ pub enum GetProviderIdError {
 /// - `Ok(Some(provider_id))` if exactly one Provider ID is found
 /// - `Err(GetProviderIdError::MultipleProviderIds)` if multiple Provider IDs are found
 /// - `Err(GetProviderIdError::RuntimeApiError)` if there's an error calling the runtime API
-pub fn get_provider_id_from_keystore<RuntimeApi, K>(
-    client: &Arc<ParachainClient<RuntimeApi>>,
-    keystore: &K,
+pub fn get_provider_id_from_keystore<Runtime>(
+    client: &Arc<ParachainClient<Runtime::RuntimeApi>>,
+    keystore: &sp_keystore::KeystorePtr,
     block_hash: &H256,
-) -> Result<Option<StorageProviderId>, GetProviderIdError>
+) -> Result<Option<StorageProviderId<Runtime>>, GetProviderIdError>
 where
-    RuntimeApi: StorageEnableRuntimeApi,
-    RuntimeApi::RuntimeApi: StorageEnableApiCollection,
-    K: ReadOnlyKeystore + ?Sized,
+    Runtime: StorageEnableRuntime,
 {
     let mut provider_ids_found = Vec::new();
 
-    for key in keystore.sr25519_public_keys(BCSV_KEY_TYPE) {
+    for key in Runtime::Signature::public_keys(keystore, BCSV_KEY_TYPE) {
         let maybe_provider_id = client
             .runtime_api()
             .get_storage_provider_id(*block_hash, &key.into())

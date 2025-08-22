@@ -5,15 +5,14 @@ use std::{
 
 use log::{debug, error, info};
 use shc_actors_framework::actor::ActorHandle;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntimeApi};
+use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::StorageHubEventsVec;
 use shc_forest_manager::traits::ForestStorageHandler;
-use sp_core::H256;
 use tokio::sync::mpsc::Receiver;
 
 use crate::{
     commands::{BlockchainServiceCommandInterface, BlockchainServiceCommandInterfaceExt},
-    types::{Extrinsic, ExtrinsicHash, ExtrinsicResult, WatchTransactionError},
+    types::{Extrinsic, ExtrinsicResult, WatchTransactionError},
     BlockchainService,
 };
 
@@ -26,19 +25,24 @@ const LOG_TARGET: &str = "blockchain-transaction";
 /// optional `timeout` that specifies the maximum amount of time to wait for the
 /// transaction to either be successful or fail.
 #[derive(Debug)]
-pub struct SubmittedTransaction {
+pub struct SubmittedTransaction<Runtime: StorageEnableRuntime> {
     /// The watcher used to query the state of the transaction from the blockchain node.
     watcher: Receiver<String>,
     /// The hash of the transaction.
-    hash: ExtrinsicHash,
+    hash: Runtime::Hash,
     /// The nonce of the transaction.
     nonce: u32,
     /// The maximum amount of time to wait for the transaction to either be successful or fail.
     timeout: Duration,
 }
 
-impl SubmittedTransaction {
-    pub fn new(watcher: Receiver<String>, hash: H256, nonce: u32, timeout: Duration) -> Self {
+impl<Runtime: StorageEnableRuntime> SubmittedTransaction<Runtime> {
+    pub fn new(
+        watcher: Receiver<String>,
+        hash: Runtime::Hash,
+        nonce: u32,
+        timeout: Duration,
+    ) -> Self {
         Self {
             watcher,
             hash,
@@ -48,7 +52,7 @@ impl SubmittedTransaction {
     }
 
     /// Getter for the transaction hash.
-    pub fn hash(&self) -> ExtrinsicHash {
+    pub fn hash(&self) -> Runtime::Hash {
         self.hash
     }
 
@@ -62,19 +66,18 @@ impl SubmittedTransaction {
     /// Waits for the transaction to be included in a block AND the checks the transaction is successful.
     /// If the transaction is not included in a block within the specified timeout, it will be
     /// considered failed and an error will be returned.
-    pub async fn watch_for_success<FSH, RuntimeApi>(
+    pub async fn watch_for_success<FSH>(
         &mut self,
-        blockchain: &ActorHandle<BlockchainService<FSH, RuntimeApi>>,
+        blockchain: &ActorHandle<BlockchainService<FSH, Runtime>>,
     ) -> Result<(), WatchTransactionError>
     where
-        FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-        RuntimeApi: StorageEnableRuntimeApi,
-        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+        FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+        Runtime: StorageEnableRuntime,
     {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
         // Check if the extrinsic was successful.
-        let extrinsic_result = ActorHandle::<BlockchainService<FSH, RuntimeApi>>::extrinsic_result(extrinsic_in_block.clone())
+        let extrinsic_result = ActorHandle::<BlockchainService<FSH, Runtime>>::extrinsic_result(extrinsic_in_block.clone())
             .map_err(|_| {
               let err_msg = "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed";
               error!(target: LOG_TARGET, "{}", err_msg);
@@ -108,19 +111,18 @@ impl SubmittedTransaction {
     /// considered failed and an error will be returned.
     ///
     /// Returns the events emitted by the transaction.
-    pub async fn watch_for_success_with_events<FSH, RuntimeApi>(
+    pub async fn watch_for_success_with_events<FSH>(
         &mut self,
-        blockchain: &ActorHandle<BlockchainService<FSH, RuntimeApi>>,
-    ) -> Result<StorageHubEventsVec, WatchTransactionError>
+        blockchain: &ActorHandle<BlockchainService<FSH, Runtime>>,
+    ) -> Result<StorageHubEventsVec<Runtime>, WatchTransactionError>
     where
-        FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-        RuntimeApi: StorageEnableRuntimeApi,
-        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+        FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+        Runtime: StorageEnableRuntime,
     {
         let extrinsic_in_block = self.watch_transaction(blockchain).await?;
 
         // Check if the extrinsic was successful.
-        let extrinsic_result = ActorHandle::<BlockchainService<FSH, RuntimeApi>>::extrinsic_result(extrinsic_in_block.clone())
+        let extrinsic_result = ActorHandle::<BlockchainService<FSH, Runtime>>::extrinsic_result(extrinsic_in_block.clone())
             .map_err(|_| {
               let err_msg = "Extrinsic does not contain an ExtrinsicFailed nor ExtrinsicSuccess event, which is not possible; qed";
               error!(target: LOG_TARGET, "{}", err_msg);
@@ -148,14 +150,13 @@ impl SubmittedTransaction {
         Ok(extrinsic_in_block.events)
     }
 
-    async fn watch_transaction<FSH, RuntimeApi>(
+    async fn watch_transaction<FSH>(
         &mut self,
-        blockchain: &ActorHandle<BlockchainService<FSH, RuntimeApi>>,
-    ) -> Result<Extrinsic, WatchTransactionError>
+        blockchain: &ActorHandle<BlockchainService<FSH, Runtime>>,
+    ) -> Result<Extrinsic<Runtime>, WatchTransactionError>
     where
-        FSH: ForestStorageHandler + Clone + Send + Sync + 'static,
-        RuntimeApi: StorageEnableRuntimeApi,
-        RuntimeApi::RuntimeApi: StorageEnableApiCollection,
+        FSH: ForestStorageHandler<Runtime> + Clone + Send + Sync + 'static,
+        Runtime: StorageEnableRuntime,
     {
         let block_hash;
         let start_time = Instant::now();
@@ -204,7 +205,7 @@ impl SubmittedTransaction {
             // TODO: Consider if we might want to wait for "finalized".
             // TODO: Handle other lifetime extrinsic edge cases. See https://github.com/paritytech/polkadot-sdk/blob/master/substrate/client/transaction-pool/api/src/lib.rs#L131
             if let Some(in_block) = json["params"]["result"]["inBlock"].as_str() {
-                block_hash = Some(H256::from_str(in_block).map_err(|_| {
+                block_hash = Some(Runtime::Hash::from_str(in_block).map_err(|_| {
                     error!(target: LOG_TARGET, "Block hash should be a valid H256; qed");
                     WatchTransactionError::Internal("Block hash should be a valid H256".to_string())
                 })?);
