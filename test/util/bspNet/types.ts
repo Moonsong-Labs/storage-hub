@@ -258,6 +258,13 @@ export type FullNetContext = {
   createMsp2Api: () => ReturnType<typeof BspNetTestApi.create> | undefined;
 
   /**
+   * Creates and returns a connected API instance for the fisherman node.
+   * Only available when fisherman is enabled in test options.
+   * @returns A promise that resolves to an enriched api instance for fisherman operations.
+   */
+  createFishermanApi?: () => ReturnType<typeof BspNetTestApi.create>;
+
+  /**
    * Creates and returns a connected API instance for a BSP node.
    * @returns A promise that resolves to  an enriched api instance for BSP operations.
    */

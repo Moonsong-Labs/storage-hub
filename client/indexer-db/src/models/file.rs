@@ -30,6 +30,7 @@ pub enum FileDeletionStatus {
 pub struct File {
     /// The ID of the file as stored in the database. For the runtime id, use `onchain_bsp_id`.
     pub id: i64,
+    /// Owner of the file.
     pub account: Vec<u8>,
     pub file_key: Vec<u8>,
     pub bucket_id: i64,
@@ -337,6 +338,20 @@ impl File {
             .load(conn)
             .await?;
         Ok(files)
+    }
+
+    pub async fn get_all_file_keys_for_bucket<'a>(
+        conn: &mut DbConnection<'a>,
+        onchain_bucket_id: &[u8],
+    ) -> Result<Vec<Vec<u8>>, diesel::result::Error> {
+        let file_keys: Vec<Vec<u8>> = file::table
+            .inner_join(bucket::table.on(file::bucket_id.eq(bucket::id)))
+            .filter(bucket::onchain_bucket_id.eq(onchain_bucket_id))
+            .select(file::file_key)
+            .load::<Vec<u8>>(conn)
+            .await?;
+
+        Ok(file_keys)
     }
 }
 

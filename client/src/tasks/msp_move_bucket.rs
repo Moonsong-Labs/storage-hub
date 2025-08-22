@@ -270,7 +270,9 @@ where
         {
             indexer_db_pool
         } else {
-            return Err(anyhow!("Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."));
+            return Err(anyhow!(
+                "Indexer is disabled but a move bucket event was received. Please provide a database URL (and enable indexer) for it to use this feature."
+            ));
         };
 
         let mut indexer_connection = indexer_db_pool.get().await.map_err(|error| {

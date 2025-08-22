@@ -1149,6 +1149,17 @@ mod benchmarks {
             )
             .expect("Non-inclusion forest proof should be decodable");
 
+        // Collect the file metadata before the extrinsic call (since file_keys_and_proofs will be moved)
+        let confirmed_file_keys_with_metadata: Vec<_> = file_keys_and_proofs
+            .iter()
+            .map(|file_key_with_proof| {
+                (
+                    file_key_with_proof.file_key,
+                    file_key_with_proof.proof.file_metadata.clone(),
+                )
+            })
+            .collect();
+
         /*********** Call the extrinsic to benchmark: ***********/
         #[extrinsic_call]
         _(
@@ -1172,7 +1183,7 @@ mod benchmarks {
             <T as pallet::Config>::RuntimeEvent::from(Event::BspConfirmedStoring {
                 who: bsp_account,
                 bsp_id,
-                confirmed_file_keys: file_keys_to_confirm.try_into().unwrap(),
+                confirmed_file_keys: confirmed_file_keys_with_metadata.try_into().unwrap(),
                 skipped_file_keys: BoundedVec::default(),
                 new_root: new_bsp_root,
             });

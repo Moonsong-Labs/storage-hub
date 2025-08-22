@@ -9,8 +9,7 @@ import {
   sleep,
   waitFor,
   assertEventPresent,
-  ShConsts,
-  sealBlock
+  ShConsts
 } from "../../../util";
 import { createBucketAndSendNewStorageRequest } from "../../../util/bspNet/fileHelpers";
 import {
@@ -26,7 +25,7 @@ import {
   verifyNoOrphanedBspAssociations,
   verifyNoOrphanedMspAssociations
 } from "../../../util/indexerHelpers";
-import { sealAndWaitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
 import { chargeUserUntilInsolvent } from "../../../util/indexerHelpers";
 
 describeMspNet(
@@ -66,8 +65,8 @@ describeMspNet(
 
       await sleep(1000);
 
-      await sealAndWaitForIndexing(userApi);
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
+      await waitForIndexing(userApi);
     });
 
     it("indexes NewStorageRequest events", async () => {
@@ -82,7 +81,7 @@ describeMspNet(
         bucketName
       );
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       const files = await sql`
         SELECT * FROM file
@@ -130,7 +129,7 @@ describeMspNet(
       );
       assert(bspConfirmedEvent, "BspConfirmedStoring event should be present");
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       await waitForFileIndexed(sql, fileKey);
 
@@ -178,7 +177,7 @@ describeMspNet(
       const acceptedFileKey = mspAcceptedEventDataBlob.fileKey.toString();
       assert.equal(acceptedFileKey, fileKey.toString());
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       await waitForFileIndexed(sql, fileKey.toString());
 
@@ -225,7 +224,7 @@ describeMspNet(
         revokeStorageRequestResult.events
       );
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
       await waitForFileDeleted(sql, fileKey);
 
       await userApi.docker.resumeContainer({ containerName: "storage-hub-sh-bsp-1" });
@@ -317,7 +316,7 @@ describeMspNet(
 
       await userApi.assert.eventPresent("fileSystem", "BspConfirmStoppedStoring");
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       await verifyNoBspFileAssociation(sql, fileKey);
     });
@@ -335,7 +334,7 @@ describeMspNet(
 
       const bucketId = newBucketEventData.bucketId;
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       await waitForBucketIndexed(sql, bucketName);
 
@@ -351,7 +350,7 @@ describeMspNet(
 
       assertEventPresent(userApi, "fileSystem", "BucketDeleted", deleteBucketResult.events);
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       buckets = await sql`
         SELECT * FROM bucket WHERE name = ${bucketName}
@@ -381,7 +380,7 @@ describeMspNet(
       await userApi.wait.mspResponseInTxPool();
       await userApi.block.seal();
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       await waitForFileIndexed(sql, fileKey);
 
@@ -409,7 +408,7 @@ describeMspNet(
 
       await userApi.block.skipTo(currentBlockNumber + 100);
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       const files = await sql`
         SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
@@ -477,54 +476,44 @@ describeMspNet(
       const rawSignature = shUser.sign(intentionPayload);
       const userSignature = userApi.createType("MultiSignature", { Sr25519: rawSignature });
 
-      const bucketIdOption = userApi.createType("Option<H256>", bucketId);
-      const mspForestProof = await msp1Api.rpc.storagehubclient.generateForestProof(
-        bucketIdOption,
-        [fileKey]
-      );
-      const bspForestProof = await bspApi.rpc.storagehubclient.generateForestProof(null, [fileKey]);
-
-      const txs = await userApi.rpc.author.pendingExtrinsics();
-      const match = txs.filter(
-        (tx) => tx.method.method === "submitProof" && tx.signer.eq(bspAddress)
-      );
-
-      if (match.length === 1) {
-        await sealBlock(userApi);
-      }
-
-      const deletionResult = await userApi.block.seal({
+      // Request file deletion - fisherman should handle the actual deletion extrinsics
+      const deletionRequestResult = await userApi.block.seal({
         calls: [
-          userApi.tx.fileSystem.deleteFile(
-            shUser.address,
+          userApi.tx.fileSystem.requestDeleteFile(
             fileOperationIntention,
             userSignature,
             bucketId,
             location,
             fileSize,
-            fingerprint,
-            mspId,
-            mspForestProof
-          ),
-          userApi.tx.fileSystem.deleteFile(
-            shUser.address,
-            fileOperationIntention,
-            userSignature,
-            bucketId,
-            location,
-            fileSize,
-            fingerprint,
-            userApi.shConsts.DUMMY_BSP_ID,
-            bspForestProof
+            fingerprint
           )
         ],
         signer: shUser
       });
 
+      assertEventPresent(
+        userApi,
+        "fileSystem",
+        "FileDeletionRequested",
+        deletionRequestResult.events
+      );
+
+      // Verify fisherman submits delete_file extrinsics
+      await userApi.assert.extrinsicPresent({
+        method: "deleteFile",
+        module: "fileSystem",
+        checkTxPool: true,
+        timeout: 15000,
+        assertLength: 2 // Expecting 2 extrinsics: one for BSP and one for MSP
+      });
+
+      // Seal block to process the fisherman-submitted extrinsics
+      const deletionResult = await userApi.block.seal();
+
       assertEventPresent(userApi, "fileSystem", "MspFileDeletionCompleted", deletionResult.events);
       assertEventPresent(userApi, "fileSystem", "BspFileDeletionCompleted", deletionResult.events);
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
 
       await waitForFileDeleted(sql, fileKey);
 
@@ -653,7 +642,7 @@ describeMspNet(
         bspAccount: bspAddress
       });
 
-      await sealAndWaitForIndexing(userApi);
+      await waitForIndexing(userApi);
       await waitForFileIndexed(sql, fileKey);
       await waitForBspFileAssociation(sql, fileKey);
 

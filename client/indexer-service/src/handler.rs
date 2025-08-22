@@ -15,7 +15,7 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{ParachainClient, StorageEnableEvents, StorageProviderId},
 };
-use shc_indexer_db::{models::*, DbConnection, DbPool};
+use shc_indexer_db::{models::*, DbConnection, DbPool, OnchainBspId, OnchainMspId};
 use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_runtime::traits::{Header, NumberFor, SaturatedConversion};
@@ -218,7 +218,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 value_prop_id: _,
                 root,
             } => {
-                let msp = Some(Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?);
+                let msp =
+                    Some(Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?);
 
                 Bucket::create(
                     conn,
@@ -239,11 +240,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 value_prop_id: _,
             } => {
                 let old_msp = if let Some(id) = old_msp_id {
-                    Some(Msp::get_by_onchain_msp_id(conn, id.to_string()).await?)
+                    Some(Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*id)).await?)
                 } else {
                     None
                 };
-                let new_msp = Msp::get_by_onchain_msp_id(conn, new_msp_id.to_string()).await?;
+                let new_msp =
+                    Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*new_msp_id)).await?;
 
                 // Handle MSP-file associations based on whether old_msp exists
                 if let Some(old_msp) = old_msp {
@@ -283,9 +285,14 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 file_key,
                 new_root,
             } => {
-                Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
+                Bsp::update_merkle_root(
+                    conn,
+                    OnchainBspId::from(*bsp_id),
+                    new_root.as_ref().to_vec(),
+                )
+                .await?;
+                BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
                     .await?;
-                BspFile::delete_for_bsp(conn, file_key.as_ref(), bsp_id.to_string()).await?;
             }
             pallet_file_system::Event::BspConfirmedStoring {
                 who: _,
@@ -294,11 +301,15 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 skipped_file_keys: _,
                 new_root,
             } => {
-                Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
-                    .await?;
+                Bsp::update_merkle_root(
+                    conn,
+                    OnchainBspId::from(*bsp_id),
+                    new_root.as_ref().to_vec(),
+                )
+                .await?;
 
-                let bsp = Bsp::get_by_onchain_bsp_id(conn, bsp_id.to_string()).await?;
-                for file_key in confirmed_file_keys {
+                let bsp = Bsp::get_by_onchain_bsp_id(conn, OnchainBspId::from(*bsp_id)).await?;
+                for (file_key, _file_metadata) in confirmed_file_keys {
                     let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                     BspFile::create(conn, bsp.id, file.id).await?;
                 }
@@ -378,7 +389,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     log::debug!("Storage request revoked for file {:?} with no associations, deleted immediately", file_key);
                 }
             }
-            pallet_file_system::Event::MspAcceptedStorageRequest { file_key } => {
+            pallet_file_system::Event::MspAcceptedStorageRequest {
+                file_key,
+                file_metadata: _,
+            } => {
                 let file = File::get_by_file_key(conn, file_key.as_ref().to_vec()).await?;
                 let bucket = Bucket::get_by_id(conn, file.bucket_id).await?;
                 if let Some(msp_id) = bucket.msp_id {
@@ -393,7 +407,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 owner: _,
                 bucket_id,
             } => {
-                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?;
                 MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
                 Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
             }
@@ -406,7 +420,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             } => {
                 // We are now only deleting for BSP as BSP are associating with files
                 // MSP will handle insolvent user at the level of buckets (an MSP will delete the full bucket for an insolvent user and it will produce a new kind of event)
-                BspFile::delete_for_bsp(conn, file_key, sp_id.to_string()).await?;
+                BspFile::delete_for_bsp(conn, file_key, OnchainBspId::from(*sp_id)).await?;
             }
             pallet_file_system::Event::FailedToQueuePriorityChallenge { .. } => {}
             pallet_file_system::Event::FileDeletionRequest { .. } => {}
@@ -419,7 +433,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 owner: _,
                 bucket_id,
             } => {
-                let msp = Msp::get_by_onchain_msp_id(conn, msp_id.to_string()).await?;
+                let msp = Msp::get_by_onchain_msp_id(conn, OnchainMspId::from(*msp_id)).await?;
                 MspFile::delete_by_bucket(conn, bucket_id.as_ref(), msp.id).await?;
                 Bucket::unset_msp(conn, bucket_id.as_ref().to_vec()).await?;
             }
@@ -464,7 +478,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 new_root,
             } => {
                 // Delete MSP-file association
-                MspFile::delete(conn, file_key.as_ref(), msp_id.to_string()).await?;
+                MspFile::delete(conn, file_key.as_ref(), OnchainMspId::from(*msp_id)).await?;
 
                 // Check if file should be deleted (no more associations)
                 let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
@@ -490,7 +504,8 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 new_root,
             } => {
                 // Delete BSP-file association
-                BspFile::delete_for_bsp(conn, file_key.as_ref(), bsp_id.to_string()).await?;
+                BspFile::delete_for_bsp(conn, file_key.as_ref(), OnchainBspId::from(*bsp_id))
+                    .await?;
 
                 // Check if file should be deleted (no more associations)
                 let deleted = File::delete_if_orphaned(conn, file_key.as_ref()).await?;
@@ -500,8 +515,12 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 }
 
                 // Update BSP merkle root
-                Bsp::update_merkle_root(conn, bsp_id.to_string(), new_root.as_ref().to_vec())
-                    .await?;
+                Bsp::update_merkle_root(
+                    conn,
+                    OnchainBspId::from(*bsp_id),
+                    new_root.as_ref().to_vec(),
+                )
+                .await?;
             }
             pallet_file_system::Event::__Ignore(_, _) => {}
         }
@@ -592,7 +611,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 let last_tick_proven: u64 = (*last_tick_proven).saturated_into();
                 Bsp::update_last_tick_proven(
                     conn,
-                    provider.to_string(),
+                    OnchainBspId::from(*provider),
                     last_tick_proven.saturated_into(),
                 )
                 .await?;
@@ -647,7 +666,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     (*capacity).into(),
                     root.as_ref().to_vec(),
                     sql_multiaddresses,
-                    bsp_id.to_string(),
+                    *bsp_id,
                     stake,
                 )
                 .await?;
@@ -656,7 +675,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 who,
                 bsp_id: _bsp_id,
             } => {
-                Bsp::delete(conn, who.to_string()).await?;
+                Bsp::delete_by_account(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::CapacityChanged {
                 who,
@@ -677,7 +696,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                         .unwrap_or(Default::default())
                         .into();
 
-                    Bsp::update_stake(conn, bsp_id.to_string(), stake).await?;
+                    Bsp::update_stake(conn, OnchainBspId::from(*bsp_id), stake).await?;
                 }
                 StorageProviderId::MainStorageProvider(_) => {
                     Bsp::update_capacity(conn, who.to_string(), (*new_capacity).into()).await?;
@@ -711,7 +730,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     (*capacity).into(),
                     value_prop,
                     sql_multiaddresses,
-                    msp_id.to_string(),
+                    *msp_id,
                 )
                 .await?;
             }
@@ -719,7 +738,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 who,
                 msp_id: _msp_id,
             } => {
-                Msp::delete(conn, who.to_string()).await?;
+                Msp::delete_by_account(conn, who.to_string()).await?;
             }
             pallet_storage_providers::Event::BucketRootChanged {
                 bucket_id,
@@ -746,7 +765,7 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                     .unwrap_or(Default::default())
                     .into();
 
-                Bsp::update_stake(conn, provider_id.to_string(), stake).await?;
+                Bsp::update_stake(conn, OnchainBspId::from(*provider_id), stake).await?;
             }
             pallet_storage_providers::Event::TopUpFulfilled { .. } => {}
             pallet_storage_providers::Event::ValuePropAdded { .. } => {}
@@ -758,10 +777,10 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 // TODO: Should we index this? Since this buckets are all going to have moves requested
             }
             pallet_storage_providers::Event::MspDeleted { provider_id } => {
-                Msp::delete(conn, provider_id.to_string()).await?;
+                Msp::delete(conn, OnchainMspId::from(*provider_id)).await?;
             }
             pallet_storage_providers::Event::BspDeleted { provider_id } => {
-                Bsp::delete(conn, provider_id.to_string()).await?;
+                Bsp::delete(conn, OnchainBspId::from(*provider_id)).await?;
             }
             pallet_storage_providers::Event::FailedToGetOwnerAccountOfInsolventProvider {
                 ..

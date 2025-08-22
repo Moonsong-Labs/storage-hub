@@ -96,6 +96,7 @@ pub type KeyProof<Runtime> = pallet_proofs_dealer::types::KeyProof<Runtime>;
 pub type KeyProofs<Runtime> = BTreeMap<ForestLeaf<Runtime>, KeyProof<Runtime>>;
 pub type Balance<Runtime> = <Runtime as pallet_balances::Config>::Balance;
 pub type PeerId<Runtime> = pallet_file_system::types::PeerId<Runtime>;
+pub type OffchainSignature<Runtime> = pallet_file_system::types::OffchainSignatureFor<Runtime>;
 pub type StorageRequestMetadata<Runtime> =
     pallet_file_system::types::StorageRequestMetadata<Runtime>;
 pub type MaxBatchConfirmStorageRequests<Runtime> =

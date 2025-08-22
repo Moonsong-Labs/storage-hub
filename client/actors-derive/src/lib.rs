@@ -1063,10 +1063,7 @@ impl Parse for CommandVariantArgs {
 fn extract_command_variant_args(attrs: &[Attribute]) -> Option<CommandVariantArgs> {
     for attr in attrs {
         if attr.path().is_ident("command") {
-            return match attr.parse_args() {
-                Ok(args) => Some(args),
-                Err(_) => None,
-            };
+            return attr.parse_args().ok();
         }
     }
     None
