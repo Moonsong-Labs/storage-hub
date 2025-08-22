@@ -277,7 +277,7 @@ describeMspNet(
       );
 
       const acceptedFileKey = mspAcceptedEventDataBlob.fileKey.toString();
-      assert.equal(acceptedFileKey, fileKey);
+      assert.equal(acceptedFileKey, fileKey.toString());
 
       // Wait for indexing
       await userApi.block.seal();
