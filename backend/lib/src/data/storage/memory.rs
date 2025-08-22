@@ -47,6 +47,7 @@ impl Storage for InMemoryStorage {
         // just to "use" `map`
         // TODO: implement a proper check for the storage once we defined what it needs to contain
         #[allow(unused_comparisons)]
+        #[allow(clippy::absurd_extreme_comparisons)]
         Ok(self.map.read().capacity() >= 0)
     }
 }
@@ -59,6 +60,6 @@ mod tests {
     async fn test_health_check() {
         let storage = InMemoryStorage::new();
 
-        assert_eq!(storage.health_check().await.unwrap(), true)
+        assert!(storage.health_check().await.unwrap())
     }
 }

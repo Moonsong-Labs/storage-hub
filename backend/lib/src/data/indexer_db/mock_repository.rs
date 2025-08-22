@@ -84,6 +84,9 @@ impl IndexerOpsMut for MockRepository {
 
 #[cfg(test)]
 pub mod tests {
+    use bigdecimal::{BigDecimal, FromPrimitive};
+    use chrono::Utc;
+
     use super::*;
     use crate::constants::test::{accounts::*, bsp::*, merkle::*};
 

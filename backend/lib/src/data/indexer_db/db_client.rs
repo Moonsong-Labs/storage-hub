@@ -10,9 +10,6 @@ use shc_indexer_db::models::Bsp;
 
 use crate::data::indexer_db::repository::StorageOperations;
 
-#[cfg(all(test, feature = "mocks"))]
-use crate::data::indexer_db::MockRepository;
-
 /// Database client that delegates to a repository implementation
 ///
 /// This client provides a clean abstraction over database operations,
@@ -134,7 +131,9 @@ mod tests {
     async fn delete_bsp_with_repo() {
         // TODO: seed db with bsp
 
-        let repo = Repository::new(DEFAULT_DATABASE_URL).expect("able to connect to db");
+        let repo = Repository::new(DEFAULT_DATABASE_URL)
+            .await
+            .expect("able to connect to db");
 
         let client = DBClient::new(Arc::new(repo));
         delete_bsp(client, DEFAULT_BSP_ID).await;

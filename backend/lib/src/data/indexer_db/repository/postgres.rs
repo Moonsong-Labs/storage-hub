@@ -13,8 +13,6 @@
 //! - Comprehensive error handling
 
 use async_trait::async_trait;
-#[cfg(test)]
-use chrono::Utc;
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use shc_indexer_db::{models::Bsp, schema::bsp};
