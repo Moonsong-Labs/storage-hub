@@ -961,8 +961,6 @@ pub mod pallet {
         InvalidSignedOperation,
         /// File key computed from metadata doesn't match the provided file key.
         FileKeyMismatch,
-        /// Storage request metadata is corrupted or inconsistent.
-        CorruptedStorageRequest,
         /// Incomplete storage request not found.
         IncompleteStorageRequestNotFound,
     }

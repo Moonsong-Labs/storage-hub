@@ -6250,7 +6250,6 @@ declare module "@polkadot/types/lookup" {
     readonly isInvalidProviderID: boolean;
     readonly isInvalidSignedOperation: boolean;
     readonly isFileKeyMismatch: boolean;
-    readonly isCorruptedStorageRequest: boolean;
     readonly isIncompleteStorageRequestNotFound: boolean;
     readonly type:
       | "StorageRequestAlreadyRegistered"
@@ -6340,7 +6339,6 @@ declare module "@polkadot/types/lookup" {
       | "InvalidProviderID"
       | "InvalidSignedOperation"
       | "FileKeyMismatch"
-      | "CorruptedStorageRequest"
       | "IncompleteStorageRequestNotFound";
   }
 

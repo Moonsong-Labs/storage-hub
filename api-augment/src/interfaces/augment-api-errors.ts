@@ -219,10 +219,6 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       CollectionNotFound: AugmentedError<ApiType>;
       /**
-       * Storage request metadata is corrupted or inconsistent.
-       **/
-      CorruptedStorageRequest: AugmentedError<ApiType>;
-      /**
        * Divided by 0
        **/
       DividedByZero: AugmentedError<ApiType>;

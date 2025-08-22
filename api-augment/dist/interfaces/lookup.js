@@ -4902,7 +4902,6 @@ export default {
       "InvalidProviderID",
       "InvalidSignedOperation",
       "FileKeyMismatch",
-      "CorruptedStorageRequest",
       "IncompleteStorageRequestNotFound"
     ]
   },
