@@ -1,12 +1,12 @@
 import { WalletBase } from './base.js';
 import { WalletError } from './errors.js';
 import {
+  type HDNodeWallet,
   hexlify,
   type Provider,
   Transaction,
   type TransactionRequest,
   Wallet as EthersWallet,
-  type HDNodeWallet,
 } from 'ethers';
 
 /**
