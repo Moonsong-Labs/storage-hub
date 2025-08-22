@@ -168,7 +168,9 @@ describeMspNet(
       const destination = "test/bsp-stored-file.txt";
 
       // Load file for BSP storage
-      const ownerHexBsp = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
+      const ownerHexBsp = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(
+        2
+      );
       const {
         file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
