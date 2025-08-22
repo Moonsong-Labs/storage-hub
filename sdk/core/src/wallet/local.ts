@@ -72,7 +72,6 @@ export class LocalWallet extends WalletBase {
     return Promise.resolve(this.wallet.address);
   }
 
-  /** @inheritdoc */
   public signTransaction(tx: Uint8Array): Promise<string> {
     const hexTx = hexlify(tx);
     return this.wallet.signTransaction(Transaction.from(hexTx));
