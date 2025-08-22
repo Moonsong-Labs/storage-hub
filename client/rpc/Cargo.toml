@@ -50,6 +50,7 @@ shc-common = { workspace = true }
 shc-file-manager = { workspace = true }
 shc-forest-manager = { workspace = true }
 shp-traits = { workspace = true }
+shp-types = { workspace = true }
 shp-constants = { workspace = true }
 
 [features]

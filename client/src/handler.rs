@@ -295,7 +295,7 @@ where
                 FinalisedBucketMovedAway<Runtime> => MspDeleteBucketTask,
                 FinalisedMspStoppedStoringBucket<Runtime> => MspDeleteBucketTask,
                 NewStorageRequest<Runtime> => MspUploadFileTask,
-                ProcessMspRespondStoringRequest => MspUploadFileTask,
+                ProcessMspRespondStoringRequest<Runtime> => MspUploadFileTask,
                 MoveBucketRequestedForMsp<Runtime> => MspRespondMoveBucketTask,
                 StartMovedBucketDownload<Runtime> => MspRespondMoveBucketTask,
                 // MspStopStoringInsolventUserTask handles events for deleting buckets owned by users that have become insolvent.
@@ -343,7 +343,7 @@ where
             critical: true,
             [
                 NewStorageRequest<Runtime> => BspUploadFileTask,
-                ProcessConfirmStoringRequest => BspUploadFileTask,
+                ProcessConfirmStoringRequest<Runtime> => BspUploadFileTask,
                 // BspSubmitProofTask is triggered by a MultipleNewChallengeSeeds event emitted by the BlockchainService.
                 // It responds by computing challenges derived from the seeds, taking also into account
                 // the custom challenges in checkpoint challenge rounds and enqueuing them in BlockchainService.

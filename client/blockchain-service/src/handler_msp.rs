@@ -5,7 +5,7 @@ use tokio::sync::{oneshot::error::TryRecvError, Mutex};
 use sc_client_api::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::TreeRoute;
-use sp_runtime::SaturatedConversion;
+use sp_runtime::traits::Block as BlockT;
 
 use pallet_file_system_runtime_api::FileSystemApi;
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
@@ -100,7 +100,7 @@ where
         _block_number: &BlockNumber<Runtime>,
         tree_route: TreeRoute<Block>,
     ) where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         self.forest_root_changes_catchup(&tree_route).await;
     }
@@ -278,7 +278,7 @@ where
     /// _IMPORTANT: This check will be skipped if the latest processed block does not match the current best block._
     pub(crate) fn msp_assign_forest_root_write_lock(&mut self) {
         let client_best_hash: Runtime::Hash = self.client.info().best_hash;
-        let client_best_number: u128 = self.client.info().best_number.saturated_into();
+        let client_best_number: BlockNumber<Runtime> = self.client.info().best_number.into();
 
         // Skip if the latest processed block doesn't match the current best block
         if self.best_block.hash != client_best_hash || self.best_block.number != client_best_number
@@ -328,7 +328,9 @@ where
                     })
                     .delete();
                 state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .delete();
                 state_store_context
                     .access_value(
@@ -555,7 +557,9 @@ where
             ForestWriteLockTaskData::MspRespondStorageRequest(data) => {
                 let state_store_context = self.persistent_state.open_rw_context_with_overlay();
                 state_store_context
-                    .access_value(&OngoingProcessMspRespondStorageRequestCf)
+                    .access_value(&OngoingProcessMspRespondStorageRequestCf::<Runtime> {
+                        phantom: Default::default(),
+                    })
                     .write(data);
                 state_store_context.commit();
             }

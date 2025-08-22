@@ -4,7 +4,6 @@ use serde_json::Number;
 use std::{cmp::max, sync::Arc, vec};
 
 use codec::{Decode, Encode};
-use cumulus_primitives_core::BlockT;
 use pallet_proofs_dealer_runtime_api::{
     GetChallengePeriodError, GetProofSubmissionRecordError, ProofsDealerApi,
 };
@@ -22,9 +21,9 @@ use shc_common::{
     },
     traits::{ExtensionOperations, KeyTypeOperations, StorageEnableRuntime},
     types::{
-        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, ParachainClient,
-        ProofsDealerProviderId, StorageEnableEvents, StorageProviderId, TrieAddMutation,
-        TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
+        BlockNumber, FileKey, Fingerprint, ForestRoot, MinimalExtension, OpaqueBlock,
+        ParachainClient, ProofsDealerProviderId, StorageEnableEvents, StorageProviderId,
+        TrieAddMutation, TrieMutation, TrieRemoveMutation, BCSV_KEY_TYPE,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
@@ -35,7 +34,7 @@ use sp_core::{Blake2Hasher, Hasher, U256};
 use sp_keystore::KeystorePtr;
 use sp_runtime::{
     generic::{self, SignedPayload},
-    traits::{CheckedSub, One, Saturating, Zero},
+    traits::{Block as BlockT, CheckedSub, One, Saturating, Zero},
     SaturatedConversion,
 };
 use substrate_frame_rpc_system::AccountNonceApi;
@@ -222,13 +221,10 @@ where
     ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::NewBestBlock`].
     /// 3. The block is the new best block, and its parent is NOT the previous best block (i.e. it's a reorg).
     ///     - If so, it registers it as the new best block and returns [`NewBlockNotificationKind::Reorg`].
-    pub(crate) fn register_best_block_and_check_reorg<Block>(
+    pub(crate) fn register_best_block_and_check_reorg(
         &mut self,
-        block_import_notification: &BlockImportNotification<Block>,
-    ) -> NewBlockNotificationKind<Block, Runtime>
-    where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
-    {
+        block_import_notification: &BlockImportNotification<OpaqueBlock>,
+    ) -> NewBlockNotificationKind<Runtime> {
         let last_best_block = self.best_block;
         let new_block_info: MinimalBlockInfo<Runtime> = block_import_notification.into();
 
@@ -759,7 +755,7 @@ where
     /// some blocks in [`TreeRoute::route`] are "retracted" blocks and some are "enacted" blocks.
     pub(crate) async fn forest_root_changes_catchup<Block>(&self, tree_route: &TreeRoute<Block>)
     where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         // Retracted blocks, i.e. the blocks from the `TreeRoute` that are reverted in the reorg.
         for block in tree_route.retracted() {
@@ -822,7 +818,7 @@ where
     /// 2. [`pallet_proofs_dealer::Event::MutationsApplied`]: for mutations applied to the Buckets of an MSP.
     async fn apply_forest_root_changes<Block>(&self, block: &HashAndNumber<Block>, revert: bool)
     where
-        Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
+        Block: BlockT<Hash = Runtime::Hash>,
     {
         if revert {
             trace!(target: LOG_TARGET, "Reverting Forest root changes for block number {:?} and hash {:?}", block.number, block.hash);

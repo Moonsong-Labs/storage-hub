@@ -48,9 +48,6 @@ substrate-frame-rpc-system = { workspace = true }
 polkadot-runtime-common = { workspace = true }
 polkadot-primitives = { workspace = true }
 
-# Cumulus
-cumulus-primitives-core = { workspace = true }
-
 # Local
 shc-actors-framework = { workspace = true }
 shc-actors-derive = { workspace = true }

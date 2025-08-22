@@ -15,13 +15,12 @@ use shc_common::{
     traits::StorageEnableRuntime,
     types::{
         BackupStorageProviderId, BlockNumber, BucketId, CustomChallenge, HasherOutT,
-        MainStorageProviderId, ProofsDealerProviderId, RandomnessOutput,
-        RejectedStorageRequestReason, StorageDataUnit, StorageHubEventsVec,
+        MainStorageProviderId, MerkleTrieHash, OpaqueBlock, ProofsDealerProviderId,
+        RandomnessOutput, RejectedStorageRequestReason, StorageDataUnit, StorageHubEventsVec,
         StorageProofsMerkleTrieLayout, StorageProviderId,
     },
 };
 use sp_blockchain::{HashAndNumber, TreeRoute};
-use sp_core::H256;
 use sp_runtime::{
     traits::{Header, Zero},
     DispatchError, SaturatedConversion,
@@ -37,7 +36,7 @@ pub struct SubmitProofRequest<Runtime: StorageEnableRuntime> {
     pub provider_id: ProofsDealerProviderId<Runtime>,
     pub tick: BlockNumber<Runtime>,
     pub seed: RandomnessOutput<Runtime>,
-    pub forest_challenges: Vec<H256>,
+    pub forest_challenges: Vec<MerkleTrieHash<Runtime>>,
     pub checkpoint_challenges: Vec<CustomChallenge<Runtime>>,
 }
 
@@ -46,7 +45,7 @@ impl<Runtime: StorageEnableRuntime> SubmitProofRequest<Runtime> {
         provider_id: ProofsDealerProviderId<Runtime>,
         tick: BlockNumber<Runtime>,
         seed: RandomnessOutput<Runtime>,
-        forest_challenges: Vec<H256>,
+        forest_challenges: Vec<MerkleTrieHash<Runtime>>,
         checkpoint_challenges: Vec<CustomChallenge<Runtime>>,
     ) -> Self {
         Self {
@@ -82,13 +81,13 @@ impl<Runtime: StorageEnableRuntime> PartialEq for SubmitProofRequest<Runtime> {
 impl<Runtime: StorageEnableRuntime> Eq for SubmitProofRequest<Runtime> {}
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct ConfirmStoringRequest {
-    pub file_key: H256,
+pub struct ConfirmStoringRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
     pub try_count: u32,
 }
 
-impl ConfirmStoringRequest {
-    pub fn new(file_key: H256) -> Self {
+impl<Runtime: StorageEnableRuntime> ConfirmStoringRequest<Runtime> {
+    pub fn new(file_key: MerkleTrieHash<Runtime>) -> Self {
         Self {
             file_key,
             try_count: 0,
@@ -107,14 +106,14 @@ pub enum MspRespondStorageRequest {
 }
 
 #[derive(Debug, Clone, Encode, Decode)]
-pub struct RespondStorageRequest {
-    pub file_key: H256,
+pub struct RespondStorageRequest<Runtime: StorageEnableRuntime> {
+    pub file_key: MerkleTrieHash<Runtime>,
     pub response: MspRespondStorageRequest,
     pub try_count: u32,
 }
 
-impl RespondStorageRequest {
-    pub fn new(file_key: H256, response: MspRespondStorageRequest) -> Self {
+impl<Runtime: StorageEnableRuntime> RespondStorageRequest<Runtime> {
+    pub fn new(file_key: MerkleTrieHash<Runtime>, response: MspRespondStorageRequest) -> Self {
         Self {
             file_key,
             response,
@@ -148,7 +147,7 @@ impl<Runtime: StorageEnableRuntime> StopStoringForInsolventUserRequest<Runtime> 
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct FileDeletionRequest<Runtime: StorageEnableRuntime> {
     pub user: Runtime::AccountId,
-    pub file_key: H256,
+    pub file_key: MerkleTrieHash<Runtime>,
     pub file_size: StorageDataUnit<Runtime>,
     pub bucket_id: BucketId<Runtime>,
     pub msp_id: ProofsDealerProviderId<Runtime>,
@@ -159,7 +158,7 @@ pub struct FileDeletionRequest<Runtime: StorageEnableRuntime> {
 impl<Runtime: StorageEnableRuntime> FileDeletionRequest<Runtime> {
     pub fn new(
         user: Runtime::AccountId,
-        file_key: H256,
+        file_key: MerkleTrieHash<Runtime>,
         file_size: StorageDataUnit<Runtime>,
         bucket_id: BucketId<Runtime>,
         msp_id: ProofsDealerProviderId<Runtime>,
@@ -202,9 +201,9 @@ impl<Runtime: StorageEnableRuntime> From<events::FileDeletionRequest<Runtime>>
 #[derive(Debug, Clone)]
 pub struct Extrinsic<Runtime: StorageEnableRuntime> {
     /// Extrinsic hash.
-    pub hash: H256,
+    pub hash: Runtime::Hash,
     /// Block hash.
-    pub block_hash: H256,
+    pub block_hash: Runtime::Hash,
     /// Events vector.
     pub events: StorageHubEventsVec<Runtime>,
 }
@@ -443,55 +442,43 @@ pub enum WatchTransactionError {
 /// and detect reorgs.
 #[derive(Debug, Clone, Encode, Decode, Copy)]
 pub struct MinimalBlockInfo<Runtime: StorageEnableRuntime> {
-    pub number: u128,
+    pub number: BlockNumber<Runtime>,
     pub hash: Runtime::Hash,
 }
 
-impl<Block, Runtime: StorageEnableRuntime> From<&BlockImportNotification<Block>>
+impl<Runtime: StorageEnableRuntime> From<&BlockImportNotification<OpaqueBlock>>
     for MinimalBlockInfo<Runtime>
-where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
 {
-    fn from(notification: &BlockImportNotification<Block>) -> Self {
+    fn from(notification: &BlockImportNotification<OpaqueBlock>) -> Self {
         Self {
-            number: (*notification.header.number()).saturated_into::<u128>(),
+            number: (*notification.header.number()).into(),
             hash: notification.hash,
         }
     }
 }
 
-impl<Block, Runtime: StorageEnableRuntime> From<BlockImportNotification<Block>>
+impl<Runtime: StorageEnableRuntime> From<BlockImportNotification<OpaqueBlock>>
     for MinimalBlockInfo<Runtime>
-where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
 {
-    fn from(notification: BlockImportNotification<Block>) -> Self {
+    fn from(notification: BlockImportNotification<OpaqueBlock>) -> Self {
         Self {
-            number: (*notification.header.number()).saturated_into::<u128>(),
+            number: (*notification.header.number()).into(),
             hash: notification.hash,
         }
     }
 }
 
-impl<Block, Runtime: StorageEnableRuntime> Into<HashAndNumber<Block>> for MinimalBlockInfo<Runtime>
-where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
-{
-    fn into(self) -> HashAndNumber<Block> {
+impl<Runtime: StorageEnableRuntime> Into<HashAndNumber<OpaqueBlock>> for MinimalBlockInfo<Runtime> {
+    fn into(self) -> HashAndNumber<OpaqueBlock> {
         HashAndNumber {
-            number: self
-                .number
-                .saturated_into::<<<Block as BlockT>::Header as Header>::Number>(),
+            number: self.number.saturated_into(),
             hash: self.hash,
         }
     }
 }
 
-impl<Block, Runtime: StorageEnableRuntime> From<HashAndNumber<Block>> for MinimalBlockInfo<Runtime>
-where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
-{
-    fn from(hash_and_number: HashAndNumber<Block>) -> Self {
+impl<Runtime: StorageEnableRuntime> From<HashAndNumber<OpaqueBlock>> for MinimalBlockInfo<Runtime> {
+    fn from(hash_and_number: HashAndNumber<OpaqueBlock>) -> Self {
         Self {
             number: hash_and_number.number.saturated_into::<u128>(),
             hash: hash_and_number.hash,
@@ -510,10 +497,7 @@ impl<Runtime: StorageEnableRuntime> Default for MinimalBlockInfo<Runtime> {
 
 /// When a new block is imported, the block is checked to see if it is one of the members
 /// of this enum.
-pub enum NewBlockNotificationKind<Block, Runtime: StorageEnableRuntime>
-where
-    Block: cumulus_primitives_core::BlockT<Hash = Runtime::Hash>,
-{
+pub enum NewBlockNotificationKind<Runtime: StorageEnableRuntime> {
     /// The block is a new best block, built on top of the previous best block.
     ///
     /// - `last_best_block_processed`: The last best block that was processed by this node.
@@ -529,7 +513,7 @@ where
     NewBestBlock {
         last_best_block_processed: MinimalBlockInfo<Runtime>,
         new_best_block: MinimalBlockInfo<Runtime>,
-        tree_route: TreeRoute<Block>,
+        tree_route: TreeRoute<OpaqueBlock>,
     },
     /// The block belongs to a fork that is not currently the best fork.
     NewNonBestBlock(MinimalBlockInfo<Runtime>),
@@ -542,7 +526,7 @@ where
     Reorg {
         old_best_block: MinimalBlockInfo<Runtime>,
         new_best_block: MinimalBlockInfo<Runtime>,
-        tree_route: TreeRoute<Block>,
+        tree_route: TreeRoute<OpaqueBlock>,
     },
 }
 
@@ -558,7 +542,7 @@ pub struct ForestStorageSnapshotInfo<Runtime: StorageEnableRuntime> {
     ///
     /// This is to uniquely identify the Forest Storage snapshot, as there could be
     /// snapshots at the same block number, but in different forks.
-    pub block_hash: H256,
+    pub block_hash: Runtime::Hash,
     /// The Forest Storage root when the snapshot was taken.
     ///
     /// This is used to identify the Forest Storage snapshot and retrieve it.

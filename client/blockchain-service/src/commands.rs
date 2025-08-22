@@ -111,10 +111,10 @@ pub enum BlockchainServiceCommand<Runtime: StorageEnableRuntime> {
         request: SubmitProofRequest<Runtime>,
     },
     QueueConfirmBspRequest {
-        request: ConfirmStoringRequest,
+        request: ConfirmStoringRequest<Runtime>,
     },
     QueueMspRespondStorageRequest {
-        request: RespondStorageRequest,
+        request: RespondStorageRequest<Runtime>,
     },
     QueueStopStoringForInsolventUserRequest {
         request: StopStoringForInsolventUserRequest<Runtime>,

@@ -29,7 +29,7 @@ use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
 use shp_constants::FILE_CHUNK_SIZE;
 use sp_api::ProvideRuntimeApi;
 use sp_blockchain::HeaderBackend;
-use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair, H256};
+use sp_core::{sr25519::Pair as Sr25519Pair, Encode, Pair};
 use sp_keystore::{Keystore, KeystorePtr};
 use sp_runtime::{Deserialize, KeyTypeId, Serialize};
 use sp_runtime_interface::pass_by::PassByInner;
@@ -41,13 +41,13 @@ const LOG_TARGET: &str = "storage-hub-client-rpc";
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CheckpointChallenge {
-    pub file_key: H256,
+    pub file_key: shp_types::Hash,
     pub should_remove_file: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LoadFileInStorageResult {
-    pub file_key: H256,
+    pub file_key: shp_types::Hash,
     pub file_metadata: FileMetadata,
 }
 
@@ -97,6 +97,11 @@ where
             config,
             _runtime: PhantomData,
         }
+    }
+
+    pub fn with_remote_file_config(mut self, config: RemoteFileConfig) -> Self {
+        self.config.remote_file = config;
+        self
     }
 }
 
@@ -150,7 +155,7 @@ pub trait StorageHubClientApi {
         file_path: String,
         location: String,
         owner_account_id_hex: String,
-        bucket_id: H256,
+        bucket_id: shp_types::Hash,
     ) -> RpcResult<LoadFileInStorageResult>;
 
     /// Remove a list of files from the file storage.
@@ -158,7 +163,8 @@ pub trait StorageHubClientApi {
     /// This is useful to allow BSPs and MSPs to manually adjust their file storage to match
     /// the state of the network if any inconsistencies are found.
     #[method(name = "removeFilesFromFileStorage", with_extensions)]
-    async fn remove_files_from_file_storage(&self, file_key: Vec<H256>) -> RpcResult<()>;
+    async fn remove_files_from_file_storage(&self, file_key: Vec<shp_types::Hash>)
+        -> RpcResult<()>;
 
     /// Remove all files under a certain prefix from the file storage.
     ///
@@ -167,12 +173,15 @@ pub trait StorageHubClientApi {
     /// to remove all files that belong to a bucket without having to call `removeFileFromFileStorage`
     /// for each file.
     #[method(name = "removeFilesWithPrefixFromFileStorage", with_extensions)]
-    async fn remove_files_with_prefix_from_file_storage(&self, prefix: H256) -> RpcResult<()>;
+    async fn remove_files_with_prefix_from_file_storage(
+        &self,
+        prefix: shp_types::Hash,
+    ) -> RpcResult<()>;
 
     #[method(name = "saveFileToDisk", with_extensions)]
     async fn save_file_to_disk(
         &self,
-        file_key: H256,
+        file_key: shp_types::Hash,
         file_path: String,
     ) -> RpcResult<SaveFileToDisk>;
 
@@ -186,7 +195,7 @@ pub trait StorageHubClientApi {
     #[method(name = "addFilesToForestStorage", with_extensions)]
     async fn add_files_to_forest_storage(
         &self,
-        forest_key: Option<H256>,
+        forest_key: Option<shp_types::Hash>,
         metadata_of_files_to_add: Vec<FileMetadata>,
     ) -> RpcResult<AddFilesToForestStorageResult>;
 
@@ -200,8 +209,8 @@ pub trait StorageHubClientApi {
     #[method(name = "removeFilesFromForestStorage", with_extensions)]
     async fn remove_files_from_forest_storage(
         &self,
-        forest_key: Option<H256>,
-        file_keys: Vec<H256>,
+        forest_key: Option<shp_types::Hash>,
+        file_keys: Vec<shp_types::Hash>,
     ) -> RpcResult<RemoveFilesFromForestStorageResult>;
 
     /// Get the root hash of a forest.
@@ -209,22 +218,29 @@ pub trait StorageHubClientApi {
     /// In the case of an BSP node, the forest key is empty since it only maintains a single forest.
     /// In the case of an MSP node, the forest key is a bucket id.
     #[method(name = "getForestRoot")]
-    async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<Option<H256>>;
+    async fn get_forest_root(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+    ) -> RpcResult<Option<shp_types::Hash>>;
 
     #[method(name = "isFileInForest")]
-    async fn is_file_in_forest(&self, forest_key: Option<H256>, file_key: H256) -> RpcResult<bool>;
+    async fn is_file_in_forest(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+        file_key: shp_types::Hash,
+    ) -> RpcResult<bool>;
 
     #[method(name = "isFileInFileStorage")]
     async fn is_file_in_file_storage(
         &self,
-        file_key: H256,
+        file_key: shp_types::Hash,
     ) -> RpcResult<GetFileFromFileStorageResult>;
 
     #[method(name = "getFileMetadata")]
     async fn get_file_metadata(
         &self,
-        forest_key: Option<H256>,
-        file_key: H256,
+        forest_key: Option<shp_types::Hash>,
+        file_key: shp_types::Hash,
     ) -> RpcResult<Option<FileMetadata>>;
 
     // Note: this RPC method returns a Vec<u8> because the `ForestProof` struct is not serializable.
@@ -232,8 +248,8 @@ pub trait StorageHubClientApi {
     #[method(name = "generateForestProof")]
     async fn generate_forest_proof(
         &self,
-        forest_key: Option<H256>,
-        challenged_file_keys: Vec<H256>,
+        forest_key: Option<shp_types::Hash>,
+        challenged_file_keys: Vec<shp_types::Hash>,
     ) -> RpcResult<Vec<u8>>;
 
     // Note: this RPC method returns a Vec<u8> because the `StorageProof` struct is not serializable.
@@ -242,8 +258,8 @@ pub trait StorageHubClientApi {
     #[method(name = "generateProof")]
     async fn generate_proof(
         &self,
-        provider_id: H256,
-        seed: H256,
+        provider_id: shp_types::Hash,
+        seed: shp_types::Hash,
         checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>>;
 
@@ -252,8 +268,8 @@ pub trait StorageHubClientApi {
     #[method(name = "generateFileKeyProofBspConfirm")]
     async fn generate_file_key_proof_bsp_confirm(
         &self,
-        bsp_id: H256,
-        file_key: H256,
+        bsp_id: shp_types::Hash,
+        file_key: shp_types::Hash,
     ) -> RpcResult<Vec<u8>>;
 
     // Note: this RPC method returns a Vec<u8> because the KeyVerifier Proof type is not serializable.
@@ -261,8 +277,8 @@ pub trait StorageHubClientApi {
     #[method(name = "generateFileKeyProofMspAccept")]
     async fn generate_file_key_proof_msp_accept(
         &self,
-        msp_id: H256,
-        file_key: H256,
+        msp_id: shp_types::Hash,
+        file_key: shp_types::Hash,
     ) -> RpcResult<Vec<u8>>;
 
     #[method(name = "insertBcsvKeys", with_extensions)]
@@ -275,14 +291,21 @@ pub trait StorageHubClientApi {
     // buckets, users or file fingerprint). This method is required to call before deleting a file to
     // avoid re-uploading a file that has just been deleted.
     #[method(name = "addToExcludeList", with_extensions)]
-    async fn add_to_exclude_list(&self, file_key: H256, exclude_type: String) -> RpcResult<()>;
+    async fn add_to_exclude_list(
+        &self,
+        file_key: shp_types::Hash,
+        exclude_type: String,
+    ) -> RpcResult<()>;
 
     // Note: This RPC method allow BSP administrator to remove a file from the exclude list (allowing
     // the BSP to volunteer for this specific file key again). Later it will allow to remove from the exclude
     // list ban users, bucket or even file fingerprint.
     #[method(name = "removeFromExcludeList", with_extensions)]
-    async fn remove_from_exclude_list(&self, file_key: H256, exclude_type: String)
-        -> RpcResult<()>;
+    async fn remove_from_exclude_list(
+        &self,
+        file_key: shp_types::Hash,
+        exclude_type: String,
+    ) -> RpcResult<()>;
 }
 
 /// Stores the required objects to be used in our RPC method.
@@ -337,7 +360,7 @@ where
         file_path: String,
         location: String,
         owner_account_id_hex: String,
-        bucket_id: H256,
+        bucket_id: shp_types::Hash,
     ) -> RpcResult<LoadFileInStorageResult> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
@@ -369,32 +392,51 @@ where
         // If `ErrorKind::Interrupted` is found, the operation is simply retried, as per
         // https://doc.rust-lang.org/std/io/trait.Read.html#errors-1
         // Build the actual [`FileDataTrie`] by inserting each chunk into it.
-        loop {
+        //
+        // We need to ensure we read exactly FILE_CHUNK_SIZE bytes per chunk (except the last one)
+        // to ensure consistent fingerprints regardless of how the underlying stream returns data.
+        'read: loop {
             let mut chunk = vec![0u8; FILE_CHUNK_SIZE as usize];
+            let mut offset = 0;
 
-            match stream.read(&mut chunk).await {
-                Ok(0) => {
-                    // Reached EOF, break loop.
-                    debug!(target: LOG_TARGET, "Finished reading file");
-                    break;
-                }
-                Ok(bytes_read) => {
-                    // Haven't reached EOF yet, continue loop.
-                    debug!(target: LOG_TARGET, "Read {} bytes from file", bytes_read);
+            // Keep reading until we fill the chunk or hit EOF
+            while offset < FILE_CHUNK_SIZE as usize {
+                match stream.read(&mut chunk[offset..]).await {
+                    Ok(0) => {
+                        // EOF reached
+                        if offset > 0 {
+                            // We have a partial chunk
+                            chunk.truncate(offset);
+                            debug!(target: LOG_TARGET, "Read final partial chunk of {} bytes", offset);
 
-                    chunk.truncate(bytes_read);
+                            file_data_trie
+                                .write_chunk(&ChunkId::new(chunk_id), &chunk)
+                                .map_err(into_rpc_error)?;
+                        }
+                        debug!(target: LOG_TARGET, "Finished reading file");
+                        break 'read;
+                    }
+                    Ok(bytes_read) => {
+                        offset += bytes_read;
+                        if offset == FILE_CHUNK_SIZE as usize {
+                            // Full chunk
+                            debug!(target: LOG_TARGET, "Read full chunk {} of {} bytes", chunk_id, FILE_CHUNK_SIZE);
 
-                    file_data_trie
-                        .write_chunk(&ChunkId::new(chunk_id), &chunk)
-                        .map_err(into_rpc_error)?;
-                    chunk_id += 1;
-                }
-                Err(e) => {
-                    error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
-                    return Err(into_rpc_error(format!(
-                        "Error reading file stream: {:?}",
-                        e
-                    )));
+                            file_data_trie
+                                .write_chunk(&ChunkId::new(chunk_id), &chunk)
+                                .map_err(into_rpc_error)?;
+                            chunk_id += 1;
+                            break; // Move to next chunk
+                        }
+                        // Continue reading to fill the chunk
+                    }
+                    Err(e) => {
+                        error!(target: LOG_TARGET, "Error when trying to read file: {:?}", e);
+                        return Err(into_rpc_error(format!(
+                            "Error reading file stream: {:?}",
+                            e
+                        )));
+                    }
                 }
             }
         }
@@ -446,7 +488,7 @@ where
     async fn remove_files_from_file_storage(
         &self,
         ext: &Extensions,
-        file_keys: Vec<H256>,
+        file_keys: Vec<shp_types::Hash>,
     ) -> RpcResult<()> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
@@ -467,7 +509,7 @@ where
     async fn remove_files_with_prefix_from_file_storage(
         &self,
         ext: &Extensions,
-        prefix: H256,
+        prefix: shp_types::Hash,
     ) -> RpcResult<()> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
@@ -486,7 +528,7 @@ where
     async fn save_file_to_disk(
         &self,
         ext: &Extensions,
-        file_key: H256,
+        file_key: shp_types::Hash,
         file_path: String,
     ) -> RpcResult<SaveFileToDisk> {
         // Check if the execution is safe.
@@ -566,7 +608,7 @@ where
     async fn add_files_to_forest_storage(
         &self,
         ext: &Extensions,
-        forest_key: Option<H256>,
+        forest_key: Option<shp_types::Hash>,
         metadata_of_files_to_add: Vec<FileMetadata>,
     ) -> RpcResult<AddFilesToForestStorageResult> {
         // Check if the execution is safe.
@@ -597,8 +639,8 @@ where
     async fn remove_files_from_forest_storage(
         &self,
         ext: &Extensions,
-        forest_key: Option<H256>,
-        file_keys: Vec<H256>,
+        forest_key: Option<shp_types::Hash>,
+        file_keys: Vec<shp_types::Hash>,
     ) -> RpcResult<RemoveFilesFromForestStorageResult> {
         // Check if the execution is safe.
         check_if_safe(ext)?;
@@ -627,7 +669,10 @@ where
         Ok(RemoveFilesFromForestStorageResult::Success)
     }
 
-    async fn get_forest_root(&self, forest_key: Option<H256>) -> RpcResult<Option<H256>> {
+    async fn get_forest_root(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+    ) -> RpcResult<Option<shp_types::Hash>> {
         let forest_key = match forest_key {
             Some(forest_key) => forest_key.as_ref().to_vec().into(),
             None => CURRENT_FOREST_KEY.to_vec().into(),
@@ -644,7 +689,11 @@ where
         Ok(Some(read_fs.root()))
     }
 
-    async fn is_file_in_forest(&self, forest_key: Option<H256>, file_key: H256) -> RpcResult<bool> {
+    async fn is_file_in_forest(
+        &self,
+        forest_key: Option<shp_types::Hash>,
+        file_key: shp_types::Hash,
+    ) -> RpcResult<bool> {
         let forest_key = match forest_key {
             Some(forest_key) => forest_key.as_ref().to_vec().into(),
             None => CURRENT_FOREST_KEY.to_vec().into(),
@@ -666,7 +715,7 @@ where
 
     async fn is_file_in_file_storage(
         &self,
-        file_key: H256,
+        file_key: shp_types::Hash,
     ) -> RpcResult<GetFileFromFileStorageResult> {
         // Acquire FileStorage read lock.
         let read_file_storage = self.file_storage.read().await;
@@ -706,8 +755,8 @@ where
     // metadata from this method until that's fixed.
     async fn get_file_metadata(
         &self,
-        forest_key: Option<H256>,
-        file_key: H256,
+        forest_key: Option<shp_types::Hash>,
+        file_key: shp_types::Hash,
     ) -> RpcResult<Option<FileMetadata>> {
         let forest_key = match forest_key {
             Some(forest_key) => forest_key.as_ref().to_vec().into(),
@@ -730,8 +779,8 @@ where
 
     async fn generate_forest_proof(
         &self,
-        forest_key: Option<H256>,
-        challenged_file_keys: Vec<H256>,
+        forest_key: Option<shp_types::Hash>,
+        challenged_file_keys: Vec<shp_types::Hash>,
     ) -> RpcResult<Vec<u8>> {
         let forest_key = match forest_key {
             Some(forest_key) => forest_key.as_ref().to_vec().into(),
@@ -756,8 +805,8 @@ where
 
     async fn generate_proof(
         &self,
-        provider_id: H256,
-        seed: H256,
+        provider_id: shp_types::Hash,
+        seed: shp_types::Hash,
         checkpoint_challenges: Option<Vec<CheckpointChallenge>>,
     ) -> RpcResult<Vec<u8>> {
         // TODO: Get provider ID itself.
@@ -882,8 +931,8 @@ where
 
     async fn generate_file_key_proof_bsp_confirm(
         &self,
-        bsp_id: H256,
-        file_key: H256,
+        bsp_id: shp_types::Hash,
+        file_key: shp_types::Hash,
     ) -> RpcResult<Vec<u8>> {
         // Getting Runtime APIs
         let api = self.client.runtime_api();
@@ -911,8 +960,8 @@ where
 
     async fn generate_file_key_proof_msp_accept(
         &self,
-        msp_id: H256,
-        file_key: H256,
+        msp_id: shp_types::Hash,
+        file_key: shp_types::Hash,
     ) -> RpcResult<Vec<u8>> {
         // Getting Runtime APIs
         let api = self.client.runtime_api();
@@ -992,7 +1041,7 @@ where
     async fn add_to_exclude_list(
         &self,
         ext: &Extensions,
-        file_key: H256,
+        file_key: shp_types::Hash,
         exclude_type: String,
     ) -> RpcResult<()> {
         check_if_safe(ext)?;
@@ -1012,7 +1061,7 @@ where
     async fn remove_from_exclude_list(
         &self,
         ext: &Extensions,
-        file_key: H256,
+        file_key: shp_types::Hash,
         exclude_type: String,
     ) -> RpcResult<()> {
         check_if_safe(ext)?;
@@ -1060,7 +1109,7 @@ fn remote_file_error_to_rpc_error(e: remote_file::RemoteFileError) -> JsonRpseeE
 async fn generate_key_proof<FL, Runtime>(
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     file_storage: Arc<RwLock<FL>>,
-    file_key: H256,
+    file_key: shp_types::Hash,
     provider_id: ProofsDealerProviderId<Runtime>,
     seed: Option<RandomnessOutput<Runtime>>,
     at: Option<BlockHash>,

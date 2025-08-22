@@ -15,7 +15,8 @@ use sp_block_builder::BlockBuilder;
 use sp_core::{crypto::KeyTypeId, H256};
 use sp_rpc::number::NumberOrHex;
 use sp_runtime::traits::{
-    Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension, Verify,
+    Block as BlockT, Dispatchable, IdentifyAccount, MaybeDisplay, Member, TransactionExtension,
+    Verify,
 };
 
 use crate::types::*;
@@ -211,11 +212,12 @@ pub trait StorageEnableRuntime:
         Hash = shp_types::Hash,
         AccountId: for<'a> TryFrom<&'a [u8]> + AsRef<[u8]>,
         RuntimeEvent: Into<StorageEnableEvents<Self>>,
+        Block: BlockT<Hash = shp_types::Hash>,
     >
         + pallet_storage_providers::Config<
-            MerklePatriciaRoot = <Self as frame_system::Config>::Hash,
-            ValuePropId = <Self as frame_system::Config>::Hash,
-            ProviderId = <Self as frame_system::Config>::Hash,
+            MerklePatriciaRoot = shp_types::Hash,
+            ValuePropId = shp_types::Hash,
+            ProviderId = shp_types::Hash,
             BucketNameLimit: Send + Sync,
             MaxCommitmentSize: Send + Sync,
             MaxMultiAddressSize: Send + Sync,
@@ -224,7 +226,7 @@ pub trait StorageEnableRuntime:
         >
         + pallet_proofs_dealer::Config<
             ProvidersPallet = pallet_storage_providers::Pallet<Self>,
-            MerkleTrieHash = <Self as frame_system::Config>::Hash,
+            MerkleTrieHash = shp_types::Hash,
             ForestVerifier = ForestVerifier,
             KeyVerifier = FileKeyVerifier,
             MaxCustomChallengesPerBlock: Send + Sync,
@@ -239,7 +241,7 @@ pub trait StorageEnableRuntime:
             ProofDealer = pallet_proofs_dealer::Pallet<Self>,
             PaymentStreams = pallet_payment_streams::Pallet<Self>,
             Nfts = pallet_nfts::Pallet<Self>,
-            Fingerprint = <Self as frame_system::Config>::Hash,
+            Fingerprint = shp_types::Hash,
             OffchainSignature: Send + Sync,
             MaxBatchConfirmStorageRequests: Send + Sync,
             MaxFilePathSize: Send + Sync,
