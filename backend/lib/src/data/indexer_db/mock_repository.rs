@@ -21,6 +21,7 @@ use crate::data::indexer_db::repository::{
 };
 
 /// Mock repository implementation using in-memory storage
+// TODO: add failure-injection mechanism (similar to RPC mocks)
 pub struct MockRepository {
     bsps: Arc<RwLock<HashMap<i64, Bsp>>>,
     next_id: Arc<AtomicI64>,

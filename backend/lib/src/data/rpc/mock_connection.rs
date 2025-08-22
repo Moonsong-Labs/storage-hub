@@ -3,22 +3,23 @@
 //! This module provides a mock RPC connection that can be configured
 //! with predefined responses and error scenarios for testing purposes.
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::Value;
-use tokio::time::sleep;
-
-use super::{
-    connection::{RpcConnectionError, RpcResult},
-    RpcConnection,
+use tokio::{
+    sync::{Mutex, RwLock},
+    time::sleep,
 };
-use crate::constants::rpc::TIMEOUT_MULTIPLIER;
+
+use crate::{
+    constants::rpc::TIMEOUT_MULTIPLIER,
+    data::rpc::{
+        connection::{RpcConnectionError, RpcResult},
+        RpcConnection,
+    },
+};
 
 /// Error simulation modes for testing
 #[derive(Debug, Clone, PartialEq)]
@@ -40,78 +41,74 @@ pub enum ErrorMode {
 /// Mock RPC connection for testing
 pub struct MockConnection {
     /// Predefined responses for specific methods
-    responses: Arc<Mutex<HashMap<String, Value>>>,
+    responses: Arc<RwLock<HashMap<String, Value>>>,
     /// Error simulation mode
-    error_mode: Arc<Mutex<ErrorMode>>,
+    error_mode: Arc<RwLock<ErrorMode>>,
     /// Whether the connection is "connected"
-    connected: Arc<Mutex<bool>>,
+    connected: Arc<RwLock<bool>>,
     /// Call counter for FailAfterNCalls mode
     call_count: Arc<Mutex<usize>>,
     /// Optional delay to simulate network latency
-    latency_ms: Arc<Mutex<Option<u64>>>,
+    latency_ms: Arc<RwLock<Option<u64>>>,
 }
 
 impl MockConnection {
-    /// Create a new mock connection without default responses
+    /// Create a new mock connection
+    ///
+    /// The mock connection will have no faults configured
     pub fn new() -> Self {
-        Self {
-            responses: Arc::new(Mutex::new(HashMap::new())),
-            error_mode: Arc::new(Mutex::new(ErrorMode::None)),
-            connected: Arc::new(Mutex::new(true)),
-            call_count: Arc::new(Mutex::new(0)),
-            latency_ms: Arc::new(Mutex::new(None)),
-        }
+        Self::default()
     }
 
     /// Set a custom response for a specific method
-    pub fn set_response(&self, method: &str, response: Value) {
-        let mut responses = self.responses.lock().unwrap();
+    pub async fn set_response(&self, method: &str, response: Value) {
+        let mut responses = self.responses.write().await;
         responses.insert(method.to_string(), response);
     }
 
     /// Set the error simulation mode
-    pub fn set_error_mode(&self, mode: ErrorMode) {
-        let mut error_mode = self.error_mode.lock().unwrap();
+    pub async fn set_error_mode(&self, mode: ErrorMode) {
+        let mut error_mode = self.error_mode.write().await;
         *error_mode = mode;
 
         // Reset call count when changing error mode
-        let mut call_count = self.call_count.lock().unwrap();
+        let mut call_count = self.call_count.lock().await;
         *call_count = 0;
     }
 
     /// Set network latency simulation
-    pub fn set_latency_ms(&self, latency: u64) {
-        let mut latency_guard = self.latency_ms.lock().unwrap();
+    pub async fn set_latency_ms(&self, latency: u64) {
+        let mut latency_guard = self.latency_ms.write().await;
         *latency_guard = Some(latency);
     }
 
     /// Simulate disconnection
-    pub fn disconnect(&self) {
-        let mut connected = self.connected.lock().unwrap();
+    pub async fn disconnect(&self) {
+        let mut connected = self.connected.write().await;
         *connected = false;
     }
 
     /// Simulate reconnection
-    pub fn reconnect(&self) {
-        let mut connected = self.connected.lock().unwrap();
+    pub async fn reconnect(&self) {
+        let mut connected = self.connected.write().await;
         *connected = true;
     }
 
     /// Check if we should simulate an error based on current mode
     async fn check_error(&self) -> RpcResult<()> {
         let current_count = {
-            let mut call_count = self.call_count.lock().unwrap();
+            let mut call_count = self.call_count.lock().await;
             *call_count += 1;
             *call_count
         };
 
-        let error_mode = self.error_mode.lock().unwrap().clone();
+        let error_mode = self.error_mode.read().await.clone();
 
         match error_mode {
             ErrorMode::None => Ok(()),
             ErrorMode::Timeout => {
                 // Simulate timeout by sleeping then returning error
-                let latency = *self.latency_ms.lock().unwrap();
+                let latency = *self.latency_ms.read().await;
                 if let Some(latency_ms) = latency {
                     sleep(Duration::from_millis(latency_ms * TIMEOUT_MULTIPLIER)).await;
                 }
@@ -135,7 +132,13 @@ impl MockConnection {
 
 impl Default for MockConnection {
     fn default() -> Self {
-        Self::new()
+        Self {
+            responses: Arc::new(RwLock::new(HashMap::new())),
+            error_mode: Arc::new(RwLock::new(ErrorMode::None)),
+            connected: Arc::new(RwLock::new(true)),
+            call_count: Arc::new(Mutex::new(0)),
+            latency_ms: Arc::new(RwLock::new(None)),
+        }
     }
 }
 
@@ -148,14 +151,14 @@ impl RpcConnection for MockConnection {
     {
         // Check if connected
         {
-            let connected = self.connected.lock().unwrap();
+            let connected = self.connected.read().await;
             if !*connected {
                 return Err(RpcConnectionError::ConnectionClosed);
             }
         }
 
         // Simulate network latency if configured
-        let latency = *self.latency_ms.lock().unwrap();
+        let latency = *self.latency_ms.read().await;
         if let Some(latency_ms) = latency {
             sleep(Duration::from_millis(latency_ms)).await;
         }
@@ -165,7 +168,7 @@ impl RpcConnection for MockConnection {
 
         // Get response for method
         let response = {
-            let responses = self.responses.lock().unwrap();
+            let responses = self.responses.read().await;
             responses
                 .get(method)
                 .cloned()
@@ -179,74 +182,23 @@ impl RpcConnection for MockConnection {
     }
 
     async fn is_connected(&self) -> bool {
-        let connected = self.connected.lock().unwrap();
+        let connected = self.connected.read().await;
         *connected
     }
 
     async fn close(&self) -> RpcResult<()> {
-        self.disconnect();
+        self.disconnect().await;
         Ok(())
-    }
-}
-
-/// Builder for mock RPC connections
-pub struct MockConnectionBuilder {
-    connection: MockConnection,
-}
-
-impl MockConnectionBuilder {
-    /// Create a new mock connection builder
-    pub fn new() -> Self {
-        Self {
-            connection: MockConnection::new(),
-        }
-    }
-
-    /// Add a custom response for a method
-    pub fn with_response(self, method: &str, response: Value) -> Self {
-        self.connection.set_response(method, response);
-        self
-    }
-
-    /// Set the error simulation mode
-    pub fn with_error_mode(self, mode: ErrorMode) -> Self {
-        self.connection.set_error_mode(mode);
-        self
-    }
-
-    /// Set network latency simulation
-    pub fn with_latency_ms(self, latency: u64) -> Self {
-        self.connection.set_latency_ms(latency);
-        self
-    }
-
-    /// Start in disconnected state
-    pub fn disconnected(self) -> Self {
-        self.connection.disconnect();
-        self
-    }
-}
-
-impl Default for MockConnectionBuilder {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl MockConnectionBuilder {
-    /// Build the mock connection
-    pub fn build(self) -> MockConnection {
-        self.connection
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::test::{counter::*, network::*};
+    use crate::constants::test::network::*;
 
     #[tokio::test]
-    async fn test_mock_connection_basic() {
+    async fn test_connection_basic() {
         let conn = MockConnection::new();
 
         // Set up test response
@@ -257,7 +209,8 @@ mod tests {
                 "isSyncing": false,
                 "shouldHavePeers": true
             }),
-        );
+        )
+        .await;
 
         // Test system health call
         let health: Value = conn.call("system_health", ()).await.unwrap();
@@ -273,32 +226,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mock_connection_custom_response() {
+    async fn test_connection_custom_response() {
         let conn = MockConnection::new();
-        conn.set_response("custom_method", serde_json::json!({"result": "custom"}));
+        conn.set_response("custom_method", serde_json::json!({"result": "custom"}))
+            .await;
 
         let response: Value = conn.call("custom_method", ()).await.unwrap();
         assert_eq!(response["result"], "custom");
     }
 
     #[tokio::test]
-    async fn test_mock_connection_error_modes() {
+    async fn test_connection_error_modes() {
         // Test timeout error
         let conn = MockConnection::new();
-        conn.set_error_mode(ErrorMode::Timeout);
+        conn.set_error_mode(ErrorMode::Timeout).await;
         let result: Result<Value, _> = conn.call("any_method", ()).await;
         assert!(matches!(result, Err(RpcConnectionError::Timeout)));
 
         // Test connection closed error
         let conn = MockConnection::new();
-        conn.set_error_mode(ErrorMode::ConnectionClosed);
+        conn.set_error_mode(ErrorMode::ConnectionClosed).await;
         let result: Result<Value, _> = conn.call("any_method", ()).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
 
         // Test fail after N calls
         let conn = MockConnection::new();
-        conn.set_response("system_health", serde_json::json!({"status": "ok"}));
-        conn.set_error_mode(ErrorMode::FailAfterNCalls(2));
+        conn.set_response("system_health", serde_json::json!({"status": "ok"}))
+            .await;
+        conn.set_error_mode(ErrorMode::FailAfterNCalls(2)).await;
 
         // First two calls should succeed
         let _: Value = conn.call("system_health", ()).await.unwrap();
@@ -310,26 +265,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_mock_connection_builder() {
-        let conn = MockConnectionBuilder::new()
-            .with_response("test", serde_json::json!(TEST_RESPONSE_VALUE))
-            .with_latency_ms(10)
-            .with_error_mode(ErrorMode::None)
-            .build();
-
-        let response: i32 = conn.call("test", ()).await.unwrap();
-        assert_eq!(response, TEST_RESPONSE_VALUE);
-    }
-
-    #[tokio::test]
-    async fn test_mock_connection_disconnect_reconnect() {
+    async fn test_connection_disconnect_reconnect() {
         let conn = MockConnection::new();
 
         // Initially connected
         assert!(conn.is_connected().await);
 
         // Disconnect
-        conn.disconnect();
+        conn.disconnect().await;
         assert!(!conn.is_connected().await);
 
         // Try to call - should fail
@@ -337,11 +280,12 @@ mod tests {
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
 
         // Reconnect
-        conn.reconnect();
+        conn.reconnect().await;
         assert!(conn.is_connected().await);
 
         // Call should work now
-        conn.set_response("system_health", serde_json::json!({"status": "ok"}));
+        conn.set_response("system_health", serde_json::json!({"status": "ok"}))
+            .await;
         let _: Value = conn.call("system_health", ()).await.unwrap();
     }
 }
