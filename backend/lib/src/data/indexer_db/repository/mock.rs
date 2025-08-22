@@ -82,11 +82,11 @@ impl IndexerOpsMut for MockRepository {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::constants::test::{accounts::*, bsp::*, merkle::*};
 
-    async fn inject_sample_bsp(repo: &MockRepository) -> i64 {
+    pub async fn inject_sample_bsp(repo: &MockRepository) -> i64 {
         let id = repo.next_id();
         let now = Utc::now().naive_utc();
 
