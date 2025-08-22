@@ -6,6 +6,7 @@ import {
   Transaction,
   type TransactionRequest,
   Wallet as EthersWallet,
+  type HDNodeWallet,
 } from 'ethers';
 
 /**
@@ -17,7 +18,7 @@ import {
  */
 export class LocalWallet extends WalletBase {
   private constructor(
-    private readonly wallet: EthersWallet,
+    private readonly wallet: EthersWallet | HDNodeWallet,
     private readonly provider?: Provider,
   ) {
     super();
@@ -51,7 +52,8 @@ export class LocalWallet extends WalletBase {
   public static fromMnemonic(mnemonic: string, provider?: Provider): LocalWallet {
     try {
       const wallet = EthersWallet.fromPhrase(mnemonic);
-      return new LocalWallet(new EthersWallet(wallet.privateKey, provider), provider);
+      const connected = provider ? wallet.connect(provider) : wallet;
+      return new LocalWallet(connected, provider);
     } catch {
       throw new WalletError('InvalidMnemonic');
     }
@@ -64,7 +66,8 @@ export class LocalWallet extends WalletBase {
    */
   public static createRandom(provider?: Provider): LocalWallet {
     const wallet = EthersWallet.createRandom();
-    return new LocalWallet(new EthersWallet(wallet.privateKey, provider), provider);
+    const connected = provider ? wallet.connect(provider) : wallet;
+    return new LocalWallet(connected, provider);
   }
 
   /** @inheritdoc */
