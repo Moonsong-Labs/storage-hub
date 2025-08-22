@@ -15,19 +15,19 @@ publish = false
 workspace = true
 
 [dependencies]
-tokio = { workspace = true }
-log = { workspace = true }
-futures = { workspace = true }
-serde_json = { workspace = true }
-serde = { workspace = true, default-features = true }
+bigdecimal = { workspace = true }
 chrono = { workspace = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+log = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true, default-features = true }
 thiserror = { workspace = true }
-bigdecimal = { workspace = true }
+tokio = { workspace = true }
 
 sc-network = { workspace = true }
 
 shc-common = { workspace = true }
 sp-core = { workspace = true }
-hex = { workspace = true }

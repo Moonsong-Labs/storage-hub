@@ -256,7 +256,6 @@ impl BspFile {
         Ok(bsp_ids)
     }
 
-    /// Get all file keys stored by a specific BSP
     pub async fn get_all_file_keys_for_bsp<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bsp_id: OnchainBspId,

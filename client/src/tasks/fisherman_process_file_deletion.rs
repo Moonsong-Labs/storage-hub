@@ -29,7 +29,6 @@ struct FileDeletionData<Runtime: StorageEnableRuntime> {
     file_metadata: shc_common::types::FileMetadata,
     bsp_ids: Vec<shc_indexer_db::OnchainBspId>,
     bucket_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
-    file_account: Vec<u8>,
 }
 
 /// Fetch common file deletion data from indexer database
@@ -86,7 +85,6 @@ where
         file_metadata,
         bsp_ids,
         bucket_target,
-        file_account: file.account,
     })
 }
 
@@ -207,7 +205,6 @@ where
 
         let event_ref = &event;
         let file_metadata_ref = &deletion_data.file_metadata;
-        let file_account_ref = &deletion_data.file_account;
 
         // Clone self before moving into async blocks
         let self_clone = self.clone();
@@ -220,7 +217,6 @@ where
                     signature,
                     deletion_data.bucket_target,
                     file_metadata_ref,
-                    file_account_ref,
                 )
                 .await
         }));
@@ -241,7 +237,6 @@ where
                         signature,
                         bsp_target,
                         file_metadata_ref,
-                        file_account_ref,
                     )
                     .await
             }));
@@ -282,7 +277,6 @@ where
         let mut deletion_futures: Vec<BoxFuture<'_, anyhow::Result<()>>> = Vec::new();
 
         let file_metadata_ref = &deletion_data.file_metadata;
-        let file_account_ref = &deletion_data.file_account;
 
         // Clone self before moving into async blocks
         let self_clone = self.clone();
@@ -293,7 +287,6 @@ where
                     file_key,
                     deletion_data.bucket_target,
                     file_metadata_ref,
-                    file_account_ref,
                 )
                 .await
         }));
@@ -308,12 +301,7 @@ where
 
             deletion_futures.push(Box::pin(async move {
                 self_clone
-                    .process_deletion_for_target_incomplete(
-                        file_key,
-                        bsp_target,
-                        file_metadata_ref,
-                        file_account_ref,
-                    )
+                    .process_deletion_for_target_incomplete(file_key, bsp_target, file_metadata_ref)
                     .await
             }));
         }
@@ -341,7 +329,6 @@ where
         file_key: &shp_types::Hash,
         deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
         file_metadata: &shc_common::types::FileMetadata,
-        file_account: &[u8],
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET_INCOMPLETE,
@@ -358,7 +345,6 @@ where
                 file_key,
                 deletion_target,
                 file_metadata,
-                file_account,
             )
             .await?;
 
@@ -388,7 +374,6 @@ where
         signature: &OffchainSignature<Runtime>,
         deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
         file_metadata: &shc_common::types::FileMetadata,
-        file_account: &[u8],
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -405,7 +390,6 @@ where
                 file_key,
                 deletion_target,
                 file_metadata,
-                file_account,
             )
             .await?;
 
@@ -472,7 +456,6 @@ async fn process_deletion_common<NT, Runtime>(
     file_key: &shp_types::Hash,
     deletion_target: shc_fisherman_service::events::FileDeletionTarget<Runtime>,
     file_metadata: &shc_common::types::FileMetadata,
-    file_account: &[u8],
 ) -> anyhow::Result<(
     <Runtime as frame_system::Config>::AccountId,
     H256,
@@ -669,15 +652,17 @@ where
         forest_proof_result
     };
 
-    // Validate and convert file owner account
-    if file_account.len() != 32 {
+    // Validate and convert file owner account from metadata
+    let owner_account = file_metadata.owner();
+    if owner_account.len() != 32 {
         return Err(anyhow!(
             "Invalid file owner account ID length: expected 32 bytes, got {}",
-            file_account.len()
+            owner_account.len()
         ));
     }
-    let file_owner = <Runtime as frame_system::Config>::AccountId::try_from(file_account)
-        .map_err(|_| anyhow!("Failed to convert file account to AccountId"))?;
+    let file_owner =
+        <Runtime as frame_system::Config>::AccountId::try_from(owner_account.as_slice())
+            .map_err(|_| anyhow!("Failed to convert file account to AccountId"))?;
 
     // Log all parameters
     info!(

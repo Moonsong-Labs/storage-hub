@@ -30,6 +30,7 @@ pub enum FileDeletionStatus {
 pub struct File {
     /// The ID of the file as stored in the database. For the runtime id, use `onchain_bsp_id`.
     pub id: i64,
+    /// Owner of the file.
     pub account: Vec<u8>,
     pub file_key: Vec<u8>,
     pub bucket_id: i64,
@@ -339,7 +340,6 @@ impl File {
         Ok(files)
     }
 
-    /// Get all file keys in a specific bucket
     pub async fn get_all_file_keys_for_bucket<'a>(
         conn: &mut DbConnection<'a>,
         onchain_bucket_id: &[u8],
