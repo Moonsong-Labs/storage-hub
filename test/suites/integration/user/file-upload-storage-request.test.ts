@@ -1,5 +1,7 @@
 import { strictEqual } from "node:assert";
-import { describeBspNet, shUser, type EnrichedBspApi } from "../../../util";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, describeBspNet, shUser } from "../../../util";
 
 describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) => {
   let userApi: EnrichedBspApi;
@@ -53,12 +55,13 @@ describeBspNet("User: Issue Storage Requests", ({ before, createUserApi, it }) =
       throw new Error("Event doesn't match Type");
     }
 
+    const ownerHex1 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     const {
       file_metadata: { location, fingerprint, file_size }
     } = await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex1,
       newBucketEventDataBlob.bucketId
     );
 

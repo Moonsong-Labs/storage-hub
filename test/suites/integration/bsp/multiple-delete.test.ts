@@ -1,5 +1,7 @@
 import assert, { strictEqual } from "node:assert";
-import { bspKey, describeBspNet, shUser, waitFor, type EnrichedBspApi } from "../../../util";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, bspKey, describeBspNet, shUser, waitFor } from "../../../util";
 
 describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUserApi }) => {
   let userApi: EnrichedBspApi;
@@ -45,13 +47,14 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
     const files = [];
     const txs = [];
+    const ownerHex = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     for (let i = 0; i < source.length; i++) {
       const {
         file_metadata: { location, fingerprint, file_size }
       } = await userApi.rpc.storagehubclient.loadFileInStorage(
         source[i],
         destination[i],
-        userApi.shConsts.NODE_INFOS.user.AddressId,
+        ownerHex,
         newBucketEventDataBlob.bucketId
       );
 
@@ -193,13 +196,16 @@ describeBspNet("Single BSP Volunteering", ({ before, createBspApi, it, createUse
 
       const files = [];
       const txs = [];
+      const ownerHex3 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(
+        2
+      );
       for (let i = 0; i < source.length; i++) {
         const {
           file_metadata: { location, fingerprint, file_size }
         } = await userApi.rpc.storagehubclient.loadFileInStorage(
           source[i],
           destination[i],
-          userApi.shConsts.NODE_INFOS.user.AddressId,
+          ownerHex3,
           newBucketEventDataBlob.bucketId
         );
 
