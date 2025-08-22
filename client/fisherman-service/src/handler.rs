@@ -38,9 +38,9 @@ pub struct FishermanService<Runtime: StorageEnableRuntime> {
     /// Substrate client for blockchain interaction
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// Last processed block number to avoid reprocessing
-    last_processed_block: Option<BlockNumber>,
+    last_processed_block: Option<BlockNumber<Runtime>>,
     /// Event bus provider for emitting fisherman events
-    event_bus_provider: FishermanServiceEventBusProvider,
+    event_bus_provider: FishermanServiceEventBusProvider<Runtime>,
 }
 
 impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
@@ -49,14 +49,14 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
         Self {
             client,
             last_processed_block: None,
-            event_bus_provider: FishermanServiceEventBusProvider::new(),
+            event_bus_provider: FishermanServiceEventBusProvider::<Runtime>::new(),
         }
     }
 
     /// Monitor new blocks for file deletion request events
     async fn monitor_block(
         &mut self,
-        block_number: BlockNumber,
+        block_number: BlockNumber<Runtime>,
         block_hash: H256,
     ) -> Result<(), FishermanServiceError> {
         debug!(target: LOG_TARGET, "🎣 Monitoring block #{}: {}", block_number, block_hash);
@@ -72,7 +72,7 @@ impl<Runtime: StorageEnableRuntime> FishermanService<Runtime> {
 impl<Runtime: StorageEnableRuntime> Actor for FishermanService<Runtime> {
     type Message = FishermanServiceCommand;
     type EventLoop = FishermanServiceEventLoop<Runtime>;
-    type EventBusProvider = FishermanServiceEventBusProvider;
+    type EventBusProvider = FishermanServiceEventBusProvider<Runtime>;
 
     fn handle_message(
         &mut self,
@@ -146,7 +146,11 @@ impl<Runtime: StorageEnableRuntime> ActorEventLoop<FishermanService<Runtime>>
 
                             // TODO: Only monitor block if it is the new best block
 
-                            if let Err(e) = self.service.monitor_block(block_number, block_hash).await {
+                            if let Err(e) = self
+                                .service
+                                .monitor_block(block_number.into(), block_hash)
+                                .await
+                            {
                                 error!(target: LOG_TARGET, "Failed to monitor block: {:?}", e);
                             }
                         }

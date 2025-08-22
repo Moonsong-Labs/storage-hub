@@ -13,31 +13,26 @@ mod weights;
 
 extern crate alloc;
 
-use smallvec::smallvec;
-use sp_runtime::{
-    generic, impl_opaque_keys,
-    traits::{BlakeTwo256, IdentifyAccount, Verify},
-    MultiSignature,
-};
-
-use sp_std::prelude::*;
-use sp_version::RuntimeVersion;
-
 use frame_support::weights::{
     constants::WEIGHT_REF_TIME_PER_SECOND, Weight, WeightToFeeCoefficient, WeightToFeeCoefficients,
     WeightToFeePolynomial,
 };
 pub use parachains_common::BlockNumber;
+use smallvec::smallvec;
 pub use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-pub use sp_runtime::{MultiAddress, Perbill, Permill, Perquintill};
-use sp_std::prelude::Vec;
+use sp_runtime::{
+    generic, impl_opaque_keys,
+    traits::{BlakeTwo256, IdentifyAccount, Verify},
+    MultiAddress, MultiSignature, Perbill,
+};
+use sp_std::prelude::{Vec, *};
+use sp_version::RuntimeVersion;
+use weights::ExtrinsicBaseWeight;
+
+pub use crate::configs::xcm_config;
 
 #[cfg(any(feature = "std", test))]
 pub use sp_runtime::BuildStorage;
-
-use weights::ExtrinsicBaseWeight;
-
-pub use crate::configs::{xcm_config, StorageDataUnit, StorageProofsMerkleTrieLayout};
 
 /// Alias to 512-bit hash when used in the context of a transaction signature on the chain.
 pub type Signature = MultiSignature;
@@ -51,12 +46,6 @@ pub type Balance = u128;
 
 /// Index of a transaction in the chain.
 pub type Nonce = u32;
-
-/// A hash of some data used by the chain.
-pub type Hash = sp_core::H256;
-
-/// The hashing algorithm used.
-pub type Hashing = BlakeTwo256;
 
 /// The address format for describing accounts.
 pub type Address = MultiAddress<AccountId, ()>;
@@ -125,28 +114,6 @@ impl WeightToFeePolynomial for WeightToFee {
             coeff_integer: p / q,
         }]
     }
-}
-
-/// Opaque types. These are used by the CLI to instantiate machinery that don't need to know
-/// the specifics of the runtime. They can then be made to be agnostic over specific formats
-/// of data like extrinsics, allowing for them to continue syncing the network through upgrades
-/// to even the core data structures.
-pub mod opaque {
-    use super::*;
-    use sp_runtime::{
-        generic,
-        traits::{BlakeTwo256, Hash as HashT},
-    };
-
-    pub use sp_runtime::OpaqueExtrinsic as UncheckedExtrinsic;
-    /// Opaque block header type.
-    pub type Header = generic::Header<BlockNumber, BlakeTwo256>;
-    /// Opaque block type.
-    pub type Block = generic::Block<Header, UncheckedExtrinsic>;
-    /// Opaque block identifier type.
-    pub type BlockId = generic::BlockId<Block>;
-    /// Opaque block hash type.
-    pub type Hash = <BlakeTwo256 as HashT>::Output;
 }
 
 impl_opaque_keys! {

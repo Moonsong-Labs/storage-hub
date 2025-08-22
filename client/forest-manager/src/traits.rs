@@ -1,15 +1,17 @@
 use std::{fmt::Debug, sync::Arc};
 
 use async_trait::async_trait;
-use shc_common::types::{FileMetadata, ForestProof, HasherOutT, StorageProofsMerkleTrieLayout};
-use sp_runtime::AccountId32;
+use shc_common::{
+    traits::StorageEnableRuntime,
+    types::{FileMetadata, ForestProof, HasherOutT, StorageProofsMerkleTrieLayout},
+};
 use tokio::sync::RwLock;
 use trie_db::TrieLayout;
 
 use crate::error::ErrorT;
 
 /// Forest storage interface to be implemented by the storage providers.
-pub trait ForestStorage<T: TrieLayout>: 'static {
+pub trait ForestStorage<T: TrieLayout, Runtime: StorageEnableRuntime>: 'static {
     /// Get the root hash of the forest.
     fn root(&self) -> HasherOutT<T>;
     /// Check if the file key exists in the storage.
@@ -36,7 +38,7 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
     /// Get all the files that belong to a particular user.
     fn get_files_by_user(
         &self,
-        user: &AccountId32,
+        user: &Runtime::AccountId,
     ) -> Result<Vec<(HasherOutT<T>, FileMetadata)>, ErrorT<T>>;
 }
 
@@ -44,11 +46,11 @@ pub trait ForestStorage<T: TrieLayout>: 'static {
 ///
 /// The key is optional in all methods, allowing for a single ForestStorage instance to be managed without a key.
 #[async_trait]
-pub trait ForestStorageHandler {
+pub trait ForestStorageHandler<Runtime: StorageEnableRuntime> {
     /// The key type used to identify forest storage instances.
     type Key: From<Vec<u8>> + Debug + Send + Sync;
     /// Type representing the forest storage instance.
-    type FS: ForestStorage<StorageProofsMerkleTrieLayout> + Send + Sync;
+    type FS: ForestStorage<StorageProofsMerkleTrieLayout, Runtime> + Send + Sync;
 
     /// Get forest storage instance.
     async fn get(&self, key: &Self::Key) -> Option<Arc<RwLock<Self::FS>>>;

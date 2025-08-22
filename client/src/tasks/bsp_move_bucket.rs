@@ -37,8 +37,8 @@ impl Default for BspMoveBucketConfig {
 /// and [`MoveBucketExpired`] events from the BSP point of view.
 pub struct BspMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -48,8 +48,8 @@ where
 
 impl<NT, Runtime> Clone for BspMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspMoveBucketTask<NT, Runtime> {
@@ -62,8 +62,8 @@ where
 
 impl<NT, Runtime> BspMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -78,13 +78,13 @@ where
 ///
 /// This event is triggered when an user requests to move a bucket to a new MSP.
 /// As a BSP, we need to allow the new MSP to download the files we have from the bucket.
-impl<NT, Runtime> EventHandler<MoveBucketRequested> for BspMoveBucketTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketRequested<Runtime>> for BspMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketRequested) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketRequested<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MoveBucketRequested: BSP will accept download requests for files in bucket {:?} from MSP {:?}",
@@ -129,13 +129,13 @@ where
 /// This does not mean that the move bucket request is complete, but that the new MSP has committed.
 /// For this to be complete, we need to wait for the new MSP to download all the files from the
 /// bucket.
-impl<NT, Runtime> EventHandler<MoveBucketAccepted> for BspMoveBucketTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketAccepted<Runtime>> for BspMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketAccepted) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketAccepted<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MoveBucketAccepted: New MSP {:?} accepted move bucket request for bucket {:?} from old MSP {:?}. Will keep accepting download requests for a window of time.",
@@ -161,13 +161,13 @@ where
 ///
 /// This event is triggered when the new MSP rejects the move bucket request.
 /// In this case, we need to stop accepting download requests for the bucket.
-impl<NT, Runtime> EventHandler<MoveBucketRejected> for BspMoveBucketTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketRejected<Runtime>> for BspMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketRejected) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketRejected<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MoveBucketRejected: BSP will no longer accept download requests for files in bucket {:?} from MSP {:?}",
@@ -189,13 +189,13 @@ where
 ///
 /// This event is triggered when the move bucket request expires.
 /// In this case, we need to stop accepting download requests for the bucket.
-impl<NT, Runtime> EventHandler<MoveBucketExpired> for BspMoveBucketTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<MoveBucketExpired<Runtime>> for BspMoveBucketTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MoveBucketExpired) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: MoveBucketExpired<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "MoveBucketExpired: BSP will no longer accept download requests for files in bucket {:?}",

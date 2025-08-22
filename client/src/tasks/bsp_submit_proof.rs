@@ -5,6 +5,7 @@ use sc_tracing::tracing::*;
 use shc_file_manager::traits::FileStorage;
 use shp_file_metadata::ChunkId;
 use sp_core::H256;
+use sp_runtime::traits::{SaturatedConversion, Saturating};
 
 use shc_actors_framework::{actor::ActorHandle, event_bus::EventHandler};
 use shc_blockchain_service::{
@@ -15,9 +16,9 @@ use shc_blockchain_service::{
     types::{RetryStrategy, SendExtrinsicOptions, SubmitProofRequest, WatchTransactionError},
     BlockchainService,
 };
-use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
+    traits::StorageEnableRuntime,
     types::{
         BlockNumber, CustomChallenge, FileKey, ForestRoot, KeyProof, KeyProofs,
         ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
@@ -74,8 +75,8 @@ impl Default for BspSubmitProofConfig {
 ///   - Ensures that no residual file keys remain in the File Storage when they should have been deleted.
 pub struct BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
@@ -85,8 +86,8 @@ where
 
 impl<NT, Runtime> Clone for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspSubmitProofTask<NT, Runtime> {
@@ -99,8 +100,8 @@ where
 
 impl<NT, Runtime> BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -119,13 +120,17 @@ where
 /// - Derives forest challenges from the seed.
 /// - Checks for checkpoint challenges and adds them to the forest challenges.
 /// - Queues the challenges for submission to the runtime, for when the Forest write lock is released.
-impl<NT, Runtime> EventHandler<MultipleNewChallengeSeeds> for BspSubmitProofTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<MultipleNewChallengeSeeds<Runtime>>
+    for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: MultipleNewChallengeSeeds) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: MultipleNewChallengeSeeds<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP multiple proof submissions for BSP ID: {:?}, with seeds: {:?}",
@@ -156,13 +161,17 @@ where
 ///   - Retries up to [`MAX_PROOF_SUBMISSION_ATTEMPTS`] times if the submission fails.
 /// - Applies any necessary mutations to the Forest Storage (not the File Storage).
 /// - Ensures the new Forest root matches the one on-chain.
-impl<NT, Runtime> EventHandler<ProcessSubmitProofRequest> for BspSubmitProofTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<ProcessSubmitProofRequest<Runtime>>
+    for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessSubmitProofRequest) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: ProcessSubmitProofRequest<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing SubmitProofRequest {:?}",
@@ -262,12 +271,11 @@ where
 
         // Submit proof to the runtime.
         // Provider is `None` since we're submitting with the account linked to the BSP.
-        let call = storage_hub_runtime::RuntimeCall::ProofsDealer(
-            pallet_proofs_dealer::Call::submit_proof {
-                proof,
-                provider: None,
-            },
-        );
+        let call: Runtime::Call = pallet_proofs_dealer::Call::<Runtime>::submit_proof {
+            proof,
+            provider: None,
+        }
+        .into();
 
         // We consider that the maximum tip we're willing to pay for the submission of the proof is
         // equal to the amount that this BSP would be slashed for, if the proof cannot be submitted.
@@ -276,12 +284,12 @@ where
             .blockchain
             .query_slash_amount_per_max_file_size()
             .await?
-            .saturating_mul(event.data.forest_challenges.len() as u128)
+            .saturating_mul(event.data.forest_challenges.len().saturated_into())
             .saturating_mul(2u32.into());
 
         // Get necessary data for the retry check.
         let cloned_sh_handler = Arc::new(self.storage_hub_handler.clone());
-        let cloned_event = Arc::new(event.clone());
+        let cloned_event: Arc<ProcessSubmitProofRequest<Runtime>> = Arc::new(event.clone());
         let cloned_forest_root = {
             let fs = self
                 .storage_hub_handler
@@ -324,7 +332,7 @@ where
                 )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_submission_attempts)
-                    .with_max_tip(max_tip as f64)
+                    .with_max_tip(max_tip.saturated_into())
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )
@@ -357,16 +365,16 @@ where
 ///   - If the key is still present, it logs a warning,
 ///     since this could indicate that the key has been re-added after being deleted.
 ///   - If the key is not present in the Forest Storage, it safely removes the key from the File Storage.
-impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied>
+impl<NT, Runtime> EventHandler<FinalisedTrieRemoveMutationsApplied<Runtime>>
     for BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_event(
         &mut self,
-        event: FinalisedTrieRemoveMutationsApplied,
+        event: FinalisedTrieRemoveMutationsApplied<Runtime>,
     ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
@@ -406,15 +414,15 @@ where
 
 impl<NT, Runtime> BspSubmitProofTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn queue_submit_proof_request(
         &self,
-        provider_id: ProofsDealerProviderId,
-        tick: BlockNumber,
-        seed: RandomnessOutput,
+        provider_id: ProofsDealerProviderId<Runtime>,
+        tick: BlockNumber<Runtime>,
+        seed: RandomnessOutput<Runtime>,
     ) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Queueing submit proof request for provider [{:?}] with tick [{:?}] and seed [{:?}]", provider_id, tick, seed);
 
@@ -447,8 +455,8 @@ where
 
     async fn derive_forest_challenges_from_seed(
         &self,
-        seed: RandomnessOutput,
-        provider_id: ProofsDealerProviderId,
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
     ) -> anyhow::Result<Vec<H256>> {
         Ok(self
             .storage_hub_handler
@@ -459,9 +467,9 @@ where
 
     async fn add_checkpoint_challenges_to_forest_challenges(
         &self,
-        provider_id: ProofsDealerProviderId,
+        provider_id: ProofsDealerProviderId<Runtime>,
         forest_challenges: &mut Vec<H256>,
-    ) -> anyhow::Result<Vec<CustomChallenge>> {
+    ) -> anyhow::Result<Vec<CustomChallenge<Runtime>>> {
         let last_tick_provider_submitted_proof_for = self
             .storage_hub_handler
             .blockchain
@@ -516,7 +524,7 @@ where
 
     async fn check_if_proof_is_outdated(
         blockchain: &ActorHandle<BlockchainService<NT::FSH, Runtime>>,
-        event: &ProcessSubmitProofRequest,
+        event: &ProcessSubmitProofRequest<Runtime>,
     ) -> anyhow::Result<()> {
         // Get the next challenge tick for this provider.
         let next_challenge_tick = blockchain
@@ -538,9 +546,9 @@ where
     async fn generate_key_proof(
         &self,
         file_key: H256,
-        seed: RandomnessOutput,
-        provider_id: ProofsDealerProviderId,
-    ) -> anyhow::Result<KeyProof> {
+        seed: RandomnessOutput<Runtime>,
+        provider_id: ProofsDealerProviderId<Runtime>,
+    ) -> anyhow::Result<KeyProof<Runtime>> {
         // Get the metadata for the file.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let metadata = read_file_storage
@@ -609,8 +617,8 @@ where
     ///    which the proof was generated is still the tick this Provider should submit a proof for.
     async fn should_retry_submit_proof(
         sh_handler: Arc<StorageHubHandler<NT, Runtime>>,
-        event: Arc<ProcessSubmitProofRequest>,
-        forest_root: Arc<ForestRoot>,
+        event: Arc<ProcessSubmitProofRequest<Runtime>>,
+        forest_root: Arc<ForestRoot<Runtime>>,
         error: WatchTransactionError,
     ) -> bool {
         // We only retry sending THE SAME proof, if the error is a timeout.

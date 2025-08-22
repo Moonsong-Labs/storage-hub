@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use parachains_common::BlockNumber;
 use sp_runtime::{
     generic,
