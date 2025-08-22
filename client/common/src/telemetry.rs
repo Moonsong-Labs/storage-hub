@@ -9,6 +9,9 @@
 //! - Graceful shutdown with event flushing
 //! - Backpressure handling with configurable drop strategies
 //! - Health monitoring and metrics
+//! - Strongly-typed, queryable event fields (no JSON blobs)
+
+pub mod events;
 
 use async_trait::async_trait;
 use axiom_rs::Client as AxiomClient;
@@ -127,19 +130,6 @@ pub trait TelemetryEvent: Serialize + Send + Sync {
     }
 }
 
-/// General telemetry event for any custom data
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GeneralTelemetryEvent {
-    #[serde(flatten)]
-    pub base: BaseTelemetryEvent,
-    pub data: serde_json::Value,
-}
-
-impl TelemetryEvent for GeneralTelemetryEvent {
-    fn event_type(&self) -> &str {
-        &self.base.event_type
-    }
-}
 
 /// Telemetry backend trait for extensibility
 #[async_trait]

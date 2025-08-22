@@ -1,8 +1,10 @@
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
+    sync::Arc,
     time::Duration,
 };
+use tokio::sync::Mutex;
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -22,6 +24,14 @@ use shc_blockchain_service::{
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
+    task_context::{calculate_transfer_rate_mbps, classify_error, TaskContext},
+    telemetry::{
+        events::{
+            BspUploadChunkReceivedEvent, BspUploadCompletedEvent, BspUploadFailedEvent,
+            BspUploadStartedEvent,
+        },
+        TelemetryService,
+    },
     types::{
         FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
@@ -137,7 +147,55 @@ where
             event.fingerprint
         );
 
-        let result = self.handle_new_storage_request_event(event).await;
+        // Create task context for tracking
+        let ctx = TaskContext::new("bsp_upload_file");
+        
+        // Send task started telemetry event
+        if let Some(telemetry) = &self.storage_hub_handler.telemetry {
+            if let Ok(telemetry_service) = telemetry.try_lock() {
+                let start_event = BspUploadStartedEvent {
+                    base: telemetry_service.create_base_event("bsp_upload_started"),
+                    task_id: ctx.task_id.clone(),
+                    task_name: ctx.task_name.clone(),
+                    file_key: format!("{:?}", event.file_key),
+                    file_size_bytes: event.size as u64,
+                    location: hex::encode(event.location.as_slice()),
+                    fingerprint: format!("{:?}", event.fingerprint),
+                    peer_id: event.peer.to_string(),
+                };
+                telemetry_service.send_event(start_event);
+            }
+        }
+
+        let result = self.handle_new_storage_request_event(event.clone()).await;
+        
+        // Send completion or failure telemetry
+        if let Some(telemetry) = &self.storage_hub_handler.telemetry {
+            if let Ok(telemetry_service) = telemetry.try_lock() {
+                match &result {
+                    Ok(_) => {
+                        // Success event will be sent when file upload completes
+                        // This is just volunteering, not actual completion
+                    }
+                    Err(e) => {
+                        let failed_event = BspUploadFailedEvent {
+                            base: telemetry_service.create_base_event("bsp_upload_failed"),
+                            task_id: ctx.task_id.clone(),
+                            task_name: ctx.task_name.clone(),
+                            file_key: format!("{:?}", event.file_key),
+                            duration_ms: ctx.elapsed_ms(),
+                            error_type: classify_error(e),
+                            error_message: e.to_string(),
+                            retry_count: 0,
+                            chunks_received: 0,
+                            total_chunks: 0,
+                        };
+                        telemetry_service.send_event(failed_event);
+                    }
+                }
+            }
+        }
+        
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
                 self.unvolunteer_file(*file_key).await;

@@ -641,29 +641,128 @@ mod tests {
 
 ## Migration Checklist
 
-### Phase 1: Foundation (Week 1)
-- [ ] Create event type definitions for all tasks
-- [ ] Add telemetry field to StorageHubHandler
-- [ ] Update builder pattern to inject telemetry
-- [ ] Create TaskContext helper
+### Phase 1: Foundation (Week 1) ✅ COMPLETED
+- [x] Create event type definitions for all tasks
+  - ✅ Created `client/common/src/telemetry/events/` directory structure
+  - ✅ Implemented `bsp_events.rs` with all BSP operations (upload, download, proof, fees)
+  - ✅ Implemented `msp_events.rs` with all MSP operations (storage, fees, capacity)
+  - ✅ Implemented `user_events.rs` with user operations
+  - ✅ Implemented `fisherman_events.rs` with verification events
+  - ✅ Implemented `indexer_events.rs` with enhanced typed fields
+  - ✅ **KEY ACHIEVEMENT**: Eliminated ALL JSON blobs - every field is queryable!
+- [x] Add telemetry field to StorageHubHandler
+  - ✅ Added `telemetry: Option<Arc<Mutex<TelemetryService>>>` to StorageHubHandler
+  - ✅ Updated all clone implementations
+- [x] Update builder pattern to inject telemetry
+  - ✅ Added `with_telemetry()` method to StorageHubBuilder
+  - ✅ Updated all `build()` implementations to pass telemetry
+- [x] Create TaskContext helper
+  - ✅ Created `client/common/src/task_context.rs`
+  - ✅ Includes task_id generation, elapsed time tracking
+  - ✅ Added helper functions: `classify_error()`, `calculate_transfer_rate_mbps()`
 
-### Phase 2: Critical Path (Week 2)
-- [ ] Instrument BSP upload flow
+### Phase 2: Critical Path (Week 2) 🚧 IN PROGRESS
+- [🚧] Instrument BSP upload flow
+  - ✅ Added imports and telemetry to `NewStorageRequest` handler
+  - ⚠️ **NEXT STEP**: Complete `RemoteUploadRequest` handler with chunk events
+  - ⚠️ **NEXT STEP**: Complete `ProcessConfirmStoringRequest` handler
 - [ ] Instrument MSP upload flow
 - [ ] Instrument proof generation
 - [ ] Add chunk-level progress tracking
 
 ### Phase 3: Complete Coverage (Week 3)
 - [ ] Instrument remaining BSP tasks
+  - [ ] `bsp_download_file.rs`
+  - [ ] `bsp_submit_proof.rs`
+  - [ ] `bsp_charge_fees.rs`
+  - [ ] `bsp_move_bucket.rs`
+  - [ ] `bsp_delete_file.rs`
 - [ ] Instrument remaining MSP tasks
+  - [ ] `msp_upload_file.rs`
+  - [ ] `msp_charge_fees.rs`
+  - [ ] `msp_move_bucket.rs`
+  - [ ] `msp_delete_bucket.rs`
+  - [ ] `msp_stop_storing_insolvent_user.rs`
 - [ ] Instrument user and fisherman tasks
+  - [ ] `user_sends_file.rs`
+  - [ ] `fisherman_process_file_deletion.rs`
 - [ ] Add indexer telemetry
+  - [ ] Update indexer handlers to use new typed events
 
 ### Phase 4: Operations (Week 4)
 - [ ] Configure Axiom dashboards
 - [ ] Set up alerts
 - [ ] Create runbooks
 - [ ] Performance testing
+
+## Implementation Status for Next Agent
+
+### ✅ What's Been Completed
+
+1. **Infrastructure Setup**
+   - All typed event definitions created (NO JSON BLOBS!)
+   - TaskContext helper with timing and error classification
+   - StorageHubHandler and builder updated with telemetry injection
+   - Removed `GeneralTelemetryEvent` with JSON blob
+
+2. **Event Modules Created**
+   - `client/common/src/telemetry/events/mod.rs` - Main module file
+   - `client/common/src/telemetry/events/bsp_events.rs` - 11 event types
+   - `client/common/src/telemetry/events/msp_events.rs` - 9 event types
+   - `client/common/src/telemetry/events/user_events.rs` - 8 event types
+   - `client/common/src/telemetry/events/fisherman_events.rs` - 6 event types
+   - `client/common/src/telemetry/events/indexer_events.rs` - 7 event types
+
+3. **Partial BSP Upload Instrumentation**
+   - Started instrumenting `client/src/tasks/bsp_upload_file.rs`
+   - Added telemetry to `NewStorageRequest` handler
+
+### 🚧 Next Steps for Continuation
+
+1. **Complete BSP Upload File Task** (Priority 1)
+   - File: `client/src/tasks/bsp_upload_file.rs`
+   - TODO: Instrument `RemoteUploadRequest` handler with `BspUploadChunkReceivedEvent`
+   - TODO: Instrument `ProcessConfirmStoringRequest` handler with completion events
+   - TODO: Add progress tracking with chunk events
+
+2. **Apply Pattern to Other Tasks** (Priority 2)
+   - Use the same pattern from BSP upload for all other tasks
+   - Pattern: TaskContext → Start Event → Progress Events → Complete/Failed Event
+
+3. **Testing** (Priority 3)
+   - Verify all events serialize correctly without JSON blobs
+   - Test non-blocking behavior
+   - Ensure < 1% performance overhead
+
+### Key Files and Locations
+
+- **Event Definitions**: `client/common/src/telemetry/events/`
+- **TaskContext**: `client/common/src/task_context.rs`
+- **Tasks to Instrument**: `client/src/tasks/`
+- **Indexer Handlers**: `client/indexer-service/src/`
+
+### Important Pattern to Follow
+
+```rust
+// 1. Create TaskContext
+let ctx = TaskContext::new("task_name");
+
+// 2. Send start event
+if let Some(telemetry) = &self.storage_hub_handler.telemetry {
+    if let Ok(telemetry_service) = telemetry.try_lock() {
+        let event = BspUploadStartedEvent {
+            base: telemetry_service.create_base_event("event_type"),
+            task_id: ctx.task_id.clone(),
+            // All typed fields - NO JSON!
+        };
+        telemetry_service.send_event(event);
+    }
+}
+
+// 3. Execute task...
+
+// 4. Send completion or failure event with metrics
+```
 
 ## Summary
 

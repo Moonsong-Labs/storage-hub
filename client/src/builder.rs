@@ -13,8 +13,10 @@ use shc_blockchain_service::{
     capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
     BlockchainService,
 };
+use shc_common::telemetry::TelemetryService;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
+use tokio::sync::Mutex;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
@@ -68,6 +70,7 @@ where
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig>,
     peer_manager: Option<Arc<BspPeerManager>>,
+    telemetry: Option<Arc<Mutex<TelemetryService>>>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -96,6 +99,7 @@ where
             bsp_submit_proof_config: None,
             blockchain_service_config: None,
             peer_manager: None,
+            telemetry: None,
         }
     }
 
@@ -218,6 +222,12 @@ where
     }
 
     /// Initialize the BSP peer manager for tracking peer performance
+    /// Set the telemetry service.
+    pub fn with_telemetry(&mut self, telemetry: Arc<Mutex<TelemetryService>>) -> &mut Self {
+        self.telemetry = Some(telemetry);
+        self
+    }
+
     pub fn with_peer_manager(&mut self, rocks_db_path: PathBuf) -> &mut Self {
         let mut peer_db_path = rocks_db_path;
         peer_db_path.push("bsp_peer_manager");
@@ -500,6 +510,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            self.telemetry.clone(),
         )
     }
 }
@@ -545,6 +556,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            self.telemetry.clone(),
         )
     }
 }
@@ -591,6 +603,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            self.telemetry.clone(),
         )
     }
 }
@@ -638,6 +651,7 @@ where
             },
             self.indexer_db_pool.clone(),
             self.peer_manager.expect("Peer Manager not set"),
+            self.telemetry.clone(),
         )
     }
 }
