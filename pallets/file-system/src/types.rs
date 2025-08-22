@@ -83,16 +83,6 @@ pub struct StorageRequestMetadata<T: Config> {
     /// This is used to pay for the cost of the BSPs volunteering for the storage request in case it either expires
     /// or gets revoked by the user. If the storage request is fulfilled, the deposit will be refunded to the user.
     pub deposit_paid: BalanceOf<T>,
-
-    /// Boolean field to track if the storage request has been rejected. Either by the MSP or as if it expired without an MSP having confirmed it.
-    ///
-    /// This is used to validate if a caller (e.g. Fisherman) can delete the file from the confirmed BSPs
-    pub rejected: bool,
-
-    /// Boolean field to track if the storage request has been revoked.
-    ///
-    /// This is used to validate if a caller (e.g. Fisherman) can delete the file from the confirmed BSPs
-    pub revoked: bool,
 }
 
 impl<T: Config> StorageRequestMetadata<T> {
@@ -490,6 +480,9 @@ pub type StorageDataUnit<T> =
 /// Alias for the `ReplicationTargetType` type used in the FileSystem pallet.
 pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
 
+/// Alias for the `MaxReplicationTarget` type used in the FileSystem pallet.
+pub type MaxReplicationTarget<T> = <T as crate::Config>::MaxReplicationTarget;
+
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;
 
@@ -561,3 +554,44 @@ pub type ThresholdType<T> = <T as crate::Config>::ThresholdType;
 /// Alias for the `TickNumber` used in the ProofsDealer pallet.
 pub type TickNumber<T> =
     <<T as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::TickNumber;
+
+/// Ephemeral metadata for incomplete storage requests.
+/// This is used to track which providers still need to remove their files.
+/// Once all providers have removed their files, the entry is  cleaned up.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct IncompleteStorageRequestMetadata<T: Config> {
+    /// File owner for validation
+    pub owner: T::AccountId,
+    /// Bucket containing the file
+    pub bucket_id: BucketIdFor<T>,
+    /// File location/path
+    pub location: FileLocation<T>,
+    /// File size
+    pub size: StorageDataUnit<T>,
+    /// File fingerprint
+    pub fingerprint: Fingerprint<T>,
+    /// BSPs that still need to remove the file (bounded by max number of BSPs that can have confirmed)
+    pub pending_bsp_removals: BoundedVec<ProviderIdFor<T>, MaxReplicationTarget<T>>,
+    /// MSP that still needs to remove the file (if any)
+    pub pending_msp_removal: Option<ProviderIdFor<T>>,
+}
+
+impl<T: Config> IncompleteStorageRequestMetadata<T> {
+    /// Check if all providers have removed their files
+    pub fn is_fully_cleaned(&self) -> bool {
+        self.pending_bsp_removals.is_empty() && self.pending_msp_removal.is_none()
+    }
+
+    /// Remove a provider from pending lists
+    pub fn remove_provider(&mut self, provider_id: ProviderIdFor<T>) {
+        // Check MSP first
+        if let Some(msp_id) = self.pending_msp_removal {
+            if msp_id == provider_id {
+                self.pending_msp_removal = None;
+            }
+        }
+        // Check BSPs
+        self.pending_bsp_removals.retain(|&id| id != provider_id);
+    }
+}

@@ -299,6 +299,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
       /**
+       * Incomplete storage request not found.
+       **/
+      IncompleteStorageRequestNotFound: AugmentedError<ApiType>;
+      /**
        * Key already exists in mapping when it should not.
        **/
       InconsistentStateKeyAlreadyExists: AugmentedError<ApiType>;
@@ -471,10 +475,6 @@ declare module "@polkadot/api-base/types/errors" {
        * Storage request not registered for the given file.
        **/
       StorageRequestNotFound: AugmentedError<ApiType>;
-      /**
-       * Storage request is not in rejected state.
-       **/
-      StorageRequestNotRejected: AugmentedError<ApiType>;
       /**
        * Operation not allowed while the storage request is not being revoked.
        **/
