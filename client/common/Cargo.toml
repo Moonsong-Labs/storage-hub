@@ -25,6 +25,13 @@ trie-db = { workspace = true }
 lazy-static = { workspace = true }
 log = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+serde_json = { workspace = true }
+axiom-rs = { workspace = true }
+chrono = { workspace = true }
+async-trait = { workspace = true }
+uuid = { workspace = true }
 
 # Substrate
 frame-benchmarking = { workspace = true }
@@ -96,6 +103,10 @@ std = [
 	"sp-runtime/std",
 	"sp-std/std",
 	"trie-db/std",
+	"tokio/full",
+	"tracing/std",
+	"serde_json/std",
+	"chrono/std",
 	"polkadot-primitives/std",
 	"cumulus-primitives-core/std",
 	"shp-constants/std",

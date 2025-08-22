@@ -8,6 +8,9 @@ services:
       - "30350:30350"
     volumes:
       - ./dev-keystores/bsp:/keystore:rw
+    environment:
+      - AXIOM_TOKEN=xaat-afe9aafd-6cf5-4327-a2c7-209946714c7a
+      - AXIOM_DATASET=storagehub-telemetry
     command:
       [
         "--dev",
@@ -35,6 +38,9 @@ services:
       - "30555:30350"
     volumes:
       - ./dev-keystores/msp:/keystore:rw
+    environment:
+      - AXIOM_TOKEN=xaat-afe9aafd-6cf5-4327-a2c7-209946714c7a
+      - AXIOM_DATASET=storagehub-telemetry
     command:
       [
         "--dev",
@@ -64,6 +70,9 @@ services:
       - "30556:30350"
     volumes:
       - ./dev-keystores/msp-two:/keystore:rw
+    environment:
+      - AXIOM_TOKEN=xaat-afe9aafd-6cf5-4327-a2c7-209946714c7a
+      - AXIOM_DATASET=storagehub-telemetry
     command:
       [
         "--dev",
@@ -94,6 +103,9 @@ services:
     volumes:
       - ./dev-keystores/user:/keystore:rw
       - ./resource:/res:ro
+    environment:
+      - AXIOM_TOKEN=xaat-afe9aafd-6cf5-4327-a2c7-209946714c7a
+      - AXIOM_DATASET=storagehub-telemetry
     command:
       [
         "--dev",
@@ -121,6 +133,9 @@ services:
       - "30666:30666"
     volumes:
       - ./dev-keystores/user:/keystore:rw
+    environment:
+      - AXIOM_TOKEN=xaat-afe9aafd-6cf5-4327-a2c7-209946714c7a
+      - AXIOM_DATASET=storagehub-telemetry
     command:
       [
         "--dev",

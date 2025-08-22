@@ -69,7 +69,7 @@ where
                     new_msp_id,
                     value_prop_id,
                 } => {
-                    trace!(target: LOG_TARGET, "Indexing move bucket accepted event for bucket ID: {}, old MSP ID: {:?}, new MSP ID: {:?}, value prop ID: {:?}", 
+                    trace!(target: LOG_TARGET, "Indexing move bucket accepted event for bucket ID: {}, old MSP ID: {:?}, new MSP ID: {:?}, value prop ID: {:?}",
                         bucket_id, old_msp_id, new_msp_id, value_prop_id);
                     self.index_file_system_event(conn, fs_event).await?
                 }
@@ -82,7 +82,7 @@ where
                     old_root,
                     new_root,
                 } => {
-                    trace!(target: LOG_TARGET, "Indexing MSP file deletion completed event for user: {:?}, file key: {:?}, file size: {}, bucket ID: {:?}, MSP ID: {:?}, old root: {:?}, new root: {:?}", 
+                    trace!(target: LOG_TARGET, "Indexing MSP file deletion completed event for user: {:?}, file key: {:?}, file size: {}, bucket ID: {:?}, MSP ID: {:?}, old root: {:?}, new root: {:?}",
                         user, file_key, file_size, bucket_id, msp_id, old_root, new_root);
                     self.index_file_system_event(conn, fs_event).await?
                 }
@@ -94,7 +94,7 @@ where
                     old_root,
                     new_root,
                 } => {
-                    trace!(target: LOG_TARGET, "Indexing BSP file deletion completed event for user: {:?}, file key: {:?}, file size: {}, BSP ID: {:?}, old root: {:?}, new root: {:?}", 
+                    trace!(target: LOG_TARGET, "Indexing BSP file deletion completed event for user: {:?}, file key: {:?}, file size: {}, BSP ID: {:?}, old root: {:?}, new root: {:?}",
                         user, file_key, file_size, bsp_id, old_root, new_root);
                     self.index_file_system_event(conn, fs_event).await?
                 }
@@ -102,7 +102,7 @@ where
                     signed_delete_intention,
                     signature: _,
                 } => {
-                    trace!(target: LOG_TARGET, "Indexing file deletion requested event for file key: {:?}", 
+                    trace!(target: LOG_TARGET, "Indexing file deletion requested event for file key: {:?}",
                         signed_delete_intention.file_key);
                     self.index_file_system_event(conn, fs_event).await?
                 }

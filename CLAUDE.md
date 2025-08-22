@@ -77,6 +77,24 @@ The client uses an actor-based architecture (`/client/actors-framework`) with sp
 - `forest-manager`: Merkle tree management
 - `indexer-service`: Blockchain event indexing
 
+### Telemetry System
+The telemetry system (`/client/common/src/telemetry.rs`) provides production-grade observability:
+- **Bounded channels**: Prevents resource exhaustion with 10K event buffer
+- **Automatic batching**: Network-efficient with 100 events or 5-second flush intervals
+- **Graceful shutdown**: Ensures all events are flushed on shutdown
+- **Delivery strategies**: BestEffort, Guaranteed, and Critical event handling
+- **Health metrics**: Atomic counters for events sent/dropped/failed
+- **Backend abstraction**: Supports Axiom and custom backends via async traits
+
+Configuration via environment variables:
+```bash
+AXIOM_TOKEN=xaat-...
+AXIOM_DATASET=storage-hub-prod
+TELEMETRY_BUFFER_SIZE=10000  # Optional
+TELEMETRY_BATCH_SIZE=100     # Optional
+TELEMETRY_FLUSH_INTERVAL=5   # Optional
+```
+
 ### Testing Infrastructure
 - **Docker-based**: Most tests run in Docker containers for isolation
 - **Zombienet**: Network topology testing

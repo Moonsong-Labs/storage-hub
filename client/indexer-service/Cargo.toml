@@ -27,6 +27,8 @@ serde = { workspace = true, default-features = true }
 diesel = { workspace = true }
 diesel-async = { workspace = true }
 thiserror = { workspace = true }
+axiom-rs = { version = "0.11.4", default-features = false, features = ["tokio", "rustls-tls"] }
+tracing = "0.1"
 
 # Substrate
 frame-support = { workspace = true }

@@ -15,23 +15,23 @@ lto = true
 
 [workspace]
 members = [
-	"runtime",
-	"pallets/*",
-	"node",
-	"client",
-	"client/actors-framework",
-	"client/blockchain-service",
-	"client/common",
-	"client/file-manager",
-	"client/file-transfer-service",
-	"client/fisherman-service",
-	"client/forest-manager",
-	"client/indexer-db",
-	"client/indexer-service",
-	"client/rpc",
-	"primitives/*",
-	"xcm-simulator",
-	"sdk/core/wasm",
+    "runtime",
+    "pallets/*",
+    "node",
+    "client",
+    "client/actors-framework",
+    "client/blockchain-service",
+    "client/common",
+    "client/file-manager",
+    "client/file-transfer-service",
+    "client/fisherman-service",
+    "client/forest-manager",
+    "client/indexer-db",
+    "client/indexer-service",
+    "client/rpc",
+    "primitives/*",
+    "xcm-simulator",
+    "sdk/core/wasm",
 ]
 resolver = "2"
 
@@ -46,7 +46,7 @@ bincode = "1.3.3"
 clap = { version = "4.5.3", features = ["derive", "env"] }
 chrono = "0.4"
 codec = { package = "parity-scale-codec", version = "3.0.0", features = [
-	"derive",
+    "derive",
 ], default-features = false }
 color-print = "0.3.4"
 diesel = { version = "2.2.4", features = ["postgres", "chrono", "numeric"] }
@@ -72,7 +72,7 @@ prost-build = "0.12.3"
 rand = "0.8.5"
 reference-trie = "0.29.1"
 scale-info = { version = "2.11.0", default-features = false, features = [
-	"derive",
+    "derive",
 ] }
 serde = { version = "1.0.210", default-features = false }
 serde_json = { version = "1.0.121", default-features = false }
@@ -87,6 +87,9 @@ proc-macro2 = "1.0.79"
 quote = "1.0.35"
 syn = { version = "2.0.52", features = ["full", "extra-traits"] }
 once_cell = "1.18.0"
+tracing = "0.1"
+uuid = { version = "1.4", features = ["v4", "serde"] }
+axiom-rs = { version = "0.11.4", default-features = false, features = ["tokio", "rustls-tls"] }
 
 # Substrate
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
@@ -163,7 +166,7 @@ pallet-uniques = { git = "https://github.com/paritytech/polkadot-sdk.git", tag =
 
 # Polkadot
 polkadot-cli = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", features = [
-	"rococo-native",
+    "rococo-native",
 ], default-features = false }
 polkadot-core-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 polkadot-primitives = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
