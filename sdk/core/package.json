@@ -19,16 +19,17 @@
         "test": "vitest",
         "typecheck": "tsc --noEmit",
         "coverage": "vitest run --coverage",
-        "build:wasm": "wasm-pack build ./wasm --target nodejs --release --out-dir pkg",
+        "build:wasm": "wasm-pack build ./wasm --target web --release --out-dir pkg",
         "preinstall": "pnpm run build:wasm"
     },
     "dependencies": {
+        "@polkadot/types": "^10.10.3",
         "@storagehub/wasm": "file:./wasm/pkg",
-        "@polkadot/types": "^10.10.3"
+        "ethers": "^6.15.0"
     },
     "devDependencies": {
-        "@types/node": "^20.11.19",
-        "@eslint/eslintrc": "2.1.4"
+        "@eslint/eslintrc": "2.1.4",
+        "@types/node": "^20.11.19"
     },
     "engines": {
         "node": ">=23"
