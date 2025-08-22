@@ -104,7 +104,6 @@ std = [
 	"trie-db/std",
 	"polkadot-primitives/std",
 	"cumulus-primitives-core/std",
-	"storage-hub-runtime/std",
 	"shp-constants/std",
 	"shp-file-key-verifier/std",
 	"shp-file-metadata/std",
