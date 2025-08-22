@@ -12238,6 +12238,15 @@ mod delete_file_tests {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
 
+                // Instead of returning `NotBucketOwner` error after checking is_bucket_owner(&file_owner, &bucket_id)?
+                // In the extrinsic, we defer the check to the `compute_file_key` function, which returns `InvalidFileKeyMetadata` error
+                // This check is essentially the same as the file_owner is part of the metadata needed to compute the file_key
+                // Which also then is ensured to be part of the Merkle tree of the given bucket
+                // Context: this was chenged to avoid an edge case where:
+                // - File is deleted from the bucket
+                // - User deletes the bucket (needs to be empty)
+                // - Now the owner of the file is no longer the owner of the bucket (it doesn't exist anymore)
+                // - BSPs remaining will no longer be able to delete the file, because the file_owner is no longer the owner of the bucket.
                 assert_noop!(
                     FileSystem::delete_file(
                         RuntimeOrigin::signed(bob.clone()),
@@ -12251,7 +12260,7 @@ mod delete_file_tests {
                         msp_id,
                         forest_proof,
                     ),
-                    Error::<Test>::NotBucketOwner
+                    Error::<Test>::InvalidFileKeyMetadata
                 );
             });
         }

@@ -1240,12 +1240,6 @@ where
             Error::<T>::OperationNotAllowedWithInsolventUser
         );
 
-        // Check if file owner provided by the entity is the owner of the bucket.
-        ensure!(
-            <T::Providers as ReadBucketsInterface>::is_bucket_owner(&file_owner, &bucket_id)?,
-            Error::<T>::NotBucketOwner
-        );
-
         // Verify that the operation is Delete
         ensure!(
             signed_intention.operation == FileOperation::Delete,
