@@ -2,30 +2,25 @@
 
 use std::sync::Arc;
 
+use crate::data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 #[cfg(all(test, feature = "mocks"))]
-use crate::data::{
-    rpc::{AnyRpcConnection, MockConnection},
-    storage::{BoxedStorageWrapper, InMemoryStorage},
-};
 use crate::{
-    data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
+    data::{
+        rpc::{AnyRpcConnection, MockConnection},
+        storage::{BoxedStorageWrapper, InMemoryStorage},
+    },
     repository::MockRepository,
 };
 
-// TODO(SCAFFOLDING): Counter module is for demonstration only
-// Remove when implementing real MSP services
-pub mod counter;
 pub mod health;
 
-use counter::CounterService;
 use health::HealthService;
 
 /// Container for all backend services
 #[derive(Clone)]
 pub struct Services {
-    // TODO(SCAFFOLDING): Counter service field is for demonstration only
-    // Remove when implementing real MSP services
-    pub counter: Arc<CounterService>,
+    // TODO(SCAFFOLDING): Health service is for demostration only
+    // Will be replaced with a proper health service is needed when we implement the backend proper
     pub health: Arc<HealthService>,
     pub storage: Arc<dyn BoxedStorage>,
     pub postgres: Arc<DBClient>,
@@ -33,20 +28,18 @@ pub struct Services {
 }
 
 impl Services {
-    /// Create a new services container
+    /// Create a new services struct
     pub fn new(
         storage: Arc<dyn BoxedStorage>,
         postgres: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
-        let counter = Arc::new(CounterService::new(storage.clone()));
         let health = Arc::new(HealthService::new(
             storage.clone(),
             postgres.clone(),
             rpc.clone(),
         ));
         Self {
-            counter,
             health,
             storage,
             postgres,
@@ -57,7 +50,7 @@ impl Services {
 
 #[cfg(all(test, feature = "mocks"))]
 impl Services {
-    /// Create a test services container with in-memory storage and mocks
+    /// Create a test services struct with in-memory storage and mocks
     pub fn test() -> Self {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();

@@ -26,23 +26,27 @@ pub struct ComponentHealth {
     pub message: Option<String>,
 }
 
+// TODO(SCAFFOLDING): This health service is a stub and should be replaced with
+// logic more appropriate to the final usecase
 pub struct HealthService {
     storage: Arc<dyn BoxedStorage>,
-    postgres: Arc<DBClient>,
+    db: Arc<DBClient>,
     rpc: Arc<StorageHubRpcClient>,
 }
 
 impl HealthService {
+    /// Instantiate a new [`HealthService`]
+    ///
+    /// This service uses the following services:
+    /// * storage: determine if storage is healthy
+    /// * db: determine if the db connection is healthy
+    /// * rpc: determine if the rpc connection is healthy
     pub fn new(
         storage: Arc<dyn BoxedStorage>,
-        postgres: Arc<DBClient>,
+        db: Arc<DBClient>,
         rpc: Arc<StorageHubRpcClient>,
     ) -> Self {
-        Self {
-            storage,
-            postgres,
-            rpc,
-        }
+        Self { storage, db, rpc }
     }
 
     pub async fn check_health(&self) -> DetailedHealthStatus {
@@ -72,27 +76,27 @@ impl HealthService {
     }
 
     async fn check_storage(&self) -> ComponentHealth {
-        match self.storage.get_counter("_health_check").await {
-            Ok(_) => ComponentHealth {
-                status: "healthy".to_string(),
-                message: None,
-            },
-            Err(e) => ComponentHealth {
-                status: "unhealthy".to_string(),
-                message: Some(format!("Storage error: {}", e)),
-            },
+        let (status, message) = match self.storage.health_check().await {
+            Ok(true) => ("healthy", None),
+            Ok(false) => ("unhealthy", None),
+            Err(e) => ("unhealthy", Some(format!("Storage error: {e}"))),
+        };
+
+        ComponentHealth {
+            status: status.to_string(),
+            message,
         }
     }
 
     async fn check_postgres(&self) -> ComponentHealth {
-        match self.postgres.test_connection().await {
+        match self.db.test_connection().await {
             Ok(_) => ComponentHealth {
                 status: "healthy".to_string(),
                 message: None,
             },
             Err(e) => ComponentHealth {
                 status: "unhealthy".to_string(),
-                message: Some(format!("Database error: {}", e)),
+                message: Some(format!("Database error: {e}")),
             },
         }
     }

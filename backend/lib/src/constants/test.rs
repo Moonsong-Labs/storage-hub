@@ -209,30 +209,6 @@ pub mod pagination {
     pub const TOTAL_BSPS_FOR_PAGINATION: usize = 25;
 }
 
-/// Test counter values
-pub mod counter {
-    /// Test counter key
-    pub const TEST_COUNTER_KEY: &str = "test";
-
-    /// Default counter increment
-    pub const DEFAULT_INCREMENT: i64 = 1;
-
-    /// Large counter increment
-    pub const LARGE_INCREMENT: i64 = 5;
-
-    /// Test counter initial value
-    pub const INITIAL_VALUE: i64 = 0;
-
-    /// Test counter set value
-    pub const SET_VALUE: i64 = 10;
-
-    /// Test counter expected value
-    pub const EXPECTED_VALUE: i64 = 42;
-
-    /// Test response value
-    pub const TEST_RESPONSE_VALUE: i32 = 42;
-}
-
 /// Test timestamps
 pub mod timestamps {
     /// Standard test timestamp (2023-11-14 22:13:20 UTC)
