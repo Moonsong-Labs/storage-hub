@@ -2,7 +2,7 @@
 pragma solidity >=0.8.3;
 
 /// @dev The File System contract's address.
-address constant FILE_SYSTEM_ADDRESS = 0x0000000000000000000000000000000000000100;
+address constant FILE_SYSTEM_ADDRESS = 0x0000000000000000000000000000000000000064;
 
 /// @dev The File System contract's instance.
 FileSystem constant FILE_SYSTEM_CONTRACT = FileSystem(FILE_SYSTEM_ADDRESS);
@@ -10,7 +10,7 @@ FileSystem constant FILE_SYSTEM_CONTRACT = FileSystem(FILE_SYSTEM_ADDRESS);
 /// @author The StorageHub Team
 /// @title File System precompile
 /// @dev Allows to perform calls to the File System pallet through the EVM.
-/// @custom:address 0x0000000000000000000000000000000000000100
+/// @custom:address 0x0000000000000000000000000000000000000064
 interface FileSystem {
     // Replication target enum values
     enum ReplicationTarget {
