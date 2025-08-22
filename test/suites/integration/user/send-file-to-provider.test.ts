@@ -1,11 +1,13 @@
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
 import {
-  describeMspNet,
-  shUser,
   type EnrichedBspApi,
-  getContainerIp,
   addMspContainer,
+  createBucket,
+  describeMspNet,
+  getContainerIp,
   mspThreeKey,
-  createBucket
+  shUser
 } from "../../../util";
 import { CAPACITY, MAX_STORAGE_CAPACITY } from "../../../util/bspNet/consts.ts";
 
@@ -29,10 +31,11 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
       throw new Error("Event doesn't match Type");
     }
 
+    const ownerHex1 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex1,
       newBucketEventDataBlob.bucketId
     );
 
@@ -138,10 +141,11 @@ describeMspNet("User: Send file to provider", ({ before, createUserApi, it }) =>
       throw new Error("Event doesn't match Type");
     }
 
+    const ownerHex2 = u8aToHex(decodeAddress(userApi.shConsts.NODE_INFOS.user.AddressId)).slice(2);
     await userApi.rpc.storagehubclient.loadFileInStorage(
       source,
       destination,
-      userApi.shConsts.NODE_INFOS.user.AddressId,
+      ownerHex2,
       newBucketEventDataBlob.bucketId
     );
 

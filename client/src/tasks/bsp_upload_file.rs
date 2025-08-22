@@ -9,8 +9,7 @@ use frame_support::BoundedVec;
 use pallet_file_system_runtime_api::QueryBspConfirmChunksToProveForFileError;
 use sc_network::PeerId;
 use sc_tracing::tracing::*;
-use sp_core::H256;
-use sp_runtime::AccountId32;
+use sp_runtime::traits::{Hash, SaturatedConversion, Zero};
 
 use shc_actors_framework::event_bus::EventHandler;
 use shc_blockchain_service::{
@@ -19,9 +18,9 @@ use shc_blockchain_service::{
     events::{NewStorageRequest, ProcessConfirmStoringRequest},
     types::{ConfirmStoringRequest, RetryStrategy, SendExtrinsicOptions},
 };
-use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
+    traits::StorageEnableRuntime,
     types::{
         FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
@@ -46,14 +45,14 @@ pub struct BspUploadFileConfig {
     /// Maximum number of times to retry an upload file request
     pub max_try_count: u32,
     /// Maximum tip amount to use when submitting an upload file request extrinsic
-    pub max_tip: f64,
+    pub max_tip: u128,
 }
 
 impl Default for BspUploadFileConfig {
     fn default() -> Self {
         Self {
             max_try_count: 3,
-            max_tip: 500.0,
+            max_tip: 500,
         }
     }
 }
@@ -75,20 +74,20 @@ impl Default for BspUploadFileConfig {
 ///   extrinsic, waiting for it to be successfully included in a block.
 pub struct BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     storage_hub_handler: StorageHubHandler<NT, Runtime>,
-    file_key_cleanup: Option<H256>,
+    file_key_cleanup: Option<Runtime::Hash>,
     /// Configuration for this task
     config: BspUploadFileConfig,
 }
 
 impl<NT, Runtime> Clone for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     fn clone(&self) -> BspUploadFileTask<NT, Runtime> {
@@ -102,8 +101,8 @@ where
 
 impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     pub fn new(storage_hub_handler: StorageHubHandler<NT, Runtime>) -> Self {
@@ -122,13 +121,13 @@ where
 /// receiving the file. This task optimistically assumes the transaction will succeed, and registers
 /// the user and file key in the registry of the File Transfer Service, which handles incoming p2p
 /// upload requests.
-impl<NT, Runtime> EventHandler<NewStorageRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<NewStorageRequest<Runtime>> for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: NewStorageRequest<Runtime>) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Initiating BSP volunteer for file_key {:x}, location 0x{}, fingerprint {:x}",
@@ -151,13 +150,13 @@ where
 ///
 /// This event is triggered by a user sending a chunk of the file to the BSP. It checks the proof
 /// for the chunk and if it is valid, stores it, until the whole file is stored.
-impl<NT, Runtime> EventHandler<RemoteUploadRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<RemoteUploadRequest<Runtime>> for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: RemoteUploadRequest) -> anyhow::Result<()> {
+    async fn handle_event(&mut self, event: RemoteUploadRequest<Runtime>) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote upload request for file {:?} and peer {:?}", event.file_key, event.peer);
 
         let file_complete = match self.handle_remote_upload_request_event(event.clone()).await {
@@ -219,13 +218,17 @@ where
 ///
 /// This event is triggered by the runtime when it decides it is the right time to submit a confirm
 /// storing extrinsic (and update the local forest root).
-impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest> for BspUploadFileTask<NT, Runtime>
+impl<NT, Runtime> EventHandler<ProcessConfirmStoringRequest<Runtime>>
+    for BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType + 'static,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime> + 'static,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
-    async fn handle_event(&mut self, event: ProcessConfirmStoringRequest) -> anyhow::Result<()> {
+    async fn handle_event(
+        &mut self,
+        event: ProcessConfirmStoringRequest<Runtime>,
+    ) -> anyhow::Result<()> {
         info!(
             target: LOG_TARGET,
             "Processing ConfirmStoringRequest: {:?}",
@@ -374,16 +377,15 @@ where
         let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
 
         // Build extrinsic.
-        let call = storage_hub_runtime::RuntimeCall::FileSystem(
-            pallet_file_system::Call::bsp_confirm_storing {
+        let call: Runtime::Call =
+            pallet_file_system::Call::<Runtime>::bsp_confirm_storing {
                 non_inclusion_forest_proof: non_inclusion_forest_proof.proof,
                 file_keys_and_proofs: BoundedVec::try_from(file_keys_and_proofs)
                 .map_err(|_| {
                     error!("CRITICAL❗️❗️ This is a bug! Failed to convert file keys and proofs to BoundedVec. Please report it to the StorageHub team.");
                     anyhow!("Failed to convert file keys and proofs to BoundedVec.")
                 })?,
-            },
-        );
+            }.into();
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
@@ -399,7 +401,7 @@ where
                 )),
                 RetryStrategy::default()
                     .with_max_retries(self.config.max_try_count)
-                    .with_max_tip(self.config.max_tip)
+                    .with_max_tip(self.config.max_tip.saturated_into())
                     .retry_only_if_timeout(),
                 true,
             )
@@ -422,15 +424,15 @@ where
 
 impl<NT, Runtime> BspUploadFileTask<NT, Runtime>
 where
-    NT: ShNodeType,
-    NT::FSH: BspForestStorageHandlerT,
+    NT: ShNodeType<Runtime>,
+    NT::FSH: BspForestStorageHandlerT<Runtime>,
     Runtime: StorageEnableRuntime,
 {
     async fn handle_new_storage_request_event(
         &mut self,
-        event: NewStorageRequest,
+        event: NewStorageRequest<Runtime>,
     ) -> anyhow::Result<()> {
-        if event.size == 0 {
+        if event.size == Zero::zero() {
             let err_msg = "File size cannot be 0";
             error!(target: LOG_TARGET, err_msg);
             return Err(anyhow!(err_msg));
@@ -463,11 +465,12 @@ where
         }
 
         // Construct file metadata.
+        let who = event.who.as_ref().to_vec();
         let metadata = FileMetadata::new(
-            <AccountId32 as AsRef<[u8]>>::as_ref(&event.who).to_vec(),
+            who,
             event.bucket_id.as_ref().to_vec(),
             event.location.to_vec(),
-            event.size as u64,
+            event.size.saturated_into(),
             event.fingerprint,
         )
         .map_err(|_| anyhow::anyhow!("Invalid file metadata"))?;
@@ -593,7 +596,8 @@ where
         // Calculate the tick in which the BSP should send the extrinsic. It's one less that the tick
         // in which the BSP can volunteer for the file because that way it the extrinsic will get included
         // in the tick where the BSP can actually volunteer for the file.
-        let tick_to_wait_to_submit_volunteer = earliest_volunteer_tick.saturating_sub(1);
+        use sp_runtime::Saturating;
+        let tick_to_wait_to_submit_volunteer = earliest_volunteer_tick.saturating_sub(1u32.into());
 
         info!(
             target: LOG_TARGET,
@@ -658,10 +662,10 @@ where
         }
 
         // Build extrinsic.
-        let call =
-            storage_hub_runtime::RuntimeCall::FileSystem(pallet_file_system::Call::bsp_volunteer {
-                file_key: H256(file_key.into()),
-            });
+        let call: Runtime::Call = pallet_file_system::Call::<Runtime>::bsp_volunteer {
+            file_key: file_key.into(),
+        }
+        .into();
 
         // Send extrinsic and wait for it to be included in the block.
         let result = self
@@ -700,7 +704,7 @@ where
                 .storage_hub_handler
                 .blockchain
                 .send_extrinsic(
-                    call.into(),
+                    call,
                     SendExtrinsicOptions::new(Duration::from_secs(
                         self.storage_hub_handler
                             .provider_config
@@ -732,7 +736,7 @@ where
     /// Returns `true` if the file is complete, `false` if the file is incomplete.
     async fn handle_remote_upload_request_event(
         &mut self,
-        event: RemoteUploadRequest,
+        event: RemoteUploadRequest<Runtime>,
     ) -> anyhow::Result<bool> {
         let file_key = event.file_key.into();
         let mut write_file_storage = self.storage_hub_handler.file_storage.write().await;
@@ -896,7 +900,7 @@ where
         Ok(file_complete)
     }
 
-    async fn is_allowed(&self, event: &NewStorageRequest) -> anyhow::Result<bool> {
+    async fn is_allowed(&self, event: &NewStorageRequest<Runtime>) -> anyhow::Result<bool> {
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut is_allowed = read_file_storage
             .is_allowed(
@@ -938,7 +942,7 @@ where
             return Ok(false);
         }
 
-        let owner = H256::from(event.who.as_ref());
+        let owner = Runtime::Hashing::hash(event.who.as_ref());
         is_allowed = read_file_storage
             .is_allowed(&owner, shc_file_manager::traits::ExcludeType::User)
             .map_err(|e| {
@@ -981,7 +985,7 @@ where
         return Ok(true);
     }
 
-    async fn unvolunteer_file(&self, file_key: H256) {
+    async fn unvolunteer_file(&self, file_key: Runtime::Hash) {
         warn!(target: LOG_TARGET, "Unvolunteering file {:?}", file_key);
 
         // Unregister the file from the file transfer service.

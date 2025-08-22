@@ -128,7 +128,7 @@ pub trait ReadBucketsInterface {
         + FullCodec;
 
     /// Type that represents the unit of storage data in which the capacity is measured.
-    type StorageDataUnit: NumericalParam + Into<u64> + MaybeDisplay;
+    type StorageDataUnit: NumericalParam + MaybeDisplay;
 
     /// Type of the root of the buckets.
     type MerkleHash: Parameter
@@ -253,7 +253,7 @@ pub trait MutateBucketsInterface {
         + FullCodec;
 
     /// Type that represents the unit of storage data in which the capacity is measured.
-    type StorageDataUnit: NumericalParam + Into<u64> + MaybeDisplay;
+    type StorageDataUnit: NumericalParam + MaybeDisplay;
 
     /// Type of a bucket's read-access group's ID (which is the read-access NFT collection's ID).
     type ReadAccessGroupId: Member + Parameter + MaxEncodedLen + Copy + Incrementable;
@@ -373,7 +373,7 @@ pub trait ReadStorageProvidersInterface {
         + FullCodec;
 
     /// Type that represents the unit of storage data in which the capacity is measured.
-    type StorageDataUnit: NumericalParam + Into<u64> + MaybeDisplay;
+    type StorageDataUnit: NumericalParam + MaybeDisplay;
 
     /// Type of the counter of the total number of registered Storage Providers.
     type SpCount: NumericalParam + scale_info::TypeInfo;
@@ -484,7 +484,7 @@ pub trait MutateStorageProvidersInterface {
         + FullCodec;
 
     /// Type that represents the unit of storage data in which the capacity is measured.
-    type StorageDataUnit: NumericalParam + Into<u64>;
+    type StorageDataUnit: NumericalParam;
 
     /// Increase the used capacity of a Storage Provider (MSP or BSP). To be called when confirming
     /// that it's storing a new file.
@@ -725,7 +725,7 @@ pub trait MutateProvidersInterface {
 /// its total used capacity.
 pub trait SystemMetricsInterface {
     /// Type of the unit provided by Providers
-    type ProvidedUnit: NumericalParam + Into<u64>;
+    type ProvidedUnit: NumericalParam;
 
     /// Get the total available capacity of units of the network.
     fn get_total_capacity() -> Self::ProvidedUnit;

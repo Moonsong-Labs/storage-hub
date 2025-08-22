@@ -76,7 +76,7 @@ declare module "@polkadot/api-base/types/consts" {
        **/
       basicReplicationTarget: u32 & AugmentedConst<ApiType>;
       /**
-       * Penalty payed by a BSP when they forcefully stop storing a file.
+       * Penalty paid by a BSP when they forcefully stop storing a file.
        **/
       bspStopStoringFilePenalty: u128 & AugmentedConst<ApiType>;
       /**

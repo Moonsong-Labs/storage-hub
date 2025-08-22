@@ -13,13 +13,10 @@ use sc_consensus_manual_seal::{
 };
 use sc_rpc::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
-use shc_common::traits::{StorageEnableApiCollection, StorageEnableRuntime};
+use shc_common::{traits::StorageEnableRuntime, types::ParachainClient};
 use shc_forest_manager::traits::ForestStorageHandler;
 use shc_rpc::{StorageHubClientApiServer, StorageHubClientRpc, StorageHubClientRpcConfig};
-use sp_api::ProvideRuntimeApi;
-use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
 use sp_core::H256;
-use storage_hub_runtime::opaque::Block;
 
 use shc_client::types::FileStorageT;
 
@@ -27,31 +24,29 @@ use shc_client::types::FileStorageT;
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
 
 /// Full client dependencies
-pub struct FullDeps<C, P, FL, FS> {
+pub struct FullDeps<P, FL, FS, Runtime>
+where
+    Runtime: StorageEnableRuntime,
+{
     /// The client instance to use.
-    pub client: Arc<C>,
+    pub client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     /// Transaction pool instance.
     pub pool: Arc<P>,
     /// RPC configuration.
-    pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS>>,
+    pub maybe_storage_hub_client_config: Option<StorageHubClientRpcConfig<FL, FS, Runtime>>,
     /// Manual seal command sink
     pub command_sink: Option<futures::channel::mpsc::Sender<EngineCommand<H256>>>,
 }
 
 /// Instantiate all RPC extensions.
-pub fn create_full<C, P, FL, FSH, Runtime>(
-    deps: FullDeps<C, P, FL, FSH>,
+pub fn create_full<P, FL, FSH, Runtime>(
+    deps: FullDeps<P, FL, FSH, Runtime>,
 ) -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>>
 where
-    C: ProvideRuntimeApi<Block>
-        + HeaderBackend<Block>
-        + HeaderMetadata<Block, Error = BlockChainError>,
-    C: Send + Sync + 'static,
-    C::Api: StorageEnableApiCollection<Runtime>,
     Runtime: StorageEnableRuntime,
     P: TransactionPool + Send + Sync + 'static,
     FL: FileStorageT,
-    FSH: ForestStorageHandler + Send + Sync + 'static,
+    FSH: ForestStorageHandler<Runtime> + Send + Sync + 'static,
 {
     use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
     use substrate_frame_rpc_system::{System, SystemApiServer};
@@ -68,7 +63,13 @@ where
     io.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
     if let Some(storage_hub_client_config) = maybe_storage_hub_client_config {
-        io.merge(StorageHubClientRpc::new(client, storage_hub_client_config).into_rpc())?;
+        io.merge(
+            StorageHubClientRpc::<FL, FSH, Runtime, shc_common::types::OpaqueBlock>::new(
+                client,
+                storage_hub_client_config,
+            )
+            .into_rpc(),
+        )?;
     }
 
     if let Some(command_sink) = command_sink {
