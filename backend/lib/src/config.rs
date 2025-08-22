@@ -7,9 +7,12 @@ use crate::constants::{
     server::{DEFAULT_HOST, DEFAULT_PORT},
 };
 
+/// Backend configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    /// The backend will serve requests at this host
     pub host: String,
+    /// The backend will serve requests at this port
     pub port: u16,
     pub api: ApiConfig,
     pub storage_hub: StorageHubConfig,
@@ -29,19 +32,36 @@ pub struct ApiConfig {
     pub max_page_size: usize,
 }
 
+/// StorageHub RPC configuration for blockchain interaction
+///
+/// Configures the connection and behavior parameters for communicating
+/// with the StorageHub parachain node via JSON-RPC interface.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StorageHubConfig {
+    /// WebSocket URL for the StorageHub RPC endpoint
+    /// (e.g., `ws://localhost:9944`)
     pub rpc_url: String,
+    /// Request timeout in seconds for RPC calls
     pub timeout_secs: Option<u64>,
+    /// Maximum number of concurrent RPC requests allowed
     pub max_concurrent_requests: Option<usize>,
+    /// Whether to verify TLS certificates for secure connections
     pub verify_tls: bool,
+    /// When enabled, uses mock RPC operations for testing
     #[cfg(feature = "mocks")]
     pub mock_mode: bool,
 }
 
+/// Database configuration for PostgreSQL connection
+///
+/// Manages the connection parameters for the PostgreSQL database
+/// where blockchain data is indexed and stored for efficient querying.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DatabaseConfig {
+    /// PostgreSQL connection URL in the format:
+    /// `postgresql://[user[:password]@][host][:port][/dbname]`
     pub url: String,
+    /// When enabled, uses mock database operations for testing
     #[cfg(feature = "mocks")]
     pub mock_mode: bool,
 }
