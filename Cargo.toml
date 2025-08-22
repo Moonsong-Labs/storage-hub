@@ -16,6 +16,7 @@ lto = true
 [workspace]
 members = [
 	"runtime/parachain",
+	"runtime/solochain-evm",
 	"pallets/*",
 	"node",
 	"client",
@@ -269,6 +270,7 @@ shp-types = { path = "primitives/types", default-features = false }
 
 # Local - StorageHub Runtime
 storage-hub-runtime = { path = "runtime/parachain", default-features = false }
+shr-solochain-evm = { path = "runtime/solochain-evm", default-features = false }
 
 [workspace.lints.rust]
 suspicious_double_ref_op = { level = "allow", priority = 2 }
