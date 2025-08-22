@@ -25,7 +25,7 @@ mod tests {
     #[cfg(feature = "mocks")]
     fn create_test_app() -> axum::Router {
         // Create test services with everything mocked
-        let services = services::Services::test();
+        let services = services::Services::mocks();
 
         api::create_app(services)
     }

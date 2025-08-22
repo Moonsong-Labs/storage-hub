@@ -16,7 +16,7 @@ use tokio::{
 use crate::{
     constants::rpc::TIMEOUT_MULTIPLIER,
     data::rpc::{
-        connection::{RpcConnectionError, RpcResult},
+        connection::error::{RpcConnectionError, RpcResult},
         RpcConnection,
     },
 };

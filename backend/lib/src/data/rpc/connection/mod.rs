@@ -3,7 +3,6 @@
 use std::fmt::Debug;
 
 use async_trait::async_trait;
-use jsonrpsee::core::client::Error;
 use serde::{de::DeserializeOwned, Serialize};
 
 use crate::data::rpc::{ws_connection::WsConnection, RpcConnection};

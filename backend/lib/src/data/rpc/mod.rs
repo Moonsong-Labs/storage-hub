@@ -5,15 +5,20 @@ use serde::{de::DeserializeOwned, Serialize};
 
 pub mod client;
 pub mod connection;
-#[cfg(feature = "mocks")]
-pub mod mock_connection;
 pub mod ws_connection;
 
-pub use client::StorageHubRpcClient;
-pub use connection::{AnyRpcConnection, IntoRpcError, RpcConfig, RpcConnectionError, RpcResult};
 #[cfg(feature = "mocks")]
-pub use mock_connection::{ErrorMode, MockConnection, MockConnectionBuilder};
-pub use ws_connection::{WsConnection, WsConnectionBuilder};
+pub mod mock_connection;
+
+pub use client::StorageHubRpcClient;
+pub use connection::{
+    error::{IntoRpcError, RpcConnectionError, RpcResult},
+    AnyRpcConnection,
+};
+pub use ws_connection::{RpcConfig, WsConnection};
+
+#[cfg(feature = "mocks")]
+pub use mock_connection::{ErrorMode, MockConnection};
 
 /// Trait for RPC connections
 #[async_trait]

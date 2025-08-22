@@ -37,7 +37,7 @@ impl MockRepository {
     }
 
     /// Generate next unique ID
-    fn next_id(&self) -> i64 {
+    pub fn next_id(&self) -> i64 {
         self.next_id.fetch_add(1, Ordering::SeqCst)
     }
 }

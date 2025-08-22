@@ -2,19 +2,21 @@
 
 use std::sync::Arc;
 
-use crate::data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
+use crate::data::{indexer_db::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
+
 #[cfg(all(test, feature = "mocks"))]
-use crate::{
-    data::{
-        rpc::{AnyRpcConnection, MockConnection},
-        storage::{BoxedStorageWrapper, InMemoryStorage},
-    },
-    repository::MockRepository,
+use crate::data::{
+    indexer_db::MockRepository,
+    rpc::{AnyRpcConnection, MockConnection},
+    storage::{BoxedStorageWrapper, InMemoryStorage},
 };
 
 pub mod health;
 
 use health::HealthService;
+
+// TODO: consider re-exporting all the services in this module
+// so other modules can easily get the right types (eg DBClient) at `crate::services`
 
 /// Container for all backend services
 #[derive(Clone)]
@@ -51,7 +53,7 @@ impl Services {
 #[cfg(all(test, feature = "mocks"))]
 impl Services {
     /// Create a test services struct with in-memory storage and mocks
-    pub fn test() -> Self {
+    pub fn mocks() -> Self {
         // Create in-memory storage
         let memory_storage = InMemoryStorage::new();
         let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));

@@ -45,6 +45,8 @@ impl Storage for InMemoryStorage {
 
     async fn health_check(&self) -> Result<bool, Self::Error> {
         // just to "use" `map`
+        // TODO: implement a proper check for the storage once we defined what it needs to contain
+        #[allow(unused_comparisons)]
         Ok(self.map.read().capacity() >= 0)
     }
 }

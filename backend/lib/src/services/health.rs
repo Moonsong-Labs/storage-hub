@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde::Serialize;
 
-use crate::data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
+use crate::data::{indexer_db::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage};
 
 #[derive(Serialize)]
 pub struct DetailedHealthStatus {

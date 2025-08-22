@@ -6,21 +6,22 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use tracing::{debug, info};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+
 use sh_msp_backend_lib::{
     api::create_app,
     config::Config,
     data::{
-        postgres::DBClient,
+        indexer_db::{DBClient, Repository},
         rpc::{AnyRpcConnection, RpcConfig, StorageHubRpcClient, WsConnection},
         storage::{BoxedStorageWrapper, InMemoryStorage},
     },
-    repository::Repository,
     services::Services,
 };
+
 #[cfg(feature = "mocks")]
-use sh_msp_backend_lib::{data::rpc::MockConnection, repository::MockRepository};
-use tracing::{debug, info};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
+use sh_msp_backend_lib::data::{indexer_db::MockRepository, rpc::MockConnection};
 
 #[derive(Parser, Debug)]
 #[command(name = "sh-msp-backend")]

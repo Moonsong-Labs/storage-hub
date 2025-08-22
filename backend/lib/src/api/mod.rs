@@ -30,7 +30,7 @@ pub fn create_app(services: Services) -> Router {
 ///
 /// This function creates a test application with mock services.
 /// Currently requires PostgreSQL mock implementation to be completed.
-pub fn test_app() -> Router {
-    let services = Services::test();
+pub fn mock_app() -> Router {
+    let services = Services::mocks();
     create_app(services)
 }

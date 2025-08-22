@@ -13,10 +13,26 @@ use jsonrpsee::{
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::RwLock;
 
-use super::{
-    connection::{IntoRpcError, RpcConfig, RpcConnectionError, RpcResult},
+use crate::data::rpc::{
+    connection::error::{IntoRpcError, RpcConnectionError, RpcResult},
     RpcConnection,
 };
+
+/// Configuration for RPC connections
+#[derive(Debug, Clone)]
+pub struct RpcConfig {
+    /// The RPC endpoint URL
+    pub url: String,
+
+    /// Request timeout in seconds
+    pub timeout_secs: Option<u64>,
+
+    /// Maximum number of concurrent requests
+    pub max_concurrent_requests: Option<usize>,
+
+    /// Whether to verify TLS certificates (for HTTPS/WSS)
+    pub verify_tls: bool,
+}
 
 /// WebSocket RPC connection implementation
 pub struct WsConnection {
@@ -64,29 +80,18 @@ impl WsConnection {
         })
     }
 
-    /// Attempt to reconnect if the connection is closed
-    async fn ensure_connected(&self) -> RpcResult<()> {
-        let mut client_guard = self.client.write().await;
-
-        // Check if we need to reconnect
-        if client_guard.is_none() {
-            // Attempt to reconnect
-            let new_client = Self::build_client(&self.config).await?;
-            *client_guard = Some(Arc::new(new_client));
-        }
-
-        Ok(())
-    }
-
     /// Get a reference to the client, ensuring it's connected
     async fn get_client(&self) -> RpcResult<Arc<WsClient>> {
-        self.ensure_connected().await?;
-
-        let client_guard = self.client.read().await;
-        client_guard
-            .as_ref()
-            .cloned()
-            .ok_or(RpcConnectionError::ConnectionClosed)
+        let mut client_guard = self.client.write().await;
+        match client_guard.as_ref() {
+            None => {
+                let new_client = Self::build_client(&self.config).await?;
+                let new_client = Arc::new(new_client);
+                *client_guard = Some(Arc::clone(&new_client));
+                Ok(new_client)
+            }
+            Some(client) => Ok(Arc::clone(client)),
+        }
     }
 }
 
@@ -99,7 +104,6 @@ impl RpcConnection for WsConnection {
     {
         let client = self.get_client().await?;
 
-        // Use rpc_params! macro to properly format parameters
         let result = client
             .request(method, jsonrpsee::rpc_params![params])
             .await
@@ -125,76 +129,11 @@ impl RpcConnection for WsConnection {
     }
 
     async fn close(&self) -> RpcResult<()> {
-        let mut client_guard = self.client.write().await;
-
-        // Drop the client to close the connection
-        if let Some(_client) = client_guard.take() {
-            // Client is dropped here, closing the connection
-        }
+        self.client.write().await.take();
 
         Ok(())
     }
 }
 
-/// Builder for WebSocket RPC connections
-pub struct WsConnectionBuilder {
-    config: RpcConfig,
-}
-
-impl WsConnectionBuilder {
-    /// Create a new WebSocket connection builder
-    pub fn new(url: impl Into<String>) -> Self {
-        let config = RpcConfig {
-            url: url.into(),
-            ..Default::default()
-        };
-        Self { config }
-    }
-
-    /// Set the request timeout
-    pub fn timeout_secs(mut self, timeout: u64) -> Self {
-        self.config.timeout_secs = Some(timeout);
-        self
-    }
-
-    /// Set the maximum number of concurrent requests
-    pub fn max_concurrent_requests(mut self, max: usize) -> Self {
-        self.config.max_concurrent_requests = Some(max);
-        self
-    }
-
-    /// Set whether to verify TLS certificates
-    pub fn verify_tls(mut self, verify: bool) -> Self {
-        self.config.verify_tls = verify;
-        self
-    }
-}
-
-impl WsConnectionBuilder {
-    /// Build and establish the WebSocket connection
-    pub async fn build(self) -> RpcResult<WsConnection> {
-        WsConnection::new(self.config).await
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::constants::test::{MAX_CONCURRENT_REQUESTS, RPC_TIMEOUT_SECS};
-
-    #[test]
-    fn test_ws_connection_builder() {
-        let builder = WsConnectionBuilder::new("ws://localhost:9944")
-            .timeout_secs(RPC_TIMEOUT_SECS)
-            .max_concurrent_requests(MAX_CONCURRENT_REQUESTS)
-            .verify_tls(false);
-
-        assert_eq!(builder.config.url, "ws://localhost:9944");
-        assert_eq!(builder.config.timeout_secs, Some(RPC_TIMEOUT_SECS));
-        assert_eq!(
-            builder.config.max_concurrent_requests,
-            Some(MAX_CONCURRENT_REQUESTS)
-        );
-        assert!(!builder.config.verify_tls);
-    }
-}
+// TODO: add some tests here for the RPC using testcontainers
+// to ensure our RPC connection actually behaves like we expect it to

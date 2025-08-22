@@ -40,24 +40,24 @@ pub trait IntoRpcError {
 impl IntoRpcError for jsonrpsee::core::client::Error {
     fn into_rpc_error(self) -> RpcConnectionError {
         match self {
-            Error::Call(e) => RpcConnectionError::Rpc(e.to_string()),
-            Error::Transport(e) => RpcConnectionError::Transport(e.to_string()),
-            Error::RestartNeeded(_) => RpcConnectionError::ConnectionClosed,
-            Error::ParseError(e) => RpcConnectionError::Serialization(e.to_string()),
-            Error::InvalidSubscriptionId => {
+            Self::Call(e) => RpcConnectionError::Rpc(e.to_string()),
+            Self::Transport(e) => RpcConnectionError::Transport(e.to_string()),
+            Self::RestartNeeded(_) => RpcConnectionError::ConnectionClosed,
+            Self::ParseError(e) => RpcConnectionError::Serialization(e.to_string()),
+            Self::InvalidSubscriptionId => {
                 RpcConnectionError::Rpc("Invalid subscription ID".to_string())
             }
-            Error::InvalidRequestId(e) => {
+            Self::InvalidRequestId(e) => {
                 RpcConnectionError::Rpc(format!("Invalid request ID: {}", e))
             }
-            Error::RequestTimeout => RpcConnectionError::Timeout,
-            Error::HttpNotImplemented => {
+            Self::RequestTimeout => RpcConnectionError::Timeout,
+            Self::HttpNotImplemented => {
                 RpcConnectionError::Other("HTTP not implemented".to_string())
             }
-            Error::EmptyBatchRequest(_) => {
+            Self::EmptyBatchRequest(_) => {
                 RpcConnectionError::Rpc("Empty batch request".to_string())
             }
-            Error::RegisterMethod(e) => {
+            Self::RegisterMethod(e) => {
                 RpcConnectionError::Rpc(format!("Failed to register method: {}", e))
             }
             other => RpcConnectionError::Other(other.to_string()),
