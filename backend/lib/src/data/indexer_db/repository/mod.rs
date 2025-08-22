@@ -37,12 +37,10 @@ pub mod mock;
 pub mod pool;
 pub mod postgres;
 
-// Re-export main types for convenience
 pub use error::{RepositoryError, RepositoryResult};
 pub use mock::MockRepository;
 pub use pool::SmartPool;
 pub use postgres::Repository;
-// Re-export models from shc_indexer_db as our standard
 pub use shc_indexer_db::models::{Bsp, Bucket, File};
 
 // ============ Input Types for Creating Records ============

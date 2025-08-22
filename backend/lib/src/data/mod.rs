@@ -1,5 +1,5 @@
 //! Data module for StorageHub backend
 
-pub mod postgres;
+pub mod indexer_db;
 pub mod rpc;
 pub mod storage;
