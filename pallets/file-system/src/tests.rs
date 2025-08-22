@@ -5861,7 +5861,7 @@ mod bsp_confirm {
 						// The deposit paid should have been updated after paying the BSP that volunteered.
 						deposit_paid: storage_request_deposit - <<Test as crate::Config>::WeightToFee as sp_weights::WeightToFee>::weight_to_fee(
 							&<Test as crate::Config>::WeightInfo::bsp_volunteer(),
-								),
+								)
                     })
                 );
 
@@ -7252,7 +7252,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -7298,7 +7298,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -7464,7 +7464,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -7516,7 +7516,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -7663,7 +7663,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -7726,7 +7726,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -7941,7 +7941,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -7987,7 +7987,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -8238,7 +8238,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 				assert_eq!(
@@ -8256,7 +8256,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
 						expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -8294,7 +8294,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
 						expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -8500,7 +8500,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -8615,7 +8615,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: storage_request_deposit,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -8722,7 +8722,7 @@ mod bsp_stop_storing {
                         bsps_confirmed: 0,
                         bsps_volunteered: 0,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: storage_request_deposit,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -9316,7 +9316,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -9573,7 +9573,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -9761,7 +9761,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -10050,7 +10050,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -10319,7 +10319,7 @@ mod stop_storing_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: new_deposit_paid,
+						deposit_paid: new_deposit_paid
                     })
                 );
 
@@ -10569,7 +10569,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: storage_request_deposit,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -10772,7 +10772,7 @@ mod msp_stop_storing_bucket_for_insolvent_user {
                         bsps_confirmed: 1,
                         bsps_volunteered: 1,
                         expires_at: next_expiration_tick_storage_request,
-						deposit_paid: storage_request_deposit,
+						deposit_paid: storage_request_deposit
                     })
                 );
 
@@ -11739,6 +11739,11 @@ mod delete_file_tests {
                     Some(bucket_id.encode()),
                 ).unwrap();
 
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
+                // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
+                assert_eq!(expected_new_root, file_key);
+
                 assert_ok!(FileSystem::delete_file(
                     RuntimeOrigin::signed(alice.clone()),
                     alice.clone(),
@@ -11840,6 +11845,11 @@ mod delete_file_tests {
                     &forest_proof,
                     Some(bsp_id.encode()),
                 ).unwrap();
+
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
+                // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
+                assert_eq!(expected_new_root, file_key);
 
                 assert_ok!(FileSystem::delete_file(
                     RuntimeOrigin::signed(alice.clone()),
@@ -11954,6 +11964,11 @@ mod delete_file_tests {
                     Some(bsp_id.encode()),
                 ).unwrap();
 
+                // This is incorrect behaivour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
+                // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
+                assert_eq!(expected_new_root, file_key);
+
                 assert_ok!(FileSystem::delete_file(
                     RuntimeOrigin::signed(alice.clone()),
                     alice.clone(),
@@ -12043,6 +12058,11 @@ mod delete_file_tests {
                     &forest_proof,
                     Some(bucket_id.encode()),
                 ).unwrap();
+
+                // This is incorrect behaviour given that apply_delta returns the mutation provided (in our case, the value we pass as `file_key` 
+                // to `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
+                // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
+                assert_eq!(expected_new_root, file_key);
 
                 assert_ok!(FileSystem::delete_file(
                     RuntimeOrigin::signed(bob),
@@ -12218,6 +12238,15 @@ mod delete_file_tests {
                     encoded_nodes: vec![file_key.as_ref().to_vec()],
                 };
 
+                // Instead of returning `NotBucketOwner` error after checking is_bucket_owner(&file_owner, &bucket_id)?
+                // In the extrinsic, we defer the check to the `compute_file_key` function, which returns `InvalidFileKeyMetadata` error
+                // This check is essentially the same as the file_owner is part of the metadata needed to compute the file_key
+                // Which also then is ensured to be part of the Merkle tree of the given bucket
+                // Context: this was chenged to avoid an edge case where:
+                // - File is deleted from the bucket
+                // - User deletes the bucket (needs to be empty)
+                // - Now the owner of the file is no longer the owner of the bucket (it doesn't exist anymore)
+                // - BSPs remaining will no longer be able to delete the file, because the file_owner is no longer the owner of the bucket.
                 assert_noop!(
                     FileSystem::delete_file(
                         RuntimeOrigin::signed(bob.clone()),
@@ -12231,7 +12260,7 @@ mod delete_file_tests {
                         msp_id,
                         forest_proof,
                     ),
-                    Error::<Test>::NotBucketOwner
+                    Error::<Test>::InvalidFileKeyMetadata
                 );
             });
         }
@@ -12305,6 +12334,1363 @@ mod delete_file_tests {
                         forest_proof,
                     ),
                     Error::<Test>::InvalidFileKeyMetadata
+                );
+            });
+        }
+
+        #[test]
+        fn delete_file_fails_when_msp_not_storing_bucket() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp_storing_file = Keyring::Charlie.to_account_id();
+                let msp_not_storing_file = Keyring::Dave.to_account_id();
+
+                // Set up MSP that will store the file
+                let (
+                    bucket_id,
+                    file_key,
+                    location,
+                    size,
+                    fingerprint,
+                    _msp_storing_file_id,
+                    _value_prop_id,
+                ) = setup_file_in_msp_bucket(&alice, &msp_storing_file);
+
+                // Set up MSP that does NOT store the file
+                let (msp_not_storing_file_id, _dave_value_prop_id) =
+                    add_msp_to_provider_storage(&msp_not_storing_file);
+
+                // Alice signs the deletion message (valid signature)
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+
+                // Create valid forest proof for the file stored by MSP
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Fisherman node attempts exploiting the system by sending:
+                // - Valid proof from MSP that stores the file
+                // - But specifies MSP that does NOT store the file
+                // This should fail with MspNotStoringBucket error
+                assert_noop!(
+                    FileSystem::delete_file(
+                        RuntimeOrigin::signed(alice.clone()),
+                        alice.clone(),
+                        signed_delete_intention,
+                        signature,
+                        bucket_id,
+                        location,
+                        size,
+                        fingerprint,
+                        msp_not_storing_file_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::MspNotStoringBucket
+                );
+            });
+        }
+    }
+}
+
+mod delete_file_for_incomplete_storage_request_tests {
+    use super::*;
+    // Note: as for now we only amend processing expired storage requests
+    // This test suite only involves BSPs (not MSPs) which files need to be deleted
+    // As, if the MSP accepts the file, the storage request gets accepted (no deletion is needed)
+    mod success {
+        use crate::{types::RejectedStorageRequestReason, IncompleteStorageRequests};
+
+        use super::*;
+        use pallet_payment_streams::types::UnitsProvidedFor;
+
+        #[test]
+        fn single_bsp_expired_storage_request() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSP
+                let bsp_account = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                // BSP needs to have enough capacity to volunteer for the file
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                let initial_bsp_root = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+                let default_root = <<Test as crate::Config>::Providers as shp_traits::ReadProvidersInterface>::get_default_root();
+                // Check initial root is the default root
+                assert_eq!(initial_bsp_root, default_root);
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id, location.clone(), fingerprint, size, msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // BSP volunteers and confirms
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof { encoded_nodes: vec![file_key.as_ref().to_vec()] },
+                };
+                let forest_proof = CompactProof { encoded_nodes: vec![H256::default().as_ref().to_vec()] };
+
+                // BSP confirm storing the file
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed, forest_proof,
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // Root is correctly updated
+                let bsp_root_after_confirming = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+                assert_eq!(bsp_root_after_confirming, file_key);
+
+                // BSP should have increased used capacity and payment stream
+                let initial_capacity = Providers::get_used_capacity(&bsp_id);
+                assert!(initial_capacity == size);
+
+                // Check the payment stream has been created with the correct amount provided
+                let payment_stream = PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &owner);
+                assert!(payment_stream.is_ok());
+                assert_eq!(payment_stream.unwrap().amount_provided, UnitsProvidedFor::<Test>::from(size));
+
+                // Storage request is not rejected and it has 1 confirmed storage provider
+                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(storage_request.bsps_confirmed, 1);
+
+                // BSP is in StorageRequestBsps
+                let initial_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert_eq!(initial_bsps.len(), 1, "Should have 1 BSP associated with storage request initially");
+                assert_eq!(initial_bsps[0].0, bsp_id, "BSP should be associated with storage request");
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration();
+
+                // Fisherman should be listening to this event
+                System::assert_has_event(
+                    Event::StorageRequestRejected {
+                        file_key,
+                        reason: RejectedStorageRequestReason::RequestExpired,
+                    }
+                    .into(),
+                );
+
+                // Verify the all storage request related data was removed from the storage
+                assert!(StorageRequests::<Test>::get(&file_key).is_none(), "Storage request should be removed");
+                // Storage request should be removed from bucket associations
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+                // All BSPs should be removed from storage request associations
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
+                );
+
+                // Verify the incomplete storage request was created
+                assert!(IncompleteStorageRequests::<Test>::get(&file_key).is_some(), "Incomplete storage request should be created");
+
+                // Verify the incomplete storage request has the correct BSPs
+                let incomplete_storage_request = IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(incomplete_storage_request.pending_bsp_removals, vec![bsp_id]);
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                // Create forest proof showing BSP stores the file
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Call delete_file_for_incomplete_storage_request
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()), // Any caller
+                    file_key,
+                    bsp_id,
+                    forest_proof,
+                ));
+
+                // Warning
+                // We can't perform this check that after deleting the only file that a BSP is storing, the root 
+                // should revert to the default root, because the `apply_delta` function defined in the mock runtime 
+                // returns the mutation provided (in our case, the value we pass as `file_key` to 
+                // `delete_file_for_incomplete_storage_request`) instead of the new root calculated after the mutation.
+                // Reference: https://github.com/Moonsong-Labs/storage-hub/blob/main/pallets/file-system/src/mock.rs#L568C5-L586
+                //
+                // This check represents the real functionality of the extrinsic (but we can’t run it here):
+                // let bsp_root_after_deleting = <<Test as crate::Config>::Providers as ReadProvidersInterface>::get_root(bsp_id).unwrap();
+                // assert_eq!(bsp_root_after_deleting, default_root);
+                //
+                // A similar issue exists in the `bsp_confirm_stop_storing` test. There, the `default_root` is passed 
+                // to the extrinsic (and a custom `PendingStopStoringRequests` is injected). We can’t do that here, 
+                // since we check the integrity of the `file_key` against the `StorageRequest`.
+                //
+                // This limitation means we can’t test whether the challenge cycles stop.
+                // TODO: Consider using the real `apply_delta` from the `file_system` pallet to enable correct testing.
+
+                // Verify the BspFileDeletionCompleted event was emitted
+                System::assert_has_event(
+                    Event::BspFileDeletionCompleted {
+                        user: owner.clone(),
+                        file_key,
+                        file_size: size,
+                        bsp_id,
+                        old_root: file_key,
+                        new_root: file_key, // This should be default_key
+                    }
+                    .into(),
+                );
+
+                // Verify the FileDeletedFromIncompleteStorageRequest event was emitted
+                System::assert_has_event(
+                    Event::FileDeletedFromIncompleteStorageRequest {
+                        file_key,
+                        provider_id: bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Verify BSP capacity decreased
+                let final_capacity = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(final_capacity, initial_capacity - size);
+
+                // Verify payment stream was removed after deletion
+                let payment_stream_after =
+                PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &owner);
+                assert!(
+                    payment_stream_after.is_err(),
+                    "Payment stream should be removed after file deletion"
+                );
+
+                // Incomplete storage request should be completely removed after all providers removed their files
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should be completely removed after all providers removed their files"
+                );
+
+                // TODO: Check that the challenge cycles stop (we need a proper implementation of apply_delta to be able to test this)
+            });
+        }
+
+        #[test]
+        fn single_bsp_expired_storage_request_with_two_files() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp_account = Keyring::Bob.to_account_id();
+
+                // Setup MSP and bucket for first file
+                let (bucket_id, file_key1, location1, size, fingerprint1, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup second file
+                let location2 = FileLocation::<Test>::try_from(b"test2".to_vec()).unwrap();
+                let fingerprint2 = BlakeTwo256::hash(&b"test_content2".to_vec());
+                let file_key2 = FileSystem::compute_file_key(
+                    owner.clone(),
+                    bucket_id,
+                    location2.clone(),
+                    size,
+                    fingerprint2,
+                )
+                .unwrap();
+
+                // Setup BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 3));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Issue and complete first storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location1.clone(),
+                    fingerprint1,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Issue second storage request that will expire
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location2.clone(),
+                    fingerprint2,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key1));
+                let file_key1_with_proof = FileKeyWithProof {
+                    file_key: file_key1,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key1.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof1 = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    forest_proof1,
+                    BoundedVec::try_from(vec![file_key1_with_proof]).unwrap(),
+                ));
+
+                // BSP volunteers and confirms second file
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key2));
+                let file_key2_with_proof = FileKeyWithProof {
+                    file_key: file_key2,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key2.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof2 = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed,
+                    forest_proof2,
+                    BoundedVec::try_from(vec![file_key2_with_proof]).unwrap(),
+                ));
+
+                // Verify BSP now has 2 files and correct payment stream
+                let capacity_with_two_files = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    capacity_with_two_files,
+                    size * 2,
+                    "BSP should store 2 files"
+                );
+
+                let payment_stream_before =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &owner);
+                assert!(payment_stream_before.is_ok(), "Payment stream should exist");
+                let amount_provided_file = UnitsProvidedFor::<Test>::from(size);
+                let total_amount_before_deletion = amount_provided_file * 2;
+                assert_eq!(
+                    payment_stream_before.unwrap().amount_provided,
+                    total_amount_before_deletion,
+                    "Payment stream should reflect both files"
+                );
+
+                // Verify storage request has 1 confirmed BSP
+                let storage_request = StorageRequests::<Test>::get(&file_key2).unwrap();
+                assert_eq!(storage_request.bsps_confirmed, 1);
+
+                // Verify BSP is in StorageRequestBsps for file2
+                let initial_bsps_file2: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key2).collect();
+                assert_eq!(
+                    initial_bsps_file2.len(),
+                    1,
+                    "Should have 1 BSP associated with file2 storage request initially"
+                );
+                assert_eq!(
+                    initial_bsps_file2[0].0, bsp_id,
+                    "BSP should be associated with file2 storage request"
+                );
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration();
+
+                // Verify all Storage request related data was removed from the storage (from file1)
+                assert!(
+                    StorageRequests::<Test>::get(&file_key1).is_none(),
+                    "Storage request should be removed"
+                );
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key1)
+                        .is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+                let final_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key1).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
+                );
+
+                assert!(
+                    StorageRequests::<Test>::get(&file_key2).is_none(),
+                    "Storage request should be removed"
+                );
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key2)
+                        .is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+                let final_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key2).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
+                );
+
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key1).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key1).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key2).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key2).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                // Verify second storage request was marked as rejected
+                System::assert_has_event(
+                    Event::StorageRequestRejected {
+                        file_key: file_key2,
+                        reason: RejectedStorageRequestReason::RequestExpired,
+                    }
+                    .into(),
+                );
+
+                // Delete the expired storage request (we only do it for file 2)
+                let forest_proof_delete = CompactProof {
+                    encoded_nodes: vec![file_key2.as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                    file_key2,
+                    bsp_id,
+                    forest_proof_delete,
+                ));
+
+                // Verify incomplete storage request was removed as bsp was the only provider storing the file
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key2).is_none(),
+                    "Incomplete storage request should be removed"
+                );
+
+                // Verify deletion events
+                System::assert_has_event(
+                    Event::BspFileDeletionCompleted {
+                        user: owner.clone(),
+                        file_key: file_key2,
+                        file_size: size,
+                        bsp_id,
+                        old_root: file_key2,
+                        new_root: file_key2,
+                    }
+                    .into(),
+                );
+
+                System::assert_has_event(
+                    Event::FileDeletedFromIncompleteStorageRequest {
+                        file_key: file_key2,
+                        provider_id: bsp_id,
+                    }
+                    .into(),
+                );
+
+                // Check capacity decreased by second file size (from 2 files to 1 file)
+                let final_capacity = Providers::get_used_capacity(&bsp_id);
+                assert_eq!(
+                    final_capacity, size,
+                    "BSP capacity should be back to 1 file after deleting expired file"
+                );
+
+                // Verify payment stream still exists but is updated (back to 1 file worth)
+                let payment_stream_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp_id, &owner);
+                assert!(
+                    payment_stream_after.is_ok(),
+                    "Payment stream should still exist after deleting one of two files"
+                );
+                assert_eq!(
+                    payment_stream_after.unwrap().amount_provided,
+                    amount_provided_file,
+                    "Payment stream should be updated to reflect remaining file"
+                );
+            });
+        }
+
+        #[test]
+        fn two_bsps_expired_storage_request_with_full_cleanup() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp1_account = Keyring::Bob.to_account_id();
+                let bsp2_account = Keyring::Dave.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup first BSP
+                let bsp1_signed = RuntimeOrigin::signed(bsp1_account.clone());
+                assert_ok!(bsp_sign_up(bsp1_signed.clone(), size * 2));
+                let bsp1_id = Providers::get_provider_id(&bsp1_account).unwrap();
+
+                // Setup second BSP
+                let bsp2_signed = RuntimeOrigin::signed(bsp2_account.clone());
+                assert_ok!(bsp_sign_up(bsp2_signed.clone(), size * 2));
+                let bsp2_id = Providers::get_provider_id(&bsp2_account).unwrap();
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Both BSPs volunteer for the storage request
+                assert_ok!(FileSystem::bsp_volunteer(bsp1_signed.clone(), file_key));
+                assert_ok!(FileSystem::bsp_volunteer(bsp2_signed.clone(), file_key));
+
+                // Both BSPs confirm storing the file
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp1_signed,
+                    forest_proof.clone(),
+                    BoundedVec::try_from(vec![file_key_with_proof.clone()]).unwrap(),
+                ));
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp2_signed,
+                    forest_proof,
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // Both BSPs have the file and payment streams
+                let bsp1_capacity = Providers::get_used_capacity(&bsp1_id);
+                let bsp2_capacity = Providers::get_used_capacity(&bsp2_id);
+                assert_eq!(bsp1_capacity, size);
+                assert_eq!(bsp2_capacity, size);
+
+                let payment_stream_bsp1 =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp1_id, &owner);
+                let payment_stream_bsp2 =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp2_id, &owner);
+                assert!(payment_stream_bsp1.is_ok());
+                assert!(payment_stream_bsp2.is_ok());
+                assert_eq!(
+                    payment_stream_bsp1.unwrap().amount_provided,
+                    UnitsProvidedFor::<Test>::from(size)
+                );
+                assert_eq!(
+                    payment_stream_bsp2.unwrap().amount_provided,
+                    UnitsProvidedFor::<Test>::from(size)
+                );
+
+                // Storage request has 2 confirmed BSPs
+                let storage_request = StorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    storage_request.bsps_confirmed, 2,
+                    "Storage request should have 2 confirmed BSPs"
+                );
+
+                // Both BSPs are in StorageRequestBsps
+                let initial_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert_eq!(
+                    initial_bsps.len(),
+                    2,
+                    "Should have 2 BSPs associated with storage request initially"
+                );
+                let bsp_ids: Vec<_> = initial_bsps.iter().map(|(bsp_id, _)| *bsp_id).collect();
+                assert!(
+                    bsp_ids.contains(&bsp1_id),
+                    "BSP1 should be associated with storage request"
+                );
+                assert!(
+                    bsp_ids.contains(&bsp2_id),
+                    "BSP2 should be associated with storage request"
+                );
+
+                // Verify incomplete storage request for this file_key does not exist
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should not exist"
+                );
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration();
+
+                // Verify all Storage request related data was removed from the storage
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be removed"
+                );
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key)
+                        .is_none(),
+                    "Storage request should be removed from bucket associations"
+                );
+                let final_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert!(
+                    final_bsps.is_empty(),
+                    "No BSPs should remain associated with the storage request after deletion"
+                );
+
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp2_id, bsp1_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                // Storage request was marked as rejected
+                System::assert_has_event(
+                    Event::StorageRequestRejected {
+                        file_key,
+                        reason: RejectedStorageRequestReason::RequestExpired,
+                    }
+                    .into(),
+                );
+
+                // First BSP deletion
+                let forest_proof_delete1 = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                    file_key,
+                    bsp1_id,
+                    forest_proof_delete1,
+                ));
+
+                // Verify first BSP deletion events and state changes
+                System::assert_has_event(
+                    Event::FileDeletedFromIncompleteStorageRequest {
+                        file_key,
+                        provider_id: bsp1_id,
+                    }
+                    .into(),
+                );
+
+                // Verify first BSP capacity is reduced and payment stream removed
+                let bsp1_capacity_after_delete = Providers::get_used_capacity(&bsp1_id);
+                assert_eq!(
+                    bsp1_capacity_after_delete, 0,
+                    "BSP1 should have no capacity after deletion"
+                );
+
+                let payment_stream_bsp1_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp1_id, &owner);
+                assert!(
+                    payment_stream_bsp1_after.is_err(),
+                    "Payment stream for BSP1 should be removed"
+                );
+
+                // Verify incomplete storage request still exists with 1 confirmed BSP
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp2_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                // Second BSP deletion - this should trigger full cleanup
+                let forest_proof_delete2 = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                    file_key,
+                    bsp2_id,
+                    forest_proof_delete2,
+                ));
+
+                // Verify second BSP deletion events and state changes
+                System::assert_has_event(
+                    Event::FileDeletedFromIncompleteStorageRequest {
+                        file_key,
+                        provider_id: bsp2_id,
+                    }
+                    .into(),
+                );
+
+                // Verify second BSP capacity is reduced and payment stream removed
+                let bsp2_capacity_after_delete = Providers::get_used_capacity(&bsp2_id);
+                assert_eq!(
+                    bsp2_capacity_after_delete, 0,
+                    "BSP2 should have no capacity after deletion"
+                );
+
+                let payment_stream_bsp2_after =
+                    PaymentStreams::get_dynamic_rate_payment_stream_info(&bsp2_id, &owner);
+                assert!(
+                    payment_stream_bsp2_after.is_err(),
+                    "Payment stream for BSP2 should be removed"
+                );
+
+                // Verify incomplete storage request was removed as bsp was the only provider storing the file
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_none(),
+                    "Incomplete storage request should be removed"
+                );
+            });
+        }
+
+        #[test]
+        fn no_bsp_confirmations_triggers_full_cleanup_on_expiration() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp_account = Keyring::Bob.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id, location.clone(), fingerprint, size, msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Verify storage request exists initially
+                let initial_request = StorageRequests::<Test>::get(&file_key);
+                assert!(initial_request.is_some(), "Storage request should exist initially");
+                let initial_request = initial_request.unwrap();
+                assert_eq!(initial_request.bsps_confirmed, 0, "No BSPs should be confirmed initially");
+
+                // Verify storage request is in BucketsWithStorageRequests
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_some(),
+                    "File key should be in bucket storage requests"
+                );
+
+                // BSP volunteers but do not confirm storing
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed, file_key));
+
+                // Verify BSP volunteered
+                let volunteered_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert_eq!(volunteered_bsps.len(), 1, "BSP should have volunteered");
+                assert_eq!(volunteered_bsps[0].0, bsp_id, "Correct BSP should have volunteered");
+
+                // Storage request should still show 0 confirmed BSPs
+                let request_before_expiry = StorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(request_before_expiry.bsps_confirmed, 0, "No BSPs should be confirmed before expiry");
+
+                // Trigger storage request expiration: as no provider confirmed storing,
+                // the storage request should be rejected and cleaned up.
+                trigger_storage_request_expiration();
+
+                // Verify full cleanup occurred:
+                // 1. Storage request should be completely removed
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be completely cleaned up after expiration with no confirmations"
+                );
+
+                // 2. BSP associations should be completely cleaned up
+                let final_bsps: Vec<_> = file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert_eq!(final_bsps.len(), 0, "BSP associations should be completely cleaned up");
+
+                // 3. Bucket storage requests should be cleaned up
+                assert!(
+                    file_system::BucketsWithStorageRequests::<Test>::get(&bucket_id, &file_key).is_none(),
+                    "File key should be removed from bucket storage requests after cleanup"
+                );
+
+                // Verify incomplete storage request for this file_key does not exist
+                assert!(IncompleteStorageRequests::<Test>::get(&file_key).is_none(), "Incomplete storage request should not exist");
+
+                // Verify the StorageRequestRejected event was emitted
+                System::assert_has_event(
+                    Event::StorageRequestRejected {
+                        file_key,
+                        reason: RejectedStorageRequestReason::RequestExpired,
+                    }.into()
+                );
+            });
+        }
+    }
+
+    mod failure {
+        use crate::{types::IncompleteStorageRequestMetadata, IncompleteStorageRequests};
+
+        use super::*;
+
+        #[test]
+        fn storage_request_not_found() {
+            new_test_ext().execute_with(|| {
+                let non_existent_file_key = H256::from_low_u64_be(99999);
+                let bsp_account = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed, 100));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![non_existent_file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
+                        non_existent_file_key,
+                        bsp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::IncompleteStorageRequestNotFound
+                );
+            });
+        }
+
+        #[test]
+        fn storage_request_not_rejected() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp_account = Keyring::Bob.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location,
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Verify storage request exists
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_some(),
+                    "Storage request should exist"
+                );
+
+                // BSP volunteers but do not confirm storing
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed, file_key));
+
+                // Verify BSP volunteered
+                let volunteered_bsps: Vec<_> =
+                    file_system::StorageRequestBsps::<Test>::iter_prefix(&file_key).collect();
+                assert_eq!(volunteered_bsps.len(), 1, "BSP should have volunteered");
+                assert_eq!(
+                    volunteered_bsps[0].0, bsp_id,
+                    "Correct BSP should have volunteered"
+                );
+
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // Try to delete from active (non-rejected) storage request
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
+                        file_key,
+                        bsp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::IncompleteStorageRequestNotFound
+                );
+            });
+        }
+
+        #[test]
+        fn provider_not_associated_with_storage_request() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp1_account = Keyring::Bob.to_account_id();
+                let bsp2_account = Keyring::Dave.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup two BSPs
+                let bsp1_signed = RuntimeOrigin::signed(bsp1_account.clone());
+                assert_ok!(bsp_sign_up(bsp1_signed.clone(), size * 2));
+                let bsp1_id = Providers::get_provider_id(&bsp1_account).unwrap();
+
+                let bsp2_signed = RuntimeOrigin::signed(bsp2_account.clone());
+                assert_ok!(bsp_sign_up(bsp2_signed.clone(), size * 2));
+                let bsp2_id = Providers::get_provider_id(&bsp2_account).unwrap();
+
+                // Issue storage request
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Only BSP1 volunteers and confirms
+                assert_ok!(FileSystem::bsp_volunteer(bsp1_signed.clone(), file_key));
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp1_signed,
+                    forest_proof.clone(),
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration();
+
+                // Verify storage request was deleted
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be deleted"
+                );
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp1_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                // Try to delete from BSP2
+                let forest_proof_delete = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                        file_key,
+                        bsp2_id, // BSP2 never volunteered
+                        forest_proof_delete,
+                    ),
+                    Error::<Test>::ProviderNotStoringFile
+                );
+
+                // Verify incomplete storage request was not impacted
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp1_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+            });
+        }
+
+        #[test]
+        fn invalid_provider_id() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp_account = Keyring::Bob.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Issue storage request and have BSP volunteer/confirm
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed,
+                    forest_proof,
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration();
+
+                // Try to delete using non-existent provider ID
+                let non_existent_provider_id = H256::from_low_u64_be(99999);
+                let forest_proof_delete = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                        file_key,
+                        non_existent_provider_id, // Non-existent provider
+                        forest_proof_delete,
+                    ),
+                    Error::<Test>::InvalidProviderID
+                );
+
+                // Verify incomplete storage request was not impacted
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+            });
+        }
+
+        #[test]
+        fn file_already_deleted_from_bsp() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp_account = Keyring::Bob.to_account_id();
+                let bsp2_account = Keyring::Dave.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSPs
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                let bsp2_signed = RuntimeOrigin::signed(bsp2_account.clone());
+                assert_ok!(bsp_sign_up(bsp2_signed.clone(), size * 2));
+                let bsp2_id = Providers::get_provider_id(&bsp2_account).unwrap();
+
+                // Issue storage request and have BSP volunteer/confirm
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                // Both BSPs volunteer and confirm storing
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                assert_ok!(FileSystem::bsp_volunteer(bsp2_signed.clone(), file_key));
+
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed.clone(),
+                    forest_proof.clone(),
+                    BoundedVec::try_from(vec![file_key_with_proof.clone()]).unwrap(),
+                ));
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp2_signed.clone(),
+                    forest_proof.clone(),
+                    BoundedVec::try_from(vec![file_key_with_proof.clone()]).unwrap(),
+                ));
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration();
+
+                // Verify storage request was deleted
+                assert!(
+                    StorageRequests::<Test>::get(&file_key).is_none(),
+                    "Storage request should be deleted"
+                );
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp2_id, bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                // First deletion succeeds
+                let forest_proof_delete = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::delete_file_for_incomplete_storage_request(
+                    RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                    file_key,
+                    bsp_id,
+                    forest_proof_delete.clone(),
+                ));
+
+                // Verify incomplete storage request was updated
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp2_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                // Try to delete again - should fail because this BSP no longer stores the file
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                        file_key,
+                        bsp_id, // Same BSP, same file
+                        forest_proof_delete,
+                    ),
+                    Error::<Test>::ProviderNotStoringFile
+                );
+            });
+        }
+
+        #[test]
+        fn invalid_forest_proof_verification() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let bsp_account = Keyring::Bob.to_account_id();
+
+                // Setup MSP and bucket
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
+                    setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSP
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed.clone(), size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Issue storage request and have BSP volunteer/confirm
+                assert_ok!(FileSystem::issue_storage_request(
+                    RuntimeOrigin::signed(owner.clone()),
+                    bucket_id,
+                    location.clone(),
+                    fingerprint,
+                    size,
+                    msp_id,
+                    PeerIds::<Test>::try_from(vec![]).unwrap(),
+                    ReplicationTarget::Basic,
+                ));
+
+                assert_ok!(FileSystem::bsp_volunteer(bsp_signed.clone(), file_key));
+                let file_key_with_proof = FileKeyWithProof {
+                    file_key,
+                    proof: CompactProof {
+                        encoded_nodes: vec![file_key.as_ref().to_vec()],
+                    },
+                };
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::default().as_ref().to_vec()],
+                };
+
+                assert_ok!(FileSystem::bsp_confirm_storing(
+                    bsp_signed,
+                    forest_proof,
+                    BoundedVec::try_from(vec![file_key_with_proof]).unwrap(),
+                ));
+
+                // Trigger storage request expiration
+                trigger_storage_request_expiration();
+
+                // Verify incomplete storage request was created
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+
+                // Try to delete with invalid forest proof
+                let invalid_forest_proof = CompactProof {
+                    encoded_nodes: vec![H256::from_low_u64_be(99999).as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Ferdie.to_account_id()),
+                        file_key,
+                        bsp_id,
+                        invalid_forest_proof,
+                    ),
+                    Error::<Test>::ExpectedInclusionProof
+                );
+
+                // Verify incomplete storage request was not impacted
+                assert!(
+                    IncompleteStorageRequests::<Test>::get(&file_key).is_some(),
+                    "Incomplete storage request should be created"
+                );
+                let incomplete_storage_request =
+                    IncompleteStorageRequests::<Test>::get(&file_key).unwrap();
+                assert_eq!(
+                    incomplete_storage_request.pending_bsp_removals,
+                    vec![bsp_id]
+                );
+                assert!(incomplete_storage_request.pending_msp_removal.is_none());
+            });
+        }
+
+        #[test]
+        fn file_key_mismatch() {
+            new_test_ext().execute_with(|| {
+                let owner = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+
+                // Setup MSP and bucket
+                let (
+                    bucket_id,
+                    _correct_file_key,
+                    location,
+                    size,
+                    fingerprint,
+                    _msp_id,
+                    _value_prop_id,
+                ) = setup_file_in_msp_bucket(&owner, &msp);
+
+                // Setup BSP
+                let bsp_account = Keyring::Bob.to_account_id();
+                let bsp_signed = RuntimeOrigin::signed(bsp_account.clone());
+                assert_ok!(bsp_sign_up(bsp_signed, size * 2));
+                let bsp_id = Providers::get_provider_id(&bsp_account).unwrap();
+
+                // Insert a fake incomplete storage request under a wrong file_key
+                let wrong_file_key = H256::from_low_u64_be(99999);
+
+                IncompleteStorageRequests::<Test>::insert(
+                    wrong_file_key,
+                    IncompleteStorageRequestMetadata {
+                        owner: owner.clone(),
+                        bucket_id,
+                        location: location.clone(),
+                        fingerprint,
+                        size,
+                        pending_bsp_removals: BoundedVec::try_from(vec![bsp_id]).unwrap(),
+                        pending_msp_removal: None,
+                    },
+                );
+
+                // Forest proof uses the wrong key
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![wrong_file_key.as_ref().to_vec()],
+                };
+
+                assert_noop!(
+                    FileSystem::delete_file_for_incomplete_storage_request(
+                        RuntimeOrigin::signed(Keyring::Alice.to_account_id()),
+                        wrong_file_key,
+                        bsp_id,
+                        forest_proof,
+                    ),
+                    Error::<Test>::FileKeyMismatch
                 );
             });
         }
@@ -12540,4 +13926,14 @@ fn create_file_deletion_signature(
     let signature = MultiSignature::Sr25519(signature_bytes);
 
     (signed_delete_intention, signature)
+}
+
+/// Trigger storage request expiration by advancing time and calling on_idle
+fn trigger_storage_request_expiration() {
+    let storage_request_ttl: u32 = StorageRequestTtl::<Test>::get();
+    let storage_request_ttl: TickNumber<Test> = storage_request_ttl.into();
+    let expiration_tick = <<Test as crate::Config>::ProofDealer as shp_traits::ProofsDealerInterface>::get_current_tick() + storage_request_ttl;
+
+    // Roll to expiration + 1 to trigger processing
+    roll_to(expiration_tick + 1);
 }

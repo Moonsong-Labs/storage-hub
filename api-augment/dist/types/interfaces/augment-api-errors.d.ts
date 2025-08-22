@@ -267,6 +267,10 @@ declare module "@polkadot/api-base/types/errors" {
        **/
       FileKeyAlreadyPendingDeletion: AugmentedError<ApiType>;
       /**
+       * File key computed from metadata doesn't match the provided file key.
+       **/
+      FileKeyMismatch: AugmentedError<ApiType>;
+      /**
        * File key not found in pending deletion requests.
        **/
       FileKeyNotPendingDeletion: AugmentedError<ApiType>;
@@ -290,6 +294,10 @@ declare module "@polkadot/api-base/types/errors" {
        * Failed to get value when just checked it existed.
        **/
       ImpossibleFailedToGetValue: AugmentedError<ApiType>;
+      /**
+       * Incomplete storage request not found.
+       **/
+      IncompleteStorageRequestNotFound: AugmentedError<ApiType>;
       /**
        * Key already exists in mapping when it should not.
        **/

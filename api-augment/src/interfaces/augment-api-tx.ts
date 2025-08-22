@@ -570,6 +570,21 @@ declare module "@polkadot/api-base/types/submittable" {
         ]
       >;
       /**
+       * Delete a file from an incomplete (rejected, expired or revoked) storage request.
+       *
+       * This extrinsic allows fisherman nodes to delete files from providers when an IncompleteStorageRequestMetadata for the given file_key
+       * exist in the IncompleteStorageRequests mapping. It validates that the IncompleteStorageRequestMetadata exists,
+       * that the provider has the file in its Merkle Patricia Forest, and verifies the file key matches the metadata.
+       **/
+      deleteFileForIncompleteStorageRequest: AugmentedSubmittable<
+        (
+          fileKey: H256 | string | Uint8Array,
+          providerId: H256 | string | Uint8Array,
+          forestProof: SpTrieStorageProofCompactProof | { encodedNodes?: any } | string | Uint8Array
+        ) => SubmittableExtrinsic<ApiType>,
+        [H256, H256, SpTrieStorageProofCompactProof]
+      >;
+      /**
        * Issue a new storage request for a file
        **/
       issueStorageRequest: AugmentedSubmittable<

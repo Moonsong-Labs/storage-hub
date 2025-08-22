@@ -34,7 +34,8 @@ where
                     self.index_file_system_event(conn, fs_event).await?
                 }
                 pallet_file_system::Event::StorageRequestRevoked { .. }
-                | pallet_file_system::Event::SpStopStoringInsolventUser { .. } => {
+                | pallet_file_system::Event::SpStopStoringInsolventUser { .. }
+                | pallet_file_system::Event::FileDeletedFromIncompleteStorageRequest { .. } => {
                     trace!(target: LOG_TARGET, "Indexing file deletion event");
                     self.index_file_system_event(conn, fs_event).await?
                 }

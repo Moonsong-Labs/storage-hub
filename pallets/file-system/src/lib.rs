@@ -377,7 +377,7 @@ pub mod pallet {
 
         /// Maximum replication target that a user can select for a new storage request.
         #[pallet::constant]
-        type MaxReplicationTarget: Get<ReplicationTargetType<Self>>;
+        type MaxReplicationTarget: Get<u32>;
 
         /// The amount of ticks that the user has to pay upfront when issuing a storage request.
         ///
@@ -523,6 +523,15 @@ pub mod pallet {
     #[pallet::storage]
     pub type PendingMoveBucketRequests<T: Config> =
         StorageMap<_, Blake2_128Concat, BucketIdFor<T>, MoveBucketRequestMetadata<T>>;
+
+    /// Incomplete storage requests with pending provider file removal.
+    ///
+    /// This mapping tracks storage requests that have been expired or rejected but still have
+    /// confirmed providers storing files. Each entry tracks which providers still need to remove
+    /// their files. Once all providers have removed their files, the entry is automatically cleaned up.
+    #[pallet::storage]
+    pub type IncompleteStorageRequests<T: Config> =
+        StorageMap<_, Blake2_128Concat, MerkleHash<T>, IncompleteStorageRequestMetadata<T>>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -767,6 +776,11 @@ pub mod pallet {
             old_root: MerkleHash<T>,
             new_root: MerkleHash<T>,
         },
+        /// Notifies that a file has been deleted from a rejected storage request.
+        FileDeletedFromIncompleteStorageRequest {
+            file_key: MerkleHash<T>,
+            provider_id: ProviderIdFor<T>,
+        },
     }
 
     // Errors inform users that something went wrong.
@@ -945,6 +959,10 @@ pub mod pallet {
         InvalidProviderID,
         /// Invalid signed operation provided.
         InvalidSignedOperation,
+        /// File key computed from metadata doesn't match the provided file key.
+        FileKeyMismatch,
+        /// Incomplete storage request not found.
+        IncompleteStorageRequestNotFound,
     }
 
     /// This enum holds the HoldReasons for this pallet, allowing the runtime to identify each held balance with different reasons separately
@@ -1502,6 +1520,37 @@ pub mod pallet {
 
             Ok(())
         }
+
+        /// Delete a file from an incomplete (rejected, expired or revoked) storage request.
+        ///
+        /// This extrinsic allows fisherman nodes to delete files from providers when an IncompleteStorageRequestMetadata for the given file_key
+        /// exist in the IncompleteStorageRequests mapping. It validates that the IncompleteStorageRequestMetadata exists,
+        /// that the provider has the file in its Merkle Patricia Forest, and verifies the file key matches the metadata.
+        #[pallet::call_index(18)]
+        #[pallet::weight(Weight::zero())]
+        pub fn delete_file_for_incomplete_storage_request(
+            origin: OriginFor<T>,
+            file_key: MerkleHash<T>,
+            provider_id: ProviderIdFor<T>,
+            forest_proof: ForestProof<T>,
+        ) -> DispatchResult {
+            // TODO: We need to reward the caller of delete_file_for_incomplete_storage_request
+            let _caller = ensure_signed(origin)?;
+
+            Self::do_delete_file_for_incomplete_storage_request(
+                file_key,
+                provider_id,
+                forest_proof,
+            )?;
+
+            // Emit event
+            Self::deposit_event(Event::FileDeletedFromIncompleteStorageRequest {
+                file_key,
+                provider_id,
+            });
+
+            Ok(())
+        }
     }
 
     #[pallet::hooks]
@@ -1533,7 +1582,8 @@ pub mod pallet {
                 T::SuperHighSecurityReplicationTarget::get();
             let ultra_high_security_replication_target =
                 T::UltraHighSecurityReplicationTarget::get();
-            let max_replication_target = T::MaxReplicationTarget::get();
+            let max_replication_target: ReplicationTargetType<T> =
+                T::MaxReplicationTarget::get().into();
             let storage_request_ttl = T::StorageRequestTtl::get();
             let tick_range_to_max_threshold = T::TickRangeToMaximumThreshold::get();
             let min_wait_for_stop_storing = T::MinWaitForStopStoring::get();
