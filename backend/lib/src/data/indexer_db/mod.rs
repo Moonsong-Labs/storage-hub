@@ -8,7 +8,7 @@ pub mod db_client;
 pub mod repository;
 
 pub use db_client::DBClient;
-pub use repository::{Repository, RepositoryError, SmartPool};
+pub use repository::{error::RepositoryError, pool::SmartPool, postgres::Repository};
 
 #[cfg(feature = "mocks")]
-pub use repository::MockRepository;
+pub use repository::mock::MockRepository;

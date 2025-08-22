@@ -6,7 +6,6 @@
 //! ## Features
 //! - Automatic test transactions in test mode (single connection)
 //! - Normal pooling in production mode (32 connections)
-//! - Zero runtime overhead (test code compiled out in release)
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -118,17 +117,6 @@ impl SmartPool {
 
         Ok(conn)
     }
-
-    /// Get the maximum size of the connection pool.
-    ///
-    /// Returns 1 in test mode, 32 in production mode.
-    pub fn max_size(&self) -> usize {
-        #[cfg(test)]
-        return 1;
-
-        #[cfg(not(test))]
-        return 32;
-    }
 }
 
 #[cfg(test)]
@@ -136,11 +124,11 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore] // Requires actual database connection
+    // TODO: should NOT panic when we add testcontainers
+    #[should_panic]
     async fn test_pool_creation() {
-        // This test will fail without a valid database URL
-        // It's mainly to verify compilation
-        let result = SmartPool::new("postgres://invalid:invalid@localhost/invalid").await;
-        assert!(result.is_err());
+        let result = SmartPool::new(DEFAULT_TEST_DATABASE_URL).await;
+
+        assert!(result.is_ok());
     }
 }
