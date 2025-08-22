@@ -40,6 +40,8 @@ pub const SELECTOR_LOG_STORAGE_REQUEST_REVOKED: [u8; 32] =
 pub const SELECTOR_LOG_FILE_DELETION_REQUESTED: [u8; 32] =
     keccak256!("FileDeletionRequested(bytes32,address)");
 
+/// Emit the EVM log for the BucketCreated event
+/// Event signature: BucketCreated(address indexed who, bytes32 indexed bucketId, bytes32 indexed mspId)
 pub fn log_bucket_created(
     address: impl Into<H160>,
     who: impl Into<H160>,
@@ -56,6 +58,8 @@ pub fn log_bucket_created(
     )
 }
 
+/// Emit the EVM log for the BucketMoveRequested event
+/// Event signature: BucketMoveRequested(address indexed who, bytes32 indexed bucketId, bytes32 indexed newMspId)
 pub fn log_bucket_move_requested(
     address: impl Into<H160>,
     who: impl Into<H160>,
@@ -72,6 +76,8 @@ pub fn log_bucket_move_requested(
     )
 }
 
+/// Emit the EVM log for the BucketPrivacyUpdated event
+/// Event signature: BucketPrivacyUpdated(address indexed who, bytes32 indexed bucketId, bool _private)
 pub fn log_bucket_privacy_updated(
     address: impl Into<H160>,
     who: impl Into<H160>,
@@ -88,6 +94,8 @@ pub fn log_bucket_privacy_updated(
     )
 }
 
+/// Emit the EVM log for the CollectionCreated event
+/// Event signature: CollectionCreated(address indexed who, bytes32 indexed bucketId, bytes32 indexed collectionId)
 pub fn log_collection_created(
     address: impl Into<H160>,
     who: impl Into<H160>,
@@ -104,6 +112,8 @@ pub fn log_collection_created(
     )
 }
 
+/// Emit the EVM log for the BucketDeleted event
+/// Event signature: BucketDeleted(address indexed who, bytes32 indexed bucketId)
 pub fn log_bucket_deleted(address: impl Into<H160>, who: impl Into<H160>, bucket_id: H256) -> Log {
     log3(
         address.into(),
@@ -114,6 +124,8 @@ pub fn log_bucket_deleted(address: impl Into<H160>, who: impl Into<H160>, bucket
     )
 }
 
+/// Emit the EVM log for the StorageRequestIssued event
+/// Event signature: StorageRequestIssued(address indexed who, bytes32 indexed fileKey, bytes32 indexed bucketId)
 pub fn log_storage_request_issued(
     address: impl Into<H160>,
     who: impl Into<H160>,
@@ -130,6 +142,8 @@ pub fn log_storage_request_issued(
     )
 }
 
+/// Emit the EVM log for the StorageRequestRevoked event
+/// Event signature: StorageRequestRevoked(bytes32 indexed fileKey)
 pub fn log_storage_request_revoked(address: impl Into<H160>, file_key: H256) -> Log {
     log2(
         address.into(),
@@ -139,6 +153,8 @@ pub fn log_storage_request_revoked(address: impl Into<H160>, file_key: H256) -> 
     )
 }
 
+/// Emit the EVM log for the FileDeletionRequested event
+/// Event signature: FileDeletionRequested(bytes32 indexed fileKey, address indexed owner)
 pub fn log_file_deletion_requested(
     address: impl Into<H160>,
     file_key: H256,
@@ -214,8 +230,6 @@ where
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
-        // Emit EVM log for BucketCreated event
-        // Event signature: BucketCreated(address indexed who, bytes32 indexed bucketId, bytes32 indexed mspId)
         let log = log_bucket_created(
             handle.context().address,
             handle.context().caller,
@@ -250,8 +264,6 @@ where
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
-        // Emit EVM log for BucketMoveRequested event
-        // Event signature: BucketMoveRequested(address indexed who, bytes32 indexed bucketId, bytes32 indexed newMspId)
         let log = log_bucket_move_requested(
             handle.context().address,
             handle.context().caller,
@@ -281,8 +293,6 @@ where
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
-        // Emit EVM log for BucketPrivacyUpdated event
-        // Event signature: BucketPrivacyUpdated(address indexed who, bytes32 indexed bucketId, bool _private)
         let log = log_bucket_privacy_updated(
             handle.context().address,
             handle.context().caller,
@@ -316,8 +326,6 @@ where
             .map_err(|_| RevertReason::custom("Failed to get collection ID"))?
             .ok_or(RevertReason::custom("Collection ID not found"))?; // Should exist after successful dispatch
 
-        // Emit EVM log for CollectionCreated event
-        // Event signature: CollectionCreated(address indexed who, bytes32 indexed bucketId, bytes32 indexed collectionId)
         let log = log_collection_created(
             handle.context().address,
             handle.context().caller,
@@ -342,8 +350,6 @@ where
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
-        // Emit EVM log for BucketDeleted event
-        // Event signature: BucketDeleted(address indexed who, bytes32 indexed bucketId)
         let log = log_bucket_deleted(
             handle.context().address,
             handle.context().caller,
@@ -423,8 +429,6 @@ where
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
-        // Emit EVM log for StorageRequestIssued event
-        // Event signature: StorageRequestIssued(address indexed who, bytes32 indexed fileKey, bytes32 indexed bucketId)
         let log = log_storage_request_issued(
             handle.context().address,
             handle.context().caller,
@@ -449,8 +453,6 @@ where
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
-        // Emit EVM log for StorageRequestRevoked event
-        // Event signature: StorageRequestRevoked(bytes32 indexed fileKey)
         let log = log_storage_request_revoked(
             handle.context().address,
             file_key,
@@ -519,8 +521,6 @@ where
         // TODO: Consult about what storage growth argument is
         RuntimeHelper::<Runtime>::try_dispatch(handle, Some(origin).into(), call, 0)?;
 
-        // Emit EVM log for FileDeletionRequested event
-        // Event signature: FileDeletionRequested(bytes32 indexed fileKey, address indexed owner)
         let log = log_file_deletion_requested(
             handle.context().address,
             file_key_h256,
