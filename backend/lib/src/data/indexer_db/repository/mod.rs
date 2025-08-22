@@ -25,12 +25,10 @@
 //! ```
 
 use async_trait::async_trait;
-use bigdecimal::BigDecimal;
 
 use shc_indexer_db::models::Bsp;
 
 pub mod error;
-pub mod mock;
 pub mod pool;
 pub mod postgres;
 
