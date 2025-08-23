@@ -11776,6 +11776,68 @@ mod delete_file_tests {
         }
 
         #[test]
+        fn showcase_vulnerability() {
+            new_test_ext().execute_with(|| {
+                let alice = Keyring::Alice.to_account_id();
+                let msp = Keyring::Charlie.to_account_id();
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, value_prop_id) =
+                    setup_file_in_msp_bucket(&alice, &msp);
+                let non_storing_msp = Keyring::Dave.to_account_id();
+
+                // Set up msp that will not store the file
+                let (non_storing_msp_id, non_storing_value_prop_id) = add_msp_to_provider_storage(&non_storing_msp);
+
+                // Simulate the other msp is storing something
+                assert_ok!(<<Test as crate::Config>::Providers as MutateStorageProvidersInterface>::increase_capacity_used(&non_storing_msp_id, size*2));
+
+                // Get Payment streams and capacity used
+                let initial_payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                let initial_payment_stream_value_non_storing = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&non_storing_msp_id, &alice);
+
+                assert_eq!(initial_payment_stream_value, Some(5));
+                assert_eq!(initial_payment_stream_value_non_storing, None); // Non-storing MSP does not have a payment stream with the user
+
+                let initial_capacity_used = Providers::get_used_capacity(&msp_id);
+                let initial_capacity_used_non_storing = Providers::get_used_capacity(&non_storing_msp_id);
+
+                assert_eq!(initial_capacity_used, size);
+                assert_eq!(initial_capacity_used_non_storing, size*2); // Non-storing should not have any capacity used
+
+                // Alice signs the deletion message
+                let (signed_delete_intention, signature) =
+                    create_file_deletion_signature(&Keyring::Alice, file_key);
+
+                let forest_proof = CompactProof {
+                    encoded_nodes: vec![file_key.as_ref().to_vec()],
+                };
+
+                // This should be noop.
+                assert_ok!(FileSystem::delete_file(
+                    RuntimeOrigin::signed(alice.clone()),
+                    alice.clone(),
+                    signed_delete_intention,
+                    signature,
+                    bucket_id,
+                    location,
+                    size,
+                    fingerprint,
+                    non_storing_msp_id,
+                    forest_proof,
+                ));
+
+                // Verify payment stream value changed for the corresponding MSP
+                let payment_stream_value = <<Test as crate::Config>::PaymentStreams as PaymentStreamsInterface>::get_inner_fixed_rate_payment_stream_value(&msp_id, &alice);
+                assert_eq!(payment_stream_value, Some(1));
+
+                // but capacity used....
+                // The supposed MSP is not decreasing its capacity...   
+                assert_eq!(Providers::get_used_capacity(&msp_id), size);
+                // And the random one does :(
+                assert_eq!(Providers::get_used_capacity(&non_storing_msp_id), initial_capacity_used_non_storing - size);
+            });
+        }
+
+        #[test]
         fn bsp_delete_file_with_valid_forest_proof_payment_stream_finish_if_no_more_files_stored() {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
