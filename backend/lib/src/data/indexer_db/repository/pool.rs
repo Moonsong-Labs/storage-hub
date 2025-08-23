@@ -128,9 +128,17 @@ mod tests {
     #[tokio::test]
     // TODO: should NOT panic when we add testcontainers
     #[should_panic]
-    async fn test_pool_creation() {
-        let result = SmartPool::new(DEFAULT_TEST_DATABASE_URL).await;
+    async fn create_and_get_connection() {
+        let pool = SmartPool::new(DEFAULT_TEST_DATABASE_URL)
+            .await
+            .expect("able to create pool");
 
-        assert!(result.is_ok());
+        pool.get().await.expect("able to get connection");
+
+        assert!(
+            pool.test_tx_initialized
+                .fetch_and(true, std::sync::atomic::Ordering::SeqCst),
+            "connection initialized with test_transaction"
+        );
     }
 }
