@@ -195,7 +195,7 @@ impl RpcConnection for MockConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::test::{mock_rpc::*, network::*};
+    use crate::constants::test::mock_rpc::*;
 
     #[tokio::test]
     async fn test_connection_basic() {
