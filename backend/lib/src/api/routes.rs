@@ -17,6 +17,8 @@ mod tests {
     use axum::http::StatusCode;
     use axum_test::TestServer;
 
+    use crate::services::health::HealthService;
+
     #[tokio::test]
     async fn test_health_route() {
         let app = crate::api::mock_app();
@@ -26,6 +28,6 @@ mod tests {
         assert_eq!(response.status_code(), StatusCode::OK);
 
         let json: serde_json::Value = response.json();
-        assert_eq!(json["status"], "ok");
+        assert_eq!(json["status"], HealthService::HEALTHY);
     }
 }

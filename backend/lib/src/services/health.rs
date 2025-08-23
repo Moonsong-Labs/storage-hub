@@ -35,6 +35,9 @@ pub struct HealthService {
 }
 
 impl HealthService {
+    pub const HEALTHY: &str = "healthy";
+    pub const UNHEALTHY: &str = "unhealthy";
+
     /// Instantiate a new [`HealthService`]
     ///
     /// This service uses the following services:
@@ -54,13 +57,13 @@ impl HealthService {
         let postgres_health = self.check_postgres().await;
         let rpc_health = self.check_rpc().await;
 
-        let overall_status = if storage_health.status == "healthy"
-            && postgres_health.status == "healthy"
-            && rpc_health.status == "healthy"
+        let overall_status = if storage_health.status == Self::HEALTHY
+            && postgres_health.status == Self::HEALTHY
+            && rpc_health.status == Self::HEALTHY
         {
-            "healthy"
+            Self::HEALTHY
         } else {
-            "unhealthy"
+            Self::UNHEALTHY
         };
 
         DetailedHealthStatus {
@@ -77,9 +80,9 @@ impl HealthService {
 
     async fn check_storage(&self) -> ComponentHealth {
         let (status, message) = match self.storage.health_check().await {
-            Ok(true) => ("healthy", None),
-            Ok(false) => ("unhealthy", None),
-            Err(e) => ("unhealthy", Some(format!("Storage error: {e}"))),
+            Ok(true) => (Self::HEALTHY, None),
+            Ok(false) => (Self::UNHEALTHY, None),
+            Err(e) => (Self::UNHEALTHY, Some(format!("Storage error: {e}"))),
         };
 
         ComponentHealth {
@@ -89,28 +92,29 @@ impl HealthService {
     }
 
     async fn check_postgres(&self) -> ComponentHealth {
-        match self.db.test_connection().await {
-            Ok(_) => ComponentHealth {
-                status: "healthy".to_string(),
-                message: None,
-            },
-            Err(e) => ComponentHealth {
-                status: "unhealthy".to_string(),
-                message: Some(format!("Database error: {e}")),
-            },
+        let (status, message) = match self.db.test_connection().await {
+            Ok(_) => (Self::HEALTHY, None),
+            Err(e) => (Self::UNHEALTHY, Some(format!("Database error: {e}"))),
+        };
+
+        ComponentHealth {
+            status: status.to_string(),
+            message,
         }
     }
 
     async fn check_rpc(&self) -> ComponentHealth {
-        match self.rpc.is_connected().await {
-            true => ComponentHealth {
-                status: "healthy".to_string(),
-                message: None,
-            },
-            false => ComponentHealth {
-                status: "unhealthy".to_string(),
-                message: Some("RPC connection not established".to_string()),
-            },
+        let (status, message) = match self.rpc.is_connected().await {
+            true => (Self::HEALTHY, None),
+            false => (
+                Self::UNHEALTHY,
+                Some("RPC connection not established".to_string()),
+            ),
+        };
+
+        ComponentHealth {
+            status: status.to_string(),
+            message,
         }
     }
 }
