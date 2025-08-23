@@ -230,37 +230,18 @@ pub mod error_cases {
     pub const CONCURRENT_TEST_COUNT: usize = 10;
 }
 
-/// Helper functions for creating test data
-pub mod helpers {
-    use super::*;
+/// Mock connection test data
+pub mod mock_rpc {
+    /// Test method names
+    pub const SAMPLE_METHOD: &str = "system_health";
+    pub const SAMPLE_FIELD: &str = "field";
+    pub const SAMPLE_VALUE: &str = "value";
 
-    /// Creates a standard test file metadata response
-    pub fn create_test_file_metadata() -> serde_json::Value {
-        serde_json::json!({
-            "owner": accounts::TEST_OWNER,
-            "bucket_id": buckets::TEST_BUCKET_ID,
-            "location": file_metadata::TEST_LOCATION,
-            "fingerprint": file_metadata::TEST_FINGERPRINT,
-            "size": file_metadata::TEST_FILE_SIZE,
-            "peer_ids": [peers::TEST_PEER_1, peers::TEST_PEER_2]
-        })
-    }
+    /// Error simulation parameters
+    pub const FAIL_AFTER_N_CALLS_THRESHOLD: usize = 2;
+    pub const ERROR_MESSAGE_FAIL_AFTER_N: &str = "Simulated failure after N calls";
 
-    /// Creates a test transaction receipt
-    pub fn create_test_transaction_receipt() -> serde_json::Value {
-        serde_json::json!({
-            "block_hash": blockchain::TEST_BLOCK_HASH,
-            "block_number": blockchain::ALTERNATIVE_BLOCK_NUMBER,
-            "extrinsic_index": blockchain::TEST_EXTRINSIC_INDEX,
-            "success": true
-        })
-    }
-
-    /// Creates test peer IDs vector
-    pub fn create_test_peer_ids() -> Vec<Vec<u8>> {
-        vec![
-            peers::ALTERNATIVE_PEER_1.to_vec(),
-            peers::ALTERNATIVE_PEER_2.to_vec(),
-        ]
-    }
+    /// Transport error messages
+    pub const TEST_TRANSPORT_ERROR_MSG: &str = "Test transport error";
+    pub const TEST_RPC_ERROR_MSG: &str = "Test RPC error";
 }

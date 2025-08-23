@@ -195,7 +195,7 @@ impl RpcConnection for MockConnection {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::constants::test::network::*;
+    use crate::constants::test::{mock_rpc::*, network::*};
 
     #[tokio::test]
     async fn test_connection_basic() {
@@ -203,19 +203,16 @@ mod tests {
 
         // Set up test response
         conn.set_response(
-            "system_health",
+            SAMPLE_METHOD,
             serde_json::json!({
-                "peers": DEFAULT_PEER_COUNT,
-                "isSyncing": false,
-                "shouldHavePeers": true
+                SAMPLE_FIELD: SAMPLE_VALUE
             }),
         )
         .await;
 
         // Test system health call
-        let health: Value = conn.call("system_health", ()).await.unwrap();
-        assert_eq!(health["peers"], DEFAULT_PEER_COUNT);
-        assert_eq!(health["isSyncing"], false);
+        let health: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        assert_eq!(health[SAMPLE_FIELD], SAMPLE_VALUE);
 
         // Test connection status
         assert!(conn.is_connected().await);
@@ -228,40 +225,95 @@ mod tests {
     #[tokio::test]
     async fn test_connection_custom_response() {
         let conn = MockConnection::new();
-        conn.set_response("custom_method", serde_json::json!({"result": "custom"}))
-            .await;
+        conn.set_response(
+            SAMPLE_METHOD,
+            serde_json::json!({
+                SAMPLE_FIELD: SAMPLE_VALUE
+            }),
+        )
+        .await;
 
-        let response: Value = conn.call("custom_method", ()).await.unwrap();
-        assert_eq!(response["result"], "custom");
+        let response: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        assert_eq!(response[SAMPLE_FIELD], SAMPLE_VALUE);
     }
 
     #[tokio::test]
-    async fn test_connection_error_modes() {
-        // Test timeout error
+    async fn test_error_mode_timeout() {
         let conn = MockConnection::new();
         conn.set_error_mode(ErrorMode::Timeout).await;
-        let result: Result<Value, _> = conn.call("any_method", ()).await;
-        assert!(matches!(result, Err(RpcConnectionError::Timeout)));
 
-        // Test connection closed error
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        assert!(matches!(result, Err(RpcConnectionError::Timeout)));
+    }
+
+    #[tokio::test]
+    async fn test_error_mode_connection_closed() {
         let conn = MockConnection::new();
         conn.set_error_mode(ErrorMode::ConnectionClosed).await;
-        let result: Result<Value, _> = conn.call("any_method", ()).await;
+
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
+    }
 
-        // Test fail after N calls
+    #[tokio::test]
+    async fn test_error_mode_transport_error() {
         let conn = MockConnection::new();
-        conn.set_response("system_health", serde_json::json!({"status": "ok"}))
+        conn.set_error_mode(ErrorMode::TransportError(
+            TEST_TRANSPORT_ERROR_MSG.to_string(),
+        ))
+        .await;
+
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        match result {
+            Err(RpcConnectionError::Transport(msg)) => {
+                assert_eq!(msg, TEST_TRANSPORT_ERROR_MSG);
+            }
+            _ => panic!("Expected transport error"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_error_mode_rpc_error() {
+        let conn = MockConnection::new();
+        conn.set_error_mode(ErrorMode::RpcError(TEST_RPC_ERROR_MSG.to_string()))
             .await;
-        conn.set_error_mode(ErrorMode::FailAfterNCalls(2)).await;
 
-        // First two calls should succeed
-        let _: Value = conn.call("system_health", ()).await.unwrap();
-        let _: Value = conn.call("system_health", ()).await.unwrap();
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        match result {
+            Err(RpcConnectionError::Rpc(msg)) => {
+                assert_eq!(msg, TEST_RPC_ERROR_MSG);
+            }
+            _ => panic!("Expected RPC error"),
+        }
+    }
 
-        // Third call should fail
-        let result: Result<Value, _> = conn.call("system_health", ()).await;
-        assert!(matches!(result, Err(RpcConnectionError::Rpc(_))));
+    #[tokio::test]
+    async fn test_error_mode_fail_after_n_calls() {
+        let conn = MockConnection::new();
+        conn.set_response(
+            SAMPLE_METHOD,
+            serde_json::json!({
+                SAMPLE_FIELD: SAMPLE_VALUE
+            }),
+        )
+        .await;
+        conn.set_error_mode(ErrorMode::FailAfterNCalls(FAIL_AFTER_N_CALLS_THRESHOLD))
+            .await;
+
+        // First N calls should succeed
+        for _ in 0..FAIL_AFTER_N_CALLS_THRESHOLD {
+            let result: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+            assert_eq!(result[SAMPLE_FIELD], SAMPLE_VALUE);
+        }
+
+        // Next call should fail
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
+        match result {
+            Err(RpcConnectionError::Rpc(msg)) => {
+                assert!(msg.contains(ERROR_MESSAGE_FAIL_AFTER_N));
+            }
+            _ => panic!("Expected RPC error after N calls"),
+        }
     }
 
     #[tokio::test]
@@ -276,7 +328,7 @@ mod tests {
         assert!(!conn.is_connected().await);
 
         // Try to call - should fail
-        let result: Result<Value, _> = conn.call("any_method", ()).await;
+        let result: Result<Value, _> = conn.call(SAMPLE_METHOD, ()).await;
         assert!(matches!(result, Err(RpcConnectionError::ConnectionClosed)));
 
         // Reconnect
@@ -284,8 +336,14 @@ mod tests {
         assert!(conn.is_connected().await);
 
         // Call should work now
-        conn.set_response("system_health", serde_json::json!({"status": "ok"}))
-            .await;
-        let _: Value = conn.call("system_health", ()).await.unwrap();
+        conn.set_response(
+            SAMPLE_METHOD,
+            serde_json::json!({
+                SAMPLE_FIELD: SAMPLE_VALUE
+            }),
+        )
+        .await;
+        let response: Value = conn.call(SAMPLE_METHOD, ()).await.unwrap();
+        assert_eq!(response[SAMPLE_FIELD], SAMPLE_VALUE);
     }
 }
