@@ -17,6 +17,7 @@ lto = true
 members = [
 	"runtime",
 	"pallets/*",
+	"precompiles/*",
 	"node",
 	"client",
 	"client/actors-framework",
@@ -55,8 +56,8 @@ futures-timer = "3.0.1"
 hash-db = "0.16.0"
 hex = { version = "0.4.3", default-features = false }
 hex-literal = { version = "0.4.1" }
-jsonrpsee = { version = "0.24.3" }
-jsonrpsee-core = { version = "0.24.3" }
+jsonrpsee = { version = "0.24.9" }
+jsonrpsee-core = { version = "0.24.9" }
 kvdb = "0.13.0"
 kvdb-memorydb = "0.13.0"
 kvdb-rocksdb = "0.19.0"
@@ -217,6 +218,7 @@ pallet-evm-precompile-modexp = { git = "https://github.com/polkadot-evm/frontier
 pallet-evm-precompile-sha3fips = { git = "https://github.com/polkadot-evm/frontier", branch = "stable2412", default-features = false }
 pallet-evm-precompile-simple = { git = "https://github.com/polkadot-evm/frontier", branch = "stable2412", default-features = false }
 pallet-hotfix-sufficients = { git = "https://github.com/polkadot-evm/frontier", branch = "stable2412", default-features = false }
+precompile-utils = { git = "https://github.com/polkadot-evm/frontier.git", branch = "stable2412", default-features = false }
 
 # Frontier (client)
 fc-api = { git = "https://github.com/polkadot-evm/frontier", branch = "stable2412", default-features = false }
@@ -240,6 +242,9 @@ pallet-proofs-dealer-runtime-api = { path = "pallets/proofs-dealer/runtime-api",
 pallet-randomness = { path = "pallets/randomness", default-features = false }
 pallet-storage-providers = { path = "pallets/providers", default-features = false }
 pallet-storage-providers-runtime-api = { path = "pallets/providers/runtime-api", default-features = false }
+
+# Local - Precompiles
+pallet-evm-precompile-file-system = { path = "precompiles/pallet-file-system", default-features = false }
 
 # Local - StorageHub Client (used by the node, can be std or no_std)
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
@@ -267,7 +272,7 @@ shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
 shp-types = { path = "primitives/types", default-features = false }
 
-# Lcoal - StorageHub Runtime
+# Local - StorageHub Runtime
 storage-hub-runtime = { path = "runtime", default-features = false }
 
 [workspace.lints.rust]
