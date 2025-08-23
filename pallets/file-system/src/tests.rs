@@ -11801,7 +11801,7 @@ mod delete_file_tests {
                 let initial_capacity_used_non_storing = Providers::get_used_capacity(&non_storing_msp_id);
 
                 assert_eq!(initial_capacity_used, size);
-                assert_eq!(initial_capacity_used_non_storing, size*2); // Non-storing should not have any capacity used
+                assert_eq!(initial_capacity_used_non_storing, size*2); 
 
                 // Alice signs the deletion message
                 let (signed_delete_intention, signature) =
