@@ -11780,12 +11780,12 @@ mod delete_file_tests {
             new_test_ext().execute_with(|| {
                 let alice = Keyring::Alice.to_account_id();
                 let msp = Keyring::Charlie.to_account_id();
-                let (bucket_id, file_key, location, size, fingerprint, msp_id, value_prop_id) =
+                let (bucket_id, file_key, location, size, fingerprint, msp_id, _value_prop_id) =
                     setup_file_in_msp_bucket(&alice, &msp);
                 let non_storing_msp = Keyring::Dave.to_account_id();
 
                 // Set up msp that will not store the file
-                let (non_storing_msp_id, non_storing_value_prop_id) = add_msp_to_provider_storage(&non_storing_msp);
+                let (non_storing_msp_id, _non_storing_value_prop_id) = add_msp_to_provider_storage(&non_storing_msp);
 
                 // Simulate the other msp is storing something
                 assert_ok!(<<Test as crate::Config>::Providers as MutateStorageProvidersInterface>::increase_capacity_used(&non_storing_msp_id, size*2));
@@ -11801,7 +11801,7 @@ mod delete_file_tests {
                 let initial_capacity_used_non_storing = Providers::get_used_capacity(&non_storing_msp_id);
 
                 assert_eq!(initial_capacity_used, size);
-                assert_eq!(initial_capacity_used_non_storing, size*2); 
+                assert_eq!(initial_capacity_used_non_storing, size*2);
 
                 // Alice signs the deletion message
                 let (signed_delete_intention, signature) =
