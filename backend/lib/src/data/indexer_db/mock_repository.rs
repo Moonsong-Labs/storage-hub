@@ -51,7 +51,6 @@ impl Default for MockRepository {
 #[async_trait]
 impl IndexerOps for MockRepository {
     // ============ BSP Read Operations ============
-
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>> {
         let bsps = self.bsps.read().await;
         let mut all_bsps: Vec<Bsp> = bsps.values().cloned().collect();
@@ -68,7 +67,6 @@ impl IndexerOps for MockRepository {
 #[async_trait]
 impl IndexerOpsMut for MockRepository {
     // ============ BSP Write Operations ============
-
     async fn delete_bsp(&self, account: &str) -> RepositoryResult<()> {
         let mut bsps = self.bsps.write().await;
         let id_to_remove = bsps.values().find(|b| b.account == account).map(|b| b.id);

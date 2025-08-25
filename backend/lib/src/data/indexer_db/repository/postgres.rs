@@ -48,7 +48,6 @@ impl Repository {
 #[async_trait]
 impl IndexerOps for Repository {
     // ============ BSP Read Operations ============
-
     async fn list_bsps(&self, limit: i64, offset: i64) -> RepositoryResult<Vec<Bsp>> {
         let mut conn = self.pool.get().await?;
 
@@ -67,7 +66,6 @@ impl IndexerOps for Repository {
 #[async_trait]
 impl IndexerOpsMut for Repository {
     // ============ BSP Write Operations ============
-
     async fn delete_bsp(&self, account: &str) -> RepositoryResult<()> {
         let mut conn = self.pool.get().await?;
 
