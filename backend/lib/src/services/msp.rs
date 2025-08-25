@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::Utc;
 
 use crate::{
-    data::{postgres::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
+    data::{indexer_db::DBClient, rpc::StorageHubRpcClient, storage::BoxedStorage},
     error::Error,
     models::*,
 };
@@ -304,23 +304,19 @@ impl MspService {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "mocks"))]
 mod tests {
     use super::*;
-    use crate::data::{
-        rpc::{AnyRpcConnection, MockConnection},
-        storage::{BoxedStorageWrapper, InMemoryStorage},
-    };
+    use crate::services::Services;
 
     async fn create_test_service() -> MspService {
-        let memory_storage = InMemoryStorage::new();
-        let storage = Arc::new(BoxedStorageWrapper::new(memory_storage));
-        let postgres = Arc::new(DBClient::test());
-        let mock_conn = MockConnection::new();
-        let rpc_conn = Arc::new(AnyRpcConnection::Mock(mock_conn));
-        let rpc = Arc::new(StorageHubRpcClient::new(rpc_conn));
+        let services = Services::mocks();
 
-        MspService::new(storage, postgres, rpc)
+        MspService::new(
+            services.storage.clone(),
+            services.postgres.clone(),
+            services.rpc.clone(),
+        )
     }
 
     #[tokio::test]
