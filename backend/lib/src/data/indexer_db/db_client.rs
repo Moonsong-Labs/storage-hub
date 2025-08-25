@@ -8,7 +8,9 @@ use std::sync::Arc;
 
 use shc_indexer_db::models::Bsp;
 
-use crate::data::indexer_db::repository::StorageOperations;
+use crate::{
+    constants::database::DEFAULT_PAGE_LIMIT, data::indexer_db::repository::StorageOperations,
+};
 
 /// Database client that delegates to a repository implementation
 ///
@@ -60,7 +62,7 @@ impl DBClient {
         limit: Option<i64>,
         offset: Option<i64>,
     ) -> crate::error::Result<Vec<Bsp>> {
-        let limit = limit.unwrap_or(100);
+        let limit = limit.unwrap_or(DEFAULT_PAGE_LIMIT);
         let offset = offset.unwrap_or(0);
 
         self.repository

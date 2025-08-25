@@ -38,6 +38,9 @@ pub mod database {
 
     /// Default PostgreSQL database URL
     pub const DEFAULT_DATABASE_URL: &str = "postgres://localhost:5432/storage_hub";
+
+    /// Default limit for requests with pagination
+    pub const DEFAULT_PAGE_LIMIT: usize = 100;
 }
 
 /// API configuration constants
