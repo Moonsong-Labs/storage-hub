@@ -30,7 +30,7 @@ pub fn routes(services: Services) -> Router {
         .route("/info", get(handlers::info))
         .route("/stats", get(handlers::stats))
         .route("/value-props", get(handlers::value_props))
-        .route("/msp/health", get(handlers::msp_health))
+        .route("/health", get(handlers::msp_health))
         // Bucket routes
         .route("/buckets", get(handlers::list_buckets))
         .route("/buckets/:bucket_id", get(handlers::get_bucket))
