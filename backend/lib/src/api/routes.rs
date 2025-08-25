@@ -6,8 +6,7 @@ use axum::{
     Router,
 };
 
-use super::{handlers, msp_handlers};
-use crate::services::Services;
+use crate::{api::handlers, services::Services};
 
 /// Creates the router with all API routes
 pub fn routes(services: Services) -> Router {
@@ -16,48 +15,46 @@ pub fn routes(services: Services) -> Router {
     let file_upload = Router::new()
         .route(
             "/buckets/:bucket_id/:file_key/upload",
-            put(msp_handlers::upload_file),
+            put(handlers::upload_file),
         )
         .route_layer(DefaultBodyLimit::disable());
 
     Router::new()
-        // TODO(SCAFFOLDING): These are example endpoints for demonstration purposes only.
-        .route("/health", get(handlers::health_check_detailed))
         // Auth routes
-        .route("/auth/nonce", post(msp_handlers::nonce))
-        .route("/auth/verify", post(msp_handlers::verify))
-        .route("/auth/refresh", post(msp_handlers::refresh))
-        .route("/auth/logout", post(msp_handlers::logout))
-        .route("/auth/profile", get(msp_handlers::profile))
+        .route("/auth/nonce", post(handlers::nonce))
+        .route("/auth/verify", post(handlers::verify))
+        .route("/auth/refresh", post(handlers::refresh))
+        .route("/auth/logout", post(handlers::logout))
+        .route("/auth/profile", get(handlers::profile))
         // MSP info routes
-        .route("/info", get(msp_handlers::info))
-        .route("/stats", get(msp_handlers::stats))
-        .route("/value-props", get(msp_handlers::value_props))
-        .route("/msp/health", get(msp_handlers::msp_health))
+        .route("/info", get(handlers::info))
+        .route("/stats", get(handlers::stats))
+        .route("/value-props", get(handlers::value_props))
+        .route("/msp/health", get(handlers::msp_health))
         // Bucket routes
-        .route("/buckets", get(msp_handlers::list_buckets))
-        .route("/buckets/:bucket_id", get(msp_handlers::get_bucket))
-        .route("/buckets/:bucket_id/files", get(msp_handlers::get_files))
+        .route("/buckets", get(handlers::list_buckets))
+        .route("/buckets/:bucket_id", get(handlers::get_bucket))
+        .route("/buckets/:bucket_id/files", get(handlers::get_files))
         // File routes - note the order matters for path matching
         .route(
             "/buckets/:bucket_id/:file_key/info",
-            get(msp_handlers::get_file_info),
+            get(handlers::get_file_info),
         )
         .merge(file_upload)
         .route(
             "/buckets/:bucket_id/:file_key/distribute",
-            post(msp_handlers::distribute_file),
+            post(handlers::distribute_file),
         )
         .route(
             "/buckets/:bucket_id/:file_key",
-            get(msp_handlers::download_by_key),
+            get(handlers::download_by_key),
         )
         .route(
             "/buckets/:bucket_id/*file_location",
-            get(msp_handlers::download_by_location),
+            get(handlers::download_by_location),
         )
         // Payment route
-        .route("/payment_stream", get(msp_handlers::payment_stream))
+        .route("/payment_stream", get(handlers::payment_stream))
         // Add state to all routes
         .with_state(services)
 }

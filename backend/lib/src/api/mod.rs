@@ -1,7 +1,6 @@
 //! API module for StorageHub backend
 
 pub mod handlers;
-pub mod msp_handlers;
 pub mod routes;
 pub mod validation;
 
