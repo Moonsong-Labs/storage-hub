@@ -1,7 +1,9 @@
 import assert from "node:assert";
 import type { SubmittableExtrinsic } from "@polkadot/api/types";
 import type { ISubmittableResult } from "@polkadot/types/types";
-import { alice, bob, charlie, describeBspNet, type EnrichedBspApi, ShConsts } from "../../../util";
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { type EnrichedBspApi, ShConsts, alice, bob, charlie, describeBspNet } from "../../../util";
 
 describeBspNet("BSPNet: Mulitple BSP Volunteering - 1", ({ before, it, createUserApi }) => {
   let api: EnrichedBspApi;
@@ -34,10 +36,11 @@ describeBspNet("BSPNet: Mulitple BSP Volunteering - 1", ({ before, it, createUse
 
       assert(newBucketEventDataBlob, "Event doesn't match Type");
 
+      const ownerHex = u8aToHex(decodeAddress(signer.address)).slice(2);
       const { file_metadata: fileMetadata } = await api.rpc.storagehubclient.loadFileInStorage(
         "res/smile.jpg",
         "cat/smile.jpg",
-        signer.address,
+        ownerHex,
         newBucketEventDataBlob.bucketId
       );
 

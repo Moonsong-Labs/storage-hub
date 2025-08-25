@@ -86,17 +86,18 @@ pub fn configure_file_transfer_network<
     (protocol_config.name, request_receiver)
 }
 
-pub async fn spawn_file_transfer_service(
+pub async fn spawn_file_transfer_service<Runtime: StorageEnableRuntime>(
     task_spawner: &TaskSpawner,
     request_receiver: async_channel::Receiver<IncomingRequest>,
     protocol_name: ProtocolName,
     network: Arc<dyn NetworkService>,
-) -> ActorHandle<FileTransferService> {
+) -> ActorHandle<FileTransferService<Runtime>> {
     let task_spawner = task_spawner
         .with_name("file-transfer-service")
         .with_group("network");
 
-    let file_transfer_service = FileTransferService::new(protocol_name, request_receiver, network);
+    let file_transfer_service =
+        FileTransferService::<Runtime>::new(protocol_name, request_receiver, network);
 
     let file_transfer_service_handle = task_spawner.spawn_actor(file_transfer_service);
 

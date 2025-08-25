@@ -140,14 +140,6 @@ impl Bucket {
     }
 
     /// Get all buckets belonging to a specific user account
-    ///
-    /// # Example
-    /// ```ignore
-    /// use sp_runtime::AccountId32;
-    ///
-    /// let user: AccountId32 = /* ... */;
-    /// let buckets = Bucket::get_user_buckets(&mut conn, user.to_string()).await?;
-    /// ```
     pub async fn get_user_buckets<'a>(
         conn: &mut DbConnection<'a>,
         user_account: impl Into<String>,
@@ -161,16 +153,6 @@ impl Bucket {
     }
 
     /// Get all buckets belonging to a specific user account and assigned to a specific MSP
-    ///
-    /// # Example
-    /// ```ignore
-    /// use sp_runtime::AccountId32;
-    /// use storage_hub_runtime::StorageProviderId;
-    ///
-    /// let user: AccountId32 = /* ... */;
-    /// let msp_id: StorageProviderId = /* ... */;
-    /// let buckets = Bucket::get_user_buckets_by_msp(&mut conn, user.to_string(), msp_id).await?;
-    /// ```
     pub async fn get_user_buckets_by_msp<'a>(
         conn: &mut DbConnection<'a>,
         user_account: impl Into<String>,

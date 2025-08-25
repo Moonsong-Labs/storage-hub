@@ -108,9 +108,7 @@ pub mod pallet {
             + Zero
             + Copy
             + MaxEncodedLen
-            + HasCompact
-            + Into<BalanceOf<Self>>
-            + Into<u64>;
+            + HasCompact;
 
         type StorageDataUnitAndBalanceConvert: ConvertBack<Self::StorageDataUnit, BalanceOf<Self>>;
 

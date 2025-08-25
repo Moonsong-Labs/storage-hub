@@ -114,6 +114,7 @@ sp-inherents = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "
 sp-keyring = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-keystore = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-offchain = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
+sp-rpc = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-session = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-state-machine = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
 sp-timestamp = { git = "https://github.com/paritytech/polkadot-sdk.git", tag = "polkadot-stable2412-6", default-features = false }
@@ -268,11 +269,11 @@ shp-data-price-updater = { path = "primitives/data-price-updater", default-featu
 shp-file-key-verifier = { path = "primitives/file-key-verifier", default-features = false }
 shp-file-metadata = { path = "primitives/file-metadata", default-features = false }
 shp-forest-verifier = { path = "primitives/forest-verifier", default-features = false }
+shp-opaque = { path = "primitives/opaque", default-features = false }
 shp-session-keys = { path = "primitives/session-keys", default-features = false }
 shp-traits = { path = "primitives/traits", default-features = false }
 shp-treasury-funding = { path = "primitives/treasury-funding", default-features = false }
-shp-opaque = { path = "primitives/opaque", default-features = false }
-
+shp-types = { path = "primitives/types", default-features = false }
 
 # Lcoal - StorageHub Runtime
 storage-hub-runtime = { path = "runtime", default-features = false }
