@@ -14,10 +14,7 @@ impl StorageHubRpcClient {
     pub fn new(connection: Arc<AnyRpcConnection>) -> Self {
         Self { connection }
     }
-}
 
-impl StorageHubRpcClient {
-    /// Check if the RPC connection is active
     pub async fn is_connected(&self) -> bool {
         self.connection.is_connected().await
     }
