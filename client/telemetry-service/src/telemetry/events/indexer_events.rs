@@ -3,7 +3,7 @@
 //! This module defines all telemetry events related to the indexer service including
 //! block processing, event handling, and synchronization.
 
-use crate::telemetry::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
+use crate::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
 use serde::{Deserialize, Serialize};
 
 /// Event sent when indexer processes a block.

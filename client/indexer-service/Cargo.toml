@@ -57,8 +57,10 @@ cumulus-primitives-storage-weight-reclaim = { workspace = true }
 # Local
 storage-hub-runtime = { workspace = true }
 shc-actors-framework = { workspace = true }
+shc-actors-derive = { workspace = true }
 shc-common = { workspace = true }
 shc-indexer-db = { workspace = true }
+shc-telemetry-service = { workspace = true }
 
 # Local pallets
 pallet-file-system = { workspace = true }

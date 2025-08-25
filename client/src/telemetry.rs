@@ -5,12 +5,13 @@
 //! It integrates with the service identity system to automatically attribute events.
 
 use serde::{Deserialize, Serialize};
-use shc_common::telemetry::{
+use shc_actors_framework::actor::ActorHandle;
+use shc_telemetry_service::{
     BaseTelemetryEvent, TelemetryEvent, TelemetryService, TelemetryStrategy,
+    TelemetryServiceCommandInterface, TelemetryServiceCommandInterfaceExt, 
+    TelemetryMetricsSnapshot, create_base_event,
 };
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 use uuid::Uuid;
 
 /// Task execution telemetry event
@@ -54,13 +55,17 @@ pub enum TaskStatus {
 
 /// Service-scoped telemetry wrapper that provides automatic service attribution
 pub struct ServiceTelemetry {
-    inner: Arc<Mutex<TelemetryService>>,
+    inner: Option<ActorHandle<TelemetryService>>,
+    service_name: String,
 }
 
 impl ServiceTelemetry {
     /// Create a new service telemetry wrapper
-    pub fn new(service: Arc<Mutex<TelemetryService>>, _service_name: String) -> Self {
-        Self { inner: service }
+    pub fn new(telemetry_handle: Option<ActorHandle<TelemetryService>>, service_name: String) -> Self {
+        Self { 
+            inner: telemetry_handle,
+            service_name,
+        }
     }
 
     /// Generate a new task ID
@@ -76,9 +81,9 @@ impl ServiceTelemetry {
         file_size_bytes: Option<u64>,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = TaskTelemetryEvent {
-                base: service.create_base_event("task_started"),
+                base: create_base_event("task_started", self.service_name.clone(), None),
                 task_name: task_name.to_string(),
                 task_id,
                 status: TaskStatus::Started,
@@ -88,7 +93,7 @@ impl ServiceTelemetry {
                 transfer_rate_mbps: None,
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
@@ -102,9 +107,9 @@ impl ServiceTelemetry {
         transfer_rate_mbps: Option<f64>,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = TaskTelemetryEvent {
-                base: service.create_base_event("task_completed"),
+                base: create_base_event("task_completed", self.service_name.clone(), None),
                 task_name: task_name.to_string(),
                 task_id,
                 status: TaskStatus::Success,
@@ -114,7 +119,7 @@ impl ServiceTelemetry {
                 transfer_rate_mbps,
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
@@ -127,9 +132,9 @@ impl ServiceTelemetry {
         error_message: String,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = TaskTelemetryEvent {
-                base: service.create_base_event("task_failed"),
+                base: create_base_event("task_failed", self.service_name.clone(), None),
                 task_name: task_name.to_string(),
                 task_id,
                 status: TaskStatus::Failed,
@@ -139,7 +144,7 @@ impl ServiceTelemetry {
                 transfer_rate_mbps: None,
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
@@ -151,9 +156,9 @@ impl ServiceTelemetry {
         duration: Duration,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = TaskTelemetryEvent {
-                base: service.create_base_event("task_timeout"),
+                base: create_base_event("task_timeout", self.service_name.clone(), None),
                 task_name: task_name.to_string(),
                 task_id,
                 status: TaskStatus::Timeout,
@@ -163,7 +168,7 @@ impl ServiceTelemetry {
                 transfer_rate_mbps: None,
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
@@ -176,9 +181,9 @@ impl ServiceTelemetry {
         reason: String,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = TaskTelemetryEvent {
-                base: service.create_base_event("task_cancelled"),
+                base: create_base_event("task_cancelled", self.service_name.clone(), None),
                 task_name: task_name.to_string(),
                 task_id,
                 status: TaskStatus::Cancelled,
@@ -188,14 +193,14 @@ impl ServiceTelemetry {
                 transfer_rate_mbps: None,
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
     /// Get telemetry metrics
-    pub async fn metrics(&self) -> Option<shc_common::telemetry::TelemetryMetricsSnapshot> {
-        if let Ok(service) = self.inner.try_lock() {
-            Some(service.metrics())
+    pub async fn metrics(&self) -> Option<TelemetryMetricsSnapshot> {
+        if let Some(telemetry) = &self.inner {
+            telemetry.get_metrics().await.ok()
         } else {
             None
         }

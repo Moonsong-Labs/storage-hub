@@ -54,6 +54,7 @@ shc-fisherman-service = { workspace = true }
 shc-forest-manager = { workspace = true }
 shc-indexer-db = { workspace = true }
 shc-indexer-service = { workspace = true }
+shc-telemetry-service = { workspace = true }
 shc-rpc = { workspace = true }
 shc-client = { workspace = true }
 shp-constants = { workspace = true }

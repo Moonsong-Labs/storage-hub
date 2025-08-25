@@ -3,7 +3,7 @@
 //! This module defines all telemetry events related to MSP operations including
 //! file acceptance, bucket management, capacity management, and fee collection.
 
-use crate::telemetry::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
+use crate::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
 use serde::{Deserialize, Serialize};
 
 /// Event sent when MSP accepts a file upload.

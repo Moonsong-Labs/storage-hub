@@ -1,0 +1,28 @@
+[package]
+name = "shc-telemetry-service"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Actor framework
+shc-actors-framework = { workspace = true }
+shc-actors-derive = { workspace = true }
+
+# Common dependencies
+shc-common = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+log = { workspace = true }
+thiserror = { workspace = true }
+
+# Telemetry specific
+axiom-rs = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true }
+tokio = { workspace = true }
+
+# Core dependencies
+sp-core = { workspace = true }
+sc-utils = { workspace = true }
+futures = { workspace = true }

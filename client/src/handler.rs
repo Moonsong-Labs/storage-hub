@@ -2,7 +2,7 @@ use std::{
     fmt::{self, Debug},
     sync::Arc,
 };
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
 use shc_actors_derive::{subscribe_actor_event, subscribe_actor_event_map};
 use shc_actors_framework::{
@@ -24,7 +24,8 @@ use shc_blockchain_service::{
     handler::BlockchainServiceConfig,
     BlockchainService,
 };
-use shc_common::{consts::CURRENT_FOREST_KEY, telemetry::TelemetryService, traits::StorageEnableRuntime};
+use shc_common::{consts::CURRENT_FOREST_KEY, traits::StorageEnableRuntime};
+use shc_telemetry_service::TelemetryService;
 use shc_file_transfer_service::{
     events::{RemoteDownloadRequest, RemoteUploadRequest, RetryBucketMoveDownload},
     FileTransferService,
@@ -104,7 +105,7 @@ where
     /// The file download manager for rate-limiting downloads.
     pub file_download_manager: Arc<FileDownloadManager>,
     /// The telemetry service for tracking operations.
-    pub telemetry: Option<Arc<Mutex<TelemetryService>>>,
+    pub telemetry: Option<ActorHandle<TelemetryService>>,
 }
 
 impl<NT, Runtime> Debug for StorageHubHandler<NT, Runtime>
@@ -154,7 +155,7 @@ where
         provider_config: ProviderConfig,
         indexer_db_pool: Option<DbPool>,
         peer_manager: Arc<BspPeerManager>,
-        telemetry: Option<Arc<Mutex<TelemetryService>>>,
+        telemetry: Option<ActorHandle<TelemetryService>>,
     ) -> Self {
         // Get the data directory path from the peer manager's directory
         // This assumes the peer manager stores data in a similar location to where we want our download state

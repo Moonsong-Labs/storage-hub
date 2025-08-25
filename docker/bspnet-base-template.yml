@@ -8,6 +8,9 @@ services:
       - "30350:30350"
     volumes:
       - ./dev-keystores/bsp:/keystore:rw
+    environment:
+      - AXIOM_TOKEN=xaat-afe9aafd-6cf5-4327-a2c7-209946714c7a
+      - AXIOM_DATASET=storagehub-telemetry
     command:
       [
         "--dev",
@@ -25,6 +28,7 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
+        "--telemetry",
       ]
   sh-user:
     image: storage-hub:local
@@ -36,6 +40,9 @@ services:
     volumes:
       - ./dev-keystores/user:/keystore:rw
       - ./resource:/res:ro
+    environment:
+      - AXIOM_TOKEN=xaat-afe9aafd-6cf5-4327-a2c7-209946714c7a
+      - AXIOM_DATASET=storagehub-telemetry
     command:
       [
         "--dev",
@@ -52,6 +59,7 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
+        "--telemetry",
       ]
 
   toxiproxy:

@@ -357,6 +357,9 @@ where
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
+            telemetry_enabled,
+            axiom_token,
+            axiom_dataset,
             ..
         }) => {
             info!(
@@ -367,6 +370,27 @@ where
             // Start building the StorageHubHandler, if running as a provider.
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "sh-builder");
             let mut storage_hub_builder = StorageHubBuilder::<R, S, Runtime>::new(task_spawner);
+
+            // Initialize telemetry if enabled
+            if *telemetry_enabled {
+                // Get node ID from network (or use a default)
+                let node_id = network.local_peer_id().to_string();
+
+                // Spawn telemetry service as an actor
+                let telemetry_task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "telemetry-service");
+                if let Some(telemetry_handle) = shc_telemetry_service::spawn_telemetry_service(
+                    &telemetry_task_spawner,
+                    format!("storage-hub-{:?}", provider_type).to_lowercase(),
+                    Some(node_id),
+                    axiom_token.clone(),
+                    axiom_dataset.clone(),
+                )
+                .await
+                {
+                    storage_hub_builder.with_telemetry(telemetry_handle);
+                    info!("Telemetry service initialized and configured");
+                }
+            }
 
             // Setup and spawn the File Transfer Service.
             let (file_transfer_request_protocol_name, file_transfer_request_receiver) =

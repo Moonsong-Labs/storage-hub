@@ -1,10 +1,8 @@
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
-use tokio::sync::Mutex;
 
 use anyhow::anyhow;
 use frame_support::BoundedVec;
@@ -24,14 +22,7 @@ use shc_blockchain_service::{
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
-    task_context::{calculate_transfer_rate_mbps, classify_error, TaskContext},
-    telemetry::{
-        events::{
-            BspUploadChunkReceivedEvent, BspUploadCompletedEvent, BspUploadFailedEvent,
-            BspUploadStartedEvent,
-        },
-        TelemetryService,
-    },
+    task_context::{classify_error, TaskContext},
     types::{
         FileKey, FileKeyWithProof, FileMetadata, HashT, StorageProofsMerkleTrieLayout,
         StorageProviderId, BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE,
@@ -42,6 +33,141 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceCommandInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
+};
+use serde::{Deserialize, Serialize};
+
+// Local BSP telemetry event definitions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspUploadStartedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    file_key: String,
+    file_size_bytes: u64,
+    location: String,
+    fingerprint: String,
+    peer_id: String,
+}
+
+impl TelemetryEvent for BspUploadStartedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_upload_started"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspUploadChunkReceivedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    chunk_index: u32,
+    chunk_size_bytes: u64,
+    total_chunks: u32,
+    bytes_received: u64,
+    bytes_total: u64,
+}
+
+impl TelemetryEvent for BspUploadChunkReceivedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_upload_chunk_received"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspUploadCompletedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    file_size_bytes: u64,
+    duration_ms: u64,
+    avg_transfer_rate_mbps: f64,
+    chunks_received: u32,
+    fingerprint: String,
+    peer_id: String,
+}
+
+impl TelemetryEvent for BspUploadCompletedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_upload_completed"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspUploadFailedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    error_type: String,
+    error_message: String,
+    duration_ms: Option<u64>,
+    chunks_received: Option<u32>,
+    bytes_received: Option<u64>,
+}
+
+impl TelemetryEvent for BspUploadFailedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_upload_failed"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspProofGenerationStartedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    proof_type: String,
+    file_key: String,
+    challenge_block: u32,
+}
+
+impl TelemetryEvent for BspProofGenerationStartedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_proof_generation_started"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspProofSubmittedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    proof_type: String,
+    file_key: String,
+    challenge_block: u32,
+    generation_time_ms: u64,
+    submission_attempts: u32,
+    transaction_hash: Option<String>,
+}
+
+impl TelemetryEvent for BspProofSubmittedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_proof_submitted"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspProofFailedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    proof_type: String,
+    error_type: String,
+    error_message: String,
+    generation_time_ms: Option<u64>,
+    submission_attempts: u32,
+}
+
+impl TelemetryEvent for BspProofFailedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_proof_failed"
+    }
+}
 
 use crate::{
     handler::StorageHubHandler,
@@ -149,29 +275,26 @@ where
 
         // Create task context for tracking
         let ctx = TaskContext::new("bsp_upload_file");
-        
+
         // Send task started telemetry event
-        if let Some(telemetry) = &self.storage_hub_handler.telemetry {
-            if let Ok(telemetry_service) = telemetry.try_lock() {
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                 let start_event = BspUploadStartedEvent {
-                    base: telemetry_service.create_base_event("bsp_upload_started"),
+                    base: create_base_event("bsp_upload_started", "storage-hub-bsp".to_string(), None),
                     task_id: ctx.task_id.clone(),
                     task_name: ctx.task_name.clone(),
                     file_key: format!("{:?}", event.file_key),
                     file_size_bytes: event.size as u64,
                     location: hex::encode(event.location.as_slice()),
                     fingerprint: format!("{:?}", event.fingerprint),
-                    peer_id: event.peer.to_string(),
+                    peer_id: format!("{:?}", event.user_peer_ids),
                 };
-                telemetry_service.send_event(start_event);
-            }
+                telemetry_service.queue_typed_event(start_event).await.ok();
         }
 
         let result = self.handle_new_storage_request_event(event.clone()).await;
-        
+
         // Send completion or failure telemetry
-        if let Some(telemetry) = &self.storage_hub_handler.telemetry {
-            if let Ok(telemetry_service) = telemetry.try_lock() {
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
                 match &result {
                     Ok(_) => {
                         // Success event will be sent when file upload completes
@@ -179,23 +302,20 @@ where
                     }
                     Err(e) => {
                         let failed_event = BspUploadFailedEvent {
-                            base: telemetry_service.create_base_event("bsp_upload_failed"),
+                            base: create_base_event("bsp_upload_failed", "storage-hub-bsp".to_string(), None),
                             task_id: ctx.task_id.clone(),
-                            task_name: ctx.task_name.clone(),
                             file_key: format!("{:?}", event.file_key),
-                            duration_ms: ctx.elapsed_ms(),
-                            error_type: classify_error(e),
+                            error_type: classify_error(&e),
                             error_message: e.to_string(),
-                            retry_count: 0,
-                            chunks_received: 0,
-                            total_chunks: 0,
+                            duration_ms: Some(ctx.elapsed_ms()),
+                            chunks_received: Some(0),
+                            bytes_received: Some(0),
                         };
-                        telemetry_service.send_event(failed_event);
+                        telemetry_service.queue_typed_event(failed_event).await.ok();
                     }
                 }
-            }
         }
-        
+
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
                 self.unvolunteer_file(*file_key).await;
@@ -290,6 +410,10 @@ where
             event.data.confirm_storing_requests,
         );
 
+        // Create task context for tracking proof generation
+        let ctx = TaskContext::new("bsp_confirm_storing");
+        let proof_start_time = Instant::now();
+
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
         // That is until we release the lock gracefully with the `release_forest_root_write_lock` method, or `forest_root_write_lock` is dropped.
         let forest_root_write_tx = match event.forest_root_write_tx.lock().await.take() {
@@ -370,6 +494,23 @@ where
             return Ok(());
         }
 
+        // Send proof generation started event
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            if !confirm_storing_requests_with_chunks_to_prove.is_empty() {
+                let proof_start_event = BspProofGenerationStartedEvent {
+                    base: create_base_event("bsp_proof_generation_started", "storage-hub-bsp".to_string(), None),
+                    task_id: ctx.task_id.clone(),
+                    proof_type: "storage".to_string(),
+                    file_key: format!("{:?}", confirm_storing_requests_with_chunks_to_prove[0].0.file_key),
+                    challenge_block: 0, // TODO: Get actual challenge block when available
+                };
+                telemetry_service
+                    .queue_typed_event(proof_start_event)
+                    .await
+                    .ok();
+            }
+        }
+
         // Generate the proof for the files and get metadatas.
         let read_file_storage = self.storage_hub_handler.file_storage.read().await;
         let mut file_keys_and_proofs = Vec::new();
@@ -431,6 +572,9 @@ where
         // Generate a proof of non-inclusion (executed in closure to drop the read lock on the forest storage).
         let non_inclusion_forest_proof = { fs.read().await.generate_proof(file_keys)? };
 
+        // Store file keys for telemetry before moving into BoundedVec
+        let file_keys_for_telemetry = file_keys_and_proofs.clone();
+
         // Build extrinsic.
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::bsp_confirm_storing {
@@ -445,7 +589,10 @@ where
 
         // Send the confirmation transaction and wait for it to be included in the block and
         // continue only if it is successful.
-        self.storage_hub_handler
+        let proof_generation_time_ms = proof_start_time.elapsed().as_millis() as u64;
+
+        let extrinsic_result = self
+            .storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -461,14 +608,82 @@ where
                     .retry_only_if_timeout(),
                 true,
             )
-            .await
-            .map_err(|e| {
-                anyhow!(
+            .await;
+
+        let extrinsic_hash = match extrinsic_result {
+            Ok(hash) => hash,
+            Err(e) => {
+                // Send proof failed event
+                if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                    let proof_failed_event = BspProofFailedEvent {
+                        base: create_base_event(
+                            "bsp_proof_failed",
+                            "storage-hub-bsp".to_string(),
+                            None,
+                        ),
+                        task_id: ctx.task_id.clone(),
+                        proof_type: "storage".to_string(),
+                        error_type: classify_error(&e),
+                        error_message: e.to_string(),
+                        generation_time_ms: Some(proof_generation_time_ms),
+                        submission_attempts: self.config.max_try_count,
+                    };
+                    telemetry_service
+                        .queue_typed_event(proof_failed_event)
+                        .await
+                        .ok();
+                }
+
+                return Err(anyhow!(
                     "Failed to confirm file after {} retries: {:?}",
                     self.config.max_try_count,
                     e
-                )
-            })?;
+                ));
+            }
+        };
+
+        // Send proof submitted event
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let proof_submitted_event = BspProofSubmittedEvent {
+                base: create_base_event("bsp_proof_submitted", "storage-hub-bsp".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                proof_type: "storage".to_string(),
+                file_key: format!("{:?}", file_keys_for_telemetry[0].file_key),
+                challenge_block: 0, // TODO: Get actual challenge block when available
+                generation_time_ms: proof_generation_time_ms,
+                submission_attempts: self.config.max_try_count,
+                transaction_hash: Some(format!("{:?}", extrinsic_hash)),
+                };
+                telemetry_service
+                    .queue_typed_event(proof_submitted_event)
+                    .await
+                    .ok();
+
+                // Also send upload completed events for all files
+                for file_key_with_proof in &file_keys_for_telemetry {
+                    if let Some(metadata) = file_metadatas.get(&file_key_with_proof.file_key) {
+                        let completed_event = BspUploadCompletedEvent {
+                            base: create_base_event(
+                                "bsp_upload_completed",
+                                "storage-hub-bsp".to_string(),
+                                None,
+                            ),
+                            task_id: ctx.task_id.clone(),
+                            file_key: format!("{:?}", file_key_with_proof.file_key),
+                            file_size_bytes: metadata.file_size(),
+                            duration_ms: ctx.elapsed_ms(),
+                            avg_transfer_rate_mbps: 0.0, // Could calculate if we track timing
+                            chunks_received: 1, // Single chunk for now
+                            fingerprint: format!("{:?}", file_key_with_proof.file_key), // Use file key as fingerprint identifier
+                            peer_id: "unknown".to_string(), // Could track if needed
+                        };
+                        telemetry_service
+                            .queue_typed_event(completed_event)
+                            .await
+                            .ok();
+                    }
+                }
+            }
 
         // Release the forest root write "lock" and finish the task.
         self.storage_hub_handler
@@ -801,6 +1016,9 @@ where
             .map_err(|e| anyhow!("Failed to get file metadata: {:?}", e))?
             .ok_or_else(|| anyhow!("File metadata not found"))?;
 
+        // Create task context for tracking chunk upload
+        let ctx = TaskContext::new("bsp_upload_chunk");
+
         // Verify that the fingerprint in the proof matches the expected file fingerprint
         let expected_fingerprint = file_metadata.fingerprint();
         if event.file_key_proof.file_metadata.fingerprint() != expected_fingerprint {
@@ -852,6 +1070,15 @@ where
         };
 
         let mut file_complete = false;
+
+        // Get stored chunks count before processing new ones
+        let stored_chunks_before = write_file_storage
+            .stored_chunks_count(&file_key)
+            .unwrap_or(0);
+        let total_chunks = file_metadata.chunks_count();
+
+        // Calculate batch size for telemetry
+        let batch_size_bytes: u64 = proven.iter().map(|c| c.data.len() as u64).sum();
 
         // Process each proven chunk in the batch
         for chunk in proven {
@@ -949,6 +1176,26 @@ where
                     }
                 },
             }
+        }
+
+        // Send chunk received telemetry event
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                // Get current stored chunks count
+                let stored_chunks_after = write_file_storage
+                    .stored_chunks_count(&file_key)
+                    .unwrap_or(stored_chunks_before);
+
+                let chunk_event = BspUploadChunkReceivedEvent {
+                    base: create_base_event("bsp_upload_chunk_received", "storage-hub-bsp".to_string(), None),
+                    task_id: ctx.task_id.clone(),
+                    file_key: format!("{:?}", file_key),
+                    chunk_index: stored_chunks_after as u32 - 1, // Last chunk index
+                    chunk_size_bytes: batch_size_bytes,
+                    total_chunks: total_chunks as u32,
+                    bytes_received: stored_chunks_after * shc_common::types::FILE_CHUNK_SIZE as u64,
+                    bytes_total: file_metadata.file_size(),
+                };
+                telemetry_service.queue_typed_event(chunk_event).await.ok();
         }
 
         Ok(file_complete)

@@ -29,6 +29,7 @@ members = [
     "client/indexer-db",
     "client/indexer-service",
     "client/rpc",
+    "client/telemetry-service",
     "primitives/*",
     "xcm-simulator",
     "sdk/core/wasm",
@@ -247,6 +248,7 @@ pallet-storage-providers-runtime-api = { path = "pallets/providers/runtime-api",
 shc-actors-framework = { path = "client/actors-framework", default-features = false }
 shc-actors-derive = { path = "client/actors-derive", default-features = false }
 shc-blockchain-service = { path = "client/blockchain-service", default-features = false }
+shc-telemetry-service = { path = "client/telemetry-service", default-features = false }
 shc-file-transfer-service = { path = "client/file-transfer-service", default-features = false }
 shc-indexer-service = { path = "client/indexer-service", default-features = false }
 shc-indexer-db = { path = "client/indexer-db", default-features = false }

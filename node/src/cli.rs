@@ -491,6 +491,9 @@ impl ProviderConfigurations {
             bsp_submit_proof,
             blockchain_service,
             maintenance_mode: self.maintenance_mode,
+            telemetry_enabled: false,  // This will be set from telemetry_config
+            axiom_token: None,         // This will be set from telemetry_config
+            axiom_dataset: None,        // This will be set from telemetry_config
         }
     }
 }
@@ -567,6 +570,41 @@ impl FishermanConfigurations {
         } else {
             None
         }
+    }
+}
+
+#[derive(Debug, Parser, Clone)]
+pub struct TelemetryConfigurations {
+    /// Enable telemetry service.
+    #[clap(long)]
+    pub telemetry: bool,
+
+    /// Axiom API token for telemetry.
+    ///
+    /// If not provided, the telemetry will use the `AXIOM_TOKEN` environment variable.
+    /// If the environment variable is not set and telemetry is enabled, the node will abort.
+    #[clap(
+        long("axiom-token"),
+        env = "AXIOM_TOKEN",
+        required_if_eq("telemetry", "true")
+    )]
+    pub axiom_token: Option<String>,
+
+    /// Axiom dataset name for telemetry.
+    ///
+    /// If not provided, the telemetry will use the `AXIOM_DATASET` environment variable.
+    /// If the environment variable is not set and telemetry is enabled, the node will abort.
+    #[clap(
+        long("axiom-dataset"),
+        env = "AXIOM_DATASET",
+        required_if_eq("telemetry", "true")
+    )]
+    pub axiom_dataset: Option<String>,
+}
+
+impl TelemetryConfigurations {
+    pub fn is_enabled(&self) -> bool {
+        self.telemetry && self.axiom_token.is_some() && self.axiom_dataset.is_some()
     }
 }
 
@@ -662,6 +700,10 @@ pub struct Cli {
     /// Fisherman configurations
     #[command(flatten)]
     pub fisherman_config: FishermanConfigurations,
+
+    /// Telemetry configurations
+    #[command(flatten)]
+    pub telemetry_config: TelemetryConfigurations,
 }
 
 #[derive(Debug, Parser)]

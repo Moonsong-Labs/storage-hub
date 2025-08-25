@@ -3,7 +3,7 @@
 //! This module defines all telemetry events related to Fisherman operations including
 //! challenge verification, slashing, and file deletion processing.
 
-use crate::telemetry::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
+use crate::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
 use serde::{Deserialize, Serialize};
 
 /// Event sent when fisherman starts a challenge verification.

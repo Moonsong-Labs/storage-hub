@@ -28,6 +28,7 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
+        "--telemetry",
       ]
   sh-msp-1:
     image: storage-hub:local
@@ -122,6 +123,7 @@ services:
         "--keystore-path=/keystore",
         "--sealing=manual",
         "--base-path=/data",
+        "--telemetry",
       ]
 
   sh-fisherman:
@@ -152,6 +154,7 @@ services:
         "--base-path=/data",
         "--fisherman",
         "--fisherman-database-url=postgresql://postgres:postgres@storage-hub-sh-postgres-1:5432/storage_hub",
+        "--telemetry",
       ]
 
   sh-postgres:

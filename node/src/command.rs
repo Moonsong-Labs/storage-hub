@@ -66,6 +66,12 @@ pub struct ProviderOptions {
     pub blockchain_service: Option<BlockchainServiceOptions>,
     /// Whether the node is running in maintenance mode.
     pub maintenance_mode: bool,
+    /// Whether telemetry is enabled.
+    pub telemetry_enabled: bool,
+    /// Axiom API token for telemetry.
+    pub axiom_token: Option<String>,
+    /// Axiom dataset name for telemetry.
+    pub axiom_dataset: Option<String>,
 }
 
 fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
@@ -286,7 +292,14 @@ pub fn run() -> Result<()> {
             if let Some(provider_config_file) = cli.provider_config_file {
                 let config = config::read_config(&provider_config_file);
                 if let Some(c) = config {
-                    provider_options = Some(c.provider);
+                    let mut opts = c.provider;
+                    // Override with CLI telemetry config if provided
+                    if cli.telemetry_config.is_enabled() {
+                        opts.telemetry_enabled = true;
+                        opts.axiom_token = cli.telemetry_config.axiom_token.clone();
+                        opts.axiom_dataset = cli.telemetry_config.axiom_dataset.clone();
+                    }
+                    provider_options = Some(opts);
                     indexer_options = Some(c.indexer);
                     fisherman_options = Some(c.fisherman);
                 };
@@ -294,7 +307,14 @@ pub fn run() -> Result<()> {
 
             // We then check cli (the cli doesn't allow to have both cli parameters and a config file so we should not have overlap here)
             if cli.provider_config.provider {
-                provider_options = Some(cli.provider_config.provider_options());
+                let mut opts = cli.provider_config.provider_options();
+                // Set telemetry configuration from CLI
+                if cli.telemetry_config.is_enabled() {
+                    opts.telemetry_enabled = true;
+                    opts.axiom_token = cli.telemetry_config.axiom_token.clone();
+                    opts.axiom_dataset = cli.telemetry_config.axiom_dataset.clone();
+                }
+                provider_options = Some(opts);
             };
 
             if cli.indexer_config.indexer {
@@ -303,6 +323,33 @@ pub fn run() -> Result<()> {
 
             if cli.fisherman_config.fisherman {
                 fisherman_options = cli.fisherman_config.fisherman_options();
+            };
+
+            // If telemetry is enabled but no provider is configured, we need to create a basic provider options
+            // This allows telemetry to work even for non-provider nodes
+            if cli.telemetry_config.is_enabled() && provider_options.is_none() {
+                // Create minimal provider options just for telemetry
+                let opts = ProviderOptions {
+                    provider_type: ProviderType::User,
+                    storage_layer: StorageLayer::Memory,
+                    storage_path: None,
+                    max_storage_capacity: None,
+                    jump_capacity: None,
+                    rpc_config: Default::default(),
+                    msp_charging_period: None,
+                    msp_charge_fees: None,
+                    msp_move_bucket: None,
+                    bsp_upload_file: None,
+                    bsp_move_bucket: None,
+                    bsp_charge_fees: None,
+                    bsp_submit_proof: None,
+                    blockchain_service: None,
+                    maintenance_mode: false,
+                    telemetry_enabled: true,
+                    axiom_token: cli.telemetry_config.axiom_token.clone(),
+                    axiom_dataset: cli.telemetry_config.axiom_dataset.clone(),
+                };
+                provider_options = Some(opts);
             };
 
             runner.run_node_until_exit(|config| async move {

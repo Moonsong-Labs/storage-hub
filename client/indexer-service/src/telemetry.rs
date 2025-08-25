@@ -4,12 +4,13 @@
 //! service, such as block processing, event handling, and handler execution.
 
 use serde::{Deserialize, Serialize};
-use shc_common::telemetry::{
-    BaseTelemetryEvent, TelemetryEvent, TelemetryService, TelemetryStrategy,
+use shc_actors_framework::actor::ActorHandle;
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryMetricsSnapshot,
+    TelemetryService, TelemetryServiceCommandInterface, TelemetryServiceCommandInterfaceExt,
+    TelemetryStrategy,
 };
-use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 
 /// Indexer handler telemetry event
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -32,14 +33,11 @@ impl TelemetryEvent for IndexerTelemetryEvent {
     }
 
     fn strategy(&self) -> TelemetryStrategy {
-        match self.status {
-            IndexerStatus::Failed => TelemetryStrategy::Guaranteed,
-            _ => TelemetryStrategy::BestEffort,
-        }
+        TelemetryStrategy::BestEffort
     }
 }
 
-/// Indexer processing status
+/// Status of an indexer operation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum IndexerStatus {
@@ -51,13 +49,17 @@ pub enum IndexerStatus {
 
 /// Service-scoped telemetry wrapper for indexer service
 pub struct IndexerServiceTelemetry {
-    inner: Arc<Mutex<TelemetryService>>,
+    inner: Option<ActorHandle<TelemetryService>>,
+    service_name: String,
 }
 
 impl IndexerServiceTelemetry {
     /// Create a new indexer service telemetry wrapper
-    pub fn new(service: Arc<Mutex<TelemetryService>>) -> Self {
-        Self { inner: service }
+    pub fn new(telemetry_handle: Option<ActorHandle<TelemetryService>>) -> Self {
+        Self {
+            inner: telemetry_handle,
+            service_name: "storage-hub-indexer".to_string(),
+        }
     }
 
     /// Send an indexer started event
@@ -68,9 +70,9 @@ impl IndexerServiceTelemetry {
         block_hash: Option<String>,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = IndexerTelemetryEvent {
-                base: service.create_base_event("indexer_started"),
+                base: create_base_event("indexer_started", self.service_name.clone(), None),
                 handler_name: handler_name.to_string(),
                 block_number,
                 block_hash,
@@ -80,7 +82,7 @@ impl IndexerServiceTelemetry {
                 error_message: None,
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
@@ -94,9 +96,9 @@ impl IndexerServiceTelemetry {
         duration: Duration,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = IndexerTelemetryEvent {
-                base: service.create_base_event("indexer_completed"),
+                base: create_base_event("indexer_completed", self.service_name.clone(), None),
                 handler_name: handler_name.to_string(),
                 block_number,
                 block_hash,
@@ -106,7 +108,7 @@ impl IndexerServiceTelemetry {
                 error_message: None,
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
@@ -120,9 +122,9 @@ impl IndexerServiceTelemetry {
         error_message: String,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = IndexerTelemetryEvent {
-                base: service.create_base_event("indexer_failed"),
+                base: create_base_event("indexer_failed", self.service_name.clone(), None),
                 handler_name: handler_name.to_string(),
                 block_number,
                 block_hash,
@@ -132,7 +134,7 @@ impl IndexerServiceTelemetry {
                 error_message: Some(error_message),
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
@@ -145,9 +147,9 @@ impl IndexerServiceTelemetry {
         reason: String,
         custom_metrics: serde_json::Value,
     ) {
-        if let Ok(service) = self.inner.try_lock() {
+        if let Some(telemetry) = &self.inner {
             let event = IndexerTelemetryEvent {
-                base: service.create_base_event("indexer_skipped"),
+                base: create_base_event("indexer_skipped", self.service_name.clone(), None),
                 handler_name: handler_name.to_string(),
                 block_number,
                 block_hash,
@@ -157,14 +159,14 @@ impl IndexerServiceTelemetry {
                 error_message: Some(reason),
                 custom_metrics,
             };
-            service.send_event(event);
+            telemetry.queue_typed_event(event).await.ok();
         }
     }
 
     /// Get telemetry metrics
-    pub async fn metrics(&self) -> Option<shc_common::telemetry::TelemetryMetricsSnapshot> {
-        if let Ok(service) = self.inner.try_lock() {
-            Some(service.metrics())
+    pub async fn metrics(&self) -> Option<TelemetryMetricsSnapshot> {
+        if let Some(telemetry) = &self.inner {
+            telemetry.get_metrics().await.ok()
         } else {
             None
         }

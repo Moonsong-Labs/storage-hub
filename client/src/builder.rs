@@ -13,10 +13,9 @@ use shc_blockchain_service::{
     capacity_manager::CapacityConfig, handler::BlockchainServiceConfig, spawn_blockchain_service,
     BlockchainService,
 };
-use shc_common::telemetry::TelemetryService;
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
-use tokio::sync::Mutex;
+use shc_telemetry_service::TelemetryService;
 use shc_file_manager::{in_memory::InMemoryFileStorage, rocksdb::RocksDbFileStorage};
 use shc_file_transfer_service::{spawn_file_transfer_service, FileTransferService};
 use shc_fisherman_service::{spawn_fisherman_service, FishermanService};
@@ -70,7 +69,7 @@ where
     bsp_submit_proof_config: Option<BspSubmitProofConfig>,
     blockchain_service_config: Option<BlockchainServiceConfig>,
     peer_manager: Option<Arc<BspPeerManager>>,
-    telemetry: Option<Arc<Mutex<TelemetryService>>>,
+    telemetry: Option<ActorHandle<TelemetryService>>,
 }
 
 /// Common components to build for any given configuration of [`ShRole`] and [`ShStorageLayer`].
@@ -221,9 +220,8 @@ where
         self
     }
 
-    /// Initialize the BSP peer manager for tracking peer performance
     /// Set the telemetry service.
-    pub fn with_telemetry(&mut self, telemetry: Arc<Mutex<TelemetryService>>) -> &mut Self {
+    pub fn with_telemetry(&mut self, telemetry: ActorHandle<TelemetryService>) -> &mut Self {
         self.telemetry = Some(telemetry);
         self
     }

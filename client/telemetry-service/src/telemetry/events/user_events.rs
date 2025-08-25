@@ -3,7 +3,7 @@
 //! This module defines all telemetry events related to user operations including
 //! file sending, bucket management, and payment operations.
 
-use crate::telemetry::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
+use crate::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
 use serde::{Deserialize, Serialize};
 
 /// Event sent when a user initiates sending a file.

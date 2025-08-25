@@ -14657,6 +14657,7 @@ dependencies = [
  "shc-indexer-db",
  "shc-indexer-service",
  "shc-rpc",
+ "shc-telemetry-service",
  "shp-constants",
  "shp-file-metadata",
  "shp-traits",
@@ -14678,7 +14679,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "axiom-rs",
  "bincode",
  "chrono",
  "cumulus-client-service",
@@ -14892,9 +14892,11 @@ dependencies = [
  "sc-utils",
  "serde",
  "serde_json",
+ "shc-actors-derive",
  "shc-actors-framework",
  "shc-common",
  "shc-indexer-db",
+ "shc-telemetry-service",
  "sp-api 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
  "sp-blockchain",
  "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
@@ -14943,6 +14945,27 @@ dependencies = [
  "tokio",
  "tokio-util",
  "url",
+]
+
+[[package]]
+name = "shc-telemetry-service"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "axiom-rs",
+ "chrono",
+ "futures",
+ "log",
+ "sc-utils",
+ "serde",
+ "serde_json",
+ "shc-actors-derive",
+ "shc-actors-framework",
+ "shc-common",
+ "sp-core 35.0.0 (git+https://github.com/paritytech/polkadot-sdk.git?tag=polkadot-stable2412-6)",
+ "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]
@@ -17179,6 +17202,7 @@ dependencies = [
  "shc-indexer-db",
  "shc-indexer-service",
  "shc-rpc",
+ "shc-telemetry-service",
  "shp-constants",
  "shp-file-key-verifier",
  "shp-file-metadata",

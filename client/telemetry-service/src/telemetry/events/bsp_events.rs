@@ -3,7 +3,7 @@
 //! This module defines all telemetry events related to BSP operations including
 //! file uploads, downloads, proof generation, and fee collection.
 
-use crate::telemetry::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
+use crate::{BaseTelemetryEvent, TelemetryEvent, TelemetryStrategy};
 use serde::{Deserialize, Serialize};
 
 /// Event sent when BSP starts receiving a file upload.
