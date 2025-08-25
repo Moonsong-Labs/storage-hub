@@ -6,20 +6,12 @@ use axum::{
 };
 use axum_extra::extract::Multipart;
 
-use crate::{api::validation::extract_bearer_token, error::Error, models::*, services::Services};
-
-// Helper functions for token handling
-fn extract_token(headers: &HeaderMap) -> Result<String, Error> {
-    let auth_header = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|v| v.to_str().ok());
-    extract_bearer_token(auth_header)
-}
-
-fn validate_token(_token: &str) -> Result<(), Error> {
-    // Mock validation - in production this would verify JWT
-    Ok(())
-}
+use crate::{
+    api::validation::{extract_token, validate_token},
+    error::Error,
+    models::*,
+    services::Services,
+};
 
 // ==================== Auth Handlers ====================
 
