@@ -40,7 +40,7 @@ pub mod database {
     pub const DEFAULT_DATABASE_URL: &str = "postgres://localhost:5432/storage_hub";
 
     /// Default limit for requests with pagination
-    pub const DEFAULT_PAGE_LIMIT: usize = 100;
+    pub const DEFAULT_PAGE_LIMIT: i64 = 100;
 }
 
 /// API configuration constants
