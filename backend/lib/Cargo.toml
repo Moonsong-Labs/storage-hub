@@ -23,7 +23,7 @@ toml = { workspace = true }
 tower-http = { workspace = true }
 
 # Workspace dependencies
-shc-indexer-db = { path = "../../client/indexer-db" }
+shc-indexer-db = { workspace = true, default-features = true }
 
 [dev-dependencies]
 axum-test = { workspace = true }
