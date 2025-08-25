@@ -29,3 +29,7 @@ bigdecimal = { workspace = true }
 sc-network = { workspace = true }
 
 shc-common = { workspace = true }
+
+[features]
+default = ["std"]
+std = ["shc-common/std"]

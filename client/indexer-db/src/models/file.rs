@@ -25,7 +25,7 @@ pub enum FileDeletionStatus {
 }
 
 /// Table that holds the Files (both ongoing requests and completed).
-#[derive(Debug, Queryable, Insertable, Selectable)]
+#[derive(Debug, Clone, Queryable, Insertable, Selectable)]
 #[diesel(table_name = file)]
 pub struct File {
     /// The ID of the file as stored in the database. For the runtime id, use `onchain_bsp_id`.
