@@ -12,12 +12,12 @@ use std::{
 };
 
 use async_trait::async_trait;
+use shc_indexer_db::models::Bsp;
 use tokio::sync::RwLock;
 
-use shc_indexer_db::models::Bsp;
-
 use crate::data::indexer_db::repository::{
-    error::RepositoryError, error::RepositoryResult, IndexerOps, IndexerOpsMut,
+    error::{RepositoryError, RepositoryResult},
+    IndexerOps, IndexerOpsMut,
 };
 
 /// Mock repository implementation using in-memory storage

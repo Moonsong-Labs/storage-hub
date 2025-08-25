@@ -17,10 +17,9 @@ use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use shc_indexer_db::{models::Bsp, schema::bsp};
 
-use crate::data::indexer_db::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
-
 #[cfg(test)]
 use crate::data::indexer_db::repository::IndexerOpsMut;
+use crate::data::indexer_db::repository::{error::RepositoryResult, pool::SmartPool, IndexerOps};
 
 /// PostgreSQL repository implementation.
 ///

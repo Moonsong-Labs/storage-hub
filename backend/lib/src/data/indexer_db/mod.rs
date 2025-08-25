@@ -10,7 +10,6 @@ pub mod mock_repository;
 pub mod repository;
 
 pub use db_client::DBClient;
-pub use repository::{error::RepositoryError, pool::SmartPool, postgres::Repository};
-
 #[cfg(feature = "mocks")]
 pub use mock_repository::MockRepository;
+pub use repository::{error::RepositoryError, pool::SmartPool, postgres::Repository};

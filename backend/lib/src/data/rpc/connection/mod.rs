@@ -5,10 +5,9 @@ use std::fmt::Debug;
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Serialize};
 
-use crate::data::rpc::{ws_connection::WsConnection, RpcConnection};
-
 #[cfg(feature = "mocks")]
 use crate::data::rpc::mock_connection::MockConnection;
+use crate::data::rpc::{ws_connection::WsConnection, RpcConnection};
 
 pub mod error;
 

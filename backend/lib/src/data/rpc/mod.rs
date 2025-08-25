@@ -15,10 +15,9 @@ pub use connection::{
     error::{IntoRpcError, RpcConnectionError, RpcResult},
     AnyRpcConnection,
 };
-pub use ws_connection::{RpcConfig, WsConnection};
-
 #[cfg(feature = "mocks")]
 pub use mock_connection::{ErrorMode, MockConnection};
+pub use ws_connection::{RpcConfig, WsConnection};
 
 /// Trait for RPC connections
 #[async_trait]

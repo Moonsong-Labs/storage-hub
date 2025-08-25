@@ -121,9 +121,8 @@ impl SmartPool {
 
 #[cfg(test)]
 mod tests {
-    use crate::constants::test::DEFAULT_TEST_DATABASE_URL;
-
     use super::*;
+    use crate::constants::test::DEFAULT_TEST_DATABASE_URL;
 
     #[tokio::test]
     // TODO: should NOT panic when we add testcontainers

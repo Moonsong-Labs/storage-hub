@@ -6,9 +6,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use tracing::{debug, info};
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
-
+#[cfg(feature = "mocks")]
+use sh_msp_backend_lib::data::{indexer_db::MockRepository, rpc::MockConnection};
 use sh_msp_backend_lib::{
     api::create_app,
     config::Config,
@@ -19,9 +18,8 @@ use sh_msp_backend_lib::{
     },
     services::Services,
 };
-
-#[cfg(feature = "mocks")]
-use sh_msp_backend_lib::data::{indexer_db::MockRepository, rpc::MockConnection};
+use tracing::{debug, info};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 #[derive(Parser, Debug)]
 #[command(name = "sh-msp-backend")]

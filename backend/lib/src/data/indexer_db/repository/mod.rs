@@ -25,7 +25,6 @@
 //! ```
 
 use async_trait::async_trait;
-
 use shc_indexer_db::models::Bsp;
 
 pub mod error;
