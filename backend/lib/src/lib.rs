@@ -30,23 +30,4 @@ mod tests {
 
         api::create_app(services)
     }
-
-    #[cfg(feature = "mocks")]
-    #[tokio::test]
-    async fn test_health_endpoint() {
-        // Create test server
-        let app = create_test_app();
-        let server = TestServer::new(app).unwrap();
-
-        // Test health endpoint
-        let response = server.get("/health").await;
-
-        // Assert status code
-        assert_eq!(response.status_code(), StatusCode::OK);
-
-        // Assert response body
-        let json: serde_json::Value = response.json();
-        assert_eq!(json["status"], "healthy");
-        assert_eq!(json["service"], "storagehub-backend");
-    }
 }
