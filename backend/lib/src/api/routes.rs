@@ -23,12 +23,6 @@ pub fn routes(services: Services) -> Router {
     Router::new()
         // TODO(SCAFFOLDING): These are example endpoints for demonstration purposes only.
         .route("/health", get(handlers::health_check_detailed))
-        // TODO(SCAFFOLDING): Remove counter routes when real MSP endpoints are implemented.
-        // These are example endpoints for demonstration purposes only.
-        // Counter endpoints
-        .route("/counter", get(handlers::get_counter))
-        .route("/counter/inc", post(handlers::increment_counter))
-        .route("/counter/dec", post(handlers::decrement_counter))
         // Auth routes
         .route("/auth/nonce", post(msp_handlers::nonce))
         .route("/auth/verify", post(msp_handlers::verify))
