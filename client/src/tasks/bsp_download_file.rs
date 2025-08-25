@@ -1,10 +1,88 @@
 use sc_tracing::tracing::{error, trace};
 use shc_actors_framework::event_bus::EventHandler;
+use shc_common::task_context::{classify_error, TaskContext};
 use shc_common::traits::StorageEnableRuntime;
 use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::{
     commands::FileTransferServiceCommandInterface, events::RemoteDownloadRequest,
 };
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
+};
+use serde::{Deserialize, Serialize};
+
+// Local BSP download telemetry event definitions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspDownloadRequestedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    file_key: String,
+    chunk_ids: String,
+    request_id: String,
+    bucket_id: Option<String>,
+}
+
+impl TelemetryEvent for BspDownloadRequestedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_download_requested"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspDownloadChunkSentEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    chunk_ids: String,
+    request_id: String,
+    chunk_count: u32,
+    total_size_bytes: u64,
+}
+
+impl TelemetryEvent for BspDownloadChunkSentEvent {
+    fn event_type(&self) -> &str {
+        "bsp_download_chunk_sent"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspDownloadCompletedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    request_id: String,
+    duration_ms: u64,
+    chunk_count: u32,
+    total_size_bytes: u64,
+}
+
+impl TelemetryEvent for BspDownloadCompletedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_download_completed"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspDownloadFailedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    error_type: String,
+    error_message: String,
+    request_id: String,
+    duration_ms: Option<u64>,
+}
+
+impl TelemetryEvent for BspDownloadFailedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_download_failed"
+    }
+}
 
 use crate::{
     handler::StorageHubHandler,
@@ -61,6 +139,69 @@ where
     async fn handle_event(&mut self, event: RemoteDownloadRequest) -> anyhow::Result<()> {
         trace!(target: LOG_TARGET, "Received remote download request with id {:?} for file {:?}", event.request_id, event.file_key);
 
+        // Create task context for tracking
+        let ctx = TaskContext::new("bsp_download_file");
+
+        // Send task started telemetry event
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let start_event = BspDownloadRequestedEvent {
+                base: create_base_event("bsp_download_requested", "storage-hub-bsp".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                task_name: ctx.task_name.clone(),
+                file_key: format!("{:?}", event.file_key),
+                chunk_ids: format!("{:?}", event.chunk_ids),
+                request_id: format!("{:?}", event.request_id),
+                bucket_id: event.bucket_id.as_ref().map(|b| format!("{:?}", b)),
+            };
+            telemetry_service.queue_typed_event(start_event).await.ok();
+        }
+
+        let result = self.handle_download_request_internal(event.clone()).await;
+
+        // Send completion or failure telemetry
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            match &result {
+                Ok((chunk_count, total_size_bytes)) => {
+                    let completed_event = BspDownloadCompletedEvent {
+                        base: create_base_event("bsp_download_completed", "storage-hub-bsp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", event.file_key),
+                        request_id: format!("{:?}", event.request_id),
+                        duration_ms: ctx.elapsed_ms(),
+                        chunk_count: *chunk_count,
+                        total_size_bytes: *total_size_bytes,
+                    };
+                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                }
+                Err(e) => {
+                    let failed_event = BspDownloadFailedEvent {
+                        base: create_base_event("bsp_download_failed", "storage-hub-bsp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", event.file_key),
+                        error_type: classify_error(&e),
+                        error_message: e.to_string(),
+                        request_id: format!("{:?}", event.request_id),
+                        duration_ms: Some(ctx.elapsed_ms()),
+                    };
+                    telemetry_service.queue_typed_event(failed_event).await.ok();
+                }
+            }
+        }
+
+        result.map(|_| ())
+    }
+}
+
+impl<NT, Runtime> BspDownloadFileTask<NT, Runtime>
+where
+    NT: ShNodeType,
+    NT::FSH: BspForestStorageHandlerT,
+    Runtime: StorageEnableRuntime,
+{
+    async fn handle_download_request_internal(
+        &mut self,
+        event: RemoteDownloadRequest,
+    ) -> anyhow::Result<(u32, u64)> {
         let RemoteDownloadRequest {
             chunk_ids,
             request_id,
@@ -99,20 +240,44 @@ where
         let generate_proof_result =
             file_storage_read_lock.generate_proof(&event.file_key.into(), &chunk_ids);
 
-        match generate_proof_result {
+        let (chunk_count, total_size_bytes) = match generate_proof_result {
             Ok(file_key_proof) => {
+                // Calculate metrics for telemetry
+                let chunk_count = chunk_ids.len() as u32;
+                let total_size_bytes = file_key_proof
+                    .proven::<shc_common::types::StorageProofsMerkleTrieLayout>()
+                    .map(|proven| proven.iter().map(|chunk| chunk.data.len() as u64).sum())
+                    .unwrap_or(0);
+
+                // Send chunk sent telemetry event
+                if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                    let ctx = TaskContext::new("bsp_download_chunk");
+                    let chunk_sent_event = BspDownloadChunkSentEvent {
+                        base: create_base_event("bsp_download_chunk_sent", "storage-hub-bsp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", event.file_key),
+                        chunk_ids: format!("{:?}", chunk_ids),
+                        request_id: format!("{:?}", request_id),
+                        chunk_count,
+                        total_size_bytes,
+                    };
+                    telemetry_service.queue_typed_event(chunk_sent_event).await.ok();
+                }
+
                 // Send the chunk data and proof back to the requester.
                 self.storage_hub_handler
                     .file_transfer
                     .download_response(request_id, file_key_proof)
                     .await?;
+
+                (chunk_count, total_size_bytes)
             }
             Err(error) => {
                 error!(target: LOG_TARGET, "Failed to generate proof for chunk id {:?} of file {:?}", chunk_ids, event.file_key);
                 return Err(anyhow::anyhow!("{:?}", error));
             }
-        }
+        };
 
-        Ok(())
+        Ok((chunk_count, total_size_bytes))
     }
 }

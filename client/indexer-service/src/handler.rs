@@ -5,9 +5,14 @@ use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::StorageProviderId;
 use sp_runtime::AccountId32;
 use std::sync::Arc;
+use std::time::Instant;
 use thiserror::Error;
 
+use crate::telemetry::IndexerServiceTelemetry;
+
 use pallet_storage_providers_runtime_api::StorageProvidersApi;
+use shc_actors_framework::actor::ActorHandle;
+use shc_telemetry_service::TelemetryService;
 use sc_client_api::{BlockBackend, BlockchainEvents};
 use shc_actors_framework::actor::{Actor, ActorEventLoop};
 use shc_common::blockchain_utils::{convert_raw_multiaddress_to_multiaddr, EventsRetrievalError};
@@ -36,6 +41,7 @@ pub struct IndexerService<Runtime: StorageEnableRuntime> {
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: crate::IndexerMode,
+    telemetry: IndexerServiceTelemetry,
 }
 
 // Implement the Actor trait for IndexerService
@@ -66,11 +72,13 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         client: Arc<ParachainClient<Runtime::RuntimeApi>>,
         db_pool: DbPool,
         indexer_mode: crate::IndexerMode,
+        telemetry_handle: Option<ActorHandle<TelemetryService>>,
     ) -> Self {
         Self {
             client,
             db_pool,
             indexer_mode,
+            telemetry: IndexerServiceTelemetry::new(telemetry_handle),
         }
     }
 
@@ -98,8 +106,19 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
                 .client
                 .block_hash(block_number)?
                 .ok_or(HandleFinalityNotificationError::BlockHashNotFound)?;
-            self.index_block(&mut db_conn, block_number as BlockNumber, block_hash)
-                .await?;
+            if let Err(e) = self.index_block(&mut db_conn, block_number as BlockNumber, block_hash).await {
+                let handler_name = format!("{:?}", self.indexer_mode).to_lowercase();
+                self.telemetry.indexer_error(
+                    &handler_name,
+                    Some(block_number.into()),
+                    None,
+                    "IndexBlockError".to_string(),
+                    e.to_string(),
+                    false, // For now, we don't retry at this level
+                    None,
+                ).await;
+                return Err(e.into());
+            }
         }
 
         Ok(())
@@ -111,9 +130,11 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
         block_number: BlockNumber,
         block_hash: H256,
     ) -> Result<(), IndexBlockError> {
+        let start_time = Instant::now();
         info!(target: LOG_TARGET, "Indexing block #{}: {}", block_number, block_hash);
 
         let block_events = get_events_at_block::<Runtime>(&self.client, &block_hash)?;
+        let events_count = block_events.len() as u32;
 
         conn.transaction::<(), IndexBlockError, _>(move |conn| {
             Box::pin(async move {
@@ -127,6 +148,20 @@ impl<Runtime: StorageEnableRuntime> IndexerService<Runtime> {
             })
         })
         .await?;
+
+        let processing_time_ms = start_time.elapsed().as_millis() as u64;
+        let handler_name = format!("{:?}", self.indexer_mode).to_lowercase();
+
+        // Send block processed telemetry event
+        self.telemetry.block_processed(
+            &handler_name,
+            block_number.into(),
+            format!("{:?}", block_hash),
+            format!("{:?}", H256::zero()), // TODO: Get actual parent hash if needed
+            events_count,
+            processing_time_ms,
+            handler_name.clone(),
+        ).await;
 
         Ok(())
     }

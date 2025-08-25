@@ -29,6 +29,69 @@ use shc_file_transfer_service::{
     commands::FileTransferServiceCommandInterface, events::RemoteUploadRequest,
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_common::task_context::{classify_error, TaskContext};
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
+};
+use serde::{Deserialize, Serialize};
+
+// Local MSP telemetry event definitions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspUploadAcceptedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    file_key: String,
+    file_size_bytes: u64,
+    bucket_id: String,
+    location: String,
+    fingerprint: String,
+    peer_ids: String,
+}
+
+impl TelemetryEvent for MspUploadAcceptedEvent {
+    fn event_type(&self) -> &str {
+        "msp_upload_accepted"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspCapacityIncreasedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    required_capacity: u64,
+    current_capacity: u64,
+    available_capacity_before: u64,
+    available_capacity_after: u64,
+    max_capacity: u64,
+}
+
+impl TelemetryEvent for MspCapacityIncreasedEvent {
+    fn event_type(&self) -> &str {
+        "msp_capacity_increased"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspUploadRejectedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    bucket_id: String,
+    rejection_reason: String,
+    error_type: String,
+    error_message: String,
+}
+
+impl TelemetryEvent for MspUploadRejectedEvent {
+    fn event_type(&self) -> &str {
+        "msp_upload_rejected"
+    }
+}
 
 use crate::{
     handler::StorageHubHandler,
@@ -120,7 +183,43 @@ where
             event.fingerprint
         );
 
-        let result = self.handle_new_storage_request_event(event).await;
+        // Create task context for tracking
+        let ctx = TaskContext::new("msp_upload_file");
+
+        let result = self.handle_new_storage_request_event(event.clone(), &ctx).await;
+        
+        // Send telemetry based on result
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            match &result {
+                Ok(_) => {
+                    let accepted_event = MspUploadAcceptedEvent {
+                        base: create_base_event("msp_upload_accepted", "storage-hub-msp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        task_name: ctx.task_name.clone(),
+                        file_key: format!("{:?}", event.file_key),
+                        file_size_bytes: event.size as u64,
+                        bucket_id: format!("{:?}", event.bucket_id),
+                        location: hex::encode(event.location.as_slice()),
+                        fingerprint: format!("{:?}", event.fingerprint),
+                        peer_ids: format!("{:?}", event.user_peer_ids),
+                    };
+                    telemetry_service.queue_typed_event(accepted_event).await.ok();
+                }
+                Err(e) => {
+                    let rejected_event = MspUploadRejectedEvent {
+                        base: create_base_event("msp_upload_rejected", "storage-hub-msp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", event.file_key),
+                        bucket_id: format!("{:?}", event.bucket_id),
+                        rejection_reason: "storage_request_failed".to_string(),
+                        error_type: classify_error(&e),
+                        error_message: e.to_string(),
+                    };
+                    telemetry_service.queue_typed_event(rejected_event).await.ok();
+                }
+            }
+        }
+
         if result.is_err() {
             if let Some(file_key) = &self.file_key_cleanup {
                 self.unregister_file(*file_key).await?;
@@ -377,6 +476,7 @@ where
     async fn handle_new_storage_request_event(
         &mut self,
         event: NewStorageRequest,
+        ctx: &TaskContext,
     ) -> anyhow::Result<()> {
         if event.size == 0 {
             let err_msg = "File size cannot be 0";
@@ -511,7 +611,7 @@ where
                     .increase_capacity(CapacityRequestData::new(event.size))
                     .await?;
 
-                let available_capacity = self
+                let available_capacity_after = self
                     .storage_hub_handler
                     .blockchain
                     .query_available_storage_capacity(own_msp_id)
@@ -526,12 +626,43 @@ where
                         anyhow::anyhow!(err_msg)
                     })?;
 
+                // Send capacity increased telemetry event
+                if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                    let capacity_event = MspCapacityIncreasedEvent {
+                        base: create_base_event("msp_capacity_increased", "storage-hub-msp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", event.file_key),
+                        required_capacity: event.size,
+                        current_capacity,
+                        available_capacity_before: available_capacity,
+                        available_capacity_after,
+                        max_capacity: max_storage_capacity,
+                    };
+                    telemetry_service.queue_typed_event(capacity_event).await.ok();
+                }
+
+                let available_capacity = available_capacity_after;
+
                 // Reject storage request if the new available capacity is still less than the file size.
                 if available_capacity < event.size {
                     let err_msg = "Increased storage capacity is still insufficient to volunteer for file. Rejecting storage request.";
                     warn!(
                         target: LOG_TARGET, "{}", err_msg
                     );
+
+                    // Send rejection telemetry event
+                    if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                        let rejected_event = MspUploadRejectedEvent {
+                            base: create_base_event("msp_upload_rejected", "storage-hub-msp".to_string(), None),
+                            task_id: ctx.task_id.clone(),
+                            file_key: format!("{:?}", event.file_key),
+                            bucket_id: format!("{:?}", event.bucket_id),
+                            rejection_reason: "insufficient_capacity_after_increase".to_string(),
+                            error_type: "capacity_limit".to_string(),
+                            error_message: err_msg.to_string(),
+                        };
+                        telemetry_service.queue_typed_event(rejected_event).await.ok();
+                    }
 
                     // Build extrinsic.
                     let call = storage_hub_runtime::RuntimeCall::FileSystem(
@@ -854,6 +985,21 @@ where
         bucket_id: H256,
         reason: RejectedStorageRequestReason,
     ) -> anyhow::Result<()> {
+        // Send rejection telemetry event
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let ctx = TaskContext::new("msp_upload_file");
+            let rejected_event = MspUploadRejectedEvent {
+                base: create_base_event("msp_upload_rejected", "storage-hub-msp".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                file_key: format!("{:?}", file_key),
+                bucket_id: format!("{:?}", bucket_id),
+                rejection_reason: format!("{:?}", reason),
+                error_type: "storage_proof_error".to_string(),
+                error_message: format!("Storage request rejected due to: {:?}", reason),
+            };
+            telemetry_service.queue_typed_event(rejected_event).await.ok();
+        }
+
         let call = storage_hub_runtime::RuntimeCall::FileSystem(
             pallet_file_system::Call::msp_respond_storage_requests_multiple_buckets {
                 storage_request_msp_response: vec![StorageRequestMspBucketResponse {

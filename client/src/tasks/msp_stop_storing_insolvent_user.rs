@@ -10,11 +10,68 @@ use shc_blockchain_service::{
     events::{FinalisedMspStopStoringBucketInsolventUser, UserWithoutFunds},
     types::SendExtrinsicOptions,
 };
+use shc_common::task_context::{classify_error, TaskContext};
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::StorageProviderId;
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::ForestStorageHandler;
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
+};
+use serde::{Deserialize, Serialize};
 use sp_core::H256;
+
+// Local MSP telemetry event definitions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspInsolventUserDetectedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    insolvent_user: String,
+    buckets_count: u64,
+}
+
+impl TelemetryEvent for MspInsolventUserDetectedEvent {
+    fn event_type(&self) -> &str {
+        "msp_insolvent_user_detected"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspStorageStoppedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    insolvent_user: String,
+    buckets_processed: u64,
+    duration_ms: u64,
+}
+
+impl TelemetryEvent for MspStorageStoppedEvent {
+    fn event_type(&self) -> &str {
+        "msp_storage_stopped"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspInsolventProcessingFailedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    insolvent_user: String,
+    error_type: String,
+    error_message: String,
+    buckets_failed: u64,
+    buckets_total: u64,
+    duration_ms: Option<u64>,
+}
+
+impl TelemetryEvent for MspInsolventProcessingFailedEvent {
+    fn event_type(&self) -> &str {
+        "msp_insolvent_processing_failed"
+    }
+}
 
 use crate::{
     handler::StorageHubHandler,
@@ -97,6 +154,9 @@ where
             event.who
         );
 
+        // Create task context for tracking
+        let ctx = TaskContext::new("msp_stop_storing_insolvent_user");
+
         // Get the insolvent user from the event.
         let insolvent_user = event.who.clone();
 
@@ -130,6 +190,18 @@ where
                 amount_of_buckets_to_stop_storing,
                 insolvent_user
             );
+
+            // Send insolvent user detected telemetry event
+            if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                let detected_event = MspInsolventUserDetectedEvent {
+                    base: create_base_event("msp_insolvent_user_detected", "storage-hub-msp".to_string(), None),
+                    task_id: ctx.task_id.clone(),
+                    task_name: ctx.task_name.clone(),
+                    insolvent_user: format!("{:?}", insolvent_user),
+                    buckets_count: amount_of_buckets_to_stop_storing as u64,
+                };
+                telemetry_service.queue_typed_event(detected_event).await.ok();
+            }
 
             // Create a semaphore to allow sending parallel stop storing bucket extrinsics.
             let stop_storing_bucket_semaphore =
@@ -183,6 +255,27 @@ where
             }
 
             if failed_stop_storing_buckets > 0 {
+                // Send processing failed telemetry event
+                if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                    let error_msg = format!(
+                        "Failed to stop storing {} out of {} buckets for insolvent user {:?}",
+                        failed_stop_storing_buckets,
+                        amount_of_buckets_to_stop_storing,
+                        insolvent_user
+                    );
+                    let failed_event = MspInsolventProcessingFailedEvent {
+                        base: create_base_event("msp_insolvent_processing_failed", "storage-hub-msp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        insolvent_user: format!("{:?}", insolvent_user),
+                        error_type: "partial_failure".to_string(),
+                        error_message: error_msg.clone(),
+                        buckets_failed: failed_stop_storing_buckets as u64,
+                        buckets_total: amount_of_buckets_to_stop_storing as u64,
+                        duration_ms: Some(ctx.elapsed_ms()),
+                    };
+                    telemetry_service.queue_typed_event(failed_event).await.ok();
+                }
+
                 return Err(anyhow!(
                     "Failed to stop storing {} out of {} buckets for insolvent user {:?}",
                     failed_stop_storing_buckets,
@@ -195,6 +288,18 @@ where
                     "Successfully completed the task of stop storing all buckets for the insolvent user {:?}",
                     insolvent_user
                 );
+
+                // Send storage stopped successfully telemetry event
+                if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                    let stopped_event = MspStorageStoppedEvent {
+                        base: create_base_event("msp_storage_stopped", "storage-hub-msp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        insolvent_user: format!("{:?}", insolvent_user),
+                        buckets_processed: amount_of_buckets_to_stop_storing as u64,
+                        duration_ms: ctx.elapsed_ms(),
+                    };
+                    telemetry_service.queue_typed_event(stopped_event).await.ok();
+                }
             }
         } else {
             info!(
@@ -202,9 +307,39 @@ where
                 "No buckets found for insolvent user {:?}. Nothing to do.",
                 insolvent_user
             );
+
+            // Send insolvent user detected event with 0 buckets
+            if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                let detected_event = MspInsolventUserDetectedEvent {
+                    base: create_base_event("msp_insolvent_user_detected", "storage-hub-msp".to_string(), None),
+                    task_id: ctx.task_id.clone(),
+                    task_name: ctx.task_name.clone(),
+                    insolvent_user: format!("{:?}", insolvent_user),
+                    buckets_count: 0,
+                };
+                telemetry_service.queue_typed_event(detected_event).await.ok();
+            }
         }
 
-        Ok(())
+        // Send error telemetry if the entire process failed
+        let result = Ok(());
+        if let Err(ref e) = result {
+            if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                let failed_event = MspInsolventProcessingFailedEvent {
+                    base: create_base_event("msp_insolvent_processing_failed", "storage-hub-msp".to_string(), None),
+                    task_id: ctx.task_id.clone(),
+                    insolvent_user: format!("{:?}", insolvent_user),
+                    error_type: classify_error(e),
+                    error_message: e.to_string(),
+                    buckets_failed: 0,
+                    buckets_total: 0,
+                    duration_ms: Some(ctx.elapsed_ms()),
+                };
+                telemetry_service.queue_typed_event(failed_event).await.ok();
+            }
+        }
+
+        result
     }
 }
 

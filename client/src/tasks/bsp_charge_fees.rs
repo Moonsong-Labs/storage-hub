@@ -11,15 +11,70 @@ use shc_blockchain_service::{
     },
     types::{SendExtrinsicOptions, StopStoringForInsolventUserRequest},
 };
+use shc_common::task_context::{classify_error, TaskContext};
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{consts::CURRENT_FOREST_KEY, types::MaxUsersToCharge};
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
+};
+use serde::{Deserialize, Serialize};
 use sp_core::{Get, H256};
 
 use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
+
+// Local BSP charge fees telemetry event definitions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspFeeCalculationStartedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    provider_id: String,
+    min_debt_threshold: u64,
+}
+
+impl TelemetryEvent for BspFeeCalculationStartedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_fee_calculation_started"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspFeeChargedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    users_count: u32,
+    transaction_hash: String,
+}
+
+impl TelemetryEvent for BspFeeChargedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_fee_charged"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspFeeCollectionFailedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    error_type: String,
+    error_message: String,
+    users_count: Option<u32>,
+}
+
+impl TelemetryEvent for BspFeeCollectionFailedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_fee_collection_failed"
+    }
+}
 
 const LOG_TARGET: &str = "bsp-charge-fees-task";
 
@@ -100,19 +155,52 @@ where
     async fn handle_event(&mut self, event: LastChargeableInfoUpdated) -> anyhow::Result<()> {
         info!(target: LOG_TARGET, "A proof was accepted for provider {:?} and users' fees are going to be charged.", event.provider_id);
 
+        // Create task context for tracking
+        let ctx = TaskContext::new("bsp_charge_fees");
+
+        // Send fee calculation started telemetry event
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let start_event = BspFeeCalculationStartedEvent {
+                base: create_base_event("bsp_fee_calculation_started", "storage-hub-bsp".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                task_name: ctx.task_name.clone(),
+                provider_id: format!("{:?}", event.provider_id),
+                min_debt_threshold: self.config.min_debt,
+            };
+            telemetry_service.queue_typed_event(start_event).await.ok();
+        }
+
         // Retrieves users with debt over the min_debt threshold from config
         // using a Runtime API.
-        let users_with_debt = self
+        let users_with_debt = match self
             .storage_hub_handler
             .blockchain
             .query_users_with_debt(event.provider_id, self.config.min_debt as u128)
             .await
-            .map_err(|e| {
-                anyhow!(
+        {
+            Ok(users) => users,
+            Err(e) => {
+                let error = anyhow!(
                     "Failed to retrieve users with debt from the runtime: {:?}",
                     e
-                )
-            })?;
+                );
+                
+                // Send fee collection failed telemetry event
+                if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                    let failed_event = BspFeeCollectionFailedEvent {
+                        base: create_base_event("bsp_fee_collection_failed", "storage-hub-bsp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        task_name: ctx.task_name.clone(),
+                        error_type: classify_error(&error),
+                        error_message: error.to_string(),
+                        users_count: None,
+                    };
+                    telemetry_service.queue_typed_event(failed_event).await.ok();
+                }
+                
+                return Err(error);
+            }
+        };
 
         // Divides the users to charge in chunks of MaxUsersToCharge to avoid exceeding the block limit.
         // Calls the `charge_multiple_users_payment_streams` extrinsic for each chunk in the list to be charged.
@@ -134,9 +222,34 @@ where
             match charging_result {
                 Ok(submitted_transaction) => {
                     info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                    
+                    // Send fee charged telemetry event
+                    if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                        let charged_event = BspFeeChargedEvent {
+                            base: create_base_event("bsp_fee_charged", "storage-hub-bsp".to_string(), None),
+                            task_id: ctx.task_id.clone(),
+                            task_name: ctx.task_name.clone(),
+                            users_count: users_chunk.len() as u32,
+                            transaction_hash: submitted_transaction.hash().to_string(),
+                        };
+                        telemetry_service.queue_typed_event(charged_event).await.ok();
+                    }
                 }
                 Err(e) => {
                     error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
+                    
+                    // Send fee collection failed telemetry event
+                    if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                        let failed_event = BspFeeCollectionFailedEvent {
+                            base: create_base_event("bsp_fee_collection_failed", "storage-hub-bsp".to_string(), None),
+                            task_id: ctx.task_id.clone(),
+                            task_name: ctx.task_name.clone(),
+                            error_type: classify_error(&e),
+                            error_message: e.to_string(),
+                            users_count: Some(users_chunk.len() as u32),
+                        };
+                        telemetry_service.queue_typed_event(failed_event).await.ok();
+                    }
                 }
             }
         }
@@ -262,6 +375,9 @@ where
             event.data.who,
         );
 
+        // Create task context for tracking
+        let ctx = TaskContext::new("bsp_charge_fees");
+
         // Get the insolvent user from the event.
         let insolvent_user = event.data.who;
 
@@ -358,9 +474,34 @@ where
                 match charging_result {
                     Ok(submitted_transaction) => {
                         info!(target: LOG_TARGET, "Submitted extrinsic to charge users with debt: {}", submitted_transaction.hash());
+                        
+                        // Send fee charged telemetry event for final charge after file deletion
+                        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                            let charged_event = BspFeeChargedEvent {
+                                base: create_base_event("bsp_fee_charged", "storage-hub-bsp".to_string(), None),
+                                task_id: ctx.task_id.clone(),
+                                task_name: ctx.task_name.clone(),
+                                users_count: 1,
+                                transaction_hash: submitted_transaction.hash().to_string(),
+                            };
+                            telemetry_service.queue_typed_event(charged_event).await.ok();
+                        }
                     }
                     Err(e) => {
                         error!(target: LOG_TARGET, "Failed to send extrinsic to charge users with debt: {}", e);
+                        
+                        // Send fee collection failed telemetry event
+                        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                            let failed_event = BspFeeCollectionFailedEvent {
+                                base: create_base_event("bsp_fee_collection_failed", "storage-hub-bsp".to_string(), None),
+                                task_id: ctx.task_id.clone(),
+                                task_name: ctx.task_name.clone(),
+                                error_type: classify_error(&e),
+                                error_message: e.to_string(),
+                                users_count: Some(1),
+                            };
+                            telemetry_service.queue_typed_event(failed_event).await.ok();
+                        }
                     }
                 }
             }

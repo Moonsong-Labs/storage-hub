@@ -1,6 +1,6 @@
 use anyhow::anyhow;
 use rand::{rngs::StdRng, SeedableRng};
-use std::{sync::Mutex, time::Duration};
+use std::{sync::Mutex, time::{Duration, Instant}};
 
 use sc_tracing::tracing::*;
 use sp_core::H256;
@@ -13,17 +13,74 @@ use shc_blockchain_service::{
     events::{MoveBucketRequestedForMsp, StartMovedBucketDownload},
     types::{RetryStrategy, SendExtrinsicOptions},
 };
+use shc_common::task_context::{classify_error, TaskContext};
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::{
     BucketId, HashT, ProviderId, StorageProofsMerkleTrieLayout, StorageProviderId,
 };
 use shc_file_manager::traits::FileStorage;
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     handler::StorageHubHandler,
     types::{MspForestStorageHandlerT, ShNodeType},
 };
+
+// Local MSP telemetry event definitions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspBucketMoveStartedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    bucket_id: String,
+    file_count: u32,
+    total_size_bytes: u64,
+}
+
+impl TelemetryEvent for MspBucketMoveStartedEvent {
+    fn event_type(&self) -> &str {
+        "msp_bucket_move_started"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspBucketMoveCompletedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    bucket_id: String,
+    file_count: u32,
+    total_size_bytes: u64,
+    duration_ms: u64,
+}
+
+impl TelemetryEvent for MspBucketMoveCompletedEvent {
+    fn event_type(&self) -> &str {
+        "msp_bucket_move_completed"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct MspBucketMoveFailedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    bucket_id: String,
+    error_type: String,
+    error_message: String,
+    duration_ms: Option<u64>,
+}
+
+impl TelemetryEvent for MspBucketMoveFailedEvent {
+    fn event_type(&self) -> &str {
+        "msp_bucket_move_failed"
+    }
+}
 
 // Constants
 const LOG_TARGET: &str = "storage-hub::msp-move-bucket";
@@ -110,7 +167,46 @@ where
             event.bucket_id,
         );
 
-        if let Err(error) = self.handle_move_bucket_request(event.clone()).await {
+        // Create task context for tracking
+        let ctx = TaskContext::new("msp_move_bucket");
+
+        // Send task started telemetry event (will get file count and size in handle_move_bucket_request)
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let start_event = MspBucketMoveStartedEvent {
+                base: create_base_event("msp_bucket_move_started", "storage-hub-msp".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                task_name: ctx.task_name.clone(),
+                bucket_id: format!("{:?}", event.bucket_id),
+                file_count: 0, // Will be updated when we get file info
+                total_size_bytes: 0, // Will be updated when we get file info
+            };
+            telemetry_service.queue_typed_event(start_event).await.ok();
+        }
+
+        let result = self.handle_move_bucket_request(event.clone()).await;
+
+        // Send completion or failure telemetry
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            match &result {
+                Ok(_) => {
+                    // Success event will be sent when download completes in StartMovedBucketDownload handler
+                    // This is just the acceptance phase
+                }
+                Err(error) => {
+                    let failed_event = MspBucketMoveFailedEvent {
+                        base: create_base_event("msp_bucket_move_failed", "storage-hub-msp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        bucket_id: format!("{:?}", event.bucket_id),
+                        error_type: classify_error(&error),
+                        error_message: error.to_string(),
+                        duration_ms: Some(ctx.elapsed_ms()),
+                    };
+                    telemetry_service.queue_typed_event(failed_event).await.ok();
+                }
+            }
+        }
+
+        if let Err(error) = result {
             // TODO: Based on the error, we should persist the bucket move request and retry later.
             error!(
                 target: LOG_TARGET,
@@ -137,6 +233,10 @@ where
             event.bucket_id
         );
 
+        // Create task context for tracking download phase
+        let ctx = TaskContext::new("msp_move_bucket");
+        let download_start_time = Instant::now();
+
         // Important: Add a delay after receiving the on-chain confirmation
         // This gives the BSPs time to process the chain event and prepare to serve files
         info!(
@@ -144,99 +244,37 @@ where
             "Waiting for BSPs to be ready to serve files for bucket {:?}", event.bucket_id
         );
 
-        // Get all files for this bucket from the indexer
-        let indexer_db_pool =
-            if let Some(indexer_db_pool) = self.storage_hub_handler.indexer_db_pool.clone() {
-                indexer_db_pool
-            } else {
-                return Err(anyhow!(
-                    "Indexer is disabled but a StartMovedBucketDownload event was received"
-                ));
-            };
+        let result = self.handle_bucket_download(event.clone()).await;
 
-        let mut indexer_connection = indexer_db_pool.get().await?;
-
-        let files = shc_indexer_db::models::File::get_by_onchain_bucket_id(
-            &mut indexer_connection,
-            event.bucket_id.as_ref().to_vec(),
-        )
-        .await?;
-
-        if files.is_empty() {
-            info!(
-                target: LOG_TARGET,
-                "No files to download for bucket {:?}", event.bucket_id
-            );
-            self.pending_bucket_id = None;
-            return Ok(());
-        }
-
-        // Convert indexer files to FileMetadata
-        let file_metadatas = files
-            .iter()
-            .filter_map(
-                |file| match file.to_file_metadata(event.bucket_id.as_ref().to_vec()) {
-                    Ok(metadata) => Some(metadata),
-                    Err(e) => {
-                        error!(
-                            target: LOG_TARGET,
-                            "Failed to convert file to metadata: {:?}", e
-                        );
-                        None
-                    }
-                },
-            )
-            .collect::<Vec<_>>();
-
-        // Now download all files using the FileDownloadManager
-        let file_download_manager = &self.storage_hub_handler.file_download_manager;
-        let file_transfer_service = self.storage_hub_handler.file_transfer.clone();
-
-        info!(
-            target: LOG_TARGET,
-            "Starting new download of bucket {:?}", event.bucket_id
-        );
-
-        // Use try_lock_and_download_bucket which handles locking internally
-        let download_result = file_download_manager
-            .try_lock_and_download_bucket(
-                event.bucket_id,
-                file_metadatas,
-                file_transfer_service,
-                self.storage_hub_handler.file_storage.clone(),
-            )
-            .await;
-
-        match download_result {
-            Ok(()) => {
-                info!(
-                    target: LOG_TARGET,
-                    "Successfully downloaded bucket {:?}", event.bucket_id
-                );
-            }
-            Err(crate::file_download_manager::BucketDownloadError::AlreadyBeingDownloaded(_)) => {
-                info!(
-                    target: LOG_TARGET,
-                    "Bucket {:?} is already being downloaded by another task", event.bucket_id
-                );
-            }
-            Err(crate::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
-                error!(
-                    target: LOG_TARGET,
-                    "Failed to download bucket {:?}: {:?}", event.bucket_id, e
-                );
+        // Send completion or failure telemetry
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            match &result {
+                Ok((file_count, total_size)) => {
+                    let completed_event = MspBucketMoveCompletedEvent {
+                        base: create_base_event("msp_bucket_move_completed", "storage-hub-msp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        bucket_id: format!("{:?}", event.bucket_id),
+                        file_count: *file_count,
+                        total_size_bytes: *total_size,
+                        duration_ms: download_start_time.elapsed().as_millis() as u64,
+                    };
+                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                }
+                Err(error) => {
+                    let failed_event = MspBucketMoveFailedEvent {
+                        base: create_base_event("msp_bucket_move_failed", "storage-hub-msp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        bucket_id: format!("{:?}", event.bucket_id),
+                        error_type: classify_error(&error),
+                        error_message: error.to_string(),
+                        duration_ms: Some(download_start_time.elapsed().as_millis() as u64),
+                    };
+                    telemetry_service.queue_typed_event(failed_event).await.ok();
+                }
             }
         }
 
-        // After download is complete, update status
-        self.pending_bucket_id = None;
-
-        info!(
-            target: LOG_TARGET,
-            "Bucket move completed for bucket {:?}", event.bucket_id
-        );
-
-        Ok(())
+        result.map(|_| ())
     }
 }
 
@@ -389,6 +427,108 @@ where
         );
 
         Ok(())
+    }
+
+    /// Handles the bucket download process and returns (file_count, total_size) for telemetry
+    async fn handle_bucket_download(&mut self, event: StartMovedBucketDownload) -> anyhow::Result<(u32, u64)> {
+        // Get all files for this bucket from the indexer
+        let indexer_db_pool =
+            if let Some(indexer_db_pool) = self.storage_hub_handler.indexer_db_pool.clone() {
+                indexer_db_pool
+            } else {
+                return Err(anyhow!(
+                    "Indexer is disabled but a StartMovedBucketDownload event was received"
+                ));
+            };
+
+        let mut indexer_connection = indexer_db_pool.get().await?;
+
+        let files = shc_indexer_db::models::File::get_by_onchain_bucket_id(
+            &mut indexer_connection,
+            event.bucket_id.as_ref().to_vec(),
+        )
+        .await?;
+
+        if files.is_empty() {
+            info!(
+                target: LOG_TARGET,
+                "No files to download for bucket {:?}", event.bucket_id
+            );
+            self.pending_bucket_id = None;
+            return Ok((0, 0));
+        }
+
+        // Calculate total size for telemetry
+        let total_size: u64 = files.iter().map(|f| f.size as u64).sum();
+        let file_count = files.len() as u32;
+
+        // Convert indexer files to FileMetadata
+        let file_metadatas = files
+            .iter()
+            .filter_map(
+                |file| match file.to_file_metadata(event.bucket_id.as_ref().to_vec()) {
+                    Ok(metadata) => Some(metadata),
+                    Err(e) => {
+                        error!(
+                            target: LOG_TARGET,
+                            "Failed to convert file to metadata: {:?}", e
+                        );
+                        None
+                    }
+                },
+            )
+            .collect::<Vec<_>>();
+
+        // Now download all files using the FileDownloadManager
+        let file_download_manager = &self.storage_hub_handler.file_download_manager;
+        let file_transfer_service = self.storage_hub_handler.file_transfer.clone();
+
+        info!(
+            target: LOG_TARGET,
+            "Starting new download of bucket {:?}", event.bucket_id
+        );
+
+        // Use try_lock_and_download_bucket which handles locking internally
+        let download_result = file_download_manager
+            .try_lock_and_download_bucket(
+                event.bucket_id,
+                file_metadatas,
+                file_transfer_service,
+                self.storage_hub_handler.file_storage.clone(),
+            )
+            .await;
+
+        match download_result {
+            Ok(()) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Successfully downloaded bucket {:?}", event.bucket_id
+                );
+            }
+            Err(crate::file_download_manager::BucketDownloadError::AlreadyBeingDownloaded(_)) => {
+                info!(
+                    target: LOG_TARGET,
+                    "Bucket {:?} is already being downloaded by another task", event.bucket_id
+                );
+            }
+            Err(crate::file_download_manager::BucketDownloadError::DownloadFailed(e)) => {
+                error!(
+                    target: LOG_TARGET,
+                    "Failed to download bucket {:?}: {:?}", event.bucket_id, e
+                );
+                return Err(anyhow!("Failed to download bucket: {:?}", e));
+            }
+        }
+
+        // After download is complete, update status
+        self.pending_bucket_id = None;
+
+        info!(
+            target: LOG_TARGET,
+            "Bucket move completed for bucket {:?}", event.bucket_id
+        );
+
+        Ok((file_count, total_size))
     }
 
     /// Rejects a bucket move request and performs cleanup of any partially created resources.

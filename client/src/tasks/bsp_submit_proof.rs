@@ -1,4 +1,4 @@
-use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{collections::HashSet, future::Future, pin::Pin, sync::Arc, time::{Duration, Instant}};
 
 use anyhow::anyhow;
 use sc_tracing::tracing::*;
@@ -18,17 +18,114 @@ use shc_blockchain_service::{
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::{
     consts::CURRENT_FOREST_KEY,
+    task_context::{classify_error, TaskContext},
     types::{
         BlockNumber, CustomChallenge, FileKey, ForestRoot, KeyProof, KeyProofs,
         ProofsDealerProviderId, Proven, RandomnessOutput, StorageProof,
     },
 };
 use shc_forest_manager::traits::{ForestStorage, ForestStorageHandler};
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     handler::StorageHubHandler,
     types::{BspForestStorageHandlerT, ShNodeType},
 };
+
+// Local BSP proof telemetry event definitions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspProofChallengeReceivedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    provider_id: String,
+    tick: u32,
+    seed: String,
+    forest_challenges_count: usize,
+    checkpoint_challenges_count: usize,
+}
+
+impl TelemetryEvent for BspProofChallengeReceivedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_proof_challenge_received"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspProofGeneratedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    provider_id: String,
+    tick: u32,
+    proven_keys_count: usize,
+    key_proofs_count: usize,
+    generation_time_ms: u64,
+}
+
+impl TelemetryEvent for BspProofGeneratedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_proof_generated"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspProofSubmittedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    provider_id: String,
+    tick: u32,
+    submission_attempts: u32,
+    transaction_hash: Option<String>,
+    total_time_ms: u64,
+}
+
+impl TelemetryEvent for BspProofSubmittedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_proof_submitted"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspProofAcceptedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    provider_id: String,
+    tick: u32,
+    transaction_hash: String,
+    total_time_ms: u64,
+}
+
+impl TelemetryEvent for BspProofAcceptedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_proof_accepted"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BspProofRejectedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    provider_id: String,
+    tick: u32,
+    error_type: String,
+    error_message: String,
+    submission_attempts: u32,
+    total_time_ms: u64,
+}
+
+impl TelemetryEvent for BspProofRejectedEvent {
+    fn event_type(&self) -> &str {
+        "bsp_proof_rejected"
+    }
+}
 
 const LOG_TARGET: &str = "bsp-submit-proof-task";
 
@@ -169,9 +266,28 @@ where
             event.data
         );
 
+        // Create task context for tracking proof generation and submission
+        let ctx = TaskContext::new("bsp_submit_proof");
+        let proof_start_time = Instant::now();
+
         if event.data.forest_challenges.is_empty() && event.data.checkpoint_challenges.is_empty() {
             warn!(target: LOG_TARGET, "No challenges to respond to. Skipping proof submission.");
             return Ok(());
+        }
+
+        // Send challenge received telemetry event
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let challenge_event = BspProofChallengeReceivedEvent {
+                base: create_base_event("bsp_proof_challenge_received", "storage-hub-bsp".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                task_name: ctx.task_name.clone(),
+                provider_id: format!("{:?}", event.data.provider_id),
+                tick: event.data.tick,
+                seed: format!("{:?}", event.data.seed),
+                forest_challenges_count: event.data.forest_challenges.len(),
+                checkpoint_challenges_count: event.data.checkpoint_challenges.len(),
+            };
+            telemetry_service.queue_typed_event(challenge_event).await.ok();
         }
 
         // Acquire Forest root write lock. This prevents other Forest-root-writing tasks from starting while we are processing this task.
@@ -254,6 +370,22 @@ where
             };
         }
 
+        // Send proof generated telemetry event
+        let proof_generation_time_ms = proof_start_time.elapsed().as_millis() as u64;
+        let key_proofs_count = key_proofs.len();
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let proof_generated_event = BspProofGeneratedEvent {
+                base: create_base_event("bsp_proof_generated", "storage-hub-bsp".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                provider_id: format!("{:?}", event.data.provider_id),
+                tick: event.data.tick,
+                proven_keys_count: proven_keys.len(),
+                key_proofs_count,
+                generation_time_ms: proof_generation_time_ms,
+            };
+            telemetry_service.queue_typed_event(proof_generated_event).await.ok();
+        }
+
         // Construct full proof.
         let proof = StorageProof {
             forest_proof: proven_file_keys.proof,
@@ -312,7 +444,7 @@ where
         };
 
         // Attempt to submit the extrinsic with retries and tip increase.
-        self.storage_hub_handler
+        let submission_result = self.storage_hub_handler
             .blockchain
             .submit_extrinsic_with_retry(
                 call,
@@ -328,11 +460,59 @@ where
                     .with_should_retry(Some(Box::new(should_retry))),
                 false,
             )
-            .await
-            .map_err(|e| {
+            .await;
+
+        let total_time_ms = proof_start_time.elapsed().as_millis() as u64;
+
+        // Send telemetry based on submission result
+        match &submission_result {
+            Ok(transaction_hash) => {
+                // Send proof submitted/accepted event
+                if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                    let proof_submitted_event = BspProofSubmittedEvent {
+                        base: create_base_event("bsp_proof_submitted", "storage-hub-bsp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        provider_id: format!("{:?}", event.data.provider_id),
+                        tick: event.data.tick,
+                        submission_attempts: self.config.max_submission_attempts,
+                        transaction_hash: Some(format!("{:?}", transaction_hash)),
+                        total_time_ms,
+                    };
+                    telemetry_service.queue_typed_event(proof_submitted_event).await.ok();
+
+                    let proof_accepted_event = BspProofAcceptedEvent {
+                        base: create_base_event("bsp_proof_accepted", "storage-hub-bsp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        provider_id: format!("{:?}", event.data.provider_id),
+                        tick: event.data.tick,
+                        transaction_hash: format!("{:?}", transaction_hash),
+                        total_time_ms,
+                    };
+                    telemetry_service.queue_typed_event(proof_accepted_event).await.ok();
+                }
+            }
+            Err(e) => {
+                // Send proof rejected event
+                if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                    let proof_rejected_event = BspProofRejectedEvent {
+                        base: create_base_event("bsp_proof_rejected", "storage-hub-bsp".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        provider_id: format!("{:?}", event.data.provider_id),
+                        tick: event.data.tick,
+                        error_type: classify_error(e),
+                        error_message: e.to_string(),
+                        submission_attempts: self.config.max_submission_attempts,
+                        total_time_ms,
+                    };
+                    telemetry_service.queue_typed_event(proof_rejected_event).await.ok();
+                }
+
                 error!(target: LOG_TARGET, "❌ Failed to submit proof due to: {}", e);
-                anyhow!("Failed to submit proof due to: {}", e)
-            })?;
+                return Err(anyhow!("Failed to submit proof due to: {}", e));
+            }
+        }
+
+        submission_result?;
 
         trace!(target: LOG_TARGET, "Proof submitted successfully");
 

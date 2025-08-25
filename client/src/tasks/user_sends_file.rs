@@ -17,7 +17,87 @@ use shc_file_manager::traits::FileStorage;
 use shc_file_transfer_service::commands::{
     FileTransferServiceCommandInterface, FileTransferServiceCommandInterfaceExt,
 };
+use shc_telemetry_service::{
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryServiceCommandInterfaceExt,
+};
+use shc_common::task_context::{TaskContext, classify_error};
+use serde::{Deserialize, Serialize};
 use shp_file_metadata::ChunkId;
+
+// Local user telemetry event definitions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserFileUploadStartedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    task_name: String,
+    file_key: String,
+    file_size_bytes: u64,
+    location: String,
+    fingerprint: String,
+    peer_ids: String,
+}
+
+impl TelemetryEvent for UserFileUploadStartedEvent {
+    fn event_type(&self) -> &str {
+        "user_file_upload_started"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserChunkSentEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    chunk_count: u32,
+    chunk_size_bytes: u64,
+    peer_id: String,
+    batch_index: u32,
+}
+
+impl TelemetryEvent for UserChunkSentEvent {
+    fn event_type(&self) -> &str {
+        "user_chunk_sent"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserUploadCompletedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    file_size_bytes: u64,
+    duration_ms: u64,
+    total_chunks: u64,
+    fingerprint: String,
+    peer_id: String,
+}
+
+impl TelemetryEvent for UserUploadCompletedEvent {
+    fn event_type(&self) -> &str {
+        "user_upload_completed"
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct UserUploadFailedEvent {
+    #[serde(flatten)]
+    base: BaseTelemetryEvent,
+    task_id: String,
+    file_key: String,
+    error_type: String,
+    error_message: String,
+    duration_ms: Option<u64>,
+    peer_id: Option<String>,
+}
+
+impl TelemetryEvent for UserUploadFailedEvent {
+    fn event_type(&self) -> &str {
+        "user_upload_failed"
+    }
+}
 
 use crate::{handler::StorageHubHandler, types::ShNodeType};
 
@@ -67,6 +147,8 @@ where
     /// Reacts to a new storage request from the runtime, which is triggered by a user sending a file to be stored.
     /// It generates the file metadata and sends it to the BSPs volunteering to store the file.
     async fn handle_event(&mut self, event: NewStorageRequest) -> anyhow::Result<()> {
+        // Create task context for tracking
+        let ctx = TaskContext::new("user_sends_file");
         let node_pub_key = self
             .storage_hub_handler
             .blockchain
@@ -77,6 +159,21 @@ where
         if event.who != node_pub_key.into() {
             // Skip if the storage request was not created by this user node.
             return Ok(());
+        }
+
+        // Send task started telemetry event
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let start_event = UserFileUploadStartedEvent {
+                base: create_base_event("user_file_upload_started", "storage-hub-user".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                task_name: ctx.task_name.clone(),
+                file_key: format!("{:?}", event.file_key),
+                file_size_bytes: event.size as u64,
+                location: hex::encode(event.location.as_slice()),
+                fingerprint: format!("{:?}", event.fingerprint),
+                peer_ids: format!("{:?}", event.user_peer_ids),
+            };
+            telemetry_service.queue_typed_event(start_event).await.ok();
         }
 
         info!(
@@ -147,7 +244,40 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        self.send_chunks_to_provider(peer_ids, &file_metadata).await
+        let result = self.send_chunks_to_provider(peer_ids, &file_metadata).await;
+
+        // Send completion or failure telemetry
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            match &result {
+                Ok(_) => {
+                    let completed_event = UserUploadCompletedEvent {
+                        base: create_base_event("user_upload_completed", "storage-hub-user".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", file_key),
+                        file_size_bytes: event.size as u64,
+                        duration_ms: ctx.elapsed_ms(),
+                        total_chunks: file_metadata.chunks_count(),
+                        fingerprint: format!("{:?}", event.fingerprint),
+                        peer_id: "multiple".to_string(), // Could be multiple peers
+                    };
+                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                }
+                Err(e) => {
+                    let failed_event = UserUploadFailedEvent {
+                        base: create_base_event("user_upload_failed", "storage-hub-user".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", file_key),
+                        error_type: classify_error(&e),
+                        error_message: e.to_string(),
+                        duration_ms: Some(ctx.elapsed_ms()),
+                        peer_id: Some("multiple".to_string()),
+                    };
+                    telemetry_service.queue_typed_event(failed_event).await.ok();
+                }
+            }
+        }
+
+        result
     }
 }
 
@@ -161,6 +291,8 @@ where
     /// At this point we assume that the file is merkleised and already in file storage, and
     /// for this reason the file transfer to the BSP should not fail unless the p2p connection fails.
     async fn handle_event(&mut self, event: AcceptedBspVolunteer) -> anyhow::Result<()> {
+        // Create task context for tracking
+        let ctx = TaskContext::new("user_sends_file_bsp");
         info!(
             target: LOG_TARGET,
             "Handling BSP volunteering to store a file from user [{:?}], with location [{:?}]",
@@ -171,7 +303,7 @@ where
         let file_metadata = FileMetadata::new(
             <AccountId32 as AsRef<[u8]>>::as_ref(&event.owner).to_vec(),
             event.bucket_id.as_ref().to_vec(),
-            event.location.into_inner(),
+            event.location.clone().into_inner(),
             event.size.into(),
             event.fingerprint,
         )
@@ -195,7 +327,55 @@ where
             info!(target: LOG_TARGET, "No peers were found to receive file key {:?}", file_key);
         }
 
-        self.send_chunks_to_provider(peer_ids, &file_metadata).await
+        // Send task started telemetry event for BSP volunteer
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            let start_event = UserFileUploadStartedEvent {
+                base: create_base_event("user_file_upload_started", "storage-hub-user".to_string(), None),
+                task_id: ctx.task_id.clone(),
+                task_name: ctx.task_name.clone(),
+                file_key: format!("{:?}", file_key),
+                file_size_bytes: event.size as u64,
+                location: hex::encode(event.location.as_slice()),
+                fingerprint: format!("{:?}", event.fingerprint),
+                peer_ids: format!("{:?}", peer_ids),
+            };
+            telemetry_service.queue_typed_event(start_event).await.ok();
+        }
+
+        let result = self.send_chunks_to_provider(peer_ids, &file_metadata).await;
+
+        // Send completion or failure telemetry
+        if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+            match &result {
+                Ok(_) => {
+                    let completed_event = UserUploadCompletedEvent {
+                        base: create_base_event("user_upload_completed", "storage-hub-user".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", file_key),
+                        file_size_bytes: event.size as u64,
+                        duration_ms: ctx.elapsed_ms(),
+                        total_chunks: file_metadata.chunks_count(),
+                        fingerprint: format!("{:?}", event.fingerprint),
+                        peer_id: "bsp_volunteer".to_string(),
+                    };
+                    telemetry_service.queue_typed_event(completed_event).await.ok();
+                }
+                Err(e) => {
+                    let failed_event = UserUploadFailedEvent {
+                        base: create_base_event("user_upload_failed", "storage-hub-user".to_string(), None),
+                        task_id: ctx.task_id.clone(),
+                        file_key: format!("{:?}", file_key),
+                        error_type: classify_error(&e),
+                        error_message: e.to_string(),
+                        duration_ms: Some(ctx.elapsed_ms()),
+                        peer_id: Some("bsp_volunteer".to_string()),
+                    };
+                    telemetry_service.queue_typed_event(failed_event).await.ok();
+                }
+            }
+        }
+
+        result
     }
 }
 
@@ -246,6 +426,7 @@ where
     ) -> Result<(), anyhow::Error> {
         debug!(target: LOG_TARGET, "Attempting to send chunks of file key {:?} to peer {:?}", file_key, peer_id);
 
+        let ctx = TaskContext::new("user_send_chunks");
         let mut current_batch = Vec::new();
         let mut current_batch_size = 0;
 
@@ -308,6 +489,20 @@ where
                                 fingerprint,
                                 peer_id
                             );
+
+                            // Send chunk sent telemetry event
+                            if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                                let chunk_event = UserChunkSentEvent {
+                                    base: create_base_event("user_chunk_sent", "storage-hub-user".to_string(), None),
+                                    task_id: ctx.task_id.clone(),
+                                    file_key: format!("{:?}", file_key),
+                                    chunk_count: current_batch.len() as u32,
+                                    chunk_size_bytes: current_batch_size as u64,
+                                    peer_id: format!("{:?}", peer_id),
+                                    batch_index: (chunk_id as usize / (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / shc_common::types::FILE_CHUNK_SIZE as usize)) as u32,
+                                };
+                                telemetry_service.queue_typed_event(chunk_event).await.ok();
+                            }
 
                             let r = self
                                 .storage_hub_handler
@@ -434,6 +629,20 @@ where
                                 fingerprint,
                                 peer_id
                             );
+
+                            // Send final chunk sent telemetry event
+                            if let Some(telemetry_service) = &self.storage_hub_handler.telemetry {
+                                let chunk_event = UserChunkSentEvent {
+                                    base: create_base_event("user_chunk_sent", "storage-hub-user".to_string(), None),
+                                    task_id: ctx.task_id.clone(),
+                                    file_key: format!("{:?}", file_key),
+                                    chunk_count: current_batch.len() as u32,
+                                    chunk_size_bytes: current_batch_size as u64,
+                                    peer_id: format!("{:?}", peer_id),
+                                    batch_index: (chunk_count as usize / (BATCH_CHUNK_FILE_TRANSFER_MAX_SIZE / shc_common::types::FILE_CHUNK_SIZE as usize)) as u32,
+                                };
+                                telemetry_service.queue_typed_event(chunk_event).await.ok();
+                            }
 
                             let r = self
                                 .storage_hub_handler

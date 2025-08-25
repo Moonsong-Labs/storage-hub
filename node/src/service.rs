@@ -216,10 +216,48 @@ async fn setup_database_pool(database_url: String) -> Result<DbPool, sc_service:
         .map_err(|e| sc_service::Error::Application(Box::new(e)))
 }
 
+/// Initialize telemetry service if enabled
+async fn initialize_telemetry_service(
+    task_manager: &TaskManager,
+    network: &Arc<dyn NetworkService>,
+    telemetry_enabled: bool,
+    provider_type: Option<&ProviderType>,
+    axiom_token: &Option<String>,
+    axiom_dataset: &Option<String>,
+) -> Option<shc_actors_framework::actor::ActorHandle<shc_telemetry_service::TelemetryService>> {
+    if telemetry_enabled {
+        // Get node ID from network
+        let node_id = network.local_peer_id().to_string();
+
+        // Determine service name
+        let service_name = match provider_type {
+            Some(pt) => format!("storage-hub-{:?}", pt).to_lowercase(),
+            None => "storage-hub-indexer".to_string(),
+        };
+
+        // Spawn telemetry service as an actor
+        let telemetry_task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "telemetry-service");
+        if let Some(telemetry_handle) = shc_telemetry_service::spawn_telemetry_service(
+            &telemetry_task_spawner,
+            service_name,
+            Some(node_id),
+            axiom_token.clone(),
+            axiom_dataset.clone(),
+        )
+        .await
+        {
+            info!("Telemetry service initialized and configured");
+            return Some(telemetry_handle);
+        }
+    }
+    None
+}
+
 async fn configure_and_spawn_indexer(
     indexer_options: &Option<IndexerOptions>,
     task_manager: &TaskManager,
     client: Arc<ParachainClient>,
+    telemetry_handle: Option<shc_actors_framework::actor::ActorHandle<shc_telemetry_service::TelemetryService>>,
 ) -> Result<Option<DbPool>, sc_service::Error> {
     let indexer_options = match indexer_options {
         Some(config) => config,
@@ -240,6 +278,7 @@ async fn configure_and_spawn_indexer(
         client.clone(),
         db_pool.clone(),
         indexer_options.indexer_mode,
+        telemetry_handle,
     )
     .await;
 
@@ -339,8 +378,24 @@ where
     (R, S): ShNodeType,
     StorageHubBuilder<R, S, Runtime>: StorageLayerBuilder,
 {
+    // Initialize telemetry service early if enabled in any configuration
+    let telemetry_handle = if let Some(provider_opts) = provider_options {
+        initialize_telemetry_service(
+            task_manager,
+            &network,
+            provider_opts.telemetry_enabled,
+            Some(&provider_opts.provider_type),
+            &provider_opts.axiom_token,
+            &provider_opts.axiom_dataset,
+        ).await
+    } else {
+        // For indexer-only mode, check if we can enable telemetry 
+        // For now, we'll default to no telemetry for standalone indexer
+        None
+    };
+
     let maybe_indexer_db_pool =
-        configure_and_spawn_indexer(&indexer_options, &task_manager, client.clone()).await?;
+        configure_and_spawn_indexer(&indexer_options, &task_manager, client.clone(), telemetry_handle.clone()).await?;
 
     match provider_options {
         Some(ProviderOptions {
@@ -357,9 +412,6 @@ where
             bsp_charge_fees,
             bsp_submit_proof,
             blockchain_service,
-            telemetry_enabled,
-            axiom_token,
-            axiom_dataset,
             ..
         }) => {
             info!(
@@ -371,25 +423,10 @@ where
             let task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "sh-builder");
             let mut storage_hub_builder = StorageHubBuilder::<R, S, Runtime>::new(task_spawner);
 
-            // Initialize telemetry if enabled
-            if *telemetry_enabled {
-                // Get node ID from network (or use a default)
-                let node_id = network.local_peer_id().to_string();
-
-                // Spawn telemetry service as an actor
-                let telemetry_task_spawner = TaskSpawner::new(task_manager.spawn_handle(), "telemetry-service");
-                if let Some(telemetry_handle) = shc_telemetry_service::spawn_telemetry_service(
-                    &telemetry_task_spawner,
-                    format!("storage-hub-{:?}", provider_type).to_lowercase(),
-                    Some(node_id),
-                    axiom_token.clone(),
-                    axiom_dataset.clone(),
-                )
-                .await
-                {
-                    storage_hub_builder.with_telemetry(telemetry_handle);
-                    info!("Telemetry service initialized and configured");
-                }
+            // Use the telemetry handle if it was initialized
+            if let Some(telemetry_handle) = telemetry_handle {
+                storage_hub_builder.with_telemetry(telemetry_handle);
+                info!("Telemetry service configured for storage provider");
             }
 
             // Setup and spawn the File Transfer Service.

@@ -280,30 +280,6 @@ impl Actor for TelemetryService {
                 } => {
                     self.queue_event_internal(event, strategy);
                 }
-                TelemetryServiceCommand::Flush { callback } => {
-                    // Force a flush by sending an empty batch marker
-                    // In a real implementation, we'd have a more sophisticated flush mechanism
-                    warn!(target: LOG_TARGET, "Flush command not fully implemented yet");
-                    let _ = callback.send(Ok(()));
-                }
-                TelemetryServiceCommand::GetMetrics { callback } => {
-                    let metrics = self.metrics.snapshot();
-                    let _ = callback.send(Ok(metrics));
-                }
-                TelemetryServiceCommand::Shutdown { callback } => {
-                    info!(target: LOG_TARGET, "Initiating telemetry service shutdown");
-                    self.is_shutting_down.store(true, Ordering::Relaxed);
-
-                    // Send shutdown signal
-                    if let Some(tx) = self.shutdown_tx.take() {
-                        let _ = tx.send(());
-                    }
-                    
-                    // Create a channel to send back to the caller
-                    let (tx, rx) = oneshot::channel();
-                    let _ = tx.send(Ok(()));
-                    let _ = callback.send(rx);
-                }
             }
         }
     }

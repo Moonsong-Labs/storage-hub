@@ -18,8 +18,7 @@ pub use handler::TelemetryService;
 pub use telemetry::events;
 pub use types::{
     AxiomBackend, AxiomConfig, BaseTelemetryEvent, NoOpBackend, OverflowStrategy,
-    TelemetryBackend, TelemetryConfig, TelemetryEvent, TelemetryMetrics, TelemetryMetricsSnapshot,
-    TelemetryStrategy,
+    TelemetryBackend, TelemetryConfig, TelemetryEvent, TelemetryStrategy,
 };
 
 use chrono::Utc;

@@ -5,7 +5,7 @@ use serde_json::Value as JsonValue;
 use shc_actors_derive::actor_command;
 use shc_actors_framework::actor::ActorHandle;
 
-use crate::{handler::TelemetryService, types::{TelemetryMetricsSnapshot, TelemetryStrategy}};
+use crate::{handler::TelemetryService, types::TelemetryStrategy};
 
 /// Commands that can be sent to the TelemetryService actor.
 #[actor_command(
@@ -20,15 +20,6 @@ pub enum TelemetryServiceCommand {
         event: JsonValue,
         strategy: TelemetryStrategy,
     },
-    /// Flush all pending events immediately.
-    #[command(mode = "ImmediateResponse")]
-    Flush,
-    /// Get current telemetry metrics.
-    #[command(mode = "ImmediateResponse", success_type = TelemetryMetricsSnapshot)]
-    GetMetrics,
-    /// Initiate graceful shutdown of telemetry service.
-    #[command(mode = "AsyncResponse")]
-    Shutdown,
 }
 
 /// Extension trait for TelemetryService command interface.

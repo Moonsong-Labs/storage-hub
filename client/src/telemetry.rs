@@ -7,9 +7,8 @@
 use serde::{Deserialize, Serialize};
 use shc_actors_framework::actor::ActorHandle;
 use shc_telemetry_service::{
-    BaseTelemetryEvent, TelemetryEvent, TelemetryService, TelemetryStrategy,
-    TelemetryServiceCommandInterface, TelemetryServiceCommandInterfaceExt, 
-    TelemetryMetricsSnapshot, create_base_event,
+    create_base_event, BaseTelemetryEvent, TelemetryEvent, TelemetryService,
+    TelemetryServiceCommandInterfaceExt, TelemetryStrategy,
 };
 use std::time::Duration;
 use uuid::Uuid;
@@ -61,8 +60,11 @@ pub struct ServiceTelemetry {
 
 impl ServiceTelemetry {
     /// Create a new service telemetry wrapper
-    pub fn new(telemetry_handle: Option<ActorHandle<TelemetryService>>, service_name: String) -> Self {
-        Self { 
+    pub fn new(
+        telemetry_handle: Option<ActorHandle<TelemetryService>>,
+        service_name: String,
+    ) -> Self {
+        Self {
             inner: telemetry_handle,
             service_name,
         }
@@ -194,15 +196,6 @@ impl ServiceTelemetry {
                 custom_metrics,
             };
             telemetry.queue_typed_event(event).await.ok();
-        }
-    }
-
-    /// Get telemetry metrics
-    pub async fn metrics(&self) -> Option<TelemetryMetricsSnapshot> {
-        if let Some(telemetry) = &self.inner {
-            telemetry.get_metrics().await.ok()
-        } else {
-            None
         }
     }
 }

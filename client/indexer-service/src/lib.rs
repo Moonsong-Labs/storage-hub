@@ -7,6 +7,7 @@ use shc_actors_framework::actor::{ActorHandle, ActorSpawner, TaskSpawner};
 use shc_common::traits::StorageEnableRuntime;
 use shc_common::types::ParachainClient;
 use shc_indexer_db::DbPool;
+use shc_telemetry_service::TelemetryService;
 
 pub use self::handler::IndexerService;
 
@@ -52,12 +53,13 @@ pub async fn spawn_indexer_service<Runtime: StorageEnableRuntime>(
     client: Arc<ParachainClient<Runtime::RuntimeApi>>,
     db_pool: DbPool,
     indexer_mode: IndexerMode,
+    telemetry_handle: Option<ActorHandle<TelemetryService>>,
 ) -> ActorHandle<IndexerService<Runtime>> {
     let task_spawner = task_spawner
         .with_name("indexer-service")
         .with_group("network");
 
-    let indexer_service = IndexerService::new(client, db_pool, indexer_mode);
+    let indexer_service = IndexerService::new(client, db_pool, indexer_mode, telemetry_handle);
 
     task_spawner.spawn_actor(indexer_service)
 }
