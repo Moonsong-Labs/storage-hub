@@ -1,0 +1,34 @@
+[package]
+name = "sh-msp-backend-lib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# External dependencies
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+bigdecimal = { workspace = true }
+chrono = { workspace = true }
+diesel = { workspace = true }
+diesel-async = { workspace = true }
+hex = { workspace = true }
+jsonrpsee = { workspace = true, features = ["client", "ws-client"] }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
+toml = { workspace = true }
+tower-http = { workspace = true }
+
+# Workspace dependencies
+shc-indexer-db = { workspace = true, default-features = true }
+
+[dev-dependencies]
+axum-test = { workspace = true }
+futures = { workspace = true }
+
+[features]
+default = []
+mocks = []
