@@ -14,7 +14,7 @@ use sp_std::{fmt::Debug, vec::Vec};
 
 use crate::{
     Config, Error, MoveBucketRequestExpirations, NextAvailableMoveBucketRequestExpirationTick,
-    NextAvailableStorageRequestExpirationTick, StorageRequestExpirations,
+    NextAvailableStorageRequestExpirationTick, StorageRequestBsps, StorageRequestExpirations,
 };
 
 /// Ephemeral metadata of a storage request.
@@ -438,6 +438,78 @@ impl<T: Config> Debug for FileOperationIntention<T> {
     }
 }
 
+/// Ephemeral metadata for incomplete storage requests.
+/// This is used to track which providers still need to remove their files.
+/// Once all providers have removed their files, the entry is  cleaned up.
+#[derive(Encode, Decode, MaxEncodedLen, TypeInfo, Debug, PartialEq, Eq, Clone)]
+#[scale_info(skip_type_params(T))]
+pub struct IncompleteStorageRequestMetadata<T: Config> {
+    /// File owner for validation
+    pub owner: T::AccountId,
+    /// Bucket containing the file
+    pub bucket_id: BucketIdFor<T>,
+    /// File location/path
+    pub location: FileLocation<T>,
+    /// File size
+    pub size: StorageDataUnit<T>,
+    /// File fingerprint
+    pub fingerprint: Fingerprint<T>,
+    /// BSPs that still need to remove the file (bounded by max number of BSPs that can have confirmed)
+    pub pending_bsp_removals: BoundedVec<ProviderIdFor<T>, MaxReplicationTarget<T>>,
+    /// MSP that still needs to remove the file (if any)
+    pub pending_msp_removal: Option<ProviderIdFor<T>>,
+}
+
+impl<T: Config> IncompleteStorageRequestMetadata<T> {
+    /// Check if all providers have removed their files
+    pub fn is_fully_cleaned(&self) -> bool {
+        self.pending_bsp_removals.is_empty() && self.pending_msp_removal.is_none()
+    }
+
+    /// Remove a provider from pending lists
+    pub fn remove_provider(&mut self, provider_id: ProviderIdFor<T>) {
+        // Check MSP first
+        if let Some(msp_id) = self.pending_msp_removal {
+            if msp_id == provider_id {
+                self.pending_msp_removal = None;
+            }
+        }
+        // Check BSPs
+        self.pending_bsp_removals.retain(|&id| id != provider_id);
+    }
+}
+
+impl<T: Config> From<(&StorageRequestMetadata<T>, &MerkleHash<T>)>
+    for IncompleteStorageRequestMetadata<T>
+{
+    fn from((storage_request, file_key): (&StorageRequestMetadata<T>, &MerkleHash<T>)) -> Self {
+        // Collect all confirmed BSPs
+        let mut confirmed_bsps = sp_std::vec::Vec::new();
+        for (bsp_id, metadata) in StorageRequestBsps::<T>::iter_prefix(file_key) {
+            if metadata.confirmed {
+                confirmed_bsps.push(bsp_id);
+            }
+        }
+
+        let accepted_msp = match storage_request.msp {
+            Some((msp_id, true)) => Some(msp_id),
+            _ => None,
+        };
+
+        let bounded_bsps = BoundedVec::truncate_from(confirmed_bsps);
+
+        Self {
+            owner: storage_request.owner.clone(),
+            bucket_id: storage_request.bucket_id,
+            location: storage_request.location.clone(),
+            size: storage_request.size,
+            fingerprint: storage_request.fingerprint,
+            pending_bsp_removals: bounded_bsps,
+            pending_msp_removal: accepted_msp,
+        }
+    }
+}
+
 /// Alias for FileMetadata with the concrete constants used in StorageHub.
 pub type FileMetadata = shp_file_metadata::FileMetadata<
     { shp_constants::H_LENGTH },
@@ -476,6 +548,9 @@ pub type StorageDataUnit<T> =
 
 /// Alias for the `ReplicationTargetType` type used in the FileSystem pallet.
 pub type ReplicationTargetType<T> = <T as crate::Config>::ReplicationTargetType;
+
+/// Alias for the `MaxReplicationTarget` type used in the FileSystem pallet.
+pub type MaxReplicationTarget<T> = <T as crate::Config>::MaxReplicationTarget;
 
 /// Alias for the `StorageRequestTtl` type used in the FileSystem pallet.
 pub type StorageRequestTtl<T> = <T as crate::Config>::StorageRequestTtl;

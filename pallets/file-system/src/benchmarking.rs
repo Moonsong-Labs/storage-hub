@@ -742,7 +742,7 @@ mod benchmarks {
                     user_peer_ids: Default::default(),
                     bsps_required: T::StandardReplicationTarget::get(),
                     bsps_confirmed: T::StandardReplicationTarget::get(), // All BSPs confirmed means the logic to delete the storage request is executed
-                    bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+                    bsps_volunteered: T::MaxReplicationTarget::get().into(), // Maximize the BSPs volunteered since the logic has to drain them from storage
 					deposit_paid: Default::default(),
                 };
                 <StorageRequests<T>>::insert(&file_keys_to_accept[j], storage_request_metadata);
@@ -1070,7 +1070,7 @@ mod benchmarks {
 				user_peer_ids: Default::default(),
 				bsps_required: T::StandardReplicationTarget::get(),
 				bsps_confirmed: T::StandardReplicationTarget::get().saturating_sub(ReplicationTargetType::<T>::one()), // All BSPs confirmed minus one means the logic to delete the storage request is executed
-				bsps_volunteered: T::MaxReplicationTarget::get(), // Maximize the BSPs volunteered since the logic has to drain them from storage
+				bsps_volunteered: T::MaxReplicationTarget::get().into(), // Maximize the BSPs volunteered since the logic has to drain them from storage
 				deposit_paid: Default::default(),
 			};
             <StorageRequests<T>>::insert(&file_key, storage_request_metadata);
@@ -1957,7 +1957,7 @@ mod benchmarks {
             0,
             {
                 <<T as pallet::Config>::ReplicationTargetType as Into<u64>>::into(
-                    T::MaxReplicationTarget::get(),
+                    T::MaxReplicationTarget::get().into(),
                 ) as u32
             },
         >,
@@ -2074,7 +2074,7 @@ mod benchmarks {
             0,
             {
                 <<T as pallet::Config>::ReplicationTargetType as Into<u64>>::into(
-                    T::MaxReplicationTarget::get(),
+                    T::MaxReplicationTarget::get().into(),
                 ) as u32
             },
         >,
