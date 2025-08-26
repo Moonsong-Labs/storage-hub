@@ -1,6 +1,6 @@
 # StorageHub E2E Tests with dAppWright + SDK
 
-End-to-end tests for StorageHub using dAppWright to automate MetaMask and the SDK’s `Eip1193Wallet` for signing.
+End-to-end tests for StorageHub SDK
 
 ## 🚀 Features
 
@@ -19,7 +19,14 @@ sdk/e2e/
 ├── page/
 │   └── index.html          # Minimal dApp using SDK Eip1193Wallet
 └── tests/
-    └── metamask-sdk-sign.spec.ts
+    ├── wallet/
+    │   └── metamask-sdk-sign.spec.ts
+    └── msp/
+        ├── auth-localwallet.spec.ts
+        ├── health.spec.ts
+        ├── upload.spec.ts
+        ├── download.spec.ts
+        └── unauthorized.spec.ts
 ```
 
 ## 🛠️ Setup
@@ -40,22 +47,19 @@ pnpm exec playwright install --with-deps chromium
 
 ## 🧪 Running
 
-Serve the sdk root (the test page is at `/e2e/page/index.html`):
-
-```bash
-pnpm run dev
-# serves http://localhost:3000 with sdk as document root
-```
-
 Run tests:
 
 ```bash
-# Headed
-pnpm run test:headed
+# All tests
+pnpm -C sdk build
+cd sdk/e2e && pnpm install
+pnpm exec playwright test
 
-# Headless-like via Docker (extension-friendly Xvfb)
-docker build -t storagehub-e2e -f sdk/e2e/Dockerfile .
-docker run --rm -it -p 3000:3000 storagehub-e2e
+# Only MetaMask (headed recommended)
+HEADLESS=false pnpm exec playwright test --project metamask
+
+# Only MSP (web project)
+pnpm exec playwright test --project web
 ```
 
 ## 🔧 How it works
@@ -81,8 +85,8 @@ docker run --rm -it -p 3000:3000 storagehub-e2e
 ## 🧰 CI notes
 
 - Build SDK before tests (`pnpm -C sdk build`).
-- Serve sdk root and wait for `/e2e/page/index.html` to be reachable.
-- Run tests with `xvfb-run -a pnpm exec playwright test` and `HEADLESS=false` so the extension loads.
+- Playwright webServer auto-starts the server; reports and artifacts are written to `/tmp`.
+- Use `xvfb-run` with `HEADLESS=false` for MetaMask.
 
 ## ✅ Success criteria
 

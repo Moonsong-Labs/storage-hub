@@ -7,7 +7,7 @@ export default defineConfig({
     fullyParallel: false,
     forbidOnly: !!process.env.CI,
     retries: process.env.CI ? 2 : 0,
-    reporter: [['html', { outputFolder: '/tmp/playwright-report' }], ['list']],
+    reporter: [['html', { outputFolder: '/tmp/playwright-report', open: 'never' }], ['list']],
     use: {
         trace: 'on-first-retry',
         screenshot: 'only-on-failure',
@@ -32,8 +32,8 @@ export default defineConfig({
             workers: 1,
         },
         {
-            name: 'web',
-            testMatch: ['msp/**/*.spec.ts', 'web/**/*.spec.ts'],
+            name: 'msp',
+            testMatch: ['msp/**/*.spec.ts'],
             use: {
                 ...devices['Desktop Chrome'],
                 baseURL: process.env.E2E_BASE_URL || 'http://localhost:3000',
