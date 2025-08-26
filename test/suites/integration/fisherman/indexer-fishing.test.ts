@@ -23,9 +23,10 @@ import {
   waitForBlockIndexed,
   verifyNoBspFileAssociation,
   verifyNoOrphanedBspAssociations,
-  verifyNoOrphanedMspAssociations
+  verifyNoOrphanedMspAssociations,
 } from "../../../util/indexerHelpers";
 import { waitForIndexing } from "../../../util/fisherman/indexerTestHelpers";
+import { waitForDeleteFileExtrinsic } from "../../../util/fisherman/fishermanHelpers";
 import { chargeUserUntilInsolvent } from "../../../util/indexerHelpers";
 
 describeMspNet(
@@ -82,6 +83,7 @@ describeMspNet(
       );
 
       await waitForIndexing(userApi);
+      await waitForFileIndexed(sql, fileKey);
 
       const files = await sql`
         SELECT * FROM file
@@ -410,6 +412,7 @@ describeMspNet(
 
       await waitForIndexing(userApi);
 
+      // For expired requests, file remains in database with expired status
       const files = await sql`
         SELECT * FROM file WHERE file_key = ${hexToBuffer(fileKey)}
       `;
@@ -499,13 +502,11 @@ describeMspNet(
       );
 
       // Verify fisherman submits delete_file extrinsics
-      await userApi.assert.extrinsicPresent({
-        method: "deleteFile",
-        module: "fileSystem",
-        checkTxPool: true,
-        timeout: 15000,
-        assertLength: 2 // Expecting 2 extrinsics: one for BSP and one for MSP
-      });
+      const deleteFileFound = await waitForDeleteFileExtrinsic(userApi, 2, 15000);
+      assert(
+        deleteFileFound,
+        "Should find 2 delete_file extrinsics in transaction pool (BSP and MSP)"
+      );
 
       // Seal block to process the fisherman-submitted extrinsics
       const deletionResult = await userApi.block.seal();
@@ -617,7 +618,7 @@ describeMspNet(
       });
     });
 
-    it.skip("indexes SpStopStoringInsolventUser events", async () => {
+    it("indexes SpStopStoringInsolventUser events", async () => {
       const bucketName = "test-insolvent-user";
       const source = "res/whatsup.jpg";
       const destination = "test/insolvent-file.txt";
@@ -626,8 +627,14 @@ describeMspNet(
         userApi,
         source,
         destination,
-        bucketName
+        bucketName,
+        null,
+        null,
+        null,
+        1
       );
+
+      await userApi.wait.mspResponseInTxPool();
 
       await userApi.wait.bspVolunteer();
       await waitFor({
@@ -746,6 +753,13 @@ describeMspNet(
         timeout: 15000
       });
 
+      await userApi.assert.extrinsicPresent({
+        method: "mspStopStoringBucketForInsolventUser",
+        module: "fileSystem",
+        checkTxPool: true,
+        timeout: 15000
+      });
+
       await userApi.block.seal();
 
       const spStopStoringEvents = await userApi.assert.eventMany(
@@ -753,8 +767,25 @@ describeMspNet(
         "SpStopStoringInsolventUser"
       );
       assert(spStopStoringEvents.length > 0, "SpStopStoringInsolventUser events should be emitted");
+      await userApi.assert.eventMany(
+        "fileSystem",
+        "MspStopStoringBucketInsolventUser"
+      );
+      assert(spStopStoringEvents.length > 0, "MspStopStoringBucketInsolventUser events should be emitted");
 
-      const stopStoringEvent = spStopStoringEvents[0];
+      const stopStoringEvent = spStopStoringEvents.find(e => {
+        const eventData =
+          userApi.events.fileSystem.SpStopStoringInsolventUser.is(e.event) &&
+          e.event.data;
+        return (
+          eventData &&
+          eventData.owner.toString() === shUser.address &&
+          eventData.spId.toString() === userApi.shConsts.DUMMY_BSP_ID.toString()
+        );
+      });
+
+      assert(stopStoringEvent, "SpStopStoringInsolventUser event for the correct user and BSP ID should be present");
+
       const stopStoringEventData =
         userApi.events.fileSystem.SpStopStoringInsolventUser.is(stopStoringEvent.event) &&
         stopStoringEvent.event.data;
